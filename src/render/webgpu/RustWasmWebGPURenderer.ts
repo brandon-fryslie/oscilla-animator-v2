@@ -1,7 +1,6 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
 import type {
-  DrawPrepRenderContract,
   MatrixViewportContract,
   RuntimeInputSignalContract,
 } from '../types';
@@ -9,7 +8,6 @@ import { isRuntimeConsoleEnabled } from '../../testing/test-params';
 import { reportRenderIssue } from '../render-issues';
 import {
   computeRustRendererShapeBankWordCapacity,
-  computeRustRendererSinkTableWordCapacity,
   type RustRendererBootstrapConfig,
   type RustRendererGpuPass,
   type RustRendererSchedulerState,
@@ -31,7 +29,7 @@ import {
   previewWgsl,
 } from './gpu-pass-debug';
 
-interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
+interface RenderInput extends MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
 }
 
@@ -96,32 +94,6 @@ export interface RustRendererGpuDebugReadback {
   readonly frameCount: number;
   readonly capturedAtMs: number;
   readonly arenaWords: Float32Array;
-}
-
-export interface SinkTableDebugSample {
-  readonly sinkTableWordCount: number;
-  readonly totalRecords: number;
-  readonly firstRecord: {
-    readonly drawModeCode: number;
-    readonly count: number;
-    readonly instanceCount: number;
-    readonly first: number;
-    readonly baseVertex: number;
-    readonly firstInstance: number;
-    readonly shapeWordOffset: number;
-    readonly materialId: number;
-  } | null;
-  readonly firstDescriptor: {
-    readonly positionBaseOffset: number;
-    readonly positionLaneStride: number;
-    readonly positionComponentStride: number;
-    readonly colorBaseOffset: number;
-    readonly colorLaneStride: number;
-    readonly colorComponentStride: number;
-    readonly scaleBaseOffset: number;
-    readonly scaleLaneStride: number;
-    readonly scaleComponentStride: number;
-  } | null;
 }
 
 type WorkerAckDisposition =
@@ -339,28 +311,6 @@ function assertFiniteUint32(value: number, context: string): number {
   return value;
 }
 
-function readRequiredSinkTableWord(
-  words: Uint32Array,
-  wordCount: number,
-  index: number,
-  context: string,
-): number {
-  if (!Number.isInteger(index) || index < 0 || index >= wordCount) {
-    throw new Error(
-      'Rust renderer sink table debug contract violation: ' +
-        `${context} index out of bounds (index=${index}, wordCount=${wordCount})`,
-    );
-  }
-  const value = words[index];
-  if (value === undefined) {
-    throw new Error(
-      'Rust renderer sink table debug contract violation: ' +
-        `${context} missing value at index ${index}`,
-    );
-  }
-  return value;
-}
-
 function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
   return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT' || type === 'DEBUG_READBACK_PACKET';
 }
@@ -470,7 +420,6 @@ export class WebGPURenderer {
   private readonly signalWords: Int32Array;
   private readonly inputWords: Float32Array;
   private readonly sharedShapeBankWords: Uint32Array;
-  private readonly sharedSinkTableWords: Uint32Array;
   private bootstrapped = false;
   private disposed = false;
   private fatalError: Error | null = null;
@@ -482,14 +431,7 @@ export class WebGPURenderer {
   private latestRuntimeEvent: RuntimeEventBreadcrumb | null = null;
   private latestGpuDebugReadback: RustRendererGpuDebugReadback | null = null;
   private lastInstalledPassIds: readonly string[] = [];
-  private latestSinkTableSample: SinkTableDebugSample | null = null;
-  private renderInputDebugLogged = false;
   private installRevision = 0;
-  // TODO(#159): Move debug cadence state out of renderer core state.
-  // This counter is only for runtimeConsole sampling throttle and should live
-  // with debug emitter ownership, not render execution ownership.
-  // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-  private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
   private gpuFaultCallback: GpuFaultCallback | null = null;
 
@@ -665,13 +607,11 @@ export class WebGPURenderer {
     signalWords: Int32Array,
     inputWords: Float32Array,
     sharedShapeBankWords: Uint32Array,
-    sharedSinkTableWords: Uint32Array,
   ) {
     this.worker = worker;
     this.signalWords = signalWords;
     this.inputWords = inputWords;
     this.sharedShapeBankWords = sharedShapeBankWords;
-    this.sharedSinkTableWords = sharedSinkTableWords;
     this.worker.addEventListener('message', this.handleRuntimeMessage);
   }
 
@@ -686,11 +626,8 @@ export class WebGPURenderer {
       RUNTIME_INPUT_FLOAT_WORDS,
     );
     const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
-    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
     const sharedShapeBank = new SharedArrayBuffer(shapeBankWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
-    const sharedSinkTable = new SharedArrayBuffer(sinkTableWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedShapeBankWords = new Uint32Array(sharedShapeBank);
-    const sharedSinkTableWords = new Uint32Array(sharedSinkTable);
 
     const worker = new Worker(new URL('../rust/engine.worker.ts', import.meta.url), {
       type: 'module',
@@ -700,13 +637,11 @@ export class WebGPURenderer {
       signalWords,
       inputWords,
       sharedShapeBankWords,
-      sharedSinkTableWords,
     );
     await renderer.bootstrap(
       offscreenCanvas,
       sharedInput,
       sharedShapeBank,
-      sharedSinkTable,
       getRuntimeBootstrapConfig(),
     );
     return renderer;
@@ -714,29 +649,11 @@ export class WebGPURenderer {
 
   render(input: RenderInput): void {
     this.assertRuntimeInputBoundaryReady();
-    if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
-      throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
-    }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
-    const sinkTableWords = this.syncSinkTablePlane(
-      input.drawPrepSinkTableV1,
-      input.drawPrepSinkTableWordCount,
-    );
-    this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
-    this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
+    this.setSinkAndShapeWordCounts(0, shapeBankWords);
     this.bumpInstallRevision();
     this.publishSignalWord();
-  }
-
-  private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!this.shouldEmitRuntimeConsole() || this.renderInputDebugLogged || wordCount <= 0) {
-      return;
-    }
-    this.renderInputDebugLogged = true;
-    const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
-    this.latestSinkTableSample = sample;
-    this.emitRuntimeConsoleInfo({ kind: 'render-input-sample', ...sample });
   }
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
@@ -761,7 +678,6 @@ export class WebGPURenderer {
     return {
       sharedInput: this.signalWords.buffer as SharedArrayBuffer,
       sharedShapeBank: this.sharedShapeBankWords.buffer as SharedArrayBuffer,
-      sharedSinkTable: this.sharedSinkTableWords.buffer as SharedArrayBuffer,
     };
   }
 
@@ -858,10 +774,6 @@ export class WebGPURenderer {
 
   getInstalledGpuPassIds(): readonly string[] {
     return this.lastInstalledPassIds;
-  }
-
-  getLatestSinkTableSample(): SinkTableDebugSample | null {
-    return this.latestSinkTableSample;
   }
 
   // [LAW:single-enforcer] GPU fault callback is set once by RuntimeService;
@@ -1044,207 +956,10 @@ export class WebGPURenderer {
     return wordCount;
   }
 
-  private syncSinkTablePlane(sinkTableWords: Uint32Array, sinkTableWordCount: number): number {
-    const wordCount = assertFiniteUint32(sinkTableWordCount, 'drawPrepSinkTableWordCount');
-    if (wordCount === 0) {
-      return 0;
-    }
-    this.assertSinkTableInputCapacity(sinkTableWords, wordCount);
-    this.sharedSinkTableWords.set(sinkTableWords.subarray(0, wordCount), 0);
-    this.maybeCaptureSinkTableDebugSample(sinkTableWords, wordCount);
-    return wordCount;
-  }
-
-  private assertSinkTableInputCapacity(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (sinkTableWords.length < wordCount) {
-      throw new Error(
-        'Rust renderer input contract violation: drawPrepSinkTableV1 shorter than wordCount ' +
-          `(tableLength=${sinkTableWords.length}, wordCount=${wordCount})`,
-      );
-    }
-    if (wordCount > this.sharedSinkTableWords.length) {
-      throw new Error(
-        'Rust renderer input contract violation: sink table capacity exceeded ' +
-          `(wordCount=${wordCount}, sharedCapacity=${this.sharedSinkTableWords.length})`,
-      );
-    }
-  }
-
-  private maybeCaptureSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
-    if (!this.shouldEmitRuntimeConsole()) {
-      return;
-    }
-    this.sinkTableDebugLogCounter += 1;
-    if ((this.sinkTableDebugLogCounter % 120) !== 1) {
-      return;
-    }
-    const sample = this.buildSinkTableDebugSample(sinkTableWords, wordCount);
-    this.latestSinkTableSample = sample;
-    this.emitSinkTableDebugSample(sample);
-  }
-
-  private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
-    const headerWords = 8;
-    const recordWords = 8;
-    const descriptorWords = 20;
-    const totalRecords = readRequiredSinkTableWord(
-      sinkTableWords,
-      wordCount,
-      1,
-      'sink-table-sample.totalRecords',
-    );
-    const firstRecord = this.buildSinkTableFirstRecord(sinkTableWords, wordCount, totalRecords, headerWords);
-    const descriptorBase = headerWords + totalRecords * recordWords;
-    const hasFirstDescriptor = totalRecords > 0 && wordCount >= descriptorBase + descriptorWords;
-    const firstDescriptor = hasFirstDescriptor
-      ? {
-          positionBaseOffset: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 0,
-            'sink-table-sample.firstDescriptor.positionBaseOffset',
-          ),
-          positionLaneStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 1,
-            'sink-table-sample.firstDescriptor.positionLaneStride',
-          ),
-          positionComponentStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 2,
-            'sink-table-sample.firstDescriptor.positionComponentStride',
-          ),
-          colorBaseOffset: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 3,
-            'sink-table-sample.firstDescriptor.colorBaseOffset',
-          ),
-          colorLaneStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 4,
-            'sink-table-sample.firstDescriptor.colorLaneStride',
-          ),
-          colorComponentStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 5,
-            'sink-table-sample.firstDescriptor.colorComponentStride',
-          ),
-          scaleBaseOffset: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 6,
-            'sink-table-sample.firstDescriptor.scaleBaseOffset',
-          ),
-          scaleLaneStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 7,
-            'sink-table-sample.firstDescriptor.scaleLaneStride',
-          ),
-          scaleComponentStride: readRequiredSinkTableWord(
-            sinkTableWords,
-            wordCount,
-            descriptorBase + 8,
-            'sink-table-sample.firstDescriptor.scaleComponentStride',
-          ),
-        }
-      : null;
-    return {
-      sinkTableWordCount: wordCount,
-      totalRecords,
-      firstRecord,
-      firstDescriptor,
-    };
-  }
-
-  private buildSinkTableFirstRecord(
-    sinkTableWords: Uint32Array,
-    wordCount: number,
-    totalRecords: number,
-    firstRecordBase: number,
-  ): SinkTableDebugSample['firstRecord'] {
-    const recordWords = 8;
-    const hasFirstRecord = totalRecords > 0 && wordCount >= firstRecordBase + recordWords;
-    if (!hasFirstRecord) {
-      return null;
-    }
-    return {
-      drawModeCode: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 0,
-        'sink-table-sample.firstRecord.drawModeCode',
-      ),
-      count: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 1,
-        'sink-table-sample.firstRecord.count',
-      ),
-      instanceCount: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 2,
-        'sink-table-sample.firstRecord.instanceCount',
-      ),
-      first: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 3,
-        'sink-table-sample.firstRecord.first',
-      ),
-      baseVertex: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 4,
-        'sink-table-sample.firstRecord.baseVertex',
-      ),
-      firstInstance: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 5,
-        'sink-table-sample.firstRecord.firstInstance',
-      ),
-      shapeWordOffset: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 6,
-        'sink-table-sample.firstRecord.shapeWordOffset',
-      ),
-      materialId: readRequiredSinkTableWord(
-        sinkTableWords,
-        wordCount,
-        firstRecordBase + 7,
-        'sink-table-sample.firstRecord.materialId',
-      ),
-    };
-  }
-
-  private emitSinkTableDebugSample(sample: SinkTableDebugSample): void {
-    // TODO(#159): Replace this inline payload emission with a dedicated debug
-    // emitter helper module and keep render hot path free of debug policy.
-    // [LAW:locality-or-seam] Renderer execution should not own debug payload
-    // transport and cadence policy details.
-    // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-    this.emitRuntimeConsoleInfo({
-      kind: 'sink-table-sample',
-      wordCount: sample.sinkTableWordCount,
-      totalRecords: sample.totalRecords,
-      firstRecord: sample.firstRecord,
-      firstDescriptor: sample.firstDescriptor,
-    });
-  }
-
   private async bootstrap(
     offscreenCanvas: OffscreenCanvas,
     sharedInput: SharedArrayBuffer,
     sharedShapeBank: SharedArrayBuffer,
-    sharedSinkTable: SharedArrayBuffer,
     config: RustRendererBootstrapConfig,
   ): Promise<void> {
     const message: RustRendererWorkerInboundMessage = {
@@ -1252,7 +967,6 @@ export class WebGPURenderer {
       canvas: offscreenCanvas,
       sharedInput,
       sharedShapeBank,
-      sharedSinkTable,
       config,
     };
 

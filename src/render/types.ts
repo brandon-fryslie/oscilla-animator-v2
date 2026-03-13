@@ -48,19 +48,3 @@ export interface RuntimeInputSignalContract {
   readonly inputGaugeActive: number;
 }
 
-/**
- * Canonical draw-prep render boundary.
- *
- * [LAW:one-source-of-truth] Runtime and renderer share one authoritative
- * sink-table contract shape from this module.
- */
-export interface DrawPrepRenderContract {
-  readonly drawPrepSinkTableV1: Uint32Array;
-  readonly drawPrepSinkTableWordCount: number;
-}
-
-export function defineDrawPrepRenderContract(contract: DrawPrepRenderContract): DrawPrepRenderContract {
-  // [LAW:one-source-of-truth] Runtime and renderer use this helper to pin
-  // contract shape ownership to the canonical boundary module.
-  return contract;
-}

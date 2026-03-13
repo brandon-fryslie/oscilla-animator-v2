@@ -27,7 +27,6 @@ export interface RustRendererBootstrapMessage {
   readonly canvas: OffscreenCanvas;
   readonly sharedInput: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
-  readonly sharedSinkTable: SharedArrayBuffer;
   readonly config: RustRendererBootstrapConfig;
 }
 

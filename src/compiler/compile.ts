@@ -46,7 +46,7 @@ import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import type { SerializableTopologyDef } from '../shapes/types';
-import { lowerScheduleToNagaModule } from './ir/naga-emitter';
+import { lowerToNagaModule } from './ir/naga-emitter/lower-to-naga-module';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -700,11 +700,14 @@ function convertLinkedIRToProgram(
     scheduleIR,
     runtimeAddressTable,
   );
-  const nagaLoweringProgram = lowerScheduleToNagaModule({
+  // [LAW:single-enforcer] Family A Naga lowering — single lowering boundary.
+  const nagaLoweringProgram = lowerToNagaModule({
     schedule: scheduleIR,
-    runtimeAddressTable,
     valueExprs: valueExprNodes,
-    exprToBlock: builder.getExprToBlock(),
+    arenaLayout,
+    arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
+    runtimeAddressTable,
+    maxActiveLanes: generatedComputeProgram.maxActiveLanes,
   });
 
   // Build debug index

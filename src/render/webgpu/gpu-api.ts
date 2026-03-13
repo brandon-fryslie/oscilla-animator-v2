@@ -37,6 +37,7 @@ export interface GpuRenderPassEncoder {
   setVertexBuffer(slot: number, buffer: GpuBuffer): void;
   setIndexBuffer(buffer: GpuBuffer, indexFormat: 'uint16' | 'uint32'): void;
   drawIndexedIndirect(indirectBuffer: GpuBuffer, indirectOffset: number): void;
+  drawIndirect(indirectBuffer: GpuBuffer, indirectOffset: number): void;
   end(): void;
 }
 

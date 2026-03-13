@@ -1,4 +1,3 @@
-import type { NagaModuleIR } from '../ir/naga-emitter';
 import type { WasmInitModuleOrPath } from '../../wasm/init-types';
 
 export interface ShimFormattedError {
@@ -22,7 +21,7 @@ export interface ShimInitOptions {
 }
 
 type RustCompileFn = (
-  module: NagaModuleIR,
+  module: unknown,
   maxActiveLanes?: number,
 ) => ShimCompilationResult;
 
@@ -110,7 +109,7 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
   }
 }
 
-export function compile_ir(module: NagaModuleIR, maxActiveLanes?: number): ShimCompilationResult {
+export function compile_ir(module: unknown, maxActiveLanes?: number): ShimCompilationResult {
   if (!initialized || !compileImpl) {
     return compileInitError('Shim not initialized', 'init');
   }

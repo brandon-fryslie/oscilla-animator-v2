@@ -21,7 +21,15 @@ import type { BlockId } from '../../types/compiler';
 import type { ValueExpr } from './value-expr';
 import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
-import type { NagaLoweringProgramIR } from './naga-emitter';
+// [LAW:one-source-of-truth] NagaLoweringProgramIR is the structured output of
+// Family A Naga lowering (lower-to-naga-module.ts → NagaBuilder → NagaModule).
+export interface NagaLoweringProgramIR {
+  readonly module: unknown;
+  readonly sourceMap: Readonly<Record<string, { readonly blockId: string | null; readonly stepIndex: number; readonly exprId?: number }>>;
+  readonly compute: { readonly maxActiveLanes: number };
+  readonly coverage: { readonly totalStepCount: number; readonly boundaryStepCount: number; readonly droppedComputeStepCount: number } | null;
+  readonly loweringError?: string;
+}
 import type { SerializableTopologyDef, TopologyId } from '../../shapes/types';
 
 // =============================================================================

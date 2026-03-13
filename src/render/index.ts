@@ -19,7 +19,6 @@ export {
 
 // Re-export canonical runtime->renderer boundary types.
 export type {
-  DrawPrepRenderContract,
   MatrixViewportContract,
   RuntimeInputSignalContract,
 } from './types';

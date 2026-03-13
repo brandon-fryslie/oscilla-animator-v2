@@ -27,5 +27,4 @@ export const RUNTIME_INPUT_INDEX = Object.freeze({
 export interface RuntimeSharedPlanes {
   readonly sharedInput: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
-  readonly sharedSinkTable: SharedArrayBuffer;
 }

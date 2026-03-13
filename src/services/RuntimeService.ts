@@ -59,16 +59,12 @@ import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
 import {
-  buildRuntimeHotpathInstallPlanes,
-} from './runtime-hotpath-install';
-import {
   createDebugProbeRuntimeSnapshotFromArena,
   extractDebugProbeSamplesFromRuntimeSnapshot,
 } from './DebugProbeRuntimeSnapshot';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
-const EMPTY_U32_WORDS = new Uint32Array(0);
 
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
@@ -263,11 +259,6 @@ export class RuntimeService {
       await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
-      if (expectedProgram && this.compileState.currentProgram === expectedProgram) {
-        // [LAW:one-source-of-truth] Runtime hotpath install payload is built
-        // once from the canonical compiled program + RuntimeState after swap.
-        this.installRendererHotpathPlanes(performance.now());
-      }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
       this.asyncCompiler?.markSwapFailed(err);
@@ -282,48 +273,6 @@ export class RuntimeService {
         this.requestSwapFlush();
       }
     }
-  }
-
-  private installRendererHotpathPlanes(nowMs: number): void {
-    const renderer = this.renderer;
-    const canvas = this.canvas;
-    const program = this.compileState.currentProgram;
-    const state = this.compileState.currentState;
-    if (!renderer || !canvas || !program || !state) {
-      return;
-    }
-
-    const planes = buildRuntimeHotpathInstallPlanes(program, state, nowMs);
-    const viewport = this.store.viewport;
-    const renderWidth = Math.max(1, Math.floor(viewport?.canvasWidth || canvas.width || 1));
-    const renderHeight = Math.max(1, Math.floor(viewport?.canvasHeight || canvas.height || 1));
-    const zoom = viewport?.zoom ?? 1;
-    const panX = viewport?.pan?.x ?? 0;
-    const panY = viewport?.pan?.y ?? 0;
-
-    renderer.render({
-      shapeBank: {
-        data: planes.shapeBankWords,
-        volatilePtr: planes.shapeBankWordCount,
-        staticBoundary: state.shapeBank.staticBoundary,
-        topologyIdByHandle: state.shapeBank.topologyIdByHandle,
-      },
-      drawPrepSinkTableV1: planes.sinkTableWords ?? EMPTY_U32_WORDS,
-      drawPrepSinkTableWordCount: planes.sinkTableWordCount,
-      width: renderWidth,
-      height: renderHeight,
-      zoom,
-      panX,
-      panY,
-      timeMs: nowMs,
-      inputMouseX: 0,
-      inputMouseY: 0,
-      inputMouseButtons: 0,
-      inputAudioLow: 0,
-      inputAudioMid: 0,
-      inputAudioHigh: 0,
-      inputGaugeActive: 0,
-    });
   }
 
   private async publishRendererPipelines(

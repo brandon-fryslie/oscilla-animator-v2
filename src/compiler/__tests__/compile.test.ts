@@ -402,44 +402,7 @@ describe('TimeModel', () => {
     expect(generated.wgsl).toBeUndefined();
   });
 
-  it('emits state bridge metadata and lowering stores for stateful blocks', () => {
-    const patch = buildPatch((b) => {
-      const time = b.addBlock('InfiniteTimeRoot');
-      const delay = b.addBlock('UnitDelay');
-      b.wire(time, 'phaseA', delay, 'in');
-
-      const ellipse = b.addBlock('Ellipse');
-      const array = b.addBlock('Array');
-      b.setPortDefault(array, 'count', 4);
-      b.wire(ellipse, 'shape', array, 'element');
-
-      const grid = b.addBlock('GridLayoutUV');
-      b.setPortDefault(grid, 'rows', 2);
-      b.setPortDefault(grid, 'cols', 2);
-      b.wire(array, 'elements', grid, 'elements');
-
-      const color = b.addBlock('Const');
-      b.setConfig(color, 'value', { r: 1, g: 0.4, b: 0.2, a: 1 });
-      const render = b.addBlock('RenderInstances2D');
-      b.wire(grid, 'controlPoints', render, 'controlPoints');
-      b.wire(color, 'out', render, 'color');
-      b.wire(delay, 'out', render, 'scale');
-    });
-
-    const result = compile(patch);
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const lowering = result.program.nagaLoweringProgram;
-    const globalNames = lowering.module.global_variables.map((global) => global.name);
-    expect(globalNames).toEqual(expect.arrayContaining(['state_in', 'state_out']));
-
-    const fn = lowering.module.functions[0];
-    const hasStateWriteStore = fn?.statements.some(
-      (statement) => statement.kind === 'store' && statement.buffer === 'state_out',
-    );
-    expect(hasStateWriteStore).toBe(true);
-  });
+  // [Family B lowering test deleted — will be rebuilt with Family A lowering]
 
   it('scalar write steps execute before render steps', () => {
     const patch = buildPatch((b) => {

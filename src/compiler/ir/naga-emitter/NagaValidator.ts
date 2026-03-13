@@ -84,7 +84,11 @@ function expectedComposeComponentCount(type: NagaType): number {
   if (type.kind === 'Vector') {
     return type.size;
   }
-  return type.columns * type.rows;
+  if (type.kind === 'Matrix') {
+    return type.columns * type.rows;
+  }
+  // Array/Struct — Compose into these is not valid; return 0 to trigger mismatch
+  return 0;
 }
 
 function pushIssue(
@@ -341,6 +345,35 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
       }
       continue;
     }
+
+    if (expression.type === 'AccessIndex') {
+      if (expression.index < 0) {
+        pushIssue(issues, handle, visualBlockId, 'AccessIndex index must be non-negative.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'As') {
+      const sourceTypeHandle = builder.getExpressionType(expression.expr);
+      if (sourceTypeHandle === undefined) {
+        pushIssue(issues, handle, visualBlockId, 'As (cast) source expression is missing type metadata.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'FunctionArgument') {
+      if (expression.index < 0) {
+        pushIssue(issues, handle, visualBlockId, 'FunctionArgument index must be non-negative.');
+      }
+      continue;
+    }
+
+    if (expression.type === 'Call') {
+      if (expression.function < 0) {
+        pushIssue(issues, handle, visualBlockId, 'Call function handle must be non-negative.');
+      }
+      continue;
+    }
   }
 
   for (let handle = 0; handle < statements.length; handle++) {
@@ -393,6 +426,21 @@ export function collectNagaValidationIssues(builder: NagaBuilder): readonly Naga
           break;
         }
       }
+      continue;
+    }
+
+    if (statement.type === 'Return') {
+      if (statement.value !== undefined) {
+        const valueTypeHandle = builder.getExpressionType(statement.value);
+        if (valueTypeHandle === undefined) {
+          pushIssue(issues, handle, visualBlockId, 'Return value is missing type metadata.', true);
+        }
+      }
+      continue;
+    }
+
+    // Break, Continue, Comment — no validation needed
+    if (statement.type === 'Break' || statement.type === 'Continue' || statement.type === 'Comment') {
       continue;
     }
   }

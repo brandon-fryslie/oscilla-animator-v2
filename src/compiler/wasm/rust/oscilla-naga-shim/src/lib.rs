@@ -3,6 +3,10 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
+// =============================================================================
+// Output Types
+// =============================================================================
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FormattedError {
     pub message: String,
@@ -17,11 +21,18 @@ pub struct CompilationResult {
     pub errors: Vec<FormattedError>,
 }
 
+// =============================================================================
+// IR Types — Family A format (matches TS naga-types.ts)
+//
+// [LAW:one-source-of-truth] These Rust structs mirror the TS NagaModule exactly.
+// Discriminant fields use "type" with PascalCase values, matching the TS enums.
+// =============================================================================
+
 #[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
 enum NagaScalarKindIR {
-    F32,
-    U32,
+    Sint,
+    Uint,
+    Float,
     Bool,
 }
 
@@ -33,7 +44,7 @@ enum NagaArraySizeIR {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind")]
 enum NagaTypeIR {
     Scalar {
         scalar: NagaScalarKindIR,
@@ -42,6 +53,11 @@ enum NagaTypeIR {
     Vector {
         size: u8,
         scalar: NagaScalarKindIR,
+        width: u8,
+    },
+    Matrix {
+        columns: u8,
+        rows: u8,
         width: u8,
     },
     Array {
@@ -59,13 +75,23 @@ struct NagaStructFieldIR {
     name: String,
     #[serde(rename = "type")]
     type_index: usize,
+    builtin: Option<String>,
+    location: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum NagaConstantValueIR {
+    Bool(bool),
+    Number(f64),
+    Array(Vec<f64>),
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct NagaConstantIR {
     #[serde(rename = "type")]
     type_index: usize,
-    value: f64,
+    value: NagaConstantValueIR,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -94,61 +120,120 @@ struct NagaFunctionArgumentIR {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
 enum NagaBinaryOpIR {
     Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    Eq,
-    Ne,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    Equal,
+    NotEqual,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+enum NagaMathFunctionIR {
+    Mix,
+    Sin,
+    Cos,
+    Normalize,
+    Min,
+    Max,
+    Abs,
+    Atan2,
+    Ceil,
+    Clamp,
+    Exp,
+    Floor,
+    Fract,
+    Log,
+    Pow,
+    Round,
+    Sign,
+    Sqrt,
+    Tan,
+    Trunc,
+}
+
+// [LAW:one-source-of-truth] Expression discriminant is "type" (PascalCase).
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "type")]
 enum NagaExpressionIR {
-    Argument {
-        argument: usize,
-    },
     Constant {
         constant: usize,
-    },
-    AccessIndex {
-        base: usize,
-        index: usize,
     },
     Binary {
         op: NagaBinaryOpIR,
         left: usize,
         right: usize,
     },
-    BufferLoad {
-        buffer: String,
-        index: usize,
+    Math {
+        fun: NagaMathFunctionIR,
+        arg: usize,
+        arg1: Option<usize>,
+        arg2: Option<usize>,
     },
-    As {
-        to: NagaScalarKindIR,
+    Select {
+        condition: usize,
+        accept: usize,
+        reject: usize,
+    },
+    GlobalVariable {
+        variable: usize,
+    },
+    Compose {
+        ty: usize,
+        components: Vec<usize>,
+    },
+    ArrayLength {
         expr: usize,
     },
+    Access {
+        base: usize,
+        index: usize,
+    },
+    AccessIndex {
+        base: usize,
+        index: usize,
+    },
+    Load {
+        pointer: usize,
+    },
+    As {
+        expr: usize,
+        kind: NagaScalarKindIR,
+        convert: bool,
+    },
+    FunctionArgument {
+        index: usize,
+    },
     Call {
-        function: String,
-        args: Vec<usize>,
+        function: usize,
+        arguments: Vec<usize>,
+    },
+    AtomicResult {
+        #[allow(dead_code)]
+        kind: String,
+        pointer: usize,
+        value: usize,
     },
 }
 
+// [LAW:one-source-of-truth] Statement discriminant is "type" (PascalCase).
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "type")]
 enum NagaStatementIR {
     Store {
-        buffer: String,
-        index: usize,
+        pointer: usize,
         value: usize,
-        comment: Option<String>,
+    },
+    StoreState {
+        #[serde(rename = "stateKey")]
+        state_key: String,
+        value: usize,
     },
     Comment {
         text: String,
@@ -163,13 +248,18 @@ enum NagaStatementIR {
     },
     Break,
     Continue,
-    Return,
+    Return {
+        value: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct NagaFunctionIR {
     name: String,
     arguments: Vec<NagaFunctionArgumentIR>,
+    #[serde(rename = "returnType")]
+    #[allow(dead_code)]
+    return_type: Option<usize>,
     expressions: Vec<NagaExpressionIR>,
     statements: Vec<NagaStatementIR>,
     body: Vec<usize>,
@@ -194,12 +284,9 @@ struct NagaModuleIR {
     entry_points: Vec<NagaEntryPointIR>,
 }
 
-struct ExpressionEmitter<'a> {
-    function_ir: &'a NagaFunctionIR,
-    module_ir: &'a NagaModuleIR,
-    cache: HashMap<usize, String>,
-    stack: HashSet<usize>,
-}
+// =============================================================================
+// Helpers
+// =============================================================================
 
 fn make_error(message: impl Into<String>, location: impl Into<String>, path: impl Into<String>) -> FormattedError {
     FormattedError {
@@ -209,28 +296,24 @@ fn make_error(message: impl Into<String>, location: impl Into<String>, path: imp
     }
 }
 
-fn is_valid_wgsl_identifier(identifier: &str) -> bool {
-    let mut chars = identifier.chars();
-    match chars.next() {
-        Some(first) if first == '_' || first.is_ascii_alphabetic() => {}
-        _ => return false,
-    }
-    chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-}
-
 fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
     match scalar {
-        NagaScalarKindIR::F32 => "f32",
-        NagaScalarKindIR::U32 => "u32",
+        NagaScalarKindIR::Float => "f32",
+        NagaScalarKindIR::Uint => "u32",
+        NagaScalarKindIR::Sint => "i32",
         NagaScalarKindIR::Bool => "bool",
     }
 }
 
 fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
     match scalar {
-        NagaScalarKindIR::U32 => {
+        NagaScalarKindIR::Uint => {
             let int_value = value.trunc() as i64;
             format!("{}u", int_value.max(0))
+        }
+        NagaScalarKindIR::Sint => {
+            let int_value = value.trunc() as i64;
+            format!("{}i", int_value)
         }
         NagaScalarKindIR::Bool => {
             if value == 0.0 {
@@ -239,7 +322,7 @@ fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
                 "true".to_owned()
             }
         }
-        NagaScalarKindIR::F32 => {
+        NagaScalarKindIR::Float => {
             if value.fract() == 0.0 {
                 format!("{value:.1}")
             } else {
@@ -248,6 +331,66 @@ fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
         }
     }
 }
+
+fn format_constant_value(value: &NagaConstantValueIR, scalar: NagaScalarKindIR) -> String {
+    match value {
+        NagaConstantValueIR::Bool(b) => if *b { "true" } else { "false" }.to_owned(),
+        NagaConstantValueIR::Number(n) => format_scalar_literal(*n, scalar),
+        NagaConstantValueIR::Array(values) => {
+            // Array constant — comma-separated components
+            values
+                .iter()
+                .map(|v| format_scalar_literal(*v, scalar))
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    }
+}
+
+fn binary_op_token(op: NagaBinaryOpIR) -> &'static str {
+    match op {
+        NagaBinaryOpIR::Add => "+",
+        NagaBinaryOpIR::Subtract => "-",
+        NagaBinaryOpIR::Multiply => "*",
+        NagaBinaryOpIR::Divide => "/",
+        NagaBinaryOpIR::Modulo => "%",
+        NagaBinaryOpIR::Less => "<",
+        NagaBinaryOpIR::LessEqual => "<=",
+        NagaBinaryOpIR::Greater => ">",
+        NagaBinaryOpIR::GreaterEqual => ">=",
+        NagaBinaryOpIR::Equal => "==",
+        NagaBinaryOpIR::NotEqual => "!=",
+    }
+}
+
+fn math_function_name(fun: NagaMathFunctionIR) -> &'static str {
+    match fun {
+        NagaMathFunctionIR::Mix => "mix",
+        NagaMathFunctionIR::Sin => "sin",
+        NagaMathFunctionIR::Cos => "cos",
+        NagaMathFunctionIR::Normalize => "normalize",
+        NagaMathFunctionIR::Min => "min",
+        NagaMathFunctionIR::Max => "max",
+        NagaMathFunctionIR::Abs => "abs",
+        NagaMathFunctionIR::Atan2 => "atan2",
+        NagaMathFunctionIR::Ceil => "ceil",
+        NagaMathFunctionIR::Clamp => "clamp",
+        NagaMathFunctionIR::Exp => "exp",
+        NagaMathFunctionIR::Floor => "floor",
+        NagaMathFunctionIR::Fract => "fract",
+        NagaMathFunctionIR::Log => "log",
+        NagaMathFunctionIR::Pow => "pow",
+        NagaMathFunctionIR::Round => "round",
+        NagaMathFunctionIR::Sign => "sign",
+        NagaMathFunctionIR::Sqrt => "sqrt",
+        NagaMathFunctionIR::Tan => "tan",
+        NagaMathFunctionIR::Trunc => "trunc",
+    }
+}
+
+// =============================================================================
+// Type Emission
+// =============================================================================
 
 fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, FormattedError> {
     let ty = types.get(type_index).ok_or_else(|| {
@@ -286,6 +429,16 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
             }
             Ok(format!("vec{size}<{}>", scalar_to_wgsl(*scalar)))
         }
+        NagaTypeIR::Matrix { columns, rows, width } => {
+            if *width != 4 {
+                return Err(make_error(
+                    format!("Unsupported matrix width: {width}"),
+                    "Module",
+                    format!("Type[{type_index}]"),
+                ));
+            }
+            Ok(format!("mat{}x{}<f32>", columns, rows))
+        }
         NagaTypeIR::Array { base, size } => match size {
             NagaArraySizeIR::Dynamic(tag) => {
                 if tag != "dynamic" {
@@ -303,25 +456,46 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
     }
 }
 
+fn emit_struct_field_prefix(field: &NagaStructFieldIR) -> String {
+    if let Some(builtin) = &field.builtin {
+        format!("@builtin({builtin}) ")
+    } else if let Some(loc) = field.location {
+        format!("@location({loc}) ")
+    } else {
+        String::new()
+    }
+}
+
 fn emit_structs(types: &[NagaTypeIR]) -> Result<Vec<String>, FormattedError> {
     let mut lines: Vec<String> = Vec::new();
-    for (type_index, ty) in types.iter().enumerate() {
+    for ty in types.iter() {
         if let NagaTypeIR::Struct { name, fields } = ty {
             lines.push(format!("struct {name} {{"));
             for field in fields {
+                let prefix = emit_struct_field_prefix(field);
                 lines.push(format!(
-                    "  {}: {},",
+                    "  {}{}: {},",
+                    prefix,
                     field.name,
                     emit_type_ref(field.type_index, types)?
                 ));
             }
             lines.push("};".to_owned());
             lines.push(String::new());
-        } else {
-            let _ = type_index;
         }
     }
     Ok(lines)
+}
+
+// =============================================================================
+// Expression Emitter
+// =============================================================================
+
+struct ExpressionEmitter<'a> {
+    function_ir: &'a NagaFunctionIR,
+    module_ir: &'a NagaModuleIR,
+    cache: HashMap<usize, String>,
+    stack: HashSet<usize>,
 }
 
 impl<'a> ExpressionEmitter<'a> {
@@ -357,12 +531,12 @@ impl<'a> ExpressionEmitter<'a> {
         self.stack.insert(expr_id);
 
         let emitted = match expr {
-            NagaExpressionIR::Argument { argument } => {
-                let arg = self.function_ir.arguments.get(*argument).ok_or_else(|| {
+            NagaExpressionIR::FunctionArgument { index } => {
+                let arg = self.function_ir.arguments.get(*index).ok_or_else(|| {
                     make_error(
                         "Argument handle not found",
                         format!("Expression [{expr_id}]"),
-                        format!("Function [{}] -> Argument [{argument}]", self.function_ir.name),
+                        format!("Function [{}] -> Argument [{index}]", self.function_ir.name),
                     )
                 })?;
                 arg.name.clone()
@@ -375,11 +549,29 @@ impl<'a> ExpressionEmitter<'a> {
                         format!("Function [{}] -> Constant [{constant}]", self.function_ir.name),
                     )
                 })?;
-                let scalar = match self.module_ir.types.get(constant_ir.type_index) {
+                let ty = self.module_ir.types.get(constant_ir.type_index);
+                let scalar = match ty {
                     Some(NagaTypeIR::Scalar { scalar, .. }) => *scalar,
+                    Some(NagaTypeIR::Vector { scalar, size, .. }) => {
+                        // Vector constant: vec3<f32>(x, y, z)
+                        let type_name = format!("vec{size}<{}>", scalar_to_wgsl(*scalar));
+                        let values = format_constant_value(&constant_ir.value, *scalar);
+                        self.stack.remove(&expr_id);
+                        let result = format!("{type_name}({values})");
+                        self.cache.insert(expr_id, result.clone());
+                        return Ok(result);
+                    }
+                    Some(NagaTypeIR::Matrix { columns, rows, .. }) => {
+                        let type_name = format!("mat{}x{}<f32>", columns, rows);
+                        let values = format_constant_value(&constant_ir.value, NagaScalarKindIR::Float);
+                        self.stack.remove(&expr_id);
+                        let result = format!("{type_name}({values})");
+                        self.cache.insert(expr_id, result.clone());
+                        return Ok(result);
+                    }
                     _ => {
                         return Err(make_error(
-                            "Constant scalar type is missing",
+                            "Constant type is missing or unsupported",
                             format!("Expression [{expr_id}]"),
                             format!(
                                 "Function [{}] -> Constant [{constant}] -> Type [{}]",
@@ -388,7 +580,22 @@ impl<'a> ExpressionEmitter<'a> {
                         ));
                     }
                 };
-                format_scalar_literal(constant_ir.value, scalar)
+                format_constant_value(&constant_ir.value, scalar)
+            }
+            NagaExpressionIR::GlobalVariable { variable } => {
+                let global = self.module_ir.global_variables.get(*variable).ok_or_else(|| {
+                    make_error(
+                        "GlobalVariable handle not found",
+                        format!("Expression [{expr_id}]"),
+                        format!("Function [{}] -> GlobalVariable [{variable}]", self.function_ir.name),
+                    )
+                })?;
+                global.name.clone()
+            }
+            NagaExpressionIR::Access { base, index } => {
+                let base_expr = self.emit(*base)?;
+                let index_expr = self.emit(*index)?;
+                format!("{base_expr}[{index_expr}]")
             }
             NagaExpressionIR::AccessIndex { base, index } => {
                 let base_expr = self.emit(*base)?;
@@ -399,7 +606,7 @@ impl<'a> ExpressionEmitter<'a> {
                     3 => "w",
                     _ => {
                         return Err(make_error(
-                            "access_index out of range",
+                            format!("AccessIndex out of range: {index}"),
                             format!("Expression [{expr_id}]"),
                             format!("Function [{}]", self.function_ir.name),
                         ));
@@ -407,50 +614,82 @@ impl<'a> ExpressionEmitter<'a> {
                 };
                 format!("{base_expr}.{component}")
             }
+            NagaExpressionIR::Load { pointer } => {
+                // Load from a pointer expression — the pointer already represents the access path
+                self.emit(*pointer)?
+            }
             NagaExpressionIR::Binary { op, left, right } => {
                 let left_expr = self.emit(*left)?;
                 let right_expr = self.emit(*right)?;
-                let op_token = match op {
-                    NagaBinaryOpIR::Add => "+",
-                    NagaBinaryOpIR::Sub => "-",
-                    NagaBinaryOpIR::Mul => "*",
-                    NagaBinaryOpIR::Div => "/",
-                    NagaBinaryOpIR::Mod => "%",
-                    NagaBinaryOpIR::Lt => "<",
-                    NagaBinaryOpIR::Le => "<=",
-                    NagaBinaryOpIR::Gt => ">",
-                    NagaBinaryOpIR::Ge => ">=",
-                    NagaBinaryOpIR::Eq => "==",
-                    NagaBinaryOpIR::Ne => "!=",
-                };
-                format!("({left_expr} {op_token} {right_expr})")
+                format!("({left_expr} {} {right_expr})", binary_op_token(*op))
             }
-            NagaExpressionIR::BufferLoad { buffer, index } => {
-                let index_expr = self.emit(*index)?;
-                format!("{buffer}[{index_expr}]")
+            NagaExpressionIR::Math { fun, arg, arg1, arg2 } => {
+                let name = math_function_name(*fun);
+                let a = self.emit(*arg)?;
+                match (arg1, arg2) {
+                    (Some(b_id), Some(c_id)) => {
+                        let b = self.emit(*b_id)?;
+                        let c = self.emit(*c_id)?;
+                        format!("{name}({a}, {b}, {c})")
+                    }
+                    (Some(b_id), None) => {
+                        let b = self.emit(*b_id)?;
+                        format!("{name}({a}, {b})")
+                    }
+                    _ => {
+                        format!("{name}({a})")
+                    }
+                }
             }
-            NagaExpressionIR::As { to, expr } => {
+            NagaExpressionIR::Select { condition, accept, reject } => {
+                let cond = self.emit(*condition)?;
+                let accept_expr = self.emit(*accept)?;
+                let reject_expr = self.emit(*reject)?;
+                format!("select({reject_expr}, {accept_expr}, {cond})")
+            }
+            NagaExpressionIR::Compose { ty, components } => {
+                let type_ref = emit_type_ref(*ty, &self.module_ir.types)?;
+                let mut parts: Vec<String> = Vec::with_capacity(components.len());
+                for comp in components {
+                    parts.push(self.emit(*comp)?);
+                }
+                format!("{type_ref}({})", parts.join(", "))
+            }
+            NagaExpressionIR::ArrayLength { expr } => {
+                let inner = self.emit(*expr)?;
+                format!("arrayLength(&{inner})")
+            }
+            NagaExpressionIR::As { expr, kind, convert } => {
                 let source = self.emit(*expr)?;
-                match to {
-                    NagaScalarKindIR::Bool => format!("({source} != 0u)"),
-                    _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*to)),
+                if *convert {
+                    // Conversion cast
+                    format!("{}({source})", scalar_to_wgsl(*kind))
+                } else {
+                    // Bitcast
+                    match kind {
+                        NagaScalarKindIR::Bool => format!("({source} != 0u)"),
+                        _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*kind)),
+                    }
                 }
             }
-            NagaExpressionIR::Call { function, args } => {
-                // [LAW:single-enforcer] Validate IR-driven call targets once at
-                // the shim emission boundary before any WGSL string formatting.
-                if !is_valid_wgsl_identifier(function) {
-                    return Err(make_error(
-                        "Invalid call target identifier",
+            NagaExpressionIR::Call { function, arguments } => {
+                let fn_ir = self.module_ir.functions.get(*function).ok_or_else(|| {
+                    make_error(
+                        "Call function handle not found",
                         format!("Expression [{expr_id}]"),
-                        format!("Function [{}]", self.function_ir.name),
-                    ));
-                }
-                let mut emitted_args: Vec<String> = Vec::with_capacity(args.len());
-                for arg in args {
+                        format!("Function [{}] -> Call [{function}]", self.function_ir.name),
+                    )
+                })?;
+                let mut emitted_args: Vec<String> = Vec::with_capacity(arguments.len());
+                for arg in arguments {
                     emitted_args.push(self.emit(*arg)?);
                 }
-                format!("{function}({})", emitted_args.join(", "))
+                format!("{}({})", fn_ir.name, emitted_args.join(", "))
+            }
+            NagaExpressionIR::AtomicResult { kind: _, pointer, value } => {
+                let ptr_expr = self.emit(*pointer)?;
+                let val_expr = self.emit(*value)?;
+                format!("atomicAdd(&{ptr_expr}, {val_expr})")
             }
         };
 
@@ -459,6 +698,10 @@ impl<'a> ExpressionEmitter<'a> {
         Ok(emitted)
     }
 }
+
+// =============================================================================
+// Statement Emission
+// =============================================================================
 
 fn emit_statement_block(
     function_ir: &NagaFunctionIR,
@@ -494,22 +737,16 @@ fn emit_statement_block(
         let indent = "  ".repeat(indent_level);
 
         match statement {
-            NagaStatementIR::Store {
-                buffer,
-                index,
-                value,
-                comment,
-            } => {
-                let index_expr = emitter.emit(*index)?;
-                let value_expr = emitter.emit(*value)?;
-                let mut line = format!("{indent}{buffer}[{index_expr}] = {value_expr};");
-                if let Some(comment_value) = comment {
-                    if !comment_value.is_empty() {
-                        line.push_str(" // ");
-                        line.push_str(comment_value);
-                    }
-                }
-                lines.push(line);
+            NagaStatementIR::Store { pointer, value } => {
+                let ptr_expr = emitter.emit(*pointer)?;
+                let val_expr = emitter.emit(*value)?;
+                lines.push(format!("{indent}{ptr_expr} = {val_expr};"));
+            }
+            NagaStatementIR::StoreState { state_key, value } => {
+                // StoreState is a semantic marker — emit as a Store with comment
+                let val_expr = emitter.emit(*value)?;
+                lines.push(format!("{indent}// state: {state_key}"));
+                lines.push(format!("{indent}_ = {val_expr};"));
             }
             NagaStatementIR::Comment { text } => {
                 lines.push(format!("{indent}// {text}"));
@@ -530,16 +767,18 @@ fn emit_statement_block(
                     statement_stack,
                 )?;
                 lines.extend(accept_lines);
-                lines.push(format!("{indent}}} else {{"));
-                let reject_lines = emit_statement_block(
-                    function_ir,
-                    module_ir,
-                    emitter,
-                    reject,
-                    indent_level + 1,
-                    statement_stack,
-                )?;
-                lines.extend(reject_lines);
+                if !reject.is_empty() {
+                    lines.push(format!("{indent}}} else {{"));
+                    let reject_lines = emit_statement_block(
+                        function_ir,
+                        module_ir,
+                        emitter,
+                        reject,
+                        indent_level + 1,
+                        statement_stack,
+                    )?;
+                    lines.extend(reject_lines);
+                }
                 lines.push(format!("{indent}}}"));
             }
             NagaStatementIR::Loop { body } => {
@@ -561,36 +800,101 @@ fn emit_statement_block(
             NagaStatementIR::Continue => {
                 lines.push(format!("{indent}continue;"));
             }
-            NagaStatementIR::Return => {
-                lines.push(format!("{indent}return;"));
+            NagaStatementIR::Return { value } => {
+                if let Some(val_id) = value {
+                    let val_expr = emitter.emit(*val_id)?;
+                    lines.push(format!("{indent}return {val_expr};"));
+                } else {
+                    lines.push(format!("{indent}return;"));
+                }
             }
         }
 
-        let _ = module_ir;
         statement_stack.remove(statement_handle);
     }
 
     Ok(lines)
 }
 
-fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, FormattedError> {
-    let compute_entry = module_ir
-        .entry_points
-        .iter()
-        .find(|entry| entry.stage == "compute")
-        .ok_or_else(|| make_error("Missing compute entry point", "EntryPoint", "Module"))?;
+// =============================================================================
+// Module → WGSL
+// =============================================================================
 
-    let function_ir = module_ir
-        .functions
-        .iter()
-        .find(|candidate| candidate.name == compute_entry.function)
-        .ok_or_else(|| {
-            make_error(
-                format!("Entry point function '{}' not found", compute_entry.function),
-                "EntryPoint",
-                "Module",
-            )
-        })?;
+fn emit_function(
+    function_ir: &NagaFunctionIR,
+    module_ir: &NagaModuleIR,
+    entry_point: Option<&NagaEntryPointIR>,
+    lines: &mut Vec<String>,
+    max_active_lanes: Option<u32>,
+) -> Result<(), FormattedError> {
+    let mut arg_parts: Vec<String> = Vec::new();
+    for argument in &function_ir.arguments {
+        let type_ref = emit_type_ref(argument.type_index, &module_ir.types)?;
+        let arg = if let Some(builtin) = &argument.builtin {
+            format!("@builtin({builtin}) {}: {}", argument.name, type_ref)
+        } else {
+            format!("{}: {}", argument.name, type_ref)
+        };
+        arg_parts.push(arg);
+    }
+
+    // Return type annotation
+    let return_annotation = if let Some(ret_type) = function_ir.return_type {
+        format!(" -> {}", emit_type_ref(ret_type, &module_ir.types)?)
+    } else {
+        String::new()
+    };
+
+    if let Some(entry) = entry_point {
+        match entry.stage.as_str() {
+            "compute" => {
+                if let Some(max_lanes) = max_active_lanes {
+                    let lane_bound = max_lanes.max(1);
+                    lines.push(format!("const MAX_ACTIVE_LANES: u32 = {lane_bound}u;"));
+                }
+                lines.push(format!(
+                    "@compute @workgroup_size({}, {}, {})",
+                    entry.workgroup_size[0], entry.workgroup_size[1], entry.workgroup_size[2]
+                ));
+            }
+            "vertex" => {
+                lines.push("@vertex".to_owned());
+            }
+            "fragment" => {
+                lines.push("@fragment".to_owned());
+            }
+            _ => {
+                return Err(make_error(
+                    format!("Unsupported entry point stage: {}", entry.stage),
+                    "EntryPoint",
+                    "Module",
+                ));
+            }
+        }
+    }
+
+    lines.push(format!("fn {}({}){} {{", function_ir.name, arg_parts.join(", "), return_annotation));
+
+    let mut emitter = ExpressionEmitter::new(function_ir, module_ir);
+    let mut statement_stack: HashSet<usize> = HashSet::new();
+    let body_lines = emit_statement_block(
+        function_ir,
+        module_ir,
+        &mut emitter,
+        &function_ir.body,
+        1,
+        &mut statement_stack,
+    )?;
+    lines.extend(body_lines);
+
+    lines.push("}".to_owned());
+    Ok(())
+}
+
+fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, FormattedError> {
+    if module_ir.entry_points.is_empty() {
+        return Err(make_error("No entry points in module", "EntryPoint", "Module"));
+    }
 
     let mut lines: Vec<String> = Vec::new();
     lines.extend(emit_structs(&module_ir.types)?);
@@ -612,65 +916,45 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) 
 
     lines.push(String::new());
 
-    let mut arg_parts: Vec<String> = Vec::new();
-    for argument in &function_ir.arguments {
-        let type_ref = emit_type_ref(argument.type_index, &module_ir.types)?;
-        let arg = if let Some(builtin) = &argument.builtin {
-            format!("@builtin({builtin}) {}: {}", argument.name, type_ref)
-        } else {
-            format!("{}: {}", argument.name, type_ref)
-        };
-        arg_parts.push(arg);
-    }
-
-    if let Some(max_lanes) = max_active_lanes {
-        let lane_bound = max_lanes.max(1);
-        lines.push(format!("const MAX_ACTIVE_LANES: u32 = {lane_bound}u;"));
-    }
-
-    lines.push(format!(
-        "@compute @workgroup_size({}, {}, {})",
-        compute_entry.workgroup_size[0], compute_entry.workgroup_size[1], compute_entry.workgroup_size[2]
-    ));
-    lines.push(format!("fn {}({}) {{", function_ir.name, arg_parts.join(", ")));
-
-    if let Some(max_lanes) = max_active_lanes {
-        let gid_arg = function_ir
-            .arguments
-            .iter()
-            .find(|arg| arg.builtin.as_deref() == Some("global_invocation_id"));
-        if let Some(gid) = gid_arg {
-            lines.push(format!("  let lane = {}.x;", gid.name));
-            lines.push("  if (lane >= MAX_ACTIVE_LANES) {".to_owned());
-            lines.push("    return;".to_owned());
-            lines.push("  }".to_owned());
+    // Emit non-entry-point helper functions first
+    let entry_fn_names: HashSet<&str> = module_ir.entry_points.iter().map(|e| e.function.as_str()).collect();
+    for function_ir in &module_ir.functions {
+        if !entry_fn_names.contains(function_ir.name.as_str()) {
+            emit_function(function_ir, module_ir, None, &mut lines, max_active_lanes)?;
+            lines.push(String::new());
         }
-        let _ = max_lanes;
     }
 
-    let mut emitter = ExpressionEmitter::new(function_ir, module_ir);
-    let mut statement_stack: HashSet<usize> = HashSet::new();
-    let body_lines = emit_statement_block(
-        function_ir,
-        module_ir,
-        &mut emitter,
-        &function_ir.body,
-        1,
-        &mut statement_stack,
-    )?;
-    lines.extend(body_lines);
-
-    lines.push("}".to_owned());
+    // Emit entry point functions
+    for entry in &module_ir.entry_points {
+        let function_ir = module_ir
+            .functions
+            .iter()
+            .find(|f| f.name == entry.function)
+            .ok_or_else(|| {
+                make_error(
+                    format!("Entry point function '{}' not found", entry.function),
+                    "EntryPoint",
+                    "Module",
+                )
+            })?;
+        emit_function(function_ir, module_ir, Some(entry), &mut lines, max_active_lanes)?;
+        lines.push(String::new());
+    }
 
     Ok(lines.join("\n"))
 }
+
+// =============================================================================
+// Compile Pipeline
+// =============================================================================
 
 fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, Vec<FormattedError>> {
     let emitted_wgsl = emit_module_to_wgsl(&module_ir, max_active_lanes).map_err(|error| vec![error])?;
 
     let module = naga::front::wgsl::parse_str(&emitted_wgsl).map_err(|error| {
         vec![make_error(
-            format!("WGSL Parse Failure: {error}"),
+            format!("WGSL Parse Failure: {error}\n---\n{emitted_wgsl}"),
             "Module",
             "WGSL parse",
         )]

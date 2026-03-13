@@ -192,9 +192,7 @@ function readInstalledGpuPassIds(renderer: WebGPURenderer): readonly string[] {
   return typeof renderer.getInstalledGpuPassIds === 'function' ? renderer.getInstalledGpuPassIds() : [];
 }
 
-function readSinkTableSample(renderer: WebGPURenderer): ReturnType<WebGPURenderer['getLatestSinkTableSample']> {
-  return typeof renderer.getLatestSinkTableSample === 'function' ? renderer.getLatestSinkTableSample() : null;
-}
+// Sink table sample infrastructure removed (non-compliant CPU-owned draw counts).
 
 interface RuntimeConsoleHeartbeatInputs {
   currentProgram: CompiledProgramIR;
@@ -251,13 +249,11 @@ function buildRuntimeHeartbeatRuntime(
   store: RootStore,
   telemetry: RuntimeTelemetrySnapshot,
   installedGpuPassIds: readonly string[],
-  sinkTableSample: ReturnType<WebGPURenderer['getLatestSinkTableSample']>,
 ): {
   demoFilename: string | null;
   renderStepCount: number;
   drawPrepSinkCount: number;
   installedGpuPassIds: readonly string[];
-  sinkTableSample: ReturnType<WebGPURenderer['getLatestSinkTableSample']>;
   schedulerFrameCount: number;
   simulationPassCount: number;
   expectedPingPongIndexFromParity: number;
@@ -273,7 +269,6 @@ function buildRuntimeHeartbeatRuntime(
     renderStepCount,
     drawPrepSinkCount: currentProgram.drawPrepProgram.sinks.length,
     installedGpuPassIds,
-    sinkTableSample,
     schedulerFrameCount,
     simulationPassCount,
     expectedPingPongIndexFromParity,
@@ -295,13 +290,11 @@ function emitRuntimeConsoleHeartbeat(inputs: RuntimeConsoleHeartbeatInputs): voi
     return;
   }
   const installedGpuPassIds = readInstalledGpuPassIds(renderer);
-  const sinkTableSample = readSinkTableSample(renderer);
   const runtime = buildRuntimeHeartbeatRuntime(
     currentProgram,
     store,
     telemetry,
     installedGpuPassIds,
-    sinkTableSample,
   );
   const line = {
     kind: 'runtime-heartbeat',

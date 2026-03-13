@@ -1,4 +1,3 @@
-import type { NagaModuleIR } from './ir/naga-emitter';
 import initShim, {
   compile_ir,
   type ShimBootStage,
@@ -48,7 +47,7 @@ export class NagaService {
     await this.bootPromise;
   }
 
-  static compile(module: NagaModuleIR, options?: NagaCompileOptions): NagaCompilationResult {
+  static compile(module: unknown, options?: NagaCompileOptions): NagaCompilationResult {
     if (!this.ready) {
       throw new Error('NagaService.compile called before boot');
     }

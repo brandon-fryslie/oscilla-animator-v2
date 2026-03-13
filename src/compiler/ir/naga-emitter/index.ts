@@ -8,25 +8,20 @@ export {
   type NagaHandle,
   type NagaStatement,
   type NagaType,
+  type NagaGlobalVariable,
+  type NagaFunctionArgument,
+  type NagaFunction,
+  type NagaEntryPoint,
+  type NagaEntryPointStage,
+  type NagaModule,
+  type NagaStorageClass,
+  type NagaStorageAccess,
+  type NagaStructField,
+  type NagaBuiltinName,
   NagaArena,
 } from './naga-types';
 
 export { type BlockContext, ExprHandle, NagaBuilder } from './NagaBuilder';
 export { ScopeEnvironment } from './ScopeEnvironment';
 export { NagaValidationError, collectNagaValidationIssues, validateNagaBuilder } from './NagaValidator';
-export {
-  lowerScheduleToNagaModule,
-  type NagaLoweringProgramIR,
-  type NagaModuleIR,
-  type NagaFunctionIR,
-  type NagaExpressionIR,
-  type NagaStatementIR,
-  type NagaSourceMapEntryIR,
-  type NagaComputeMetadataIR,
-  type NagaTypeIR,
-  type NagaConstantIR,
-  type NagaGlobalVariableIR,
-  type NagaEntryPointIR,
-  type NagaScalarKindIR,
-  type NagaFunctionArgumentIR,
-} from './ScheduleNagaLowering';
+export { lowerToNagaModule, type LowerToNagaInput } from './lower-to-naga-module';
