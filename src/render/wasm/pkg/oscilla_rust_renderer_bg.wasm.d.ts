@@ -11,6 +11,7 @@ export const rebuild_gpu_pipelines: (a: any) => [number, number];
 export const rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
 export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
+export const take_debug_readback_packet: () => [number, number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;

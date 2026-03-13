@@ -67,6 +67,8 @@ interface RenderTargetInfo {
   controlPoints: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
   scale?: { id: ValueExprId; stride: number };
+  positionZ?: { id: ValueExprId; stride: number };
+  rotation?: { id: ValueExprId; stride: number };
   shape?: { sourceExprId: ValueExprId };
 }
 
@@ -389,6 +391,26 @@ function identityScaleConstKey(): string {
   return 'render.scale.identity.one';
 }
 
+function zeroConstValue(): { kind: 'float'; value: number } {
+  return { kind: 'float', value: 0 };
+}
+
+function zeroConstKey(): string {
+  return 'render.zero.default';
+}
+
+function renderPositionZRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:positionZ`;
+}
+
+function renderRotationRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:rotation`;
+}
+
+function renderParameterBaseRoleKey(renderBlockId: string): string {
+  return `${renderBlockId}:parameterBase`;
+}
+
 function readRenderBuilderInstances(
   builder: UnlinkedIRFragments['builder'],
 ): ReadonlyMap<InstanceId, InstanceDecl> {
@@ -539,7 +561,7 @@ function resolveShapeOutputs(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly builder: UnlinkedIRFragments['builder'];
   readonly getFieldSlot: (fieldId: ValueExprId, semantic: FieldSemantic, roleKey: string) => ValueSlot;
-}): Pick<StepRender, 'shape' | 'controlPoints'> {
+}): Pick<StepRender, 'shapeSlot' | 'parameterBaseSlot'> {
   const shapeFieldExprId = resolveFieldExprId({
     sourceExprId: args.shape.sourceExprId,
     renderInstance: args.renderInstance,
@@ -561,21 +583,25 @@ function resolveShapeOutputs(args: {
     );
   }
 
-  const controlPoints: StepRender['controlPoints'] = shapeInfo.controlPointField
-    ? {
-        ...slotRef(
-          args.getFieldSlot(
-          shapeInfo.controlPointField.id,
-          renderCustomSemantic(),
-          renderControlPointsRoleKey(args.renderBlockId),
-          ),
-        ),
-      }
-    : undefined;
+  const parameterBaseSourceExprId = shapeInfo.controlPointField?.id
+    ?? args.builder.constantWithKey(zeroConstValue(), canonicalType(FLOAT, unitNone()), zeroConstKey());
+  const parameterBaseFieldExprId = resolveFieldExprId({
+    sourceExprId: parameterBaseSourceExprId,
+    renderInstance: args.renderInstance,
+    valueExprs: args.valueExprs,
+    builder: args.builder,
+    renderBlockId: args.renderBlockId,
+    label: 'parameterBase',
+  });
+  const parameterBaseSlot: ValueSlot = args.getFieldSlot(
+    parameterBaseFieldExprId,
+    renderCustomSemantic(),
+    renderParameterBaseRoleKey(args.renderBlockId),
+  );
 
   return {
-    shape: slotRef(shapeSlot),
-    ...(controlPoints && { controlPoints }),
+    shapeSlot: slotRef(shapeSlot),
+    parameterBaseSlot,
   };
 }
 
@@ -641,6 +667,28 @@ function buildRenderStepForTarget(args: {
     renderScaleRoleKey(scaleFieldExprId),
   );
 
+  // [LAW:dataflow-not-control-flow] Unused render attributes get real zero-valued
+  // slots so that consumers never branch on nullable fields.
+  const zeroExprId = builder.constantWithKey(zeroConstValue(), canonicalType(FLOAT, unitNone()), zeroConstKey());
+
+  const positionZSourceExprId = target.positionZ?.id ?? zeroExprId;
+  const positionZFieldExprId = resolveFieldExprId({
+    sourceExprId: positionZSourceExprId, renderInstance, valueExprs, builder,
+    renderBlockId: target.renderBlockId, label: 'positionZ',
+  });
+  const positionZSlot = getFieldSlot(
+    positionZFieldExprId, renderCustomSemantic(), renderPositionZRoleKey(target.renderBlockId),
+  );
+
+  const rotationSourceExprId = target.rotation?.id ?? zeroExprId;
+  const rotationFieldExprId = resolveFieldExprId({
+    sourceExprId: rotationSourceExprId, renderInstance, valueExprs, builder,
+    renderBlockId: target.renderBlockId, label: 'rotation',
+  });
+  const rotationSlot = getFieldSlot(
+    rotationFieldExprId, renderCustomSemantic(), renderRotationRoleKey(target.renderBlockId),
+  );
+
   if (!target.shape) {
     throw new Error(renderMissingShapeInputMessage(target.instanceId));
   }
@@ -656,11 +704,13 @@ function buildRenderStepForTarget(args: {
   return {
     kind: 'render',
     instanceId: target.instanceId,
-    controlPointsSlot,
+    positionXYSlot: controlPointsSlot,
+    positionZSlot,
     colorSlot,
-    scale: slotRef(scaleSlot),
-    shape: shapeOutputs.shape,
-    ...(shapeOutputs.controlPoints && { controlPoints: shapeOutputs.controlPoints }),
+    scaleSlot,
+    rotationSlot,
+    shapeSlot: shapeOutputs.shapeSlot,
+    parameterBaseSlot: shapeOutputs.parameterBaseSlot,
   };
 }
 

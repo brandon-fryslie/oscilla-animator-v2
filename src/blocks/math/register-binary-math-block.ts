@@ -1,6 +1,6 @@
 import { OpCode } from '../../compiler/ir/types';
 import { cardinalityVarId } from '../../core/ids';
-import { canonicalType, cardinalityVar, FLOAT, payloadStride } from '../../core/canonical-types';
+import { canonicalType, cardinalityVar, FLOAT, payloadStride, requireInst } from '../../core/canonical-types';
 import { registerBlock, STANDARD_NUMERIC_PAYLOADS } from '../registry';
 
 type BinaryMathUnitBehavior = 'preserve' | 'requireUnitless';
@@ -53,7 +53,20 @@ export function registerBinaryMathBlock(spec: BinaryMathBlockSpec): void {
       if (!a || !b) throw new Error(`${spec.type} requires both inputs`);
 
       const outType = ctx.outTypes[0];
-      const resultId = ctx.b.zipAuto([a.id, b.id], ctx.b.opcode(spec.opcode), outType);
+      const outCard = requireInst(outType.extent.cardinality, 'cardinality').kind;
+      const aCard = 'type' in a ? requireInst(a.type.extent.cardinality, 'cardinality').kind : 'unknown';
+      const bCard = 'type' in b ? requireInst(b.type.extent.cardinality, 'cardinality').kind : 'unknown';
+      let resultId;
+      try {
+        resultId = ctx.b.zipAuto([a.id, b.id], ctx.b.opcode(spec.opcode), outType);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // [LAW:no-silent-fallbacks] Cardinality mismatches must fail with
+        // block-local context instead of opaque IRBuilder errors.
+        throw new Error(
+          `${spec.type}: cardinality mismatch during lowering (a=${aCard}, b=${bCard}, out=${outCard}). ${message}`
+        );
+      }
       return {
         outputsById: {
           out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },

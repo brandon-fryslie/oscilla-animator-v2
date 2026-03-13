@@ -359,15 +359,13 @@ function collectRuntimeLiveExprIdsForPatching(args: {
         pushExpr(step.value as number);
         break;
       case 'render':
-        pushFieldExprForSlot(step.controlPointsSlot as number);
+        pushFieldExprForSlot(step.positionXYSlot as number);
         pushFieldExprForSlot(step.colorSlot as number);
-        pushFieldExprForSlot(step.scale.slot as number);
-        pushFieldExprForSlot(step.shape.slot as number);
-        if (step.controlPoints?.k === 'slot') {
-          pushFieldExprForSlot(step.controlPoints.slot as number);
-        }
-        pushFieldExprForSlot(step.rotationSlot as number | undefined);
-        pushFieldExprForSlot(step.scale2Slot as number | undefined);
+        pushFieldExprForSlot(step.scaleSlot as number);
+        pushFieldExprForSlot(step.shapeSlot.slot as number);
+        pushFieldExprForSlot(step.rotationSlot as number);
+        pushFieldExprForSlot(step.positionZSlot as number);
+        pushFieldExprForSlot(step.parameterBaseSlot as number);
         break;
       case 'continuityMapBuild':
       case 'continuityApply':
@@ -895,13 +893,13 @@ function inferDrawModeForRenderStep(
   topologyById: ReadonlyMap<number, SerializableTopologyDef>,
   materializedFieldExprBySlot: ReadonlyMap<number, number>,
 ): DrawPrepSinkIR['drawMode'] {
-  const shapeExprId = materializedFieldExprBySlot.get(step.shape.slot as number);
+  const shapeExprId = materializedFieldExprBySlot.get(step.shapeSlot.slot as number);
   if (shapeExprId === undefined) {
     // [LAW:no-silent-fallbacks] Draw-mode inference must fail fast when shape
     // slot provenance is missing; hard-coded indexed defaults are forbidden.
     throw new Error(
       'DrawPrepProgram: render step shape slot has no materialize source ' +
-        `(slot=${String(step.shape.slot)})`,
+        `(slot=${String(step.shapeSlot.slot)})`,
     );
   }
   const shapeRefExprId = resolveShapeRefExprId(shapeExprId, valueExprNodes);
@@ -1081,13 +1079,13 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
         slots.add(step.outputSlot);
         break;
       case 'render':
-        slots.add(step.controlPointsSlot);
+        slots.add(step.positionXYSlot);
         slots.add(step.colorSlot);
-        slots.add(step.shape.slot);
-        slots.add(step.scale.slot);
-        if (step.rotationSlot !== undefined) slots.add(step.rotationSlot);
-        if (step.scale2Slot !== undefined) slots.add(step.scale2Slot);
-        if (step.controlPoints?.k === 'slot') slots.add(step.controlPoints.slot);
+        slots.add(step.shapeSlot.slot);
+        slots.add(step.scaleSlot);
+        slots.add(step.rotationSlot);
+        slots.add(step.positionZSlot);
+        slots.add(step.parameterBaseSlot);
         break;
       case 'eventDispatch':
       case 'stateWrite':

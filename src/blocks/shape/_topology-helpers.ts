@@ -6,6 +6,11 @@
  */
 
 import { PathVerb, type PathTopologyDefInput } from '../../shapes/types';
+import {
+  PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
+  PARAMETRIC_RESOLUTION_DEFAULT,
+  PARAMETRIC_THICKNESS_DEFAULT,
+} from '../../shapes/parametric-contract';
 
 /**
  * Create a line-path topology definition.
@@ -48,5 +53,29 @@ export function createLinePathTopology(pointCount: number, closed: boolean): Pat
     verbs,
     pointsPerVerb,
     totalControlPoints: pointCount,
+  };
+}
+
+/**
+ * Create a cubic parametric-curve topology definition.
+ *
+ * Topology structure:
+ * - MOVE to start point (P0)
+ * - CUBIC using control/end points (P1, P2, P3)
+ * - CLOSE (required so draw-prep routes this class through indexed commands)
+ *
+ * // [LAW:one-source-of-truth] Type 2 curve topology contract is declared once
+ * // here so blocks/materializer share one canonical verb schema.
+ */
+export function createParametricCubicPathTopology(): PathTopologyDefInput {
+  return {
+    params: [
+      { name: 'resolution', type: 'float', default: PARAMETRIC_RESOLUTION_DEFAULT },
+      { name: 'thickness', type: 'float', default: PARAMETRIC_THICKNESS_DEFAULT },
+    ],
+    closed: true,
+    verbs: [PathVerb.MOVE, PathVerb.CUBIC, PathVerb.CLOSE],
+    pointsPerVerb: [1, 3, 0],
+    totalControlPoints: PARAMETRIC_CUBIC_CONTROL_POINT_COUNT,
   };
 }

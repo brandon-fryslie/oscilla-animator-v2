@@ -65,4 +65,35 @@ describe('field float generators', () => {
     }
     expect(compiled.kind).toBe('ok');
   });
+
+  it('NoisyBroadcast compiles when value and amount are both many-cardinality fields', () => {
+    const patch = buildRenderPatch((b, render) => {
+      const valueField = b.addBlock('FloatRangeField');
+      const amountField = b.addBlock('FloatRangeField');
+      b.setConfig(valueField, 'min', 0.35);
+      b.setConfig(valueField, 'max', 0.65);
+      b.setConfig(amountField, 'min', 0.08);
+      b.setConfig(amountField, 'max', 0.2);
+      const seed = b.addBlock('Const');
+      b.setConfig(seed, 'value', 11);
+
+      const noisy = b.addBlock('NoisyBroadcast');
+      b.wire(valueField, 'out', noisy, 'value');
+      b.wire(amountField, 'out', noisy, 'amount');
+      b.wire(seed, 'out', noisy, 'seed');
+      b.wire(noisy, 'out', render, 'scale');
+    });
+
+    const frontend = compileFrontend(patch);
+    if (!frontend.backendReady) {
+      console.error('Frontend errors:', JSON.stringify(frontend.errors, null, 2));
+    }
+    expect(frontend.backendReady).toBe(true);
+
+    const compiled = compile(patch);
+    if (compiled.kind === 'error') {
+      console.error('Compile errors:', JSON.stringify(compiled.errors, null, 2));
+    }
+    expect(compiled.kind).toBe('ok');
+  });
 });

@@ -24,8 +24,9 @@ const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
 
 @group(0) @binding(0) var<storage, read> sinkTableWords: array<u32>;
 @group(0) @binding(2) var<storage, read_write> indirectWords: array<atomic<u32>>;
+@group(0) @binding(3) var<storage, read> instanceWords: array<f32>;
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (arrayLength(&sinkTableWords) < SINK_TABLE_HEADER_WORDS) {
     return;
@@ -48,6 +49,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let first = sinkTableWords[recordBase + RECORD_WORD_FIRST];
   let baseVertex = sinkTableWords[recordBase + RECORD_WORD_BASE_VERTEX];
   let firstInstance = sinkTableWords[recordBase + RECORD_WORD_FIRST_INSTANCE];
+  let maxInstanceCount = arrayLength(&instanceWords) / 12u;
+  let safeInstanceCount = select(
+    min(instanceCount, maxInstanceCount - firstInstance),
+    0u,
+    firstInstance >= maxInstanceCount
+  );
   let indexedRecordCount = sinkTableWords[TABLE_WORD_INDEXED_COUNT];
   let indexedRegionBaseWords = sinkTableWords[TABLE_WORD_INDEXED_REGION_BASE_WORDS];
   let nonIndexedRegionBaseWords = sinkTableWords[TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS];
@@ -63,7 +70,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       return;
     }
     atomicStore(&indirectWords[base + 0u], count);
-    atomicAdd(&indirectWords[base + 1u], instanceCount);
+    atomicAdd(&indirectWords[base + 1u], safeInstanceCount);
     atomicStore(&indirectWords[base + 2u], first);
     atomicStore(&indirectWords[base + 3u], baseVertex);
     atomicStore(&indirectWords[base + 4u], firstInstance);
@@ -79,7 +86,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   atomicStore(&indirectWords[base + 0u], count);
-  atomicAdd(&indirectWords[base + 1u], instanceCount);
+  atomicAdd(&indirectWords[base + 1u], safeInstanceCount);
   atomicStore(&indirectWords[base + 2u], first);
   atomicStore(&indirectWords[base + 3u], firstInstance);
 }
@@ -231,6 +238,16 @@ impl ComputeDispatcher {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
@@ -502,8 +519,7 @@ impl ComputeDispatcher {
         compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
         // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
         // canonical stage; record count data governs in-shader no-op behavior.
-        let draw_prep_workgroup_count =
-            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
+        let draw_prep_workgroup_count = draw_prep_record_count.max(1);
         compute_pass.dispatch_workgroups(draw_prep_workgroup_count, 1, 1);
     }
 

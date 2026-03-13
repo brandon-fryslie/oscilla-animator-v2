@@ -11,10 +11,12 @@ import {
   rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
   resizeRustRendererSurface,
+  takeRustRendererDebugReadbackPacket,
   takeRustRendererFramePacingPacket,
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
+  RustRendererDebugReadbackPacket,
   RustRendererEngineError,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
@@ -72,6 +74,20 @@ function isEngineErrorPayload(payload: unknown): payload is RustRendererEngineEr
     && typeof candidate.message === 'string'
     && typeof candidate.location === 'string'
     && typeof candidate.fatal === 'boolean'
+  );
+}
+
+function isDebugReadbackPayload(payload: unknown): payload is Omit<RustRendererDebugReadbackPacket, 'type'> {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  const candidate = payload as Partial<Omit<RustRendererDebugReadbackPacket, 'type'>>;
+  return (
+    typeof candidate.frameCount === 'number'
+    && Number.isFinite(candidate.frameCount)
+    && typeof candidate.capturedAtMs === 'number'
+    && Number.isFinite(candidate.capturedAtMs)
+    && candidate.arenaWords instanceof Float32Array
   );
 }
 
@@ -155,6 +171,17 @@ function startRuntimePolling(): void {
   // polling relays that packet and never re-derives runtime health locally.
   runtimePollTimer = setInterval(() => {
     try {
+      const rawDebugPacket = takeRustRendererDebugReadbackPacket();
+      if (isDebugReadbackPayload(rawDebugPacket)) {
+        // [LAW:single-enforcer] Worker relay is the one outbound bridge that
+        // forwards GPU debug readback packets to the main thread.
+        postWorkerMessage({
+          type: 'DEBUG_READBACK_PACKET',
+          frameCount: rawDebugPacket.frameCount,
+          capturedAtMs: rawDebugPacket.capturedAtMs,
+          arenaWords: rawDebugPacket.arenaWords,
+        });
+      }
       const rawPacket = takeRustRendererFramePacingPacket();
       if (rawPacket == null) {
         return;

@@ -147,7 +147,7 @@ function resolveFluidPassStages(normalizedPatch: NormalizedPatch): readonly Flui
 
 function resolveStepOwnerBlockId(
   program: CompiledProgramIR,
-  slot: StepRender['controlPointsSlot'] | StepRender['colorSlot'],
+  slot: StepRender['positionXYSlot'] | StepRender['colorSlot'],
 ): string | null {
   const slotOwner = program.debugIndex.slotToBlock.get(slot as never);
   if (typeof slotOwner === 'string') {
@@ -164,7 +164,7 @@ function selectFluidRenderStep(program: CompiledProgramIR, fluidBlockIds: readon
   const fluidOwners = new Set(fluidBlockIds);
   for (const step of program.schedule.steps as readonly Step[]) {
     if (step.kind !== 'render') continue;
-    const controlOwner = resolveStepOwnerBlockId(program, step.controlPointsSlot);
+    const controlOwner = resolveStepOwnerBlockId(program, step.positionXYSlot);
     const colorOwner = resolveStepOwnerBlockId(program, step.colorSlot);
     if ((controlOwner && fluidOwners.has(controlOwner)) || (colorOwner && fluidOwners.has(colorOwner))) {
       return step;
@@ -192,12 +192,12 @@ function descriptorToPlan(program: CompiledProgramIR, slot: number): ArenaAddres
 }
 
 function buildFluidRenderPlan(program: CompiledProgramIR, step: StepRender): FluidRenderPlan | null {
-  const controlPoints = descriptorToPlan(program, step.controlPointsSlot);
+  const controlPoints = descriptorToPlan(program, step.positionXYSlot);
   const color = descriptorToPlan(program, step.colorSlot as never);
-  const scale = descriptorToPlan(program, step.scale.slot as never);
+  const scale = descriptorToPlan(program, step.scaleSlot as never);
   if (!controlPoints || !color || !scale) return null;
 
-  const controlDescriptor = program.runtimeAddressTable.slotToArena.get(step.controlPointsSlot as never);
+  const controlDescriptor = program.runtimeAddressTable.slotToArena.get(step.positionXYSlot as never);
   if (!controlDescriptor) return null;
 
   const maxActiveLanes = Math.max(1, Math.floor(program.generatedComputeProgram.maxActiveLanes));

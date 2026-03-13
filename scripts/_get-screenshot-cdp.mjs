@@ -32,11 +32,18 @@ const viewportWidth = parseInt(widthStr);
 const viewportHeight = parseInt(heightStr);
 const burst = JSON.parse(burstJson);
 
-// Global timeout — never hang indefinitely
+const CANVAS_POLL_TIMEOUT_MS = 30_000;
+const RUNTIME_READY_TIMEOUT_MS = 45_000;
+const RUNTIME_PROBE_DISCOVERY_TIMEOUT_MS = 8_000;
+const CAPTURE_LIMIT_MS = 10_000;
+const GLOBAL_TIMEOUT_MS = CANVAS_POLL_TIMEOUT_MS + RUNTIME_READY_TIMEOUT_MS + CAPTURE_LIMIT_MS + 15_000;
+
+// Global timeout — never hang indefinitely.
+// [LAW:verifiable-goals] Runtime capture must always terminate deterministically.
 setTimeout(() => {
-  console.error('Error: Global timeout reached (60s). Aborting.');
+  console.error(`Error: Global timeout reached (${Math.round(GLOBAL_TIMEOUT_MS / 1000)}s). Aborting.`);
   process.exit(1);
-}, 60_000).unref();
+}, GLOBAL_TIMEOUT_MS).unref();
 
 // ─── HTTP helpers ────────────────────────────────────────────────────────────
 
@@ -207,6 +214,14 @@ async function readJsTime(cdp) {
   return result.result.value;
 }
 
+async function readRuntimeProbe(cdp) {
+  const result = await cdp.send('Runtime.evaluate', {
+    expression: 'globalThis.__OSCILLA_RUNTIME_PROBE__ ?? null',
+    returnByValue: true,
+  });
+  return result?.result?.value ?? null;
+}
+
 async function main() {
   // 1. Connect to Chrome
   const targets = await httpGet(`http://127.0.0.1:${debugPort}/json/list`);
@@ -230,11 +245,10 @@ async function main() {
   await cdp.send('Page.navigate', { url: targetUrl });
 
   // 4. Poll for <canvas> — app has loaded, compiled, and rendered
-  const POLL_TIMEOUT_MS = 30_000;
   const start = Date.now();
   let canvasFound = false;
 
-  while (Date.now() - start < POLL_TIMEOUT_MS) {
+  while (Date.now() - start < CANVAS_POLL_TIMEOUT_MS) {
     try {
       const result = await cdp.send('Runtime.evaluate', {
         expression: "document.querySelector('canvas') !== null",
@@ -248,7 +262,46 @@ async function main() {
   if (canvasFound) {
     console.error('Canvas detected.');
   } else {
-    console.error('Warning: Canvas not found after 30s. Capturing anyway.');
+    console.error(`Warning: Canvas not found after ${Math.round(CANVAS_POLL_TIMEOUT_MS / 1000)}s. Capturing anyway.`);
+  }
+
+  // 4.5. Wait for runtime bootstrap + first rendered frame so captures reflect
+  // actual scene output instead of pre-bootstrap clear color.
+  const runtimeProbeStart = Date.now();
+  let runtimeReady = false;
+  let probeObserved = false;
+  while (Date.now() - runtimeProbeStart < RUNTIME_READY_TIMEOUT_MS) {
+    let probe = null;
+    try {
+      probe = await readRuntimeProbe(cdp);
+    } catch {
+      probe = null;
+    }
+    if (probe && typeof probe === 'object') {
+      probeObserved = true;
+    }
+    if (!probeObserved && Date.now() - runtimeProbeStart >= RUNTIME_PROBE_DISCOVERY_TIMEOUT_MS) {
+      console.error('Warning: Runtime probe unavailable; proceeding after canvas detection.');
+      break;
+    }
+    const bootstrapState = probe?.bootstrap?.state ?? 'unknown';
+    const renderedFrames = Number(probe?.loop?.renderedFrameCount ?? 0);
+    if (bootstrapState === 'failed') {
+      console.error('Warning: Runtime bootstrap probe entered failed state. Capturing anyway.');
+      break;
+    }
+    if (bootstrapState === 'succeeded' && renderedFrames > 0) {
+      runtimeReady = true;
+      break;
+    }
+    await sleep(250);
+  }
+  if (runtimeReady) {
+    console.error('Runtime probe ready (bootstrap succeeded, frames > 0).');
+  } else if (probeObserved) {
+    console.error('Warning: Runtime probe not ready within timeout. Capturing anyway.');
+  } else {
+    console.error('Runtime probe was not exposed by page; capture proceeded without probe gating.');
   }
 
   // 5. Wait burst_wait before starting capture (default 0 — capture from animation start)
@@ -289,7 +342,6 @@ async function main() {
   //    The delta from the first recording is the authoritative animation timestamp.
   mkdirSync(outputDir, { recursive: true });
 
-  const CAPTURE_LIMIT_MS = 10_000;
   const captureBaseWall = Date.now();
   let baseJsTime = null;
   let frameCount = 0;

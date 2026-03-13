@@ -180,8 +180,10 @@ function typecheckIdentifier(node: ExprNode & { kind: 'identifier' }, ctx: TypeC
   const availableIdentifiers = [...availableInputs, ...availableConstants];
   const available = availableIdentifiers.length > 0 ? availableIdentifiers.join(', ') : '(none)';
   const suggestion = findClosestMatch(node.name, availableIdentifiers);
+  const blockRefHint = findReferencePrefixHints(node.name, ctx.blockRefs?.typesByName.keys());
+  const blockRefHintText = blockRefHint ? ` Block-ref hints: ${blockRefHint}.` : '';
   throw new TypeError(
-    `Undefined identifier '${node.name}'. Available identifiers: ${available}${suggestion ? `. Did you mean '${suggestion}'?` : ''}`,
+    `Undefined identifier '${node.name}'. Available identifiers: ${available}${suggestion ? `. Did you mean '${suggestion}'?` : ''}${blockRefHintText}`,
     node.pos
   );
 }
@@ -692,8 +694,13 @@ function resolveBlockOutputReference(node: ExprNode & { kind: 'member' }, ctx: T
   // [LAW:single-enforcer] Expression block collect inputs are the only source for ref name typing.
   const payload = ctx.blockRefs.typesByName.get(shorthand);
   if (payload === undefined) {
+    const referenceKeys = Array.from(ctx.blockRefs.typesByName.keys());
+    const suggestion = findClosestMatch(shorthand, referenceKeys);
+    const prefixHints = findReferencePrefixHints(shorthand, referenceKeys);
+    const availablePreview = referenceKeys.slice(0, 8).join(', ');
+    const previewText = referenceKeys.length > 8 ? `${availablePreview}, ...` : availablePreview;
     throw new TypeError(
-      `Unknown reference: ${shorthand}`,
+      `Unknown reference: ${shorthand}.${suggestion ? ` Did you mean '${suggestion}'?` : ''}${prefixHints ? ` Similar refs: ${prefixHints}.` : ''}${previewText ? ` Available refs: ${previewText}` : ''}`,
       node.pos,
       undefined,
       undefined,
@@ -724,6 +731,18 @@ function findClosestMatch(input: string, candidates: string[]): string | undefin
   }
 
   return bestMatch;
+}
+
+function findReferencePrefixHints(
+  input: string,
+  candidates: Iterable<string> | undefined,
+): string | undefined {
+  if (!candidates) return undefined;
+  const normalizedInput = input.toLowerCase();
+  const matches = Array.from(candidates)
+    .filter((candidate) => candidate.toLowerCase().startsWith(normalizedInput))
+    .slice(0, 4);
+  return matches.length > 0 ? matches.join(', ') : undefined;
 }
 
 /**

@@ -54,6 +54,20 @@ export function createDebugProbeRuntimeSnapshot(
   state: RuntimeState,
   subscriptions: readonly DebugProbeSubscription[],
 ): DebugProbeRuntimeSnapshot | null {
+  return createDebugProbeRuntimeSnapshotFromArena(
+    program,
+    state.arena,
+    state.cache.frameId,
+    subscriptions,
+  );
+}
+
+export function createDebugProbeRuntimeSnapshotFromArena(
+  program: CompiledProgramIR,
+  arenaWords: Float32Array,
+  runtimeFrameId: number,
+  subscriptions: readonly DebugProbeSubscription[],
+): DebugProbeRuntimeSnapshot | null {
   if (subscriptions.length === 0) {
     return null;
   }
@@ -76,12 +90,12 @@ export function createDebugProbeRuntimeSnapshot(
     slots.set(subscription.slotId, {
       slotId: subscription.slotId,
       descriptor,
-      values: state.arena.subarray(lookup.arena.offset, lookup.arena.offset + lookup.arena.length),
+      values: arenaWords.subarray(lookup.arena.offset, lookup.arena.offset + lookup.arena.length),
     });
   }
 
   return {
-    runtimeFrameId: state.cache.frameId,
+    runtimeFrameId,
     slots: Array.from(slots.values()),
   };
 }

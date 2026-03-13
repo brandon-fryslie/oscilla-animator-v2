@@ -43,9 +43,9 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
 
   const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
   const splitDemos = useMemo(() => {
-    const midpoint = Math.ceil(demo.demos.length / 2);
-    const primary = demo.demos.slice(0, midpoint);
-    const secondary = demo.demos.slice(midpoint);
+    const midpoint = Math.ceil(demo.standardDemos.length / 2);
+    const primary = demo.standardDemos.slice(0, midpoint);
+    const secondary = demo.standardDemos.slice(midpoint);
     const formatLabel = (items: readonly { name: string }[], fallback: string) => {
       const first = items[0]?.name?.trim()?.[0]?.toUpperCase();
       const last = items[items.length - 1]?.name?.trim()?.[0]?.toUpperCase();
@@ -58,7 +58,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
       primaryLabel: formatLabel(primary, 'Demos 1'),
       secondaryLabel: formatLabel(secondary, 'Demos 2'),
     };
-  }, [demo.demos]);
+  }, [demo.standardDemos]);
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -238,6 +238,24 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 </Menu.Target>
                 <Menu.Dropdown>
                   {splitDemos.secondary.map((item) => (
+                    <Menu.Item
+                      key={item.filename}
+                      onClick={() => handleDemoSelect(item.filename)}
+                    >
+                      {item.name}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+            ) : null}
+
+            {demo.diagnosticDemos.length > 0 ? (
+              <Menu shadow="md" width={280} withinPortal>
+                <Menu.Target>
+                  <Button variant="subtle" color="gray" size="xs">Diagnostics</Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {demo.diagnosticDemos.map((item) => (
                     <Menu.Item
                       key={item.filename}
                       onClick={() => handleDemoSelect(item.filename)}

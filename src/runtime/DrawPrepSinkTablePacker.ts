@@ -120,7 +120,7 @@ function resolveSlotShapeHandle(
   }
   const shapeAddress = resolveSlotArenaAddress(
     program,
-    step.shape.slot,
+    step.shapeSlot.slot,
     `shapeSlot sink(instance=${String(step.instanceId)})`,
   );
   const firstHandle = readArenaNumber(shapeAddress, state, 0, 0);
@@ -281,8 +281,8 @@ export function packDrawPrepSinkTableV1(
     const packedFirstInstance = assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`);
     const positionAddress = resolveSlotArenaAddress(
       program,
-      renderStep.controlPointsSlot,
-      `controlPointsSlot sink(instance=${String(renderStep.instanceId)})`,
+      renderStep.positionXYSlot,
+      `positionXYSlot sink(instance=${String(renderStep.instanceId)})`,
     );
     const colorAddress = resolveSlotArenaAddress(
       program,
@@ -291,25 +291,14 @@ export function packDrawPrepSinkTableV1(
     );
     const scaleSlotAddress = resolveSlotArenaAddress(
       program,
-      renderStep.scale.slot,
+      renderStep.scaleSlot,
       `scaleSlot sink(instance=${String(renderStep.instanceId)})`,
     );
-    const rotationSlotAddress =
-      renderStep.rotationSlot !== undefined
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.rotationSlot,
-          `rotationSlot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
-    const scale2SlotAddress =
-      renderStep.scale2Slot !== undefined
-        ? resolveSlotArenaAddress(
-          program,
-          renderStep.scale2Slot,
-          `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
-        )
-        : null;
+    const rotationSlotAddress = resolveSlotArenaAddress(
+      program,
+      renderStep.rotationSlot,
+      `rotationSlot sink(instance=${String(renderStep.instanceId)})`,
+    );
 
     writeDrawPrepSinkRecord(words, recordWriteIndex, {
       drawMode: drawModeToCode(sink.drawMode),
@@ -331,19 +320,16 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleBaseOffset] = scaleSlotAddress.baseOffset;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleLaneStride] = scaleSlotAddress.laneStride;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleComponentStride] = scaleSlotAddress.componentStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationMode] = rotationSlotAddress
-      ? OPTIONAL_MODE_SLOT
-      : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationBaseOffset] = rotationSlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationMode] = OPTIONAL_MODE_SLOT;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationBaseOffset] = rotationSlotAddress.baseOffset;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress.laneStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress.componentStride;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = scale2SlotAddress
-      ? OPTIONAL_MODE_SLOT
-      : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = scale2SlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = scale2SlotAddress?.componentStride ?? 0;
+    // Scale2 removed from StepRender — always constant identity (1, 1).
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = OPTIONAL_MODE_CONSTANT;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 

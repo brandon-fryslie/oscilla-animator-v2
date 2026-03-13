@@ -397,10 +397,10 @@ describe('arenaLayout integration', () => {
         .filter((s): s is Extract<ScheduleIR['steps'][number], { kind: 'materialize' }> => s.kind === 'materialize')
         .map((s) => s.target as number),
     );
-    expect(materializedSlots.has(renderStep.controlPointsSlot as number)).toBe(true);
+    expect(materializedSlots.has(renderStep.positionXYSlot as number)).toBe(true);
     expect(materializedSlots.has(renderStep.colorSlot as number)).toBe(true);
 
-    const positionDesc = result.program.runtimeAddressTable.slotToArena.get(renderStep.controlPointsSlot);
+    const positionDesc = result.program.runtimeAddressTable.slotToArena.get(renderStep.positionXYSlot);
     const colorDesc = result.program.runtimeAddressTable.slotToArena.get(renderStep.colorSlot);
     // [LAW:dataflow-not-control-flow] Canonical materialization does not change packing mode;
     // render multi-component lanes stay channel-separated in SoA layout.

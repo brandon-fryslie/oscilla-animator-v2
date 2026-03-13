@@ -219,7 +219,9 @@ impl GpuMemoryArena {
             }),
         ];
 
-        let initial_instance_bytes = (max_shapes
+        // [LAW:one-source-of-truth] Instance transform capacity is derived
+        // from particle/instance capacity, not draw-record capacity.
+        let initial_instance_bytes = (max_particles
             .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
             .saturating_mul(std::mem::size_of::<f32>()))
             as u64;
@@ -281,6 +283,10 @@ impl GpuMemoryArena {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: indirect_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: instance_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -429,6 +435,10 @@ impl GpuMemoryArena {
 
     pub fn get_compiler_arena_bind_group_for_index(&self, read_index: usize) -> &wgpu::BindGroup {
         &self.compiler_arena_bind_groups[read_index & 1]
+    }
+
+    pub fn compiler_arena_buffer_for_index(&self, read_index: usize) -> &wgpu::Buffer {
+        &self.compiler_arena_buffers[read_index & 1]
     }
 
     pub fn get_compiler_simulation_bind_group(&self) -> &wgpu::BindGroup {
@@ -704,6 +714,10 @@ impl GpuMemoryArena {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: self.indirect_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.instance_buffer.as_entire_binding(),
                 },
             ],
         });
