@@ -202,11 +202,51 @@ export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
   readonly boundaryStepCount: number;
   readonly droppedComputeStepCount: number;
+  readonly fallbackValueCount: number;
+  readonly maxFallbackCascadeDepth: number;
+  readonly hardDropReasonCounts: Readonly<Partial<Record<HardDropReason, number>>>;
+  readonly fallbackReasonCounts: Readonly<Partial<Record<FallbackReason, number>>>;
 }
+
+type HardDropReason =
+  | 'missing_target_slot_metadata'
+  | 'unresolved_materialize_source'
+  | 'missing_source_slot_metadata'
+  | 'continuity_missing_slot_metadata'
+  | 'state_write_missing_source_slot'
+  | 'state_write_missing_slot_metadata';
+
+type FallbackReason = 'unsupported_expression_path';
 
 interface LoweringCoverageState {
   boundaryStepCount: number;
   droppedComputeStepCount: number;
+  fallbackValueCount: number;
+  maxFallbackCascadeDepth: number;
+  hardDropReasonCounts: Partial<Record<HardDropReason, number>>;
+  fallbackReasonCounts: Partial<Record<FallbackReason, number>>;
+}
+
+function incrementReasonCount<TReason extends string>(
+  counts: Partial<Record<TReason, number>>,
+  reason: TReason,
+): void {
+  counts[reason] = (counts[reason] ?? 0) + 1;
+}
+
+// [LAW:no-silent-fallbacks] Hard lowering defects are counted explicitly so the
+// compile boundary can fail deterministically instead of silently degrading.
+function recordHardDrop(coverage: LoweringCoverageState, reason: HardDropReason): void {
+  coverage.droppedComputeStepCount += 1;
+  incrementReasonCount(coverage.hardDropReasonCounts, reason);
+}
+
+// [LAW:dataflow-not-control-flow] Unsupported expression paths stay on the same
+// lowering path and vary only the emitted value/metadata, never step execution.
+function recordFallback(coverage: LoweringCoverageState, reason: FallbackReason, cascadeDepth: number): void {
+  coverage.fallbackValueCount += 1;
+  coverage.maxFallbackCascadeDepth = Math.max(coverage.maxFallbackCascadeDepth, cascadeDepth);
+  incrementReasonCount(coverage.fallbackReasonCounts, reason);
 }
 
 class Interner<T> {
@@ -496,6 +536,33 @@ function resolveStepInputSlot(
   // [LAW:no-silent-fallbacks] Lowering no longer derives implicit source slots
   // from output expressions; unsupported dataflow must fail at compile boundary.
   return null;
+}
+
+type ExprSourcePlanResolution =
+  | { readonly kind: 'plan'; readonly plan: SlotAddressPlan }
+  | { readonly kind: 'missing_slot' }
+  | { readonly kind: 'missing_metadata' };
+
+function resolveExprSourcePlan(
+  exprId: ValueExprId,
+  expr: ValueExpr | undefined,
+  runtimeAddressTable: RuntimeAddressTableIR,
+): ExprSourcePlanResolution {
+  const explicitInputs = collectExprInputs(expr);
+  const explicitSource = explicitInputs
+    .map((candidate) => resolveInputSlotFromExpr(candidate, runtimeAddressTable))
+    .find((candidate): candidate is ValueSlot => candidate !== null);
+  const fieldSlot = runtimeAddressTable.fieldExprToSlot.get(exprId as number);
+  const directSlot = resolveInputSlotFromExpr(exprId as number, runtimeAddressTable);
+  const sourceSlot = explicitSource ?? fieldSlot ?? directSlot;
+  if (sourceSlot === undefined || sourceSlot === null) {
+    return { kind: 'missing_slot' };
+  }
+  const sourcePlan = toSlotAddressPlan(runtimeAddressTable, sourceSlot);
+  if (!sourcePlan) {
+    return { kind: 'missing_metadata' };
+  }
+  return { kind: 'plan', plan: sourcePlan };
 }
 
 function emitAddressIndex(
@@ -1784,6 +1851,7 @@ function emitMaterializeExprComponentF32(args: {
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
   readonly scope: ScopeEnvironment<number>;
+  readonly coverage: LoweringCoverageState;
   readonly depth: number;
 }): number | null {
   if (args.depth > 128) return null;
@@ -1945,21 +2013,23 @@ function emitMaterializeExprComponentF32(args: {
   }
 
   if (resolved === null) {
-    const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
-    if (sourceSlot === null) {
+    const sourceResolution = resolveExprSourcePlan(args.exprId, expr, args.runtimeAddressTable);
+    if (sourceResolution.kind === 'plan') {
+      resolved = emitLoadedF32FromPlan(
+        args.ctx,
+        args.builtins,
+        args.laneExpr,
+        sourceResolution.plan,
+        'arena_in',
+        component,
+        args.source,
+      );
+    } else if (sourceResolution.kind === 'missing_metadata') {
       return null;
+    } else {
+      recordFallback(args.coverage, 'unsupported_expression_path', args.depth);
+      resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
     }
-    const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-    if (!sourcePlan) return null;
-    resolved = emitLoadedF32FromPlan(
-      args.ctx,
-      args.builtins,
-      args.laneExpr,
-      sourcePlan,
-      'arena_in',
-      component,
-      args.source,
-    );
   }
 
   if (resolved !== null) {
@@ -1984,6 +2054,7 @@ function emitMaterializeFromExpression(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
+  readonly coverage: LoweringCoverageState;
 }): boolean {
   if (args.targetPlan.storage !== 'f32') {
     return false;
@@ -1998,6 +2069,7 @@ function emitMaterializeFromExpression(args: {
       exprId: args.step.field,
       componentIndex,
       scope: componentScope,
+      coverage: args.coverage,
       depth: 0,
     });
     if (valueExpr === null) {
@@ -2051,7 +2123,7 @@ function lowerStep(
     case 'materialize': {
       const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.target);
       if (!targetPlan) {
-        coverage.droppedComputeStepCount += 1;
+        recordHardDrop(coverage, 'missing_target_slot_metadata');
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing target slot metadata` }, source);
         return;
       }
@@ -2077,12 +2149,13 @@ function lowerStep(
             valueExprs,
             source,
             targetPlan,
+            coverage,
           })) {
             return;
           }
           const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
           if (!sourceBinding) {
-            coverage.droppedComputeStepCount += 1;
+            recordHardDrop(coverage, 'unresolved_materialize_source');
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
             return;
           }
@@ -2091,7 +2164,7 @@ function lowerStep(
             ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
             : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
           if (!sourcePlan) {
-            coverage.droppedComputeStepCount += 1;
+            recordHardDrop(coverage, 'missing_source_slot_metadata');
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
             return;
           }
@@ -2172,7 +2245,7 @@ function lowerContinuityApply(
   const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
   const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
   if (!sourcePlan || !targetPlan) {
-    coverage.droppedComputeStepCount += 1;
+    recordHardDrop(coverage, 'continuity_missing_slot_metadata');
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
     return;
   }
@@ -2212,7 +2285,7 @@ function lowerStateWrite(args: {
 }): void {
   const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
   if (sourceSlot === null) {
-    args.coverage.droppedComputeStepCount += 1;
+    recordHardDrop(args.coverage, 'state_write_missing_source_slot');
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
     return;
   }
@@ -2220,7 +2293,7 @@ function lowerStateWrite(args: {
   const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
   const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
   if (!sourcePlan || !targetPlan) {
-    args.coverage.droppedComputeStepCount += 1;
+    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata');
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;
   }
@@ -2319,6 +2392,10 @@ export function lowerScheduleToNagaModule(args: {
   const coverage: LoweringCoverageState = {
     boundaryStepCount: 0,
     droppedComputeStepCount: 0,
+    fallbackValueCount: 0,
+    maxFallbackCascadeDepth: 0,
+    hardDropReasonCounts: {},
+    fallbackReasonCounts: {},
   };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
@@ -2384,6 +2461,10 @@ export function lowerScheduleToNagaModule(args: {
       totalStepCount: steps.length,
       boundaryStepCount: coverage.boundaryStepCount,
       droppedComputeStepCount: coverage.droppedComputeStepCount,
+      fallbackValueCount: coverage.fallbackValueCount,
+      maxFallbackCascadeDepth: coverage.maxFallbackCascadeDepth,
+      hardDropReasonCounts: coverage.hardDropReasonCounts,
+      fallbackReasonCounts: coverage.fallbackReasonCounts,
     },
   };
 }

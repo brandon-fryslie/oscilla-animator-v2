@@ -96,6 +96,10 @@ function testProgramConverter(
         totalStepCount: 0,
         boundaryStepCount: 0,
         droppedComputeStepCount: 0,
+        fallbackValueCount: 0,
+        maxFallbackCascadeDepth: 0,
+        hardDropReasonCounts: {},
+        fallbackReasonCounts: {},
       },
     },
   };
