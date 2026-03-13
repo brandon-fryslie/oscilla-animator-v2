@@ -19,6 +19,7 @@ import type {
   PureFn,
   StepStateWrite,
 } from '../types';
+import { ScopeEnvironment } from './ScopeEnvironment';
 
 export type NagaScalarKindIR = 'f32' | 'u32' | 'bool';
 
@@ -1639,6 +1640,29 @@ function emitPureFnF32(
 
 type MaterializeExprInputEmitter = (inputExprId: ValueExprId, requestedComponent: number) => number | null;
 
+function materializeScopeKey(exprId: ValueExprId, componentIndex: number): string {
+  return `${exprId as number}:${componentIndex}`;
+}
+
+function lookupMaterializeScope(args: {
+  readonly scope: ScopeEnvironment<number>;
+  readonly exprId: ValueExprId;
+  readonly componentIndex: number;
+}): number | undefined {
+  return args.scope.get(materializeScopeKey(args.exprId, args.componentIndex));
+}
+
+function bindMaterializeScope(args: {
+  readonly scope: ScopeEnvironment<number>;
+  readonly exprId: ValueExprId;
+  readonly componentIndex: number;
+  readonly handle: number;
+}): void {
+  // [LAW:one-source-of-truth] Materialize expression handle bindings are owned
+  // by ScopeEnvironment so lookup/shadowing behavior is defined at one boundary.
+  args.scope.set(materializeScopeKey(args.exprId, args.componentIndex), args.handle);
+}
+
 // [LAW:dataflow-not-control-flow] Kernel lowering stays data-driven via one
 // dispatch function; per-kind variability lives in expression values.
 // eslint-disable-next-line complexity,sonarjs/cognitive-complexity
@@ -1759,17 +1783,21 @@ function emitMaterializeExprComponentF32(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
-  readonly cache: Map<string, number>;
+  readonly scope: ScopeEnvironment<number>;
   readonly depth: number;
 }): number | null {
   if (args.depth > 128) return null;
-  const cacheKey = `${args.exprId as number}:${args.componentIndex}`;
-  const cached = args.cache.get(cacheKey);
+  const cached = lookupMaterializeScope({
+    scope: args.scope,
+    exprId: args.exprId,
+    componentIndex: args.componentIndex,
+  });
   if (cached !== undefined) return cached;
 
   const expr = args.valueExprs[args.exprId as number];
   if (!expr) return null;
   const component = Math.max(0, args.componentIndex);
+  const nestedScope = args.scope.createChild();
 
   const emitFromExprInput = (inputExprId: ValueExprId, requestedComponent: number): number | null => {
     const inputExpr = args.valueExprs[inputExprId as number];
@@ -1779,6 +1807,7 @@ function emitMaterializeExprComponentF32(args: {
       : 0;
     return emitMaterializeExprComponentF32({
       ...args,
+      scope: nestedScope,
       exprId: inputExprId,
       componentIndex: normalizedComponent,
       depth: args.depth + 1,
@@ -1934,7 +1963,12 @@ function emitMaterializeExprComponentF32(args: {
   }
 
   if (resolved !== null) {
-    args.cache.set(cacheKey, resolved);
+    bindMaterializeScope({
+      scope: args.scope,
+      exprId: args.exprId,
+      componentIndex: args.componentIndex,
+      handle: resolved,
+    });
   }
   return resolved;
 }
@@ -1954,15 +1988,16 @@ function emitMaterializeFromExpression(args: {
   if (args.targetPlan.storage !== 'f32') {
     return false;
   }
-  const cache = new Map<string, number>();
+  const functionScope = new ScopeEnvironment<number>();
 
   for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
+    const componentScope = functionScope.createChild();
     const valueExpr = emitMaterializeExprComponentF32({
       ...args,
       laneExpr: args.laneExpr,
       exprId: args.step.field,
       componentIndex,
-      cache,
+      scope: componentScope,
       depth: 0,
     });
     if (valueExpr === null) {

@@ -1,4 +1,14 @@
 {
+  "disabledMcpjsonServers": [
+    "chromedevtools/chrome-devtools-mcp"
+  ],
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "cherry-chrome",
+    "chromedevtools/chrome-devtools-mcp",
+    "cherry-chatgpt",
+    "chatgpt-mcp"
+  ],
   "permissions": {
     "allow": [
       "Bash(osascript:*)",
@@ -14,22 +24,11 @@
       "mcp__cherry-chrome__connect",
       "mcp__chatgpt-convo__chatgpt",
       "mcp__cherry-chrome__query_elements",
-      "Bash(bd list:*)",
       "Bash(npm run typecheck:*)",
       "mcp__cherry-chatgpt__chatgpt_get_messages",
       "mcp__cherry-chatgpt__chatgpt_open",
       "mcp__cherry-chatgpt__chatgpt_find_conversation"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "cherry-chrome",
-    "chromedevtools/chrome-devtools-mcp",
-    "cherry-chatgpt",
-    "chatgpt-mcp"
-  ],
-  "disabledMcpjsonServers": [
-    "chromedevtools/chrome-devtools-mcp"
-  ],
   "spinnerTipsEnabled": false
 }
