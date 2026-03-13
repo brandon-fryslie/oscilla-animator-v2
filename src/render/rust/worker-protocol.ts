@@ -1,6 +1,7 @@
 // [LAW:one-source-of-truth] Rust worker message ABI is declared in one module
 // so worker, renderer facade, and tests consume one canonical contract.
 import { SHAPE_HEADER_STRIDE } from '../webgpu/ShapeBank';
+import type { GpuPassStage } from '../../types/gpu-pass-stage';
 
 export interface RustRendererBootstrapConfig {
   readonly maxParticles: number;
@@ -37,7 +38,7 @@ export interface RustRendererShutdownMessage {
 
 export interface RustRendererGpuPass {
   readonly passId: string;
-  readonly stage: 'compute';
+  readonly stage: GpuPassStage;
   readonly entryPoint: string;
   readonly wgsl: string;
 }
