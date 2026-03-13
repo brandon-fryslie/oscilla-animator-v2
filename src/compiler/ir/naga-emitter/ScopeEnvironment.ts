@@ -1,15 +1,17 @@
-import { ExprHandle } from './NagaBuilder';
+export class ScopeEnvironment<T> {
+  private readonly map = new Map<string, T>();
 
-export class ScopeEnvironment {
-  private readonly map = new Map<string, ExprHandle>();
+  public constructor(private readonly parent: ScopeEnvironment<T> | null = null) {}
 
-  public constructor(private readonly parent: ScopeEnvironment | null = null) {}
-
-  public set(id: string, handle: ExprHandle): void {
-    this.map.set(id, handle);
+  public createChild(): ScopeEnvironment<T> {
+    return new ScopeEnvironment<T>(this);
   }
 
-  public get(id: string): ExprHandle | undefined {
+  public set(id: string, value: T): void {
+    this.map.set(id, value);
+  }
+
+  public get(id: string): T | undefined {
     const local = this.map.get(id);
     if (local !== undefined) {
       return local;
