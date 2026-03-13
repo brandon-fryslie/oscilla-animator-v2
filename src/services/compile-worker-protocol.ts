@@ -1,19 +1,20 @@
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompileError } from '../compiler/types';
 import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { GpuPassStage } from '../types/gpu-pass-stage';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
 
 export interface CompiledGpuPassArtifact {
   readonly passId: string;
-  readonly stage: 'compute';
+  readonly stage: GpuPassStage;
   readonly entryPoint: string;
   readonly wgsl: string;
 }
 
 export interface CompiledGpuPassSignature {
   readonly passId: string;
-  readonly stage: 'compute';
+  readonly stage: GpuPassStage;
   readonly entryPoint: string;
 }
 

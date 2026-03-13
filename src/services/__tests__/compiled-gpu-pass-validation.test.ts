@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateCompiledGpuPassBundle } from '../compiled-gpu-pass-validation';
 import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from '../compile-worker-protocol';
+import type { GpuPassStage } from '../../types/gpu-pass-stage';
 
 function buildBundle(passes: readonly CompiledGpuPassArtifact[]): CompiledGpuArtifactBundle {
   return {
@@ -55,9 +56,29 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
 
   it('rejects pass bundles with invalid stage', () => {
     expectValidationError(
-      { stage: 'vertex' as unknown as 'compute' },
+      { stage: 'geometry' as unknown as GpuPassStage },
       'unsupported stage',
     );
+  });
+
+  it('accepts valid vertex + fragment stage signatures', () => {
+    const result = validateCompiledGpuPassBundle(buildBundle([
+      buildPass({
+        passId: 'fullscreen.vertex',
+        stage: 'vertex',
+        entryPoint: 'vertex_main',
+        wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
+      }),
+      buildPass({
+        passId: 'fullscreen.fragment',
+        stage: 'fragment',
+        entryPoint: 'fragment_main',
+        wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+      }),
+    ]));
+    expect(result.kind).toBe('ok');
+    if (result.kind !== 'ok') return;
+    expect(result.bundle.passes.map((pass) => pass.stage)).toEqual(['vertex', 'fragment']);
   });
 
   it('rejects invalid entrypoint identifiers', () => {
@@ -81,6 +102,17 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
         wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}\nfn compute_main() {}',
       },
       'missing @compute entry annotation',
+    );
+  });
+
+  it('rejects WGSL payloads with mismatched stage annotation', () => {
+    expectValidationError(
+      {
+        stage: 'fragment',
+        entryPoint: 'fragment_main',
+        wgsl: '@vertex\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+      },
+      'missing @fragment entry annotation',
     );
   });
 
