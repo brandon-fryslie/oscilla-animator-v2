@@ -19,6 +19,7 @@ import type {
   PureFn,
   StepStateWrite,
 } from '../types';
+import { ScopeEnvironment } from './ScopeEnvironment';
 
 export type NagaScalarKindIR = 'f32' | 'u32' | 'bool';
 
@@ -205,17 +206,24 @@ export type HardDropReason =
   | 'state_write_missing_source_slot'
   | 'state_write_missing_slot_metadata';
 
+export interface HardDropEntry {
+  readonly reason: HardDropReason;
+  readonly stepIndex: number;
+}
+
 export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
   readonly boundaryStepCount: number;
   readonly droppedComputeStepCount: number;
   readonly hardDropReasonCounts: Readonly<Partial<Record<HardDropReason, number>>>;
+  readonly hardDrops: readonly HardDropEntry[];
 }
 
 interface LoweringCoverageState {
   boundaryStepCount: number;
   droppedComputeStepCount: number;
   hardDropReasonCounts: Partial<Record<HardDropReason, number>>;
+  hardDrops: HardDropEntry[];
 }
 
 function incrementReasonCount<R extends string>(counts: Partial<Record<R, number>>, reason: R): void {
@@ -224,9 +232,10 @@ function incrementReasonCount<R extends string>(counts: Partial<Record<R, number
 
 // [LAW:no-silent-fallbacks] Hard lowering defects are counted explicitly so the
 // compile boundary can fail deterministically instead of silently degrading.
-function recordHardDrop(coverage: LoweringCoverageState, reason: HardDropReason): void {
+function recordHardDrop(coverage: LoweringCoverageState, reason: HardDropReason, stepIndex: number): void {
   coverage.droppedComputeStepCount += 1;
   incrementReasonCount(coverage.hardDropReasonCounts, reason);
+  coverage.hardDrops.push({ reason, stepIndex });
 }
 
 class Interner<T> {
@@ -1687,6 +1696,29 @@ function emitPureFnF32(
 
 type MaterializeExprInputEmitter = (inputExprId: ValueExprId, requestedComponent: number) => number | null;
 
+function materializeScopeKey(exprId: ValueExprId, componentIndex: number): string {
+  return `${exprId as number}:${componentIndex}`;
+}
+
+function lookupMaterializeScope(args: {
+  readonly scope: ScopeEnvironment<number>;
+  readonly exprId: ValueExprId;
+  readonly componentIndex: number;
+}): number | undefined {
+  return args.scope.get(materializeScopeKey(args.exprId, args.componentIndex));
+}
+
+function bindMaterializeScope(args: {
+  readonly scope: ScopeEnvironment<number>;
+  readonly exprId: ValueExprId;
+  readonly componentIndex: number;
+  readonly handle: number;
+}): void {
+  // [LAW:one-source-of-truth] Materialize expression handle bindings are owned
+  // by ScopeEnvironment so lookup/shadowing behavior is defined at one boundary.
+  args.scope.set(materializeScopeKey(args.exprId, args.componentIndex), args.handle);
+}
+
 // [LAW:dataflow-not-control-flow] Kernel lowering stays data-driven via one
 // dispatch function; per-kind variability lives in expression values.
 // eslint-disable-next-line complexity,sonarjs/cognitive-complexity
@@ -1807,17 +1839,21 @@ function emitMaterializeExprComponentF32(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
-  readonly cache: Map<string, number>;
+  readonly scope: ScopeEnvironment<number>;
   readonly depth: number;
 }): number | null {
   if (args.depth > 128) return null;
-  const cacheKey = `${args.exprId as number}:${args.componentIndex}`;
-  const cached = args.cache.get(cacheKey);
+  const cached = lookupMaterializeScope({
+    scope: args.scope,
+    exprId: args.exprId,
+    componentIndex: args.componentIndex,
+  });
   if (cached !== undefined) return cached;
 
   const expr = args.valueExprs[args.exprId as number];
   if (!expr) return null;
   const component = Math.max(0, args.componentIndex);
+  const nestedScope = args.scope.createChild();
 
   const emitFromExprInput = (inputExprId: ValueExprId, requestedComponent: number): number | null => {
     const inputExpr = args.valueExprs[inputExprId as number];
@@ -1827,6 +1863,7 @@ function emitMaterializeExprComponentF32(args: {
       : 0;
     return emitMaterializeExprComponentF32({
       ...args,
+      scope: nestedScope,
       exprId: inputExprId,
       componentIndex: normalizedComponent,
       depth: args.depth + 1,
@@ -1992,7 +2029,15 @@ function emitMaterializeExprComponentF32(args: {
     });
   }
 
-  if (resolved !== null) args.cache.set(cacheKey, resolved);
+  if (resolved !== null) {
+    bindMaterializeScope({
+      scope: args.scope,
+      exprId: args.exprId,
+      componentIndex: args.componentIndex,
+      handle: resolved,
+    });
+  }
+
   return resolved;
 }
 
@@ -2011,9 +2056,10 @@ function emitMaterializeFromExpression(args: {
   if (args.targetPlan.storage !== 'f32') {
     return false;
   }
-  const cache = new Map<string, number>();
+  const functionScope = new ScopeEnvironment<number>();
 
   for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
+    const componentScope = functionScope.createChild();
     const valueExpr = emitMaterializeExprComponentF32({
       ctx: args.ctx,
       builtins: args.builtins,
@@ -2025,7 +2071,7 @@ function emitMaterializeFromExpression(args: {
       source: args.source,
       targetPlan: args.targetPlan,
       componentIndex,
-      cache,
+      scope: componentScope,
       depth: 0,
     });
     if (valueExpr === null) return false;
@@ -2077,7 +2123,7 @@ function lowerStep(
     case 'materialize': {
       const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.target);
       if (!targetPlan) {
-        recordHardDrop(coverage, 'missing_target_slot_metadata');
+        recordHardDrop(coverage, 'missing_target_slot_metadata', stepIndex);
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing target slot metadata` }, source);
         return;
       }
@@ -2108,7 +2154,7 @@ function lowerStep(
           }
           const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
           if (!sourceBinding) {
-            recordHardDrop(coverage, 'unresolved_materialize_source');
+            recordHardDrop(coverage, 'unresolved_materialize_source', stepIndex);
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
             return;
           }
@@ -2117,7 +2163,7 @@ function lowerStep(
             ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
             : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
           if (!sourcePlan) {
-            recordHardDrop(coverage, 'missing_source_slot_metadata');
+            recordHardDrop(coverage, 'missing_source_slot_metadata', stepIndex);
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
             return;
           }
@@ -2198,7 +2244,7 @@ function lowerContinuityApply(
   const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
   const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
   if (!sourcePlan || !targetPlan) {
-    recordHardDrop(coverage, 'continuity_missing_slot_metadata');
+    recordHardDrop(coverage, 'continuity_missing_slot_metadata', stepIndex);
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
     return;
   }
@@ -2238,7 +2284,7 @@ function lowerStateWrite(args: {
 }): void {
   const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
   if (sourceSlot === null) {
-    recordHardDrop(args.coverage, 'state_write_missing_source_slot');
+    recordHardDrop(args.coverage, 'state_write_missing_source_slot', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
     return;
   }
@@ -2246,7 +2292,7 @@ function lowerStateWrite(args: {
   const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
   const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
   if (!sourcePlan || !targetPlan) {
-    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata');
+    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;
   }
@@ -2346,6 +2392,7 @@ export function lowerScheduleToNagaModule(args: {
     boundaryStepCount: 0,
     droppedComputeStepCount: 0,
     hardDropReasonCounts: {},
+    hardDrops: [],
   };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
@@ -2412,6 +2459,7 @@ export function lowerScheduleToNagaModule(args: {
       boundaryStepCount: coverage.boundaryStepCount,
       droppedComputeStepCount: coverage.droppedComputeStepCount,
       hardDropReasonCounts: coverage.hardDropReasonCounts,
+      hardDrops: coverage.hardDrops,
     },
   };
 }

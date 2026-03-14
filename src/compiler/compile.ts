@@ -310,15 +310,21 @@ export function collectNagaLoweringCoverageDiagnostics(
     return { errors: [], warnings: [] };
   }
 
+  const topReason = coverage.hardDrops[0];
+  const locationHint = topReason
+    ? ` (first failure: step ${topReason.stepIndex}, reason: ${topReason.reason})`
+    : '';
+
   return {
     errors: [{
       code: 'IRValidationFailed',
-      message: 'Naga lowering failed: unresolved compute-owned steps remain after lowering.',
+      message: `Naga lowering failed: ${coverage.droppedComputeStepCount} unresolved compute-owned step(s) remain after lowering.${locationHint}`,
       details: {
         totalStepCount: coverage.totalStepCount,
         boundaryStepCount: coverage.boundaryStepCount,
         droppedComputeStepCount: coverage.droppedComputeStepCount,
         hardDropReasonCounts: coverage.hardDropReasonCounts,
+        hardDrops: coverage.hardDrops,
       },
     }],
     warnings: [],
