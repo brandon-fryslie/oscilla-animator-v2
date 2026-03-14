@@ -19,3 +19,12 @@ export function isGpuPassStage(value: unknown): value is GpuPassStage {
 export function requiredEntryAnnotationForGpuPassStage(stage: GpuPassStage): string {
   return GPU_PASS_STAGE_ENTRY_ANNOTATION[stage];
 }
+
+// [LAW:single-enforcer] Exact token match for WGSL stage annotations.
+// Substring includes('@compute') would false-positive on '@compute_size'.
+const WGSL_ATTRIBUTE_TOKEN_PATTERN = /@[\w:]+/g;
+
+export function hasExactAnnotation(attributeText: string, annotation: string): boolean {
+  const tokens: string[] = attributeText.match(WGSL_ATTRIBUTE_TOKEN_PATTERN) ?? [];
+  return tokens.includes(annotation);
+}

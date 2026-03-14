@@ -5,6 +5,7 @@ import {
   type GpuPassStage,
   isGpuPassStage,
   requiredEntryAnnotationForGpuPassStage,
+  hasExactAnnotation,
 } from '../types/gpu-pass-stage';
 
 interface NagaSourceRef {
@@ -138,7 +139,7 @@ export function validateGpuPassSignaturesAtCompileBoundary(
     }
     const requiredAnnotation = requiredEntryAnnotationForGpuPassStage(normalizedStage.stage);
     const entryAttributes = entryMatch[1] ?? '';
-    if (!entryAttributes.includes(requiredAnnotation)) {
+    if (!hasExactAnnotation(entryAttributes, requiredAnnotation)) {
       errors.push(
         makeGpuPassError(`GPU pass contract violation: pass ${passRef} WGSL is missing ${requiredAnnotation} annotation`),
       );
