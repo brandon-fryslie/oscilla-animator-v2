@@ -5,8 +5,6 @@ import { CANONICAL_FLUID_PASS_STAGES } from './fluid-gpu-bundle';
 import {
   type GpuPassStage,
   isGpuPassStage,
-  requiredEntryAnnotationForGpuPassStage,
-  hasExactAnnotation,
 } from '../types/gpu-pass-stage';
 
 interface ValidCompiledGpuPassValidation {
@@ -37,10 +35,6 @@ const FLUID_PASS_ORDER: readonly string[] = CANONICAL_FLUID_PASS_STAGES.map(
 const FLUID_PASS_INDEX: ReadonlyMap<string, number> = new Map(
   FLUID_PASS_ORDER.map((passId, index) => [passId, index]),
 );
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -102,32 +96,6 @@ function normalizePassStage(
   }
   errors.push(createPassError(index, `unsupported stage "${String(pass.stage)}"`));
   return null;
-}
-
-function validateWgslSignature(
-  passId: string,
-  stage: GpuPassStage,
-  entryPoint: string,
-  wgsl: string,
-  index: number,
-  errors: CompileError[],
-): void {
-  if (!wgsl || !entryPoint) {
-    return;
-  }
-  const entryPattern = new RegExp(
-    `((?:\\s*@[\\w:]+(?:\\([^)]*\\))?)*)\\s*fn\\s+${escapeRegex(entryPoint)}\\s*\\(`,
-  );
-  const entryMatch = entryPattern.exec(wgsl);
-  if (entryMatch === null) {
-    errors.push(createPassError(index, `pass "${passId}" is missing fn ${entryPoint}(...)`));
-    return;
-  }
-  const entryAttributes = entryMatch[1] ?? '';
-  const requiredAnnotation = requiredEntryAnnotationForGpuPassStage(stage);
-  if (!hasExactAnnotation(entryAttributes, requiredAnnotation)) {
-    errors.push(createPassError(index, `pass "${passId}" is missing ${requiredAnnotation} entry annotation`));
-  }
 }
 
 function validateUniquePassIds(passes: readonly IndexedCompiledGpuPass[], errors: CompileError[]): void {
@@ -206,7 +174,6 @@ function validatePassShape(
   if (stage === null) {
     return null;
   }
-  validateWgslSignature(passId, stage, entryPoint, wgsl, index, errors);
 
   return {
     passId,
