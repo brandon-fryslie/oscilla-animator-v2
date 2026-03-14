@@ -66,5 +66,8 @@ jobs:
       - name: Build oscilla-rust-renderer
         run: pnpm run build:rust-renderer
 
+      - name: Verify oscilla-rust-renderer pkg parity
+        run: pnpm run verify:rust-renderer-pkg
+
       - name: Build oscilla-naga-shim
         run: pnpm run build:naga-shim
