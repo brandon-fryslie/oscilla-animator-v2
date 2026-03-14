@@ -42,6 +42,12 @@ Canonical WebGPU architecture and migration design lives in:
 
 Outside `docs/WebGPU-Complete/`, WebGPU documents are historical pointers only and must not define competing architecture or readiness criteria.
 
+### `WebGPU-Future/` (post-stabilization architecture direction)
+Longer-horizon renderer architecture notes live in:
+- `./WebGPU-Future/`
+
+`WebGPU-Future/` is intentionally not a competing delivery spec. It documents where we may want to take the renderer architecture after the current `current code -> WebGPU-Complete` migration is finished and stable.
+
 ### Guardrail Test Gate
 
 Canonical architecture guardrails live in:
