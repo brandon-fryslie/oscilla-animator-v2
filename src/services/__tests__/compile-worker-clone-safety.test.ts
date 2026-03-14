@@ -80,23 +80,12 @@ describe('compile worker payload clone safety', () => {
                   entryPoint: 'compute_main',
                   wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
                 },
-                {
-                  passId: 'fullscreen.vertex',
-                  stage: 'vertex' as const,
-                  entryPoint: 'vertex_main',
-                  wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
-                },
               ],
               passSignatures: [
                 {
                   passId: 'simulation',
                   stage: 'compute' as const,
                   entryPoint: 'compute_main',
-                },
-                {
-                  passId: 'fullscreen.vertex',
-                  stage: 'vertex' as const,
-                  entryPoint: 'vertex_main',
                 },
               ],
             },
