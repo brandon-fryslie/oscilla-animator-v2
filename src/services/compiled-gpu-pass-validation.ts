@@ -5,7 +5,6 @@ import { CANONICAL_FLUID_PASS_STAGES } from './fluid-gpu-bundle';
 import {
   type GpuPassStage,
   isGpuPassStage,
-  requiredEntryAnnotationForGpuPassStage,
 } from '../types/gpu-pass-stage';
 
 interface ValidCompiledGpuPassValidation {
@@ -36,10 +35,6 @@ const FLUID_PASS_ORDER: readonly string[] = CANONICAL_FLUID_PASS_STAGES.map(
 const FLUID_PASS_INDEX: ReadonlyMap<string, number> = new Map(
   FLUID_PASS_ORDER.map((passId, index) => [passId, index]),
 );
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -101,32 +96,6 @@ function normalizePassStage(
   }
   errors.push(createPassError(index, `unsupported stage "${String(pass.stage)}"`));
   return null;
-}
-
-function validateWgslSignature(
-  passId: string,
-  stage: GpuPassStage,
-  entryPoint: string,
-  wgsl: string,
-  index: number,
-  errors: CompileError[],
-): void {
-  if (!wgsl || !entryPoint) {
-    return;
-  }
-  const entryPattern = new RegExp(
-    `((?:\\s*@[\\w:]+(?:\\([^)]*\\))?)*)\\s*fn\\s+${escapeRegex(entryPoint)}\\s*\\(`,
-  );
-  const entryMatch = entryPattern.exec(wgsl);
-  if (entryMatch === null) {
-    errors.push(createPassError(index, `pass "${passId}" is missing fn ${entryPoint}(...)`));
-    return;
-  }
-  const entryAttributes = entryMatch[1] ?? '';
-  const requiredAnnotation = requiredEntryAnnotationForGpuPassStage(stage);
-  if (!entryAttributes.includes(requiredAnnotation)) {
-    errors.push(createPassError(index, `pass "${passId}" is missing ${requiredAnnotation} entry annotation`));
-  }
 }
 
 function validateUniquePassIds(passes: readonly IndexedCompiledGpuPass[], errors: CompileError[]): void {
@@ -193,7 +162,7 @@ function validateComputePassPresence(passes: readonly CompiledGpuPassArtifact[],
   }
 }
 
-function validatePassShape(
+function normalizePassShape(
   pass: CompiledGpuPassArtifact,
   index: number,
   errors: CompileError[],
@@ -205,7 +174,6 @@ function validatePassShape(
   if (stage === null) {
     return null;
   }
-  validateWgslSignature(passId, stage, entryPoint, wgsl, index, errors);
 
   return {
     passId,
@@ -224,16 +192,23 @@ function buildManifestFromPasses(passes: readonly CompiledGpuPassArtifact[]): Ge
   return {
     schemaVersion: 1,
     // [LAW:one-source-of-truth] Runtime pass-signature metadata is derived
-    // only from compile-boundary validated pass signatures.
+    // only from compile-boundary normalized pass signatures.
     passes: manifestPasses,
   };
 }
 
 /**
- * Validates compiler-emitted GPU pass signatures before runtime publication.
+ * Normalizes compiler-emitted GPU pass metadata and builds the runtime manifest.
  *
- * // [LAW:single-enforcer] Compile worker owns semantic pass-signature
- * validation so runtime renderer install does not duplicate this policy.
+ * Checks structural shape of each pass (passId, stage, entryPoint, wgsl),
+ * enforces bundle-level policies (unique IDs, fluid ordering, compute presence),
+ * and produces the manifest that the runtime renderer consumes.
+ *
+ * WGSL content correctness is validated by Naga at compile time — this function
+ * only checks that the structured metadata fields are well-formed.
+ *
+ * // [LAW:single-enforcer] Compile worker owns pass-metadata normalization
+ * so runtime renderer install does not duplicate this policy.
  */
 export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle): CompiledGpuPassValidationResult {
   const errors: CompileError[] = [];
@@ -243,10 +218,10 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle)
   }
 
   // [LAW:dataflow-not-control-flow] Every emitted pass flows through the same
-  // validation step; validity is represented in error data, not skipped ops.
-  const validatedIndexedPasses = passes
+  // normalization step; validity is represented in error data, not skipped ops.
+  const normalizedIndexedPasses = passes
     .map((pass, index) => {
-      const normalizedPass = validatePassShape(pass, index, errors);
+      const normalizedPass = normalizePassShape(pass, index, errors);
       if (normalizedPass === null) {
         return null;
       }
@@ -256,10 +231,10 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle)
       };
     })
     .filter((pass): pass is IndexedCompiledGpuPass => pass !== null);
-  const validatedPasses = validatedIndexedPasses.map((pass) => pass.pass);
-  validateUniquePassIds(validatedIndexedPasses, errors);
-  validateFluidPassOrder(validatedPasses, errors);
-  validateComputePassPresence(validatedPasses, errors);
+  const normalizedPasses = normalizedIndexedPasses.map((pass) => pass.pass);
+  validateUniquePassIds(normalizedIndexedPasses, errors);
+  validateFluidPassOrder(normalizedPasses, errors);
+  validateComputePassPresence(normalizedPasses, errors);
 
   if (errors.length > 0) {
     return { kind: 'error', errors };
@@ -269,8 +244,8 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle)
     kind: 'ok',
     bundle: {
       schemaVersion: bundle.schemaVersion,
-      passes: validatedPasses,
+      passes: normalizedPasses,
     },
-    manifest: buildManifestFromPasses(validatedPasses),
+    manifest: buildManifestFromPasses(normalizedPasses),
   };
 }

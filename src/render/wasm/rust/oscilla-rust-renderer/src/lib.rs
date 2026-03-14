@@ -35,10 +35,6 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     })
 }
 
-fn is_supported_pass_stage(stage: &str) -> bool {
-    matches!(stage, "compute" | "vertex" | "fragment")
-}
-
 fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>, JsValue> {
     if !Array::is_array(&passes) {
         return Err(JsValue::from_str("GPU pass payload must be an array"));
@@ -58,19 +54,36 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
             ));
         }
         let stage = read_required_string_field(&item, "stage")?;
-        if !is_supported_pass_stage(stage.as_str()) {
-            return Err(JsValue::from_str(
-                format!("GPU pass {} has unsupported stage '{}'", idx, stage).as_str(),
-            ));
-        }
-        if stage == "compute" {
-            // [LAW:single-enforcer] ComputeDispatcher is the only runtime owner
-            // of executable pass compilation in this engine revision.
-            specs.push(CompilerComputePassSpec {
-                pass_id: read_required_string_field(&item, "passId")?,
-                entry_point: read_required_string_field(&item, "entryPoint")?,
-                wgsl: read_required_string_field(&item, "wgsl")?,
-            });
+        match stage.as_str() {
+            "compute" => {
+                // [LAW:single-enforcer] ComputeDispatcher is the only runtime owner
+                // of executable pass compilation in this engine revision.
+                specs.push(CompilerComputePassSpec {
+                    pass_id: read_required_string_field(&item, "passId")?,
+                    entry_point: read_required_string_field(&item, "entryPoint")?,
+                    wgsl: read_required_string_field(&item, "wgsl")?,
+                });
+            }
+            // Vertex/fragment render passes use hardcoded uber-shader entry points
+            // (vs_main/fs_main) — the Rust renderer does not accept compiler-generated
+            // vertex/fragment modules. These stages are valid in the pass manifest but
+            // are not actionable here.
+            "vertex" | "fragment" => {
+                web_sys::console::warn_1(
+                    &JsValue::from_str(
+                        format!(
+                            "GPU pass {} has stage '{}' — skipped (renderer uses hardcoded {} shader)",
+                            idx, stage, stage,
+                        )
+                        .as_str(),
+                    ),
+                );
+            }
+            _ => {
+                return Err(JsValue::from_str(
+                    format!("GPU pass {} has unsupported stage '{}'", idx, stage).as_str(),
+                ));
+            }
         }
     }
     if specs.is_empty() {

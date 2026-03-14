@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildPatch } from '../../graph';
-import { compile } from '../compile';
+import { collectNagaLoweringCoverageDiagnostics, compile } from '../compile';
+import { lowerScheduleToNagaModule } from '../ir/naga-emitter';
+import type { RuntimeAddressTableIR } from '../ir/program';
+import type { ScheduleIR } from '../backend/schedule-program';
+import type { ValueExpr } from '../ir/value-expr';
 
 function buildSimplePatch() {
   return buildPatch((b) => {
@@ -32,6 +36,48 @@ function buildRenderPatch() {
     b.wire(layout, 'controlPoints', render, 'controlPoints');
     b.wire(color, 'out', render, 'color');
   });
+}
+
+function buildMinimalSchedule(steps: readonly unknown[]): ScheduleIR {
+  return {
+    timeModel: {
+      periodAMs: 1000,
+      periodBMs: 2000,
+    },
+    instances: new Map(),
+    steps: steps as ScheduleIR['steps'],
+    stateSlotCount: 0,
+    stateMappings: [],
+    eventSlotCount: 0,
+    eventCount: 0,
+  };
+}
+
+function buildRuntimeAddressTable(args: {
+  readonly slotEntries?: ReadonlyArray<{ readonly slot: number; readonly offset: number; readonly laneCount: number; readonly stride: number }>;
+} = {}): RuntimeAddressTableIR {
+  const slotLookup = new Map();
+  const slotToArena = new Map();
+  for (const entry of args.slotEntries ?? []) {
+    slotLookup.set(entry.slot, {
+      storage: 'f32',
+    });
+    slotToArena.set(entry.slot, {
+      offset: entry.offset,
+      laneCount: entry.laneCount,
+      stride: entry.stride,
+      packing: 'soa',
+      laneStride: 1,
+      componentStride: entry.laneCount,
+      length: entry.stride,
+    });
+  }
+  return {
+    slotLookup,
+    fieldExprToSlot: new Map(),
+    scalarExprToArenaAddress: new Map(),
+    slotToArena,
+  } as RuntimeAddressTableIR;
 }
 
 describe('naga lowering artifact metadata', () => {
@@ -125,6 +171,80 @@ describe('naga lowering artifact render coverage', () => {
     expect(artifact.coverage.droppedComputeStepCount).toBe(0);
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
+  });
+});
+
+describe('naga lowering coverage diagnostics', () => {
+  it('emits hard-drop compile diagnostics when compute step metadata is missing', () => {
+    const schedule = buildMinimalSchedule([
+      {
+        kind: 'materialize',
+        field: 0,
+        instanceId: 0,
+        target: 17,
+      },
+    ]);
+    const valueExprs = [
+      {
+        kind: 'const',
+        type: {} as ValueExpr['type'],
+        value: { kind: 'float', value: 1 },
+      },
+    ] as readonly ValueExpr[];
+    const lowered = lowerScheduleToNagaModule({
+      schedule,
+      runtimeAddressTable: buildRuntimeAddressTable(),
+      valueExprs,
+      exprToBlock: new Map(),
+    });
+
+    expect(lowered.coverage.droppedComputeStepCount).toBeGreaterThan(0);
+    expect(lowered.coverage.hardDropReasonCounts.missing_target_slot_metadata).toBeGreaterThan(0);
+
+    const diagnostics = collectNagaLoweringCoverageDiagnostics(lowered.coverage);
+    expect(diagnostics.errors.length).toBe(1);
+    expect(diagnostics.warnings.length).toBe(0);
+  });
+
+  it('emits hard-drop error when expression lowering fails and no slot-copy path resolves', () => {
+    const schedule = buildMinimalSchedule([
+      {
+        kind: 'materialize',
+        field: 0,
+        instanceId: 0,
+        target: 1,
+      },
+    ]);
+    const valueExprs = [
+      {
+        kind: 'kernel',
+        kernelKind: 'map',
+        type: {} as ValueExpr['type'],
+        input: 1,
+        fn: { kind: 'expr', expr: 'x' },
+      },
+      {
+        kind: 'const',
+        type: {} as ValueExpr['type'],
+        value: { kind: 'float', value: 1 },
+      },
+    ] as readonly ValueExpr[];
+    const lowered = lowerScheduleToNagaModule({
+      schedule,
+      runtimeAddressTable: buildRuntimeAddressTable({
+        slotEntries: [{ slot: 1, offset: 0, laneCount: 1, stride: 1 }],
+      }),
+      valueExprs,
+      exprToBlock: new Map(),
+    });
+
+    // Expression lowering fails (can't lower 'expr' fn) and slot-copy
+    // resolution also fails (no fieldExprToSlot mapping) → hard drop.
+    expect(lowered.coverage.droppedComputeStepCount).toBeGreaterThan(0);
+    expect(lowered.coverage.hardDropReasonCounts['unresolved_materialize_source']).toBeGreaterThan(0);
+    const diagnostics = collectNagaLoweringCoverageDiagnostics(lowered.coverage);
+    expect(diagnostics.errors.length).toBe(1);
+    expect(diagnostics.warnings.length).toBe(0);
   });
 });
 

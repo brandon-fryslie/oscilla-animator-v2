@@ -46,7 +46,7 @@ import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import type { SerializableTopologyDef } from '../shapes/types';
-import { lowerScheduleToNagaModule } from './ir/naga-emitter';
+import { lowerScheduleToNagaModule, type NagaLoweringCoverageIR } from './ir/naga-emitter';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
 import { resolveKernels } from './resolve-kernels';
@@ -259,7 +259,12 @@ export function compileFromFrontend(
 
     // Convert to CompiledProgramIR (now with registry)
     const compiledIR = convertLinkedIRToProgram(unlinkedIR, scheduleIR, acyclicPatch, registry);
-    const nagaLoweringWarnings = collectNagaLoweringCoverageWarnings(compiledIR);
+    const nagaLoweringDiagnostics = collectNagaLoweringCoverageDiagnostics(
+      compiledIR.nagaLoweringProgram.coverage,
+    );
+    if (nagaLoweringDiagnostics.errors.length > 0) {
+      return makeFailure([...nagaLoweringDiagnostics.errors]);
+    }
 
     compilationInspector.endCompile('success');
     return {
@@ -267,7 +272,7 @@ export function compileFromFrontend(
       program: compiledIR,
       warnings: [
         ...unreachableBlockWarnings,
-        ...nagaLoweringWarnings,
+        ...nagaLoweringDiagnostics.warnings,
       ],
     };
   } catch (e: unknown) {
@@ -296,25 +301,34 @@ function makeFailure(errors: CompileError[]): CompileFailure {
   return { kind: 'error', errors };
 }
 
-function collectNagaLoweringCoverageWarnings(program: CompiledProgramIR): CompileError[] {
-  const coverage = program.nagaLoweringProgram.coverage;
-  if (!coverage) return [];
-
-  if (coverage.droppedComputeStepCount === 0) {
-    return [];
+// [LAW:single-enforcer] Compile boundary is the sole authority that decides
+// whether lowering coverage metadata becomes a hard compile failure.
+export function collectNagaLoweringCoverageDiagnostics(
+  coverage: NagaLoweringCoverageIR | undefined,
+): { readonly errors: readonly CompileError[]; readonly warnings: readonly CompileError[] } {
+  if (!coverage || coverage.droppedComputeStepCount === 0) {
+    return { errors: [], warnings: [] };
   }
 
-  return [
-    {
-      code: 'W_NAGA_LOWERING_INCOMPLETE',
-      message: 'Naga lowering dropped compute-owned steps due to unresolved slot/source metadata.',
+  const topReason = coverage.hardDrops[0];
+  const locationHint = topReason
+    ? ` (first failure: step ${topReason.stepIndex}, reason: ${topReason.reason})`
+    : '';
+
+  return {
+    errors: [{
+      code: 'IRValidationFailed',
+      message: `Naga lowering failed: ${coverage.droppedComputeStepCount} unresolved compute-owned step(s) remain after lowering.${locationHint}`,
       details: {
         totalStepCount: coverage.totalStepCount,
         boundaryStepCount: coverage.boundaryStepCount,
         droppedComputeStepCount: coverage.droppedComputeStepCount,
+        hardDropReasonCounts: coverage.hardDropReasonCounts,
+        hardDrops: coverage.hardDrops,
       },
-    },
-  ];
+    }],
+    warnings: [],
+  };
 }
 
 function collectRuntimeLiveExprIdsForPatching(args: {
