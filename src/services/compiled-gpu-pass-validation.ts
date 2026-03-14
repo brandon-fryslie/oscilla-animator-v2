@@ -6,6 +6,7 @@ import {
   type GpuPassStage,
   isGpuPassStage,
   requiredEntryAnnotationForGpuPassStage,
+  hasExactAnnotation,
 } from '../types/gpu-pass-stage';
 
 interface ValidCompiledGpuPassValidation {
@@ -124,7 +125,7 @@ function validateWgslSignature(
   }
   const entryAttributes = entryMatch[1] ?? '';
   const requiredAnnotation = requiredEntryAnnotationForGpuPassStage(stage);
-  if (!entryAttributes.includes(requiredAnnotation)) {
+  if (!hasExactAnnotation(entryAttributes, requiredAnnotation)) {
     errors.push(createPassError(index, `pass "${passId}" is missing ${requiredAnnotation} entry annotation`));
   }
 }
