@@ -242,7 +242,7 @@ describe('naga lowering coverage diagnostics', () => {
 
     expect(lowered.coverage.droppedComputeStepCount).toBe(0);
     expect(lowered.coverage.fallbackValueCount).toBeGreaterThan(0);
-    expect(lowered.coverage.maxFallbackCascadeDepth).toBeGreaterThanOrEqual(0);
+    expect(lowered.coverage.maxFallbackCascadeDepth).toBe(0);
 
     const diagnostics = collectNagaLoweringCoverageDiagnostics(lowered.coverage);
     expect(diagnostics.errors.length).toBe(0);
