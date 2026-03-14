@@ -1,4 +1,5 @@
-export const GPU_PASS_STAGES = ['compute', 'vertex', 'fragment'] as const;
+// [LAW:one-source-of-truth] GPU pass stage authority lives in one canonical list.
+export const GPU_PASS_STAGES = ['compute'] as const;
 
 export type GpuPassStage = (typeof GPU_PASS_STAGES)[number];
 
