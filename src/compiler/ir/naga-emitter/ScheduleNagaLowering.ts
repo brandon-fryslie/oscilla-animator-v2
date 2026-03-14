@@ -430,6 +430,33 @@ function resolveInputSlotFromExpr(exprId: number, runtimeAddressTable: RuntimeAd
   return null;
 }
 
+// [LAW:one-source-of-truth] CPU-materialized expressions (external inputs,
+// event reads) have their values written to the arena by the CPU runtime.
+// The GPU shader loads them via this function — same data, one resolution path.
+function emitCpuMaterializedLoad(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly exprId: ValueExprId;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly componentIndex: number;
+  readonly source: NagaSourceMapEntryIR;
+}): number | null {
+  const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
+  if (sourceSlot === null) return null;
+  const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
+  if (!sourcePlan) return null;
+  return emitLoadedF32FromPlan(
+    args.ctx,
+    args.builtins,
+    args.laneExpr,
+    sourcePlan,
+    'arena_in',
+    args.componentIndex,
+    args.source,
+  );
+}
+
 function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
   if (!expr) return [];
   switch (expr.kind) {
@@ -1911,7 +1938,17 @@ function emitMaterializeExprComponentF32(args: {
       break;
     case 'external':
     case 'eventRead':
-      resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+    case 'shapeRef':
+      // CPU-materialized: load the pre-computed value from the arena.
+      resolved = emitCpuMaterializedLoad({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        laneExpr: args.laneExpr,
+        exprId: args.exprId,
+        runtimeAddressTable: args.runtimeAddressTable,
+        componentIndex: component,
+        source: args.source,
+      });
       break;
     case 'event':
       resolved = emitEventExprComponentF32({
@@ -1932,28 +1969,27 @@ function emitMaterializeExprComponentF32(args: {
         emitFromExprInput,
       });
       break;
-    default:
-      break;
+    default: {
+      const _exhaustive: never = expr;
+      void _exhaustive;
+    }
   }
 
-  // [LAW:no-silent-fallbacks] When expression lowering can't resolve, try
-  // local slot lookup. If that also fails, return null so the outer slot-copy
-  // path (resolveStepInputSlot) can try deeper input traversal or classify
-  // the failure as a hard drop at the compile boundary.
+  // [LAW:no-silent-fallbacks] When expression-specific lowering can't resolve
+  // (e.g. state slot missing, intrinsic not recognized), try loading from
+  // the CPU-materialized arena slot. If that also fails, return null so the
+  // outer slot-copy path can try deeper input traversal or classify the
+  // failure as a hard drop at the compile boundary.
   if (resolved === null) {
-    const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
-    if (sourceSlot === null) return null;
-    const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-    if (!sourcePlan) return null;
-    resolved = emitLoadedF32FromPlan(
-      args.ctx,
-      args.builtins,
-      args.laneExpr,
-      sourcePlan,
-      'arena_in',
-      component,
-      args.source,
-    );
+    resolved = emitCpuMaterializedLoad({
+      ctx: args.ctx,
+      builtins: args.builtins,
+      laneExpr: args.laneExpr,
+      exprId: args.exprId,
+      runtimeAddressTable: args.runtimeAddressTable,
+      componentIndex: component,
+      source: args.source,
+    });
   }
 
   if (resolved !== null) args.cache.set(cacheKey, resolved);
