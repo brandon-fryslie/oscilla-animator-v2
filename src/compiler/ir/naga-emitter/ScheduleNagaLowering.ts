@@ -198,15 +198,44 @@ export interface NagaComputeMetadataIR {
   readonly maxActiveLanes: number;
 }
 
+export type HardDropReason =
+  | 'missing_target_slot_metadata'
+  | 'unresolved_materialize_source'
+  | 'missing_source_slot_metadata'
+  | 'continuity_missing_slot_metadata'
+  | 'state_write_missing_source_slot'
+  | 'state_write_missing_slot_metadata';
+
+export interface HardDropEntry {
+  readonly reason: HardDropReason;
+  readonly stepIndex: number;
+}
+
 export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
   readonly boundaryStepCount: number;
   readonly droppedComputeStepCount: number;
+  readonly hardDropReasonCounts: Readonly<Partial<Record<HardDropReason, number>>>;
+  readonly hardDrops: readonly HardDropEntry[];
 }
 
 interface LoweringCoverageState {
   boundaryStepCount: number;
   droppedComputeStepCount: number;
+  hardDropReasonCounts: Partial<Record<HardDropReason, number>>;
+  hardDrops: HardDropEntry[];
+}
+
+function incrementReasonCount<R extends string>(counts: Partial<Record<R, number>>, reason: R): void {
+  counts[reason] = (counts[reason] ?? 0) + 1;
+}
+
+// [LAW:no-silent-fallbacks] Hard lowering defects are counted explicitly so the
+// compile boundary can fail deterministically instead of silently degrading.
+function recordHardDrop(coverage: LoweringCoverageState, reason: HardDropReason, stepIndex: number): void {
+  coverage.droppedComputeStepCount += 1;
+  incrementReasonCount(coverage.hardDropReasonCounts, reason);
+  coverage.hardDrops.push({ reason, stepIndex });
 }
 
 class Interner<T> {
@@ -408,6 +437,33 @@ function resolveInputSlotFromExpr(exprId: number, runtimeAddressTable: RuntimeAd
   const scalarAddress = runtimeAddressTable.scalarExprToArenaAddress.get(exprId);
   if (scalarAddress) return scalarAddress.slot;
   return null;
+}
+
+// [LAW:one-source-of-truth] CPU-materialized expressions (external inputs,
+// event reads) have their values written to the arena by the CPU runtime.
+// The GPU shader loads them via this function — same data, one resolution path.
+function emitCpuMaterializedLoad(args: {
+  readonly ctx: LoweringCtx;
+  readonly builtins: LoweringBuiltins;
+  readonly laneExpr: number;
+  readonly exprId: ValueExprId;
+  readonly runtimeAddressTable: RuntimeAddressTableIR;
+  readonly componentIndex: number;
+  readonly source: NagaSourceMapEntryIR;
+}): number | null {
+  const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
+  if (sourceSlot === null) return null;
+  const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
+  if (!sourcePlan) return null;
+  return emitLoadedF32FromPlan(
+    args.ctx,
+    args.builtins,
+    args.laneExpr,
+    sourcePlan,
+    'arena_in',
+    args.componentIndex,
+    args.source,
+  );
 }
 
 function collectExprInputs(expr: ValueExpr | undefined): readonly number[] {
@@ -1919,7 +1975,17 @@ function emitMaterializeExprComponentF32(args: {
       break;
     case 'external':
     case 'eventRead':
-      resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
+    case 'shapeRef':
+      // CPU-materialized: load the pre-computed value from the arena.
+      resolved = emitCpuMaterializedLoad({
+        ctx: args.ctx,
+        builtins: args.builtins,
+        laneExpr: args.laneExpr,
+        exprId: args.exprId,
+        runtimeAddressTable: args.runtimeAddressTable,
+        componentIndex: component,
+        source: args.source,
+      });
       break;
     case 'event':
       resolved = emitEventExprComponentF32({
@@ -1940,26 +2006,27 @@ function emitMaterializeExprComponentF32(args: {
         emitFromExprInput,
       });
       break;
-    default:
-      break;
+    default: {
+      const _exhaustive: never = expr;
+      void _exhaustive;
+    }
   }
 
+  // [LAW:no-silent-fallbacks] When expression-specific lowering can't resolve
+  // (e.g. state slot missing, intrinsic not recognized), try loading from
+  // the CPU-materialized arena slot. If that also fails, return null so the
+  // outer slot-copy path can try deeper input traversal or classify the
+  // failure as a hard drop at the compile boundary.
   if (resolved === null) {
-    const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
-    if (sourceSlot === null) {
-      return null;
-    }
-    const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-    if (!sourcePlan) return null;
-    resolved = emitLoadedF32FromPlan(
-      args.ctx,
-      args.builtins,
-      args.laneExpr,
-      sourcePlan,
-      'arena_in',
-      component,
-      args.source,
-    );
+    resolved = emitCpuMaterializedLoad({
+      ctx: args.ctx,
+      builtins: args.builtins,
+      laneExpr: args.laneExpr,
+      exprId: args.exprId,
+      runtimeAddressTable: args.runtimeAddressTable,
+      componentIndex: component,
+      source: args.source,
+    });
   }
 
   if (resolved !== null) {
@@ -1970,6 +2037,7 @@ function emitMaterializeExprComponentF32(args: {
       handle: resolved,
     });
   }
+
   return resolved;
 }
 
@@ -1993,16 +2061,20 @@ function emitMaterializeFromExpression(args: {
   for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
     const componentScope = functionScope.createChild();
     const valueExpr = emitMaterializeExprComponentF32({
-      ...args,
+      ctx: args.ctx,
+      builtins: args.builtins,
       laneExpr: args.laneExpr,
       exprId: args.step.field,
+      schedule: args.schedule,
+      runtimeAddressTable: args.runtimeAddressTable,
+      valueExprs: args.valueExprs,
+      source: args.source,
+      targetPlan: args.targetPlan,
       componentIndex,
       scope: componentScope,
       depth: 0,
     });
-    if (valueExpr === null) {
-      return false;
-    }
+    if (valueExpr === null) return false;
     const targetIndex = emitAddressIndex(
       args.ctx,
       args.builtins,
@@ -2051,7 +2123,7 @@ function lowerStep(
     case 'materialize': {
       const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.target);
       if (!targetPlan) {
-        coverage.droppedComputeStepCount += 1;
+        recordHardDrop(coverage, 'missing_target_slot_metadata', stepIndex);
         ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing target slot metadata` }, source);
         return;
       }
@@ -2082,7 +2154,7 @@ function lowerStep(
           }
           const sourceBinding = resolveStepInputSlot(step, expr, schedule, runtimeAddressTable);
           if (!sourceBinding) {
-            coverage.droppedComputeStepCount += 1;
+            recordHardDrop(coverage, 'unresolved_materialize_source', stepIndex);
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: unresolved source for ${step.kind}` }, source);
             return;
           }
@@ -2091,7 +2163,7 @@ function lowerStep(
             ? createStateSlotAddressPlan(schedule, sourceBinding.slotOrStateOffset as number)
             : toSlotAddressPlan(runtimeAddressTable, sourceBinding.slotOrStateOffset as ValueSlot);
           if (!sourcePlan) {
-            coverage.droppedComputeStepCount += 1;
+            recordHardDrop(coverage, 'missing_source_slot_metadata', stepIndex);
             ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: missing source slot metadata` }, source);
             return;
           }
@@ -2172,7 +2244,7 @@ function lowerContinuityApply(
   const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
   const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
   if (!sourcePlan || !targetPlan) {
-    coverage.droppedComputeStepCount += 1;
+    recordHardDrop(coverage, 'continuity_missing_slot_metadata', stepIndex);
     ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
     return;
   }
@@ -2212,7 +2284,7 @@ function lowerStateWrite(args: {
 }): void {
   const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
   if (sourceSlot === null) {
-    args.coverage.droppedComputeStepCount += 1;
+    recordHardDrop(args.coverage, 'state_write_missing_source_slot', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
     return;
   }
@@ -2220,7 +2292,7 @@ function lowerStateWrite(args: {
   const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
   const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
   if (!sourcePlan || !targetPlan) {
-    args.coverage.droppedComputeStepCount += 1;
+    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;
   }
@@ -2319,6 +2391,8 @@ export function lowerScheduleToNagaModule(args: {
   const coverage: LoweringCoverageState = {
     boundaryStepCount: 0,
     droppedComputeStepCount: 0,
+    hardDropReasonCounts: {},
+    hardDrops: [],
   };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
@@ -2384,6 +2458,8 @@ export function lowerScheduleToNagaModule(args: {
       totalStepCount: steps.length,
       boundaryStepCount: coverage.boundaryStepCount,
       droppedComputeStepCount: coverage.droppedComputeStepCount,
+      hardDropReasonCounts: coverage.hardDropReasonCounts,
+      hardDrops: coverage.hardDrops,
     },
   };
 }

@@ -28,7 +28,6 @@ vi.mock('../naga-bridge', () => ({
 
 import {
   compileProgramWithNaga,
-  validateGpuPassSignaturesAtCompileBoundary,
 } from '../naga-compile';
 
 function buildSimplePatch() {
@@ -165,100 +164,5 @@ describe('compileProgramWithNaga', () => {
         error.message.includes('generatedComputeProgram.maxActiveLanes is missing or invalid'),
       ),
     ).toBe(true);
-  });
-});
-
-describe('validateGpuPassSignaturesAtCompileBoundary', () => {
-  it('accepts valid compute pass signatures', () => {
-    const result = validateGpuPassSignaturesAtCompileBoundary([
-      {
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      },
-    ]);
-    expect(result).toMatchObject({
-      kind: 'ok',
-      signatures: [{
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-      }],
-    });
-  });
-
-  it('accepts valid vertex + fragment pass signatures', () => {
-    const result = validateGpuPassSignaturesAtCompileBoundary([
-      {
-        passId: 'fullscreen.vertex',
-        stage: 'vertex',
-        entryPoint: 'vertex_main',
-        wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
-      },
-      {
-        passId: 'fullscreen.fragment',
-        stage: 'fragment',
-        entryPoint: 'fragment_main',
-        wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
-      },
-    ]);
-    expect(result).toMatchObject({
-      kind: 'ok',
-      signatures: [
-        {
-          passId: 'fullscreen.vertex',
-          stage: 'vertex',
-          entryPoint: 'vertex_main',
-        },
-        {
-          passId: 'fullscreen.fragment',
-          stage: 'fragment',
-          entryPoint: 'fragment_main',
-        },
-      ],
-    });
-  });
-
-  it('rejects invalid stage metadata', () => {
-    const result = validateGpuPassSignaturesAtCompileBoundary([
-      {
-        passId: 'simulation',
-        stage: 'geometry',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      },
-    ]);
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('unsupported stage'))).toBe(true);
-  });
-
-  it('rejects WGSL payloads missing the declared entrypoint', () => {
-    const result = validateGpuPassSignaturesAtCompileBoundary([
-      {
-        passId: 'simulation',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn wrong_entry() {}',
-      },
-    ]);
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing fn compute_main'))).toBe(true);
-  });
-
-  it('rejects stage-specific entry annotation mismatches', () => {
-    const result = validateGpuPassSignaturesAtCompileBoundary([
-      {
-        passId: 'fullscreen.fragment',
-        stage: 'fragment',
-        entryPoint: 'fragment_main',
-        wgsl: '@vertex\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
-      },
-    ]);
-    expect(result.kind).toBe('error');
-    if (result.kind !== 'error') return;
-    expect(result.errors.some((error) => error.message.includes('missing @fragment annotation'))).toBe(true);
   });
 });

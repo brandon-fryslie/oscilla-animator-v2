@@ -152,6 +152,8 @@ function mockProgram(opts: {
         totalStepCount: 0,
         boundaryStepCount: 0,
         droppedComputeStepCount: 0,
+        hardDropReasonCounts: {},
+        hardDrops: [],
       },
     },
   } as CompiledProgramIR;

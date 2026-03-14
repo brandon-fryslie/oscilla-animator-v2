@@ -96,6 +96,8 @@ function testProgramConverter(
         totalStepCount: 0,
         boundaryStepCount: 0,
         droppedComputeStepCount: 0,
+        hardDropReasonCounts: {},
+        hardDrops: [],
       },
     },
   };
