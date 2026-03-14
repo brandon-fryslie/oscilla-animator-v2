@@ -24,6 +24,7 @@ The spec target is:
 
 ## Document map
 
+- [Actionable Roadmap](./ROADMAP.md)
 - [01 - ShapeBank Canonical Contract](./01-ShapeBank-Canonical-Contract.md)
 - [02 - Dynamic Shape Materialization](./02-Dynamic-Shape-Materialization.md)
 - [03 - Install-Time CPU Runtime Execution](./03-Install-Time-CPU-Runtime-Execution.md)
