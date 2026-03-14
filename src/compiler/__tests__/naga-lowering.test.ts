@@ -169,8 +169,6 @@ describe('naga lowering artifact render coverage', () => {
     expect(artifact).toBeDefined();
     if (!artifact) return;
     expect(artifact.coverage.droppedComputeStepCount).toBe(0);
-    expect(artifact.coverage.fallbackValueCount).toBe(0);
-    expect(artifact.coverage.maxFallbackCascadeDepth).toBe(0);
     const warningCodes = result.warnings.map((warning) => warning.code);
     expect(warningCodes).not.toContain('W_NAGA_LOWERING_INCOMPLETE');
   });
@@ -208,7 +206,7 @@ describe('naga lowering coverage diagnostics', () => {
     expect(diagnostics.warnings.length).toBe(0);
   });
 
-  it('emits fallback warning diagnostics without hard drops for unsupported expression lowering', () => {
+  it('emits hard-drop error when expression lowering fails and no slot-copy path resolves', () => {
     const schedule = buildMinimalSchedule([
       {
         kind: 'materialize',
@@ -240,14 +238,13 @@ describe('naga lowering coverage diagnostics', () => {
       exprToBlock: new Map(),
     });
 
-    expect(lowered.coverage.droppedComputeStepCount).toBe(0);
-    expect(lowered.coverage.fallbackValueCount).toBeGreaterThan(0);
-    expect(lowered.coverage.maxFallbackCascadeDepth).toBeGreaterThanOrEqual(0);
-
+    // Expression lowering fails (can't lower 'expr' fn) and slot-copy
+    // resolution also fails (no fieldExprToSlot mapping) → hard drop.
+    expect(lowered.coverage.droppedComputeStepCount).toBeGreaterThan(0);
+    expect(lowered.coverage.hardDropReasonCounts['unresolved_materialize_source']).toBeGreaterThan(0);
     const diagnostics = collectNagaLoweringCoverageDiagnostics(lowered.coverage);
-    expect(diagnostics.errors.length).toBe(0);
-    expect(diagnostics.warnings.length).toBe(1);
-    expect(diagnostics.warnings[0]?.code).toBe('W_NAGA_LOWERING_INCOMPLETE');
+    expect(diagnostics.errors.length).toBe(1);
+    expect(diagnostics.warnings.length).toBe(0);
   });
 });
 

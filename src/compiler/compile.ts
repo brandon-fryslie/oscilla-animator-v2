@@ -301,20 +301,17 @@ function makeFailure(errors: CompileError[]): CompileFailure {
   return { kind: 'error', errors };
 }
 
+// [LAW:single-enforcer] Compile boundary is the sole authority that decides
+// whether lowering coverage metadata becomes a hard compile failure.
 export function collectNagaLoweringCoverageDiagnostics(
   coverage: NagaLoweringCoverageIR | undefined,
 ): { readonly errors: readonly CompileError[]; readonly warnings: readonly CompileError[] } {
-  if (!coverage) {
+  if (!coverage || coverage.droppedComputeStepCount === 0) {
     return { errors: [], warnings: [] };
   }
 
-  const errors: CompileError[] = [];
-  const warnings: CompileError[] = [];
-
-  // [LAW:single-enforcer] Compile boundary is the sole authority that decides
-  // whether lowering coverage metadata becomes a hard compile failure or warning.
-  if (coverage.droppedComputeStepCount > 0) {
-    errors.push({
+  return {
+    errors: [{
       code: 'IRValidationFailed',
       message: 'Naga lowering failed: unresolved compute-owned steps remain after lowering.',
       details: {
@@ -323,26 +320,8 @@ export function collectNagaLoweringCoverageDiagnostics(
         droppedComputeStepCount: coverage.droppedComputeStepCount,
         hardDropReasonCounts: coverage.hardDropReasonCounts,
       },
-    });
-  }
-
-  if (coverage.fallbackValueCount > 0) {
-    warnings.push({
-      code: 'W_NAGA_LOWERING_INCOMPLETE',
-      message: 'Naga lowering emitted fallback values for unresolved compute expression paths.',
-      details: {
-        totalStepCount: coverage.totalStepCount,
-        boundaryStepCount: coverage.boundaryStepCount,
-        fallbackValueCount: coverage.fallbackValueCount,
-        maxFallbackCascadeDepth: coverage.maxFallbackCascadeDepth,
-        fallbackReasonCounts: coverage.fallbackReasonCounts,
-      },
-    });
-  }
-
-  return {
-    errors,
-    warnings,
+    }],
+    warnings: [],
   };
 }
 

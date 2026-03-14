@@ -24,6 +24,7 @@ export {
   type NagaSourceMapEntryIR,
   type NagaComputeMetadataIR,
   type NagaLoweringCoverageIR,
+  type HardDropReason,
   type NagaTypeIR,
   type NagaConstantIR,
   type NagaGlobalVariableIR,

@@ -197,17 +197,7 @@ export interface NagaComputeMetadataIR {
   readonly maxActiveLanes: number;
 }
 
-export interface NagaLoweringCoverageIR {
-  readonly totalStepCount: number;
-  readonly boundaryStepCount: number;
-  readonly droppedComputeStepCount: number;
-  readonly fallbackValueCount: number;
-  readonly maxFallbackCascadeDepth: number;
-  readonly hardDropReasonCounts: Readonly<Record<string, number>>;
-  readonly fallbackReasonCounts: Readonly<Record<string, number>>;
-}
-
-type HardDropReason =
+export type HardDropReason =
   | 'missing_target_slot_metadata'
   | 'unresolved_materialize_source'
   | 'missing_source_slot_metadata'
@@ -215,23 +205,20 @@ type HardDropReason =
   | 'state_write_missing_source_slot'
   | 'state_write_missing_slot_metadata';
 
-type FallbackReason =
-  | 'depth_limit'
-  | 'missing_expr'
-  | 'missing_source_slot'
-  | 'missing_source_slot_metadata'
-  | 'unsupported_expression_path';
+export interface NagaLoweringCoverageIR {
+  readonly totalStepCount: number;
+  readonly boundaryStepCount: number;
+  readonly droppedComputeStepCount: number;
+  readonly hardDropReasonCounts: Readonly<Partial<Record<HardDropReason, number>>>;
+}
 
 interface LoweringCoverageState {
   boundaryStepCount: number;
   droppedComputeStepCount: number;
-  fallbackValueCount: number;
-  maxFallbackCascadeDepth: number;
-  hardDropReasonCounts: Record<string, number>;
-  fallbackReasonCounts: Record<string, number>;
+  hardDropReasonCounts: Partial<Record<HardDropReason, number>>;
 }
 
-function incrementReasonCount(counts: Record<string, number>, reason: string): void {
+function incrementReasonCount<R extends string>(counts: Partial<Record<R, number>>, reason: R): void {
   counts[reason] = (counts[reason] ?? 0) + 1;
 }
 
@@ -240,14 +227,6 @@ function incrementReasonCount(counts: Record<string, number>, reason: string): v
 function recordHardDrop(coverage: LoweringCoverageState, reason: HardDropReason): void {
   coverage.droppedComputeStepCount += 1;
   incrementReasonCount(coverage.hardDropReasonCounts, reason);
-}
-
-// [LAW:dataflow-not-control-flow] Unsupported expression paths stay on the same
-// lowering path and vary only the emitted value/metadata, never step execution.
-function recordFallback(coverage: LoweringCoverageState, reason: FallbackReason, cascadeDepth: number): void {
-  coverage.fallbackValueCount += 1;
-  coverage.maxFallbackCascadeDepth = Math.max(coverage.maxFallbackCascadeDepth, cascadeDepth);
-  incrementReasonCount(coverage.fallbackReasonCounts, reason);
 }
 
 class Interner<T> {
@@ -1802,25 +1781,18 @@ function emitMaterializeExprComponentF32(args: {
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
   readonly cache: Map<string, number>;
-  readonly coverage: LoweringCoverageState;
   readonly depth: number;
-}): number {
-  if (args.depth > 128) {
-    recordFallback(args.coverage, 'depth_limit', args.depth);
-    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-  }
+}): number | null {
+  if (args.depth > 128) return null;
   const cacheKey = `${args.exprId as number}:${args.componentIndex}`;
   const cached = args.cache.get(cacheKey);
   if (cached !== undefined) return cached;
 
   const expr = args.valueExprs[args.exprId as number];
-  if (!expr) {
-    recordFallback(args.coverage, 'missing_expr', args.depth);
-    return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-  }
+  if (!expr) return null;
   const component = Math.max(0, args.componentIndex);
 
-  const emitFromExprInput = (inputExprId: ValueExprId, requestedComponent: number): number => {
+  const emitFromExprInput = (inputExprId: ValueExprId, requestedComponent: number): number | null => {
     const inputExpr = args.valueExprs[inputExprId as number];
     const inputStride = inferComponentStride(inputExpr);
     const normalizedComponent = inputStride > 1
@@ -1964,36 +1936,27 @@ function emitMaterializeExprComponentF32(args: {
       break;
   }
 
+  // [LAW:no-silent-fallbacks] When expression lowering can't resolve, try
+  // local slot lookup. If that also fails, return null so the outer slot-copy
+  // path (resolveStepInputSlot) can try deeper input traversal or classify
+  // the failure as a hard drop at the compile boundary.
   if (resolved === null) {
     const sourceSlot = resolveInputSlotFromExpr(args.exprId as number, args.runtimeAddressTable);
-    if (sourceSlot === null) {
-      recordFallback(args.coverage, 'missing_source_slot', args.depth);
-      resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-    } else {
-      const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-      if (!sourcePlan) {
-        recordFallback(args.coverage, 'missing_source_slot_metadata', args.depth);
-        resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-      } else {
-        resolved = emitLoadedF32FromPlan(
-          args.ctx,
-          args.builtins,
-          args.laneExpr,
-          sourcePlan,
-          'arena_in',
-          component,
-          args.source,
-        );
-      }
-    }
+    if (sourceSlot === null) return null;
+    const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
+    if (!sourcePlan) return null;
+    resolved = emitLoadedF32FromPlan(
+      args.ctx,
+      args.builtins,
+      args.laneExpr,
+      sourcePlan,
+      'arena_in',
+      component,
+      args.source,
+    );
   }
 
-  if (resolved === null) {
-    recordFallback(args.coverage, 'unsupported_expression_path', args.depth);
-    resolved = emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-  }
-
-  args.cache.set(cacheKey, resolved);
+  if (resolved !== null) args.cache.set(cacheKey, resolved);
   return resolved;
 }
 
@@ -2008,7 +1971,6 @@ function emitMaterializeFromExpression(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly source: NagaSourceMapEntryIR;
   readonly targetPlan: SlotAddressPlan;
-  readonly coverage: LoweringCoverageState;
 }): boolean {
   if (args.targetPlan.storage !== 'f32') {
     return false;
@@ -2017,14 +1979,20 @@ function emitMaterializeFromExpression(args: {
 
   for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
     const valueExpr = emitMaterializeExprComponentF32({
-      ...args,
+      ctx: args.ctx,
+      builtins: args.builtins,
       laneExpr: args.laneExpr,
       exprId: args.step.field,
+      schedule: args.schedule,
+      runtimeAddressTable: args.runtimeAddressTable,
+      valueExprs: args.valueExprs,
+      source: args.source,
+      targetPlan: args.targetPlan,
       componentIndex,
       cache,
-      coverage: args.coverage,
       depth: 0,
     });
+    if (valueExpr === null) return false;
     const targetIndex = emitAddressIndex(
       args.ctx,
       args.builtins,
@@ -2099,7 +2067,6 @@ function lowerStep(
             valueExprs,
             source,
             targetPlan,
-            coverage,
           })) {
             return;
           }
@@ -2342,10 +2309,7 @@ export function lowerScheduleToNagaModule(args: {
   const coverage: LoweringCoverageState = {
     boundaryStepCount: 0,
     droppedComputeStepCount: 0,
-    fallbackValueCount: 0,
-    maxFallbackCascadeDepth: 0,
     hardDropReasonCounts: {},
-    fallbackReasonCounts: {},
   };
   const builtins = registerBuiltinTypes(ctx);
   registerBuiltinGlobals(ctx, builtins);
@@ -2411,10 +2375,7 @@ export function lowerScheduleToNagaModule(args: {
       totalStepCount: steps.length,
       boundaryStepCount: coverage.boundaryStepCount,
       droppedComputeStepCount: coverage.droppedComputeStepCount,
-      fallbackValueCount: coverage.fallbackValueCount,
-      maxFallbackCascadeDepth: coverage.maxFallbackCascadeDepth,
       hardDropReasonCounts: coverage.hardDropReasonCounts,
-      fallbackReasonCounts: coverage.fallbackReasonCounts,
     },
   };
 }
