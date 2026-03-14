@@ -65,21 +65,6 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
                     wgsl: read_required_string_field(&item, "wgsl")?,
                 });
             }
-            // Vertex/fragment render passes use hardcoded uber-shader entry points
-            // (vs_main/fs_main) — the Rust renderer does not accept compiler-generated
-            // vertex/fragment modules. These stages are valid in the pass manifest but
-            // are not actionable here.
-            "vertex" | "fragment" => {
-                web_sys::console::warn_1(
-                    &JsValue::from_str(
-                        format!(
-                            "GPU pass {} has stage '{}' — skipped (renderer uses hardcoded {} shader)",
-                            idx, stage, stage,
-                        )
-                        .as_str(),
-                    ),
-                );
-            }
             _ => {
                 return Err(JsValue::from_str(
                     format!("GPU pass {} has unsupported stage '{}'", idx, stage).as_str(),

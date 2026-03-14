@@ -61,32 +61,6 @@ describe('validateCompiledGpuPassBundle pass signature normalization', () => {
     );
   });
 
-  it('accepts valid compute + vertex + fragment stage signatures', () => {
-    const result = validateCompiledGpuPassBundle(buildBundle([
-      buildPass({
-        passId: 'simulation.compute',
-        stage: 'compute',
-        entryPoint: 'compute_main',
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-      }),
-      buildPass({
-        passId: 'fullscreen.vertex',
-        stage: 'vertex',
-        entryPoint: 'vertex_main',
-        wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
-      }),
-      buildPass({
-        passId: 'fullscreen.fragment',
-        stage: 'fragment',
-        entryPoint: 'fragment_main',
-        wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
-      }),
-    ]));
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-    expect(result.bundle.passes.map((pass) => pass.stage)).toEqual(['compute', 'vertex', 'fragment']);
-  });
-
   it('rejects invalid entrypoint identifiers', () => {
     expectValidationError(
       { entryPoint: '123bad', wgsl: '@compute @workgroup_size(64, 1, 1)\nfn 123bad() {}' },
@@ -139,16 +113,16 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
     const result = validateCompiledGpuPassBundle(
       buildBundle([
         buildPass({
-          passId: 'fullscreen.vertex',
-          stage: 'vertex',
-          entryPoint: 'vertex_main',
-          wgsl: '@vertex\nfn vertex_main() -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); }',
+          passId: 'invalid-a',
+          stage: 'geometry' as unknown as GpuPassStage,
+          entryPoint: 'invalid_a',
+          wgsl: 'fn invalid_a() {}',
         }),
         buildPass({
-          passId: 'fullscreen.fragment',
-          stage: 'fragment',
-          entryPoint: 'fragment_main',
-          wgsl: '@fragment\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
+          passId: 'invalid-b',
+          stage: 'geometry' as unknown as GpuPassStage,
+          entryPoint: 'invalid_b',
+          wgsl: 'fn invalid_b() {}',
         }),
       ]),
     );
