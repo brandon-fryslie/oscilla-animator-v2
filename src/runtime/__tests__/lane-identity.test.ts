@@ -110,6 +110,7 @@ function makeMinimalProgram(opts: {
         boundaryStepCount: 0,
         droppedComputeStepCount: 0,
         hardDropReasonCounts: {},
+        hardDrops: [],
       },
     },
   } as CompiledProgramIR;
