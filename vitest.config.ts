@@ -21,6 +21,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.claude/worktrees/**',
       'salvage/**',
       '**/tests/e2e/**', // Exclude Playwright E2E tests
       '**/*.spec.ts', // Exclude Playwright test files
