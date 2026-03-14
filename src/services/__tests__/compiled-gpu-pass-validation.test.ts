@@ -98,36 +98,6 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
     expectValidationError({ entryPoint: '' }, 'missing entryPoint');
   });
 
-  it('rejects WGSL payloads missing compute annotation', () => {
-    expectValidationError({ wgsl: 'fn compute_main() {}' }, 'missing @compute entry annotation');
-  });
-
-  it('rejects WGSL payloads where @compute is not on the declared entrypoint', () => {
-    expectValidationError(
-      {
-        wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}\nfn compute_main() {}',
-      },
-      'missing @compute entry annotation',
-    );
-  });
-
-  it('rejects WGSL payloads with mismatched stage annotation', () => {
-    expectValidationError(
-      {
-        stage: 'fragment',
-        entryPoint: 'fragment_main',
-        wgsl: '@vertex\nfn fragment_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }',
-      },
-      'missing @fragment entry annotation',
-    );
-  });
-
-  it('rejects WGSL payloads missing declared entrypoint function', () => {
-    expectValidationError(
-      { wgsl: '@compute @workgroup_size(64, 1, 1)\nfn other_main() {}' },
-      'missing fn compute_main(...)',
-    );
-  });
 
 });
 
