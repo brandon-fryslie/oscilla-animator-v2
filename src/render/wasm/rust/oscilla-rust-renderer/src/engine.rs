@@ -9,13 +9,18 @@ use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
 use crate::compute::{CompilerComputePassSpec, ComputeDispatcher};
+use crate::default_shaders::{
+    DEFAULT_ASSEMBLY_WGSL, DEFAULT_SIMULATION_WGSL, DEFAULT_UBER_SHADER_WGSL,
+};
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::memory::{
     GpuMemoryArena, INDIRECT_INDEXED_STRIDE_WORDS, INDIRECT_NON_INDEXED_STRIDE_WORDS,
     SHAPE_BANK_HEADER_WORDS, SINK_TABLE_DESCRIPTOR_WORDS, SINK_TABLE_HEADER_WORDS,
     SINK_TABLE_RECORD_WORDS,
 };
-use crate::render::{DepthTarget, IndirectRegionPlan, RenderDispatcher};
+use crate::render::{
+    DepthTarget, IndirectRegionPlan, MsaaColorTarget, RenderDispatcher, CANONICAL_MSAA_SAMPLE_COUNT,
+};
 use crate::scheduler::WorkerScheduler;
 use crate::telemetry::{
     build_scheduler_telemetry as build_scheduler_telemetry_packet, SchedulerState,
@@ -34,374 +39,6 @@ const INPUT_WORD_INSTALL_REVISION: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
 
-const DEFAULT_SIMULATION_WGSL: &str = r#"
-@group(0) @binding(0) var<storage, read> arena_read: array<u32>;
-@group(0) @binding(1) var<storage, read_write> arena_write: array<u32>;
-@group(0) @binding(2) var<storage, read> state_read: array<u32>;
-@group(0) @binding(3) var<storage, read_write> state_write: array<u32>;
-@group(0) @binding(4) var<uniform> global_uniforms: array<vec4<f32>, 5>;
-
-@compute @workgroup_size(64)
-fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let index = gid.x;
-  if (index >= arrayLength(&state_write)) {
-    return;
-  }
-  let base = state_read[index] + arena_read[index];
-  let dt_bits = bitcast<u32>(global_uniforms[4].y);
-  state_write[index] = base + dt_bits + 1u;
-  arena_write[index] = state_write[index];
-}
-"#;
-
-const DEFAULT_ASSEMBLY_WGSL: &str = r#"
-@group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
-@group(1) @binding(0) var<storage, read> arena_words: array<u32>;
-@group(2) @binding(0) var<storage, read_write> instance_words: array<f32>;
-@group(2) @binding(1) var<storage, read> sink_table_words: array<u32>;
-
-const SINK_TABLE_HEADER_WORDS: u32 = 8u;
-const SINK_TABLE_RECORD_WORDS: u32 = 8u;
-const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 20u;
-const RECORD_WORD_INSTANCE_COUNT: u32 = 2u;
-const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
-const RECORD_WORD_SHAPE_WORD_OFFSET: u32 = 6u;
-
-const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
-const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
-const DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE: u32 = 2u;
-const DESCRIPTOR_WORD_COLOR_BASE_OFFSET: u32 = 3u;
-const DESCRIPTOR_WORD_COLOR_LANE_STRIDE: u32 = 4u;
-const DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE: u32 = 5u;
-const DESCRIPTOR_WORD_SCALE_BASE_OFFSET: u32 = 6u;
-const DESCRIPTOR_WORD_SCALE_LANE_STRIDE: u32 = 7u;
-const DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE: u32 = 8u;
-const DESCRIPTOR_WORD_ROTATION_MODE: u32 = 9u;
-const DESCRIPTOR_WORD_ROTATION_BASE_OFFSET: u32 = 10u;
-const DESCRIPTOR_WORD_ROTATION_LANE_STRIDE: u32 = 11u;
-const DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE: u32 = 12u;
-const DESCRIPTOR_WORD_ROTATION_DEFAULT_BITS: u32 = 13u;
-const DESCRIPTOR_WORD_SCALE2_MODE: u32 = 14u;
-const DESCRIPTOR_WORD_SCALE2_BASE_OFFSET: u32 = 15u;
-const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
-const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
-const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
-const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
-
-const OPTIONAL_MODE_CONSTANT: u32 = 0u;
-const OPTIONAL_MODE_SLOT: u32 = 1u;
-
-fn read_sink_word(index: u32) -> u32 {
-  if (index >= arrayLength(&sink_table_words)) {
-    return 0u;
-  }
-  return sink_table_words[index];
-}
-
-fn read_arena_f32(
-  base_offset: u32,
-  lane_stride: u32,
-  component_stride: u32,
-  lane: u32,
-  component: u32,
-  default_value: f32,
-) -> f32 {
-  let index = base_offset + lane * lane_stride + component * component_stride;
-  if (index >= arrayLength(&arena_words)) {
-    return default_value;
-  }
-  let raw = bitcast<f32>(arena_words[index]);
-  return select(default_value, raw, raw == raw);
-}
-
-fn read_sink_f32(index: u32, default_value: f32) -> f32 {
-  if (index >= arrayLength(&sink_table_words)) {
-    return default_value;
-  }
-  let raw = bitcast<f32>(sink_table_words[index]);
-  return select(default_value, raw, raw == raw);
-}
-
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let max_instance_words = arrayLength(&instance_words);
-  let max_instances = max_instance_words / 12u;
-  if (gid.x >= max_instances) {
-    return;
-  }
-
-  let base = gid.x * 12u;
-  var pos_x = 0.0;
-  var pos_y = 0.0;
-  var scale = 1.0;
-  var rotation = 0.0;
-  var scale2_x = 1.0;
-  var scale2_y = 1.0;
-  var shape_word_offset = 0u;
-  var color_r = 1.0;
-  var color_g = 1.0;
-  var color_b = 1.0;
-  var color_a = 1.0;
-
-  let sink_table_word_count = arrayLength(&sink_table_words);
-  if (sink_table_word_count >= SINK_TABLE_HEADER_WORDS) {
-    let sink_count = read_sink_word(1u);
-    let records_base = SINK_TABLE_HEADER_WORDS;
-    let descriptors_base = records_base + sink_count * SINK_TABLE_RECORD_WORDS;
-    var sink_index = 0u;
-    var sink_found = false;
-    var sink_base = 0u;
-    var sink_lane = 0u;
-
-    loop {
-      if (sink_index >= sink_count) {
-        break;
-      }
-      let candidate_sink_base = records_base + sink_index * SINK_TABLE_RECORD_WORDS;
-      if (candidate_sink_base + RECORD_WORD_SHAPE_WORD_OFFSET >= sink_table_word_count) {
-        break;
-      }
-      let first_instance = read_sink_word(candidate_sink_base + RECORD_WORD_FIRST_INSTANCE);
-      let instance_count = read_sink_word(candidate_sink_base + RECORD_WORD_INSTANCE_COUNT);
-      let instance_end = first_instance + instance_count;
-      if (gid.x >= first_instance && gid.x < instance_end) {
-        sink_base = candidate_sink_base;
-        sink_lane = gid.x - first_instance;
-        sink_found = true;
-        break;
-      }
-      sink_index = sink_index + 1u;
-    }
-
-    if (sink_found) {
-      let descriptor_base = descriptors_base + sink_index * SINK_TABLE_DESCRIPTOR_WORDS;
-      let position_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_BASE_OFFSET);
-      let position_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_LANE_STRIDE);
-      let position_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE);
-      let color_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_BASE_OFFSET);
-      let color_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_LANE_STRIDE);
-      let color_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE);
-      let scale_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_BASE_OFFSET);
-      let scale_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_LANE_STRIDE);
-      let scale_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE);
-
-      pos_x = read_arena_f32(
-        position_base_offset,
-        position_lane_stride,
-        position_component_stride,
-        sink_lane,
-        0u,
-        0.0,
-      );
-      pos_y = read_arena_f32(
-        position_base_offset,
-        position_lane_stride,
-        position_component_stride,
-        sink_lane,
-        1u,
-        0.0,
-      );
-      color_r = read_arena_f32(
-        color_base_offset,
-        color_lane_stride,
-        color_component_stride,
-        sink_lane,
-        0u,
-        1.0,
-      );
-      color_g = read_arena_f32(
-        color_base_offset,
-        color_lane_stride,
-        color_component_stride,
-        sink_lane,
-        1u,
-        1.0,
-      );
-      color_b = read_arena_f32(
-        color_base_offset,
-        color_lane_stride,
-        color_component_stride,
-        sink_lane,
-        2u,
-        1.0,
-      );
-      color_a = read_arena_f32(
-        color_base_offset,
-        color_lane_stride,
-        color_component_stride,
-        sink_lane,
-        3u,
-        1.0,
-      );
-      scale = read_arena_f32(
-        scale_base_offset,
-        scale_lane_stride,
-        scale_component_stride,
-        sink_lane,
-        0u,
-        1.0,
-      );
-
-      let rotation_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_MODE);
-      let rotation_default = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_ROTATION_DEFAULT_BITS, 0.0);
-      let rotation_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_BASE_OFFSET);
-      let rotation_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_LANE_STRIDE);
-      let rotation_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE);
-      let rotation_from_slot = read_arena_f32(
-        rotation_base_offset,
-        rotation_lane_stride,
-        rotation_component_stride,
-        sink_lane,
-        0u,
-        rotation_default,
-      );
-      rotation = select(rotation_default, rotation_from_slot, rotation_mode == OPTIONAL_MODE_SLOT);
-
-      let scale2_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE);
-      let scale2_default_x = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS, 1.0);
-      let scale2_default_y = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS, 1.0);
-      let scale2_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_BASE_OFFSET);
-      let scale2_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_LANE_STRIDE);
-      let scale2_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE);
-      let scale2_x_from_slot = read_arena_f32(
-        scale2_base_offset,
-        scale2_lane_stride,
-        scale2_component_stride,
-        sink_lane,
-        0u,
-        scale2_default_x,
-      );
-      let scale2_y_from_slot = read_arena_f32(
-        scale2_base_offset,
-        scale2_lane_stride,
-        scale2_component_stride,
-        sink_lane,
-        1u,
-        scale2_default_y,
-      );
-      scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
-      scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
-      shape_word_offset = read_sink_word(sink_base + RECORD_WORD_SHAPE_WORD_OFFSET);
-    }
-  }
-
-  instance_words[base + 0u] = pos_x;
-  instance_words[base + 1u] = pos_y;
-  instance_words[base + 2u] = scale;
-  instance_words[base + 3u] = rotation;
-  instance_words[base + 4u] = scale2_x;
-  instance_words[base + 5u] = scale2_y;
-  instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
-  instance_words[base + 7u] = 0.0;
-  instance_words[base + 8u] = color_r;
-  instance_words[base + 9u] = color_g;
-  instance_words[base + 10u] = color_b;
-  instance_words[base + 11u] = color_a;
-}
-"#;
-
-const DEFAULT_UBER_SHADER_WGSL: &str = r#"
-struct GlobalUniforms {
-  view_proj: mat4x4<f32>,
-  resolution: vec2<f32>,
-  time_seconds: f32,
-  delta_time_seconds: f32,
-};
-
-struct InstanceData {
-  transform0: vec4<f32>,
-  transform1: vec4<f32>,
-  color: vec4<f32>,
-};
-
-@group(0) @binding(0) var<uniform> global: GlobalUniforms;
-@group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
-@group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
-
-struct VertexOutput {
-  @builtin(position) position: vec4<f32>,
-  @location(0) color: vec4<f32>,
-};
-
-fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
-  let hue = fract(h) * 6.283185307179586;
-  let a = c * cos(hue);
-  let b = c * sin(hue);
-
-  let l_prime = l + 0.3963377774 * a + 0.2158037573 * b;
-  let m_prime = l - 0.1055613458 * a - 0.0638541728 * b;
-  let s_prime = l - 0.0894841775 * a - 1.2914855480 * b;
-
-  let l3 = l_prime * l_prime * l_prime;
-  let m3 = m_prime * m_prime * m_prime;
-  let s3 = s_prime * s_prime * s_prime;
-
-  let x = 1.2270138511035211 * l3 - 0.5577999806518222 * m3 + 0.2812561489664678 * s3;
-  let y = -0.0405801784232806 * l3 + 1.11225686961683 * m3 - 0.0716766786656012 * s3;
-  let z = -0.0763812845057069 * l3 - 0.4214819784180127 * m3 + 1.5861632204407947 * s3;
-
-  return vec3<f32>(
-    3.240969941904521 * x - 1.537383177570093 * y - 0.498610760293 * z,
-    -0.96924363628087 * x + 1.87596750150772 * y + 0.041555057407175 * z,
-    0.055630079696993 * x - 0.20397695888897 * y + 1.056971514242878 * z
-  );
-}
-
-@vertex fn vs_main(
-  @location(0) localPos: vec2<f32>,
-  @builtin(instance_index) instanceIndex: u32,
-) -> VertexOutput {
-  let inst = instances[instanceIndex];
-  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
-  let topologyFlags = topologyBank[topologyWordOffset + 3u];
-  let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
-
-  let rawCenterX = inst.transform0.x;
-  let rawCenterY = inst.transform0.y;
-  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
-  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
-  let rawScaleX = inst.transform0.z * inst.transform1.x;
-  let rawScaleY = inst.transform0.z * inst.transform1.y;
-  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
-  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
-  let rawRotation = inst.transform0.w;
-  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
-
-  let c = cos(safeRotation);
-  let s = sin(safeRotation);
-  let model = mat4x4<f32>(
-    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
-    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
-    vec4<f32>(0.0, 0.0, 1.0, 0.0),
-    vec4<f32>(centerX, centerY, 0.0, 1.0),
-  );
-
-  let worldPos = model * vec4<f32>(localPos.x, localPos.y, 0.0, 1.0);
-
-  var out: VertexOutput;
-  out.position = global.view_proj * worldPos;
-
-  let rawH = inst.color.x;
-  let rawC = inst.color.y;
-  let rawL = inst.color.z;
-  let rawA = inst.color.w;
-  let safeH = select(0.0, rawH, rawH == rawH);
-  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
-  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
-  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
-  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
-  out.color = vec4<f32>(safeRgb, safeA) * (1.0 + closedMask * 0.0);
-  return out;
-}
-
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-  // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
-  // compositing and pipeline blending share one canonical alpha contract.
-  return vec4<f32>(input.color.rgb * input.color.a, input.color.a);
-}
-"#;
-
 pub struct EngineConfig {
     pub max_particles: usize,
     pub max_shapes: usize,
@@ -414,6 +51,8 @@ pub struct Engine {
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
     surface_format: wgpu::TextureFormat,
+    sample_count: u32,
+    msaa_color_target: Option<MsaaColorTarget>,
     depth_target: DepthTarget,
     arena: GpuMemoryArena,
     compute: ComputeDispatcher,
@@ -482,6 +121,42 @@ fn parse_finite_u32(value: f64, context: &str) -> u32 {
         panic!("{context} exceeds u32 max (value={value})");
     }
     floored as u32
+}
+
+fn supports_msaa_x4(adapter: &wgpu::Adapter, format: wgpu::TextureFormat) -> bool {
+    adapter
+        .get_texture_format_features(format)
+        .flags
+        .contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_X4)
+}
+
+fn resolve_sample_count(adapter: &wgpu::Adapter, surface_format: wgpu::TextureFormat) -> u32 {
+    let surface_supports_x4 = supports_msaa_x4(adapter, surface_format);
+    let depth_supports_x4 = supports_msaa_x4(adapter, wgpu::TextureFormat::Depth32Float);
+    if surface_supports_x4 && depth_supports_x4 {
+        CANONICAL_MSAA_SAMPLE_COUNT
+    } else {
+        1
+    }
+}
+
+fn create_msaa_color_target(
+    device: &wgpu::Device,
+    surface_format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+    sample_count: u32,
+) -> Option<MsaaColorTarget> {
+    if sample_count > 1 {
+        return Some(MsaaColorTarget::new(
+            device,
+            surface_format,
+            width,
+            height,
+            sample_count,
+        ));
+    }
+    None
 }
 
 const SHAPE_WORD_KIND: usize = 0;
@@ -681,6 +356,21 @@ impl Engine {
             view_formats: vec![],
         };
         surface.configure(&device, &surface_config);
+        let sample_count = resolve_sample_count(&adapter, surface_config.format);
+        if sample_count != CANONICAL_MSAA_SAMPLE_COUNT {
+            // [LAW:no-silent-fallbacks] When 4x MSAA is unsupported, emit an
+            // explicit diagnostic instead of silently degrading quality.
+            console::warn_1(&JsValue::from_str(
+                "WebGPU adapter lacks 4x MSAA support for color/depth targets; using sample_count=1",
+            ));
+        }
+        let msaa_color_target = create_msaa_color_target(
+            &device,
+            surface_config.format,
+            surface_config.width,
+            surface_config.height,
+            sample_count,
+        );
 
         let compute = ComputeDispatcher::new(
             &device,
@@ -693,6 +383,7 @@ impl Engine {
             &device,
             DEFAULT_UBER_SHADER_WGSL,
             surface_config.format,
+            sample_count,
             &compute.uniform_layout,
         );
         let arena = GpuMemoryArena::new(
@@ -708,7 +399,12 @@ impl Engine {
             config.max_shapes,
         );
         arena.clear_simulation_planes(&queue);
-        let depth_target = DepthTarget::new(&device, surface_config.width, surface_config.height);
+        let depth_target = DepthTarget::new(
+            &device,
+            surface_config.width,
+            surface_config.height,
+            sample_count,
+        );
         let debug_readback_interval_frames = if config.debug_readback_hz == 0 {
             0
         } else {
@@ -722,6 +418,8 @@ impl Engine {
             surface,
             surface_config,
             surface_format,
+            sample_count,
+            msaa_color_target,
             depth_target,
             arena,
             compute,
@@ -776,7 +474,16 @@ impl Engine {
         self.surface_config.height = safe_height;
         self.surface.configure(&self.device, &self.surface_config);
         self.depth_target
-            .resize(&self.device, safe_width, safe_height);
+            .resize(&self.device, safe_width, safe_height, self.sample_count);
+        if let Some(msaa_color_target) = self.msaa_color_target.as_mut() {
+            msaa_color_target.resize(
+                &self.device,
+                self.surface_format,
+                safe_width,
+                safe_height,
+                self.sample_count,
+            );
+        }
     }
 
     pub fn pause(&mut self) {
@@ -808,6 +515,7 @@ impl Engine {
             &self.device,
             uber_shader_wgsl,
             self.surface_format,
+            self.sample_count,
             &self.compute.uniform_layout,
         );
         let arena = GpuMemoryArena::new(
@@ -928,6 +636,7 @@ impl Engine {
                     &mut encoder,
                     &self.arena,
                     &color_view,
+                    self.msaa_color_target.as_ref().map(MsaaColorTarget::view),
                     self.depth_target.view(),
                     self.draw_regions,
                 );
@@ -1226,11 +935,12 @@ impl Engine {
             uniforms.view_proj[3][0] = tx;
             uniforms.view_proj[3][1] = ty;
             uniforms.view_proj[3][3] = 1.0;
-            let install_revision =
-                parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_INSTALL_REVISION as u32).into(),
-                    "installRevision",
-                );
+            let install_revision = parse_finite_u32(
+                shared_input
+                    .get_index(INPUT_WORD_INSTALL_REVISION as u32)
+                    .into(),
+                "installRevision",
+            );
             // [LAW:single-enforcer] Shared-plane upload ownership is gated by
             // one install revision word; per-frame ticks do not re-copy planes.
             if install_revision != self.last_install_revision {
@@ -1256,11 +966,15 @@ impl Engine {
                             .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
                     });
                 let shape_bank_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32).into(),
+                    shared_input
+                        .get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32)
+                        .into(),
                     "shapeBankWordCount",
                 );
                 let sink_table_words = parse_finite_u32(
-                    shared_input.get_index(INPUT_WORD_SINK_TABLE_WORDS as u32).into(),
+                    shared_input
+                        .get_index(INPUT_WORD_SINK_TABLE_WORDS as u32)
+                        .into(),
                     "sinkTableWordCount",
                 );
                 if shape_bank_words > shape_bank_word_limit {
