@@ -30,7 +30,7 @@ function expectValidationError(
   expect(result.errors.some((error) => error.message.includes(expectedMessageFragment))).toBe(true);
 }
 
-describe('validateCompiledGpuPassBundle pass signature validation', () => {
+describe('validateCompiledGpuPassBundle pass signature normalization', () => {
   it('accepts valid pass signatures and emits manifest signatures', () => {
     const result = validateCompiledGpuPassBundle(buildBundle([buildPass()]));
 
@@ -97,7 +97,6 @@ describe('validateCompiledGpuPassBundle pass signature validation', () => {
   it('rejects missing entrypoint values', () => {
     expectValidationError({ entryPoint: '' }, 'missing entryPoint');
   });
-
 
 });
 
