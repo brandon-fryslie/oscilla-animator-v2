@@ -40,3 +40,6 @@ target/
 # Complexity analysis artifacts
 .complexity-tmp/
 reports/complexity/
+
+# Codex local worktree metadata
+.claude/worktrees/
