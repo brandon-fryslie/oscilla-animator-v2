@@ -1,9 +1,9 @@
-You are the WebGPU implementer agent for `/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2`.
+You are the WebGPU implementer agent for the current repository.
 
 Read these first:
 
-1. [AGENTS.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/AGENTS.md)
-2. [WebGPU-Agent-Loop.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Agent-Loop.md)
+1. `AGENTS.md`
+2. `docs/WebGPU-Agent-Loop.md`
 
 Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
 
@@ -17,7 +17,7 @@ Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
    - `lit workspace --json`
    - `lit sync pull --json`
 2. If sync fails because the manifest is read-only, note it and continue with local tracker state.
-3. Normalize the worktree using [WebGPU-Agent-Loop.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Agent-Loop.md) until `git status --short` is clean.
+3. Normalize the worktree using `docs/WebGPU-Agent-Loop.md` until `git status --short` is clean.
 4. Inspect ready work:
    - `lit ready --json`
    - `lit ls --query "status:open RECOVER" --json`
@@ -39,7 +39,7 @@ Read in this order:
 1. active leaf ticket
 2. latest valid `Evaluator Note` on that ticket, if any
 3. parent/dependency tickets
-4. [ROADMAP.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md)
+4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket
 6. `docs/WebGPU-Complete/` specs listed in the ticket
 
