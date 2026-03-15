@@ -23,6 +23,7 @@
     "build:rust-renderer": "scripts/build-rust-renderer.sh",
     "test:native-webgpu-gates": "scripts/run-native-webgpu-gates.sh",
     "verify:naga-shim": "node scripts/verify-naga-shim.mjs",
+    "verify:rust-renderer-pkg": "node scripts/verify-rust-renderer-pkg.mjs",
     "ci:release-readiness": "pnpm -s verify:naga-shim && pnpm -s typecheck && pnpm -s vitest run src/compiler/__tests__ src/services/__tests__/AsyncCompilerService.test.ts src/services/__tests__/CompileWorkerClient.test.ts src/services/__tests__/RuntimeService.test.ts src/runtime/__tests__/construct-one.test.ts",
     "build:debug-probe": "scripts/build-debug-probe.sh",
     "complexity:clean": "rm -rf reports/complexity .complexity-tmp",

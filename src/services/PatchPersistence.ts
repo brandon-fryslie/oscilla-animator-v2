@@ -241,10 +241,9 @@ export function loadPatchFromStorage(): { patch: Patch; presetIndex: number } | 
 }
 
 /**
- * Clear the stored patch from localStorage and reload the page.
- * Exposed globally for UI.
+ * Clear the stored patch from localStorage.
  */
-export function clearStorageAndReload(): void {
+export function clearPatchFromStorage(): void {
   try {
     // [LAW:single-enforcer] localStorage capability detection is centralized.
     const storage = resolveLocalStorageCapability();
@@ -258,6 +257,14 @@ export function clearStorageAndReload(): void {
       detail: error,
     });
   }
+}
+
+/**
+ * Clear the stored patch from localStorage and reload the page.
+ * Exposed globally for UI.
+ */
+export function clearStorageAndReload(): void {
+  clearPatchFromStorage();
   if (typeof window !== 'undefined' && window.location) {
     window.location.reload();
   }
