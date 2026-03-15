@@ -22,16 +22,30 @@ Use it only when all of the following are true:
 
 If any of those conditions are false, stop and report why.
 
+## Loop Memory
+
+The only loop-memory surfaces are:
+
+1. The active ticket body and comments in `lit`
+2. Git history and the current worktree
+
+There is no separate planner file or hidden memory store.
+
+The only evaluator steering artifact you may follow is the latest standardized `Evaluator Note` comment on the active ticket.
+
+`// [LAW:one-source-of-truth] Evaluator notes are derived steering, not authority; the leaf ticket body plus cited docs/specs still win on any conflict.`
+
 ## Source Hierarchy
 
 Use sources in this order:
 
 1. The active `RECOVER-*` leaf ticket in `lit`
-2. The dependency chain, parent milestone, and parent epic for that leaf ticket
-3. [ROADMAP.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md)
-4. The numbered source docs explicitly listed in the active ticket
-5. The `docs/WebGPU-Complete/` specs explicitly listed in the active ticket
-6. [README.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Future/README.md) only for longer-horizon framing, never to widen immediate scope
+2. The latest valid `Evaluator Note` comment on that ticket, if present
+3. The dependency chain, parent milestone, and parent epic for that leaf ticket
+4. [ROADMAP.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md)
+5. The numbered source docs explicitly listed in the active ticket
+6. The `docs/WebGPU-Complete/` specs explicitly listed in the active ticket
+7. [README.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/docs/WebGPU-Future/README.md) only for longer-horizon framing, never to widen immediate scope
 
 If two sources disagree about scope, canonical owner, stage boundary, or verification target, stop and treat that as a blocker. Do not choose a side yourself.
 
@@ -55,14 +69,19 @@ At the start of every run:
 6. Inspect ready work:
    - `lit ready --json`
    - `lit ls --query "status:open RECOVER" --json`
+7. Identify the most likely active open/in-progress leaf ticket from tracker state, then inspect its comments and find the latest `Evaluator Note` comment, if any.
 
 ## Dirty Tree Rule
 
 If the worktree is dirty at startup:
 
-1. Identify whether the changes belong to one currently open `RECOVER-*` leaf task already in progress.
-2. If yes, continue only that ticket.
-3. If no, stop. Do not start a new ticket on top of unknown local state.
+1. Normalize the repo state before choosing work. Do not stop purely because the tree is dirty.
+2. If a git operation is half-finished and can be safely aborted, clean that up first, for example:
+   - `git revert --abort`
+3. If the local changes are clearly the current role's intended in-scope work for one active ticket and can be completed safely, continue with that ticket.
+4. Otherwise, stash unknown or out-of-scope changes with a descriptive message, for example:
+   - `git stash push -u -m "webgpu-loop-implementer-autostash $(date -u +%Y%m%dT%H%M%SZ)"`
+5. Re-check `git status --short` and do not begin normal work until the tree is clean.
 
 ## How To Choose Work
 
@@ -71,10 +90,14 @@ Choose exactly one `RECOVER-*` leaf ticket per run.
 Selection rules:
 
 1. If the user explicitly named a specific `RECOVER-*` leaf ticket for this run, use it.
-2. Otherwise, choose the highest-priority ready `RECOVER-*` leaf task.
-3. Never select `RECOVER-EPIC` or any `RECOVER-M*` milestone container.
-4. Never skip a blocked higher-priority leaf to start a later leaf.
-5. Never bundle work from the next ticket into the current ticket just because the code is nearby.
+2. Otherwise, identify the most likely active open/in-progress leaf ticket from tracker state and inspect its latest valid `Evaluator Note`, if any.
+3. If that evaluator note says `next_action: continue-active-ticket` or `next_action: revise-active-ticket`, use that active open leaf ticket.
+4. If that evaluator note says `next_action: stop-blocked`, stop and report the blocker instead of selecting new work.
+5. If that evaluator note says `next_action: advance-to-next-ready-ticket`, choose the highest-priority ready `RECOVER-*` leaf task.
+6. Otherwise, choose the highest-priority ready `RECOVER-*` leaf task.
+7. Never select `RECOVER-EPIC` or any `RECOVER-M*` milestone container.
+8. Never skip a blocked higher-priority leaf to start a later leaf.
+9. Never bundle work from the next ticket into the current ticket just because the code is nearby.
 
 If there is no ready leaf task:
 
@@ -104,6 +127,8 @@ You must confirm all of the following:
    - the non-goals that remain for later tickets
 6. The acceptance criteria can be verified locally with commands and runtime tooling available in the environment.
 7. The planned work does not require solving a later ticket first.
+8. If a valid `Evaluator Note` exists, its `repo_base_for_next_run` matches the current repo state or clearly describes how the current repo state was produced.
+9. If a valid `Evaluator Note` exists, its guidance does not conflict with the ticket/spec stack.
 
 If any preflight item fails:
 
@@ -155,6 +180,47 @@ If your alignment note reveals that the work cannot be completed without:
 - depending on unverifiable behavior
 
 stop and treat that as a blocker.
+
+## Evaluator Note Handling
+
+A valid `Evaluator Note` comment must begin with the literal first line:
+
+`Evaluator Note`
+
+And must include flat bullet lines for at least:
+
+- `evaluated_commit:`
+- `repo_base_for_next_run:`
+- `verdict:`
+- `next_action:`
+- `do:`
+- `avoid:`
+- `gates_passed:`
+- `gates_failed:`
+- `evidence:`
+
+Allowed `verdict:` values:
+
+- `accept-complete`
+- `accept-good-base`
+- `revise`
+- `revert-and-retry`
+- `blocked`
+
+Allowed `next_action:` values:
+
+- `advance-to-next-ready-ticket`
+- `continue-active-ticket`
+- `revise-active-ticket`
+- `stop-blocked`
+
+You may follow an evaluator note only when:
+
+1. It is the latest valid `Evaluator Note` on the active ticket.
+2. It does not conflict with the ticket/spec stack.
+3. Its `repo_base_for_next_run` matches the current repo state or is an ancestor that clearly explains the current state.
+
+If an evaluator note is stale, malformed, or contradictory, ignore it and treat that as a blocker comment candidate rather than inventing a new interpretation.
 
 ## Alternative Attempt Protocol
 
@@ -350,6 +416,16 @@ Closeout sequence:
 4. Exit the run after the commit exists.
 5. Do not start the next ticket in the same run.
 
+## Clean Tree Exit Gate
+
+Before exiting the run:
+
+1. Run `git status --short`.
+2. If intended repo changes from this run are still uncommitted, finish committing them now.
+3. If unknown or out-of-scope leftovers remain, stash them with a descriptive message and report the stash in the final output.
+4. If invalid partial changes from this role remain, roll them back safely before exit.
+5. Do not exit until the worktree is clean.
+
 ## Final Response Format
 
 When reporting the run outcome:
@@ -361,6 +437,7 @@ When reporting the run outcome:
 5. Mention any tracker failures such as read-only manifest issues.
 6. Mention the commit hash if a commit was created.
 7. Name any blocker ticket created.
+8. Mention any stash or rollback cleanup performed.
 
 ## Non-Goals
 
