@@ -1,6 +1,6 @@
 # 09 - Shape Taxonomy And Draw Mode Classification
 
-Spec target: `../WebGPU-Complete/IMPLEMENTATION-INDEX.md`, `../WebGPU-Complete/WS-04-shape-taxonomy.index.md`, `../WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md`
+Spec target: `../WebGPU-Complete/IMPLEMENTATION-INDEX.md`, `../WebGPU-Complete/workstreams/WS-04-shape-taxonomy.index.md`, `../WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md`
 
 // [LAW:one-type-per-behavior] Shape classes should reflect real execution differences, not collapse into one generic mesh path with ad hoc flags.
 
