@@ -30,6 +30,45 @@ Use this workflow for each implementation ticket in project `oscilla work items`
 // [LAW:verifiable-goals] State transitions, issue comments, review thread comments, PR status, and check results are deterministic evidence.
 // [LAW:one-source-of-truth] Project `Status` + issue/PR timeline are the canonical workflow record.
 
+## Unattended RECOVER Loop Mode (Local-Only)
+
+Use this workflow instead of the GitHub Project + PR Review flow only when all of the following are true:
+
+1. The active issue is a `RECOVER-*` leaf task in `lit`.
+2. The agent is executing through `PROMPT-WEBGPU-PROGRESS.md` in unattended mode.
+3. GitHub project / PR / review controls are not available in the current environment.
+4. The ticket body already contains `Objective`, `Position In Queue`, `Source Docs`, `Scope Guard`, `Acceptance Criteria`, and `Verification`.
+5. All cited source docs and `docs/WebGPU-Complete/` specs are available locally.
+
+Workflow:
+
+1. Preflight acceptance gate:
+   - Verify the ticket is the highest-priority ready leaf task.
+   - Verify blocker tickets are resolved.
+   - Verify the ticket, roadmap, numbered source docs, and cited `docs/WebGPU-Complete/` specs do not conflict on scope, canonical owner, or stage boundary.
+   - If any check fails, add a blocker comment, create a blocking ticket when needed and possible, and stop. Do not implement.
+2. Design baseline:
+   - Post a design comment before code with scope, touched files/modules, invariants/contracts, validation plan, and dependency assumptions.
+   - In this mode, the accepted design baseline is the ticket body plus its cited docs/specs.
+   - The design comment may narrow file and seam choices, but it may not widen scope or contradict the cited sources.
+3. Implementation start:
+   - Move the issue to `Status: In progress`.
+   - Implement only the accepted design baseline.
+4. Verification gate:
+   - Run deterministic local verification that proves the ticket's acceptance criteria.
+   - If verification is unavailable, inconclusive, or contradictory, add a blocker comment and stop. Do not close or advance.
+5. Closeout:
+   - Add a completion summary comment.
+   - Close the completed issue.
+   - Create a git commit for the completed work.
+6. PR/review exception:
+   - Do not fabricate GitHub project, PR, or review state in this mode.
+   - Resume the standard GitHub workflow for later tasks once those controls are available again.
+
+// [LAW:one-source-of-truth] In unattended RECOVER mode, the accepted design baseline is the leaf ticket body plus its cited local docs/specs.
+// [LAW:verifiable-goals] Unattended execution stops when correctness cannot be proven locally and deterministically.
+// [LAW:single-enforcer] This section is the only allowed local-only substitute for the GitHub project/PR workflow above.
+
 <!-- BEGIN LINKS INTEGRATION -->
 ## links Agent-Native Workflow
 
