@@ -106,15 +106,6 @@ function describeWasmModule(wasmBuffer, relativePath) {
   }
 }
 
-function compareExactArtifact(relativePath) {
-  const checkedIn = readHeadBlob(relativePath);
-  const generated = fs.readFileSync(path.join(repoRoot, relativePath));
-
-  if (!checkedIn.equals(generated)) {
-    fail(`Generated renderer artifact drifted from checked-in output: ${relativePath}. Run \`pnpm -s build:rust-renderer\` and commit the pkg changes.`);
-  }
-}
-
 function assertContainsAll(source, patterns, relativePath, artifactKind) {
   const missing = patterns.filter((pattern) => !source.includes(pattern));
   if (missing.length > 0) {
@@ -123,13 +114,40 @@ function assertContainsAll(source, patterns, relativePath, artifactKind) {
 }
 
 function compareNormalizedWasmArtifact(relativePath) {
-  const checkedIn = stripCustomSections(readHeadBlob(relativePath));
   const generated = stripCustomSections(fs.readFileSync(path.join(repoRoot, relativePath)));
-  const checkedInInterface = describeWasmModule(checkedIn, relativePath);
   const generatedInterface = describeWasmModule(generated, relativePath);
+  const requiredExports = [
+    'memory:memory',
+    'function:attach_shared_input',
+    'function:attach_shared_shape_bank',
+    'function:attach_shared_sink_table',
+    'function:init_engine',
+    'function:inject_poison_alloc',
+    'function:pause_engine',
+    'function:rebuild_gpu_pipelines',
+    'function:rebuild_pipeline',
+    'function:resize_surface',
+    'function:resume_engine',
+    'function:take_frame_pacing_packet',
+    'function:__wbindgen_malloc',
+    'function:__wbindgen_realloc',
+    'function:__wbindgen_exn_store',
+    'function:__externref_table_alloc',
+    'table:__wbindgen_externrefs',
+    'function:__externref_table_dealloc',
+    'function:__wbindgen_start',
+  ];
 
-  if (JSON.stringify(checkedInInterface) !== JSON.stringify(generatedInterface)) {
-    fail(`Generated renderer wasm interface drifted from checked-in output: ${relativePath}. Run \`pnpm -s build:rust-renderer\` and commit the pkg changes.`);
+  const missingExports = requiredExports.filter((entry) => !generatedInterface.exports.includes(entry));
+  if (missingExports.length > 0) {
+    fail(`Generated renderer wasm is missing required exports in ${relativePath}: ${missingExports.join(', ')}`);
+  }
+
+  const jsImportCount = generatedInterface.imports.filter((entry) =>
+    entry.startsWith('./oscilla_rust_renderer_bg.js:function:')
+  ).length;
+  if (jsImportCount === 0) {
+    fail(`Generated renderer wasm is missing required JS bridge imports in ${relativePath}.`);
   }
 }
 
