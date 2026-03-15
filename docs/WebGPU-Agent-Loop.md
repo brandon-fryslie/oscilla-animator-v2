@@ -2,8 +2,8 @@
 
 This document defines the unattended two-agent loop for the `RECOVER-*` backlog:
 
-- implementer: [PROMPT-WEBGPU-PROGRESS.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/PROMPT-WEBGPU-PROGRESS.md)
-- evaluator: [PROMPT-WEBGPU-EVALUATOR.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/PROMPT-WEBGPU-EVALUATOR.md)
+- implementer: `PROMPT-WEBGPU-PROGRESS.md`
+- evaluator: `PROMPT-WEBGPU-EVALUATOR.md`
 
 `// [LAW:one-source-of-truth] The active `RECOVER-*` leaf ticket plus its cited docs/specs are the only implementation authority.`
 `// [LAW:verifiable-goals] Each run must end with a concrete verdict backed by local evidence.`
@@ -12,7 +12,7 @@ This document defines the unattended two-agent loop for the `RECOVER-*` backlog:
 
 Use this loop only for the `RECOVER-*` WebGPU migration backlog.
 
-The loop does not replace the repo-wide workflow in [AGENTS.md](/Users/bmf/.codex/worktrees/a1b6/oscilla-animator-v2/AGENTS.md). It is a task-specific operating procedure used by the two prompt files above.
+The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-specific operating procedure used by the two prompt files above.
 
 ## Shared Rules
 
