@@ -6,6 +6,21 @@ CRATE_DIR="$ROOT_DIR/src/render/wasm/rust/oscilla-rust-renderer"
 PKG_DIR="$ROOT_DIR/src/render/wasm/pkg"
 TARGET_DIR="$CRATE_DIR/target"
 EXPECTED_WASM_BINDGEN_VERSION="0.2.114"
+CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
+REMAPPED_RUSTFLAGS="${RUSTFLAGS:-}"
+
+append_rustflag() {
+  local flag="$1"
+  if [ -n "$REMAPPED_RUSTFLAGS" ]; then
+    REMAPPED_RUSTFLAGS="${REMAPPED_RUSTFLAGS} ${flag}"
+  else
+    REMAPPED_RUSTFLAGS="${flag}"
+  fi
+}
+
+append_rustflag "--remap-path-prefix=${ROOT_DIR}=/workspace"
+append_rustflag "--remap-path-prefix=${CARGO_HOME_DIR}/registry/src=/cargo/registry/src"
+append_rustflag "--remap-path-prefix=${CARGO_HOME_DIR}/git/checkouts=/cargo/git/checkouts"
 
 if ! command -v wasm-bindgen >/dev/null 2>&1; then
   echo "wasm-bindgen CLI is required. Install with: cargo install wasm-bindgen-cli --version ${EXPECTED_WASM_BINDGEN_VERSION} --locked" >&2
@@ -23,12 +38,12 @@ if command -v rustup >/dev/null 2>&1; then
   TOOLCHAIN_BIN="${HOME}/.rustup/toolchains/${ACTIVE_TOOLCHAIN}/bin"
   rustup target add wasm32-unknown-unknown --toolchain "$ACTIVE_TOOLCHAIN" >/dev/null
   if [ -x "${TOOLCHAIN_BIN}/cargo" ]; then
-    RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    RUSTFLAGS="${REMAPPED_RUSTFLAGS}" RUSTC="${TOOLCHAIN_BIN}/rustc" "${TOOLCHAIN_BIN}/cargo" build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
   else
-    cargo build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+    RUSTFLAGS="${REMAPPED_RUSTFLAGS}" cargo build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
   fi
 else
-  cargo build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
+  RUSTFLAGS="${REMAPPED_RUSTFLAGS}" cargo build --locked --manifest-path "$CRATE_DIR/Cargo.toml" --target wasm32-unknown-unknown --release
 fi
 
 mkdir -p "$PKG_DIR"

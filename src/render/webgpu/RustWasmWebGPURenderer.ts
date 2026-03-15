@@ -31,6 +31,10 @@ import {
   previewWgsl,
 } from './gpu-pass-debug';
 import { type GpuPassStage, isGpuPassStage } from '../../types/gpu-pass-stage';
+import {
+  RendererCircuitBreaker,
+  type WebGPURendererExecutionState,
+} from './renderer-circuit-breaker';
 
 interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
@@ -145,6 +149,8 @@ interface RendererFatalTransition {
   readonly message: string;
   readonly timestamp: number;
   readonly cause: Error;
+  readonly executionState: WebGPURendererExecutionState;
+  readonly fault: GpuFault | null;
   readonly terminationPolicy: 'keep-worker-alive' | 'terminate-worker';
 }
 
@@ -172,11 +178,10 @@ function assertPositiveCanvasDimension(value: number, field: string): number {
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
-// TODO(#185): Keep current timeout unchanged for this PR, but measure ack
-// latency distributions by context (`bootstrap` vs `rebuildGpuPipelines`) and
-// decide whether to split/configure timeout policy from real data.
-// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/185
-const WORKER_RESPONSE_TIMEOUT_MS = 20_000;
+const BOOTSTRAP_RESPONSE_TIMEOUT_MS = 4_000;
+const PIPELINE_REBUILD_RESPONSE_TIMEOUT_MS = 8_000;
+const CIRCUIT_BREAKER_POLL_INTERVAL_MS = 250;
+const CIRCUIT_BREAKER_TERMINATION_GRACE_MS = 250;
 
 function getRuntimeBootstrapConfig(): RustRendererBootstrapConfig {
   if (!RUNTIME_CONSOLE_ENABLED) return DEFAULT_BOOTSTRAP_CONFIG;
@@ -482,6 +487,10 @@ export class WebGPURenderer {
   private sinkTableDebugLogCounter = 0;
   private readonly emittedHealthWarningCodes = new Set<string>();
   private gpuFaultCallback: GpuFaultCallback | null = null;
+  private readonly circuitBreaker = new RendererCircuitBreaker();
+  private executionState: WebGPURendererExecutionState = 'active';
+  private circuitBreakerTimer: ReturnType<typeof setInterval> | null = null;
+  private circuitBreakerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
 
   private reportEngineError(
     source: string,
@@ -534,6 +543,14 @@ export class WebGPURenderer {
       message: error.message,
       timestamp: performance.now(),
       cause: error,
+      executionState: 'fatal',
+      fault: {
+        severity: 'fatal',
+        code: 'WORKER_ACK_TIMEOUT',
+        message: error.message,
+        source: context,
+        recoverable: false,
+      },
       terminationPolicy: 'terminate-worker',
     });
   }
@@ -547,6 +564,8 @@ export class WebGPURenderer {
       message: disposition.message,
       timestamp: performance.now(),
       cause: disposition.error,
+      executionState: 'fatal',
+      fault: null,
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -558,6 +577,14 @@ export class WebGPURenderer {
       message,
       timestamp: performance.now(),
       cause: new Error(message),
+      executionState: 'fatal',
+      fault: {
+        severity: 'fatal',
+        code: 'WORKER_ERROR',
+        message,
+        source: context,
+        recoverable: false,
+      },
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -571,6 +598,8 @@ export class WebGPURenderer {
       message: payload.message,
       timestamp: performance.now(),
       cause: this.buildBracketedError(payload.source, payload.message, payload.location),
+      executionState: 'fatal',
+      fault: null,
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -584,6 +613,8 @@ export class WebGPURenderer {
       message: payload.message,
       timestamp: performance.now(),
       cause: this.buildBracketedError(payload.code, payload.message),
+      executionState: 'fatal',
+      fault: null,
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -597,6 +628,8 @@ export class WebGPURenderer {
       message: payload.reason,
       timestamp: performance.now(),
       cause: this.buildBracketedError(payload.code, payload.reason),
+      executionState: 'fatal',
+      fault: null,
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -610,6 +643,30 @@ export class WebGPURenderer {
       message: payload.message,
       timestamp: payload.emittedAtMs,
       cause: this.buildBracketedError(payload.code, payload.message),
+      executionState: 'fatal',
+      fault: null,
+      terminationPolicy: 'keep-worker-alive',
+    });
+  }
+
+  private buildCircuitBreakerFatalTransition(
+    code: 'renderer_heartbeat_stalled' | 'renderer_progress_stalled',
+    message: string,
+  ): RendererFatalTransition {
+    return this.buildFatalTransition({
+      code,
+      stage: 'CIRCUIT_BREAKER',
+      message,
+      timestamp: performance.now(),
+      cause: this.buildBracketedError(code, message),
+      executionState: 'pausedByBreaker',
+      fault: {
+        severity: 'fatal',
+        code,
+        message,
+        source: 'CIRCUIT_BREAKER',
+        recoverable: false,
+      },
       terminationPolicy: 'keep-worker-alive',
     });
   }
@@ -619,6 +676,9 @@ export class WebGPURenderer {
     // terminal issue emission are enforced at one boundary helper.
     const existingRecord = this.fatalRecord;
     if (existingRecord !== null) {
+      if (transition.fault !== null) {
+        this.emitGpuFault(transition.fault);
+      }
       if (transition.terminationPolicy === 'terminate-worker') {
         this.worker.terminate();
       }
@@ -634,6 +694,13 @@ export class WebGPURenderer {
     // [LAW:one-source-of-truth] Renderer fatal record is persisted once and
     // reused for all post-fatal behavior.
     this.fatalRecord = fatalRecord;
+    this.executionState = transition.executionState;
+    if (transition.executionState === 'fatal') {
+      this.circuitBreaker.markFatal();
+    } else {
+      this.circuitBreaker.markPausedByBreaker();
+    }
+    this.stopCircuitBreakerPolling();
     this.lifecycleState = 'Lost';
     this.fatalError = fatalRecord.cause;
     reportRenderIssue('error', `[${fatalRecord.code}] ${fatalRecord.message}`, {
@@ -644,6 +711,9 @@ export class WebGPURenderer {
       timestamp: fatalRecord.timestamp,
       cause: fatalRecord.cause,
     });
+    if (transition.fault !== null) {
+      this.emitGpuFault(transition.fault);
+    }
     if (transition.terminationPolicy === 'terminate-worker') {
       this.worker.terminate();
     }
@@ -665,7 +735,10 @@ export class WebGPURenderer {
     this.worker.addEventListener('message', this.handleRuntimeMessage);
   }
 
-  static async create(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
+  static async create(
+    canvas: HTMLCanvasElement,
+    options: { readonly onGpuFault?: GpuFaultCallback | null } = {},
+  ): Promise<WebGPURenderer> {
     assertWebGPUStartupContract(canvas);
     const offscreenCanvas = canvas.transferControlToOffscreen();
     const sharedInput = new SharedArrayBuffer(RUNTIME_INPUT_BUFFER_BYTES);
@@ -692,6 +765,7 @@ export class WebGPURenderer {
       sharedShapeBankWords,
       sharedSinkTableWords,
     );
+    renderer.setGpuFaultCallback(options.onGpuFault ?? null);
     await renderer.bootstrap(
       offscreenCanvas,
       sharedInput,
@@ -700,6 +774,54 @@ export class WebGPURenderer {
       getRuntimeBootstrapConfig(),
     );
     return renderer;
+  }
+
+  private startCircuitBreakerPolling(): void {
+    if (this.circuitBreakerTimer !== null) {
+      return;
+    }
+    this.circuitBreakerTimer = setInterval(() => {
+      const trip = this.circuitBreaker.check(performance.now());
+      if (trip === null) {
+        return;
+      }
+      this.tripCircuitBreaker(trip.code, trip.message);
+    }, CIRCUIT_BREAKER_POLL_INTERVAL_MS);
+  }
+
+  private stopCircuitBreakerPolling(): void {
+    if (this.circuitBreakerTimer !== null) {
+      clearInterval(this.circuitBreakerTimer);
+      this.circuitBreakerTimer = null;
+    }
+    if (this.circuitBreakerTerminateTimer !== null) {
+      clearTimeout(this.circuitBreakerTerminateTimer);
+      this.circuitBreakerTerminateTimer = null;
+    }
+  }
+
+  private scheduleCircuitBreakerTermination(): void {
+    if (this.circuitBreakerTerminateTimer !== null) {
+      return;
+    }
+    this.tryPostWorkerMessage(
+      this.createShutdownMessage(),
+      'Failed to post SHUTDOWN message during circuit-breaker shutdown.',
+    );
+    this.circuitBreakerTerminateTimer = setTimeout(() => {
+      this.circuitBreakerTerminateTimer = null;
+      this.tryTerminateWorker(
+        'Failed to terminate worker during circuit-breaker shutdown; worker may already be terminated.',
+      );
+    }, CIRCUIT_BREAKER_TERMINATION_GRACE_MS);
+  }
+
+  private tripCircuitBreaker(
+    code: 'renderer_heartbeat_stalled' | 'renderer_progress_stalled',
+    message: string,
+  ): void {
+    this.markRendererFatal(this.buildCircuitBreakerFatalTransition(code, message));
+    this.scheduleCircuitBreakerTermination();
   }
 
   render(input: RenderInput): void {
@@ -768,6 +890,7 @@ export class WebGPURenderer {
       return;
     }
     this.disposed = true;
+    this.stopCircuitBreakerPolling();
     this.worker.removeEventListener('message', this.handleRuntimeMessage);
     const message = this.createShutdownMessage();
     this.tryPostWorkerMessage(
@@ -844,6 +967,10 @@ export class WebGPURenderer {
 
   getLifecycleState(): RustRendererSchedulerState {
     return this.lifecycleState;
+  }
+
+  getExecutionState(): WebGPURendererExecutionState {
+    return this.executionState;
   }
 
   getInstalledGpuPassIds(): readonly string[] {
@@ -1250,6 +1377,15 @@ export class WebGPURenderer {
       },
     });
     this.bootstrapped = true;
+    this.executionState = 'active';
+    this.circuitBreaker.noteBootstrap(performance.now());
+    this.startCircuitBreakerPolling();
+  }
+
+  private getWorkerResponseTimeoutMs(context: string): number {
+    return context === 'bootstrap'
+      ? BOOTSTRAP_RESPONSE_TIMEOUT_MS
+      : PIPELINE_REBUILD_RESPONSE_TIMEOUT_MS;
   }
 
   private async awaitWorkerAck(
@@ -1269,7 +1405,7 @@ export class WebGPURenderer {
           );
           reject(fatalError);
         });
-      }, WORKER_RESPONSE_TIMEOUT_MS);
+      }, this.getWorkerResponseTimeoutMs(options.context));
       const settle = (callback: () => void): void => {
         if (settled) return;
         settled = true;
@@ -1445,6 +1581,13 @@ export class WebGPURenderer {
     // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
     // heartbeat packets instead of deriving lifecycle state client-side.
     this.lifecycleState = payload.state;
+    this.circuitBreaker.noteHeartbeat({
+      state: payload.state,
+      sequence: payload.sequence,
+      frameCount: payload.frameCount,
+      lastSuccessMs: payload.lastSuccessMs,
+      observedAtMs: performance.now(),
+    });
     this.validateHeartbeatHealth(payload);
     this.latestTelemetry = {
       meanMs: payload.meanTickMs,
@@ -1486,8 +1629,11 @@ export class WebGPURenderer {
   };
 }
 
-export async function createWebGPURenderer(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
+export async function createWebGPURenderer(
+  canvas: HTMLCanvasElement,
+  options: { readonly onGpuFault?: GpuFaultCallback | null } = {},
+): Promise<WebGPURenderer> {
   // [LAW:no-silent-fallbacks] WebGPU renderer creation is hard-fail only.
   // No legacy renderer path is allowed once worker+Rust cutover is selected.
-  return WebGPURenderer.create(canvas);
+  return WebGPURenderer.create(canvas, options);
 }

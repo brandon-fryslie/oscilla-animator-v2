@@ -13,6 +13,8 @@ import {
   createWebGPURenderer,
   assertWebGPUStartupContract,
   type WebGPURenderer,
+  type GpuFault,
+  type WebGPURendererExecutionState,
   RenderBufferArena,
   setRenderIssueReporter,
   getRenderIssues,
@@ -20,7 +22,11 @@ import {
 } from '../render';
 import type { RootStore } from '../stores';
 import { runInAction } from 'mobx';
-import { loadPatchFromStorage, savePatchToStorage } from './PatchPersistence';
+import {
+  clearPatchFromStorage,
+  loadPatchFromStorage,
+  savePatchToStorage,
+} from './PatchPersistence';
 import { consumeTestDemoFilename } from '../testing/test-params';
 import {
   markRuntimeBootstrapFailed,
@@ -59,10 +65,16 @@ import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
 import { buildRuntimeHotpathInstallPlanes } from './runtime-hotpath-install';
+import {
+  deriveRendererExecutionStateFromGpuFault,
+  shouldClearStoredStartupPatch,
+  type StartupRestoreSource,
+} from './runtime-gpu-fault-policy';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
 const EMPTY_U32_WORDS = new Uint32Array(0);
+const STARTUP_STORAGE_RESET_ARM_MS = 10_000;
 
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
@@ -124,6 +136,10 @@ export class RuntimeService {
   private debugProbeUpgradeInFlight: Promise<void> | null = null;
   private spyReadbackAnomalyFrameId: number | null = null;
   private readonly spyReadbackAnomalyKeysForFrame = new Set<string>();
+  private startupRestoreSource: StartupRestoreSource = 'none';
+  private startupStorageResetArmed = false;
+  private startupStorageResetTimer: ReturnType<typeof setTimeout> | null = null;
+  private rendererExecutionState: WebGPURendererExecutionState = 'active';
 
   constructor(
     private readonly store: RootStore,
@@ -282,7 +298,7 @@ export class RuntimeService {
     const canvas = this.canvas;
     const program = this.compileState.currentProgram;
     const state = this.compileState.currentState;
-    if (!renderer || !canvas || !program || !state) {
+    if (!renderer || !canvas || !program || !state || this.rendererExecutionState !== 'active') {
       return;
     }
 
@@ -335,6 +351,9 @@ export class RuntimeService {
 
     const renderer = this.renderer;
     if (!renderer) {
+      if (this.rendererExecutionState !== 'active') {
+        return;
+      }
       throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
     }
 
@@ -403,6 +422,80 @@ export class RuntimeService {
       this.nextSwapIsInitial = false;
     }
   }
+
+  private disarmStartupStorageResetGuard(): void {
+    this.startupStorageResetArmed = false;
+    if (this.startupStorageResetTimer !== null) {
+      clearTimeout(this.startupStorageResetTimer);
+      this.startupStorageResetTimer = null;
+    }
+  }
+
+  private armStartupStorageResetGuard(source: StartupRestoreSource): void {
+    this.startupRestoreSource = source;
+    this.disarmStartupStorageResetGuard();
+    if (source !== 'storage') {
+      return;
+    }
+    this.startupStorageResetArmed = true;
+    this.startupStorageResetTimer = setTimeout(() => {
+      this.startupStorageResetTimer = null;
+      this.startupStorageResetArmed = false;
+    }, STARTUP_STORAGE_RESET_ARM_MS);
+  }
+
+  private maybeClearStartupRestoreOnGpuFault(fault: GpuFault): void {
+    if (!shouldClearStoredStartupPatch(this.startupRestoreSource, this.startupStorageResetArmed, fault)) {
+      return;
+    }
+    // [LAW:one-source-of-truth] Startup auto-restore is sourced from one
+    // persisted patch key, so breaker recovery clears that one canonical key.
+    clearPatchFromStorage();
+    this.disarmStartupStorageResetGuard();
+    this.store.diagnostics.log({
+      level: 'warn',
+      message: 'Cleared the persisted startup patch after a fatal WebGPU startup failure.',
+    });
+  }
+
+  private handleGpuFault = (fault: GpuFault): void => {
+    const { store } = this;
+    const level = fault.severity === 'fatal' ? 'error' : 'warn';
+    this.rendererExecutionState = deriveRendererExecutionStateFromGpuFault(fault);
+    this.maybeClearStartupRestoreOnGpuFault(fault);
+    store.diagnostics.log({
+      level,
+      message: `GPU ${fault.severity}: [${fault.code}] ${fault.message}`,
+    });
+    store.diagnostics.setGpuFault({
+      severity: fault.severity,
+      code: fault.code,
+      message: fault.message,
+    });
+    store.events.emit({
+      type: 'GpuFault',
+      patchId: 'patch-0',
+      patchRevision: store.getPatchRevision(),
+      severity: fault.severity,
+      code: fault.code,
+      message: fault.message,
+      source: fault.source,
+      recoverable: fault.recoverable,
+    });
+    if (fault.severity !== 'fatal') {
+      return;
+    }
+    this.animationLoop?.stop();
+    this.animationLoop = null;
+    this.renderer?.dispose();
+    this.renderer = null;
+    store.diagnostics.log({
+      level: 'error',
+      message: fault.source === 'CIRCUIT_BREAKER'
+        ? 'Rendering stopped by the WebGPU circuit breaker to protect the system.'
+        : 'GPU device lost — rendering stopped. Reload the page to recover.',
+    });
+  };
 
   /**
    * Called by React when the canvas element is available.
@@ -499,47 +592,19 @@ export class RuntimeService {
       // [LAW:single-enforcer] RuntimeService is the only startup boundary that
       // instantiates the renderer after prerequisites are validated.
       try {
-        this.renderer = await createWebGPURenderer(this.canvas);
+        this.renderer = await createWebGPURenderer(this.canvas, {
+          onGpuFault: this.handleGpuFault,
+        });
+        this.rendererExecutionState = 'active';
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
 
-      // [LAW:single-enforcer] RuntimeService is the sole boundary that routes
-      // GPU fault events from the renderer into diagnostics and EventHub.
-      this.renderer.setGpuFaultCallback((fault) => {
-        const level = fault.severity === 'fatal' ? 'error' : 'warn';
-        store.diagnostics.log({
-          level,
-          message: `GPU ${fault.severity}: [${fault.code}] ${fault.message}`,
-        });
-        store.diagnostics.setGpuFault({
-          severity: fault.severity,
-          code: fault.code,
-          message: fault.message,
-        });
-        store.events.emit({
-          type: 'GpuFault',
-          patchId: 'patch-0',
-          patchRevision: store.getPatchRevision(),
-          severity: fault.severity,
-          code: fault.code,
-          message: fault.message,
-          source: fault.source,
-          recoverable: fault.recoverable,
-        });
-        if (fault.severity === 'fatal') {
-          store.diagnostics.log({
-            level: 'error',
-            message: 'GPU device lost \u2014 rendering stopped. Reload the page to recover.',
-          });
-          this.animationLoop?.stop();
-        }
-      });
-
       // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
       const testDemo = consumeTestDemoFilename();
       if (testDemo) {
+        this.armStartupStorageResetGuard('test');
         const loaded = store.demo.selectDemo(testDemo);
         if (!loaded) {
           store.diagnostics.log({
@@ -547,17 +612,20 @@ export class RuntimeService {
             // [LAW:single-enforcer] RuntimeService owns startup diagnostics emission.
             message: `[test-params] Demo not found: "${testDemo}". Available: ${store.demo.demos.map(d => d.filename).join(', ')}`,
           });
+          this.armStartupStorageResetGuard('demo');
           store.demo.loadDefault();
         }
       } else {
         // Try to restore from localStorage, otherwise load default demo
         const saved = loadPatchFromStorage();
         if (saved) {
+          this.armStartupStorageResetGuard('storage');
           runInAction(() => {
             store.demo.currentFilename = null;
           });
           store.patch.loadPatch(saved.patch);
         } else {
+          this.armStartupStorageResetGuard('demo');
           store.demo.loadDefault();
         }
       }
@@ -651,6 +719,7 @@ export class RuntimeService {
     compilationInspector.setErrorReporter(null);
     setRenderIssueReporter(null);
     this.renderer?.setGpuFaultCallback(null);
+    this.disarmStartupStorageResetGuard();
     this.animationLoop?.stop();
     this.animationLoop = null;
     this.stopSpyReadbackLoop();
@@ -675,6 +744,7 @@ export class RuntimeService {
     debugService.clear();
     this.renderer?.dispose();
     this.renderer = null;
+    this.rendererExecutionState = 'active';
     this.arena = null;
     shaderInspector.clear();
     this.statsSink = null;
