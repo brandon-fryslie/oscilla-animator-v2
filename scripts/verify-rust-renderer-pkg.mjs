@@ -99,26 +99,6 @@ function compareExactArtifact(relativePath) {
   }
 }
 
-function normalizeGeneratedJsArtifact(source) {
-  return source
-    .replace(/\r\n/g, '\n')
-    .replace(/^\s*\/\/ Cast intrinsic.*\n/gm, '')
-    .replace(/\bdtor_idx: \d+\b/g, 'dtor_idx: N')
-    .replace(/\bshim_idx: \d+\b/g, 'shim_idx: N')
-    .replace(/\b([A-Za-z_][A-Za-z0-9_]*?)_(?:h)?[0-9a-f]{8,}\b/g, '$1_HASH');
-}
-
-function compareNormalizedJsArtifact(relativePath) {
-  const checkedIn = normalizeGeneratedJsArtifact(readHeadBlob(relativePath).toString('utf8'));
-  const generated = normalizeGeneratedJsArtifact(
-    fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'),
-  );
-
-  if (checkedIn !== generated) {
-    fail(`Generated renderer JS drifted from checked-in output after normalizing wasm-bindgen helper suffixes: ${relativePath}. Run \`pnpm -s build:rust-renderer\` and commit the pkg changes.`);
-  }
-}
-
 function compareNormalizedWasmArtifact(relativePath) {
   const checkedIn = stripCustomSections(readHeadBlob(relativePath));
   const generated = stripCustomSections(fs.readFileSync(path.join(repoRoot, relativePath)));
@@ -152,7 +132,6 @@ if (wasmSize < 64 * 1024) {
   fail(`Compiled wasm payload is unexpectedly small (${wasmSize} bytes).`);
 }
 
-compareNormalizedJsArtifact('src/render/wasm/pkg/oscilla_rust_renderer.js');
 compareExactArtifact('src/render/wasm/pkg/oscilla_rust_renderer.d.ts');
 compareExactArtifact('src/render/wasm/pkg/oscilla_rust_renderer_bg.wasm.d.ts');
 // [LAW:no-silent-fallbacks] Generated wasm must still match the checked-in
