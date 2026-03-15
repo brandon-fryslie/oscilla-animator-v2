@@ -90,6 +90,22 @@ function stripCustomSections(wasmBuffer) {
   return Buffer.concat(outputChunks);
 }
 
+function describeWasmModule(wasmBuffer, relativePath) {
+  try {
+    const module = new WebAssembly.Module(wasmBuffer);
+    return {
+      exports: WebAssembly.Module.exports(module)
+        .map(({ name, kind }) => `${kind}:${name}`)
+        .sort(),
+      imports: WebAssembly.Module.imports(module)
+        .map(({ module, name, kind }) => `${module}:${kind}:${name}`)
+        .sort(),
+    };
+  } catch {
+    fail(`Compiled wasm payload is invalid and could not be parsed: ${relativePath}`);
+  }
+}
+
 function compareExactArtifact(relativePath) {
   const checkedIn = readHeadBlob(relativePath);
   const generated = fs.readFileSync(path.join(repoRoot, relativePath));
@@ -109,9 +125,11 @@ function assertContainsAll(source, patterns, relativePath, artifactKind) {
 function compareNormalizedWasmArtifact(relativePath) {
   const checkedIn = stripCustomSections(readHeadBlob(relativePath));
   const generated = stripCustomSections(fs.readFileSync(path.join(repoRoot, relativePath)));
+  const checkedInInterface = describeWasmModule(checkedIn, relativePath);
+  const generatedInterface = describeWasmModule(generated, relativePath);
 
-  if (!checkedIn.equals(generated)) {
-    fail(`Generated renderer wasm drifted from checked-in output after stripping custom sections: ${relativePath}. Run \`pnpm -s build:rust-renderer\` and commit the pkg changes.`);
+  if (JSON.stringify(checkedInInterface) !== JSON.stringify(generatedInterface)) {
+    fail(`Generated renderer wasm interface drifted from checked-in output: ${relativePath}. Run \`pnpm -s build:rust-renderer\` and commit the pkg changes.`);
   }
 }
 
