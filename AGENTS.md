@@ -69,9 +69,48 @@ Workflow:
    - Do not fabricate GitHub project, PR, or review state in this mode.
    - Resume the standard GitHub workflow for later tasks once those controls are available again.
 
+Companion evaluator cycle:
+
+1. Evaluate the latest implementation state against the same leaf ticket body plus cited docs/specs.
+2. Re-run the local verification needed to confirm or reject the implementation result.
+3. Add a standardized `Evaluator Note` comment to the active ticket with:
+   - evaluated commit
+   - repo base for the next implementer run
+   - verdict
+   - next action
+   - concrete do/avoid guidance
+   - gates passed/failed
+   - evidence summary
+4. If the implementation is correct and the ticket is complete, the evaluator may confirm advancement to the next ready leaf ticket.
+5. If the implementation is a good base but needs bounded follow-up inside the same ticket, the evaluator may direct another in-scope implementer run on the same ticket.
+6. If the implementation is wrong and the bad work is isolated to a safe revert target, the evaluator may revert it with `git revert`, reopen the ticket if needed, and direct the next implementer run.
+7. If the implementation cannot be judged safely or the failure is architectural/spec-level, the evaluator must block rather than improvising a new plan.
+8. If the evaluator changes repo state, for example by reverting a bad implementation commit, the evaluator must create a git commit for that repo change.
+9. If the evaluator only changes tracker state or leaves steering comments, do not fabricate a no-op git commit.
+
+Evaluator constraints:
+
+- The evaluator note is derived steering only. It cannot widen scope or override the leaf ticket body plus cited docs/specs.
+- Revert only isolated bad implementation commits. Do not use destructive history edits.
+- If the evaluator reopens a previously closed ticket, the note must explain why the earlier completion was rejected.
+
+Clean-tree invariant for unattended loop runs:
+
+1. The working tree must be clean at the end of every implementer and evaluator run.
+2. A dirty tree is not a valid reason to stop the run before first normalizing repo state.
+3. When the tree is dirty at startup:
+   - If the local changes are clearly the current role's intended in-scope work and can be completed safely, continue.
+   - Otherwise, prefer safe cleanup of in-progress git operations first, for example `git revert --abort` when a revert is half-finished.
+   - Then stash unknown or out-of-scope changes with a descriptive message and continue from a clean tree.
+4. Before exiting a run:
+   - commit intended repo changes, or
+   - stash unknown leftovers, or
+   - roll back the current role's own invalid partial changes safely
+5. Do not leave the repo dirty for the next agent.
+
 // [LAW:one-source-of-truth] In unattended RECOVER mode, the accepted design baseline is the leaf ticket body plus its cited local docs/specs.
 // [LAW:verifiable-goals] Unattended execution may try bounded alternative implementations, but stops when correctness still cannot be proven locally and deterministically.
-// [LAW:single-enforcer] This section is the only allowed local-only substitute for the GitHub project/PR workflow above.
+// [LAW:single-enforcer] This section is the only allowed local-only substitute for the GitHub project/PR workflow above, including evaluator steering and revert authority.
 
 <!-- BEGIN LINKS INTEGRATION -->
 ## links Agent-Native Workflow
