@@ -56,7 +56,11 @@ Workflow:
    - Implement only the accepted design baseline.
 4. Verification gate:
    - Run deterministic local verification that proves the ticket's acceptance criteria.
-   - If verification is unavailable, inconclusive, or contradictory, add a blocker comment and stop. Do not close or advance.
+   - If the first implementation attempt fails verification but the failure is still inside the same accepted baseline, you may try another implementation approach within the same ticket.
+   - Each alternative attempt must stay within the same ticket body plus cited docs/specs, preserve the same acceptance criteria, and avoid widening scope.
+   - Before each alternative attempt, record the failed approach, the failure evidence, and the next hypothesis in a ticket comment.
+   - Keep the attempt budget small and explicit. Default maximum: 3 implementation attempts per ticket per run.
+   - If verification is unavailable, inconclusive, contradictory, or still failing after the attempt budget is exhausted, add a blocker comment and stop. Do not close or advance.
 5. Closeout:
    - Add a completion summary comment.
    - Close the completed issue.
@@ -66,7 +70,7 @@ Workflow:
    - Resume the standard GitHub workflow for later tasks once those controls are available again.
 
 // [LAW:one-source-of-truth] In unattended RECOVER mode, the accepted design baseline is the leaf ticket body plus its cited local docs/specs.
-// [LAW:verifiable-goals] Unattended execution stops when correctness cannot be proven locally and deterministically.
+// [LAW:verifiable-goals] Unattended execution may try bounded alternative implementations, but stops when correctness still cannot be proven locally and deterministically.
 // [LAW:single-enforcer] This section is the only allowed local-only substitute for the GitHub project/PR workflow above.
 
 <!-- BEGIN LINKS INTEGRATION -->
