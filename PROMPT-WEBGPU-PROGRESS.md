@@ -52,6 +52,7 @@ Read in this order:
 
 If these disagree on scope, owner, boundary, or verification target, block instead of coding.
 If the evaluator note, tracker state, and chosen ticket disagree about whether advancement is unlocked, treat the current or last active ticket as authoritative and do not advance.
+If prior accepted work already restored a visible runtime baseline, treat that baseline as a required invariant for later tickets unless the active ticket explicitly says a temporary regression is allowed.
 
 ## Before Coding
 
@@ -61,6 +62,7 @@ If the evaluator note, tracker state, and chosen ticket disagree about whether a
    - all `Source Docs` exist
    - local verification is possible
    - no later ticket is required first
+   - the current accepted runtime baseline can still be re-verified after your change if this ticket touches render, draw-prep, materialization, install, or another live-path boundary
 2. Add a design comment on the ticket with:
    - scope
    - touched files
@@ -95,6 +97,7 @@ Run the smallest sufficient set of:
 - any ticket-specific gates
 
 If runtime behavior changed, inspect real runtime evidence. Passing tests alone is not enough when ownership/render behavior is the point.
+If the repository already has an accepted visible render baseline, re-run that baseline proof after your change when you touch a live-path boundary. Do not report `completed` if the active ticket passes locally but the accepted baseline regresses.
 
 ## Closeout
 
