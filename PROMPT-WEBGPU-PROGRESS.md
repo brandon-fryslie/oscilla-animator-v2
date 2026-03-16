@@ -34,10 +34,12 @@ Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
 5. If that note says `advance-to-next-ready-ticket`, advance only if the named `active_ticket:` is already closed by the evaluator. If it is not closed, stay on that ticket and report the mismatch instead of advancing.
 6. If that note says `stop-blocked`, stop and report the blocker.
 7. If the evaluator note is missing, malformed, or does not authorize advance, do not move to a different ticket just because another ticket is ready.
-8. Only if there is no evaluator note lock and no plausible open or in-progress active leaf ticket may you use the highest-priority ready `RECOVER-*` leaf task.
+8. If any earlier prerequisite leaf ticket in the `RECOVER-*` chain is open, that earlier ticket preempts all later tickets. Do not work a later ticket while an earlier prerequisite leaf is open.
+9. Only if there is no evaluator note lock, no plausible open or in-progress active leaf ticket, and no earlier open prerequisite leaf may you use the highest-priority ready `RECOVER-*` leaf task.
 
 Never select an epic or milestone container.
 Never advance to a different leaf ticket until the evaluator has both authorized advancement in `session-docs/WEBGPU-LOOP.md` and closed the prior active ticket.
+Never work past an earlier reopened prerequisite leaf ticket.
 
 ## Sources
 
@@ -53,6 +55,7 @@ Read in this order:
 If these disagree on scope, owner, boundary, or verification target, block instead of coding.
 If the evaluator note, tracker state, and chosen ticket disagree about whether advancement is unlocked, treat the current or last active ticket as authoritative and do not advance.
 If prior accepted work already restored a visible runtime baseline, treat that baseline as a required invariant for later tickets unless the active ticket explicitly says a temporary regression is allowed.
+If a prerequisite leaf ticket has been reopened, treat that reopened prerequisite as the authoritative active boundary even if later tickets remain open or closed.
 
 ## Before Coding
 

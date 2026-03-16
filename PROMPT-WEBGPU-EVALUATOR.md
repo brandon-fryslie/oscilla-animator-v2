@@ -29,7 +29,8 @@ Your job is to judge the latest implementation state for exactly one `RECOVER-*`
 1. If the user named a `RECOVER-*` leaf ticket, evaluate it.
 2. Otherwise, choose the one open/in-progress leaf ticket that most plausibly owns current repo state.
 3. If no open ticket fits, inspect the most recent closed leaf ticket only if current repo state clearly belongs to it.
-4. If more than one ticket plausibly owns current repo state, block.
+4. If an earlier prerequisite leaf ticket is open, that earlier ticket preempts later tickets and must be the evaluation target.
+5. If more than one ticket plausibly owns current repo state, block.
 
 ## Sources
 
@@ -56,6 +57,7 @@ Check:
 5. the change did not introduce dual authority, fallback ownership, or unrelated churn
 6. seam or cutover tickets modify the live path required by the ticket rather than only adding helper, classifier, or test-only code
 7. any previously accepted visible runtime baseline still works unless the active ticket explicitly allowed a temporary regression
+8. no earlier prerequisite leaf ticket has become invalid again in current repo state
 
 Re-run the needed proof:
 
@@ -68,6 +70,7 @@ Re-run the needed proof:
 
 Do not trust the implementer's report without replaying evidence.
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
+`// [LAW:one-way-deps] If a later ticket exposes that an earlier prerequisite boundary is still wrong, reopen the earliest violated prerequisite and steer the loop back to it before allowing more downstream work.`
 
 ## Verdict
 
@@ -109,6 +112,7 @@ Allowed `next_action:` values:
 - `stop-blocked`
 
 Only emit `advance-to-next-ready-ticket` after you have accepted the active ticket as complete and closed that same ticket in the tracker. Otherwise the active ticket remains locked.
+If an earlier prerequisite leaf ticket is reopened, set `active_ticket:` to that earliest reopened prerequisite and do not authorize advancement past it.
 Steer tactically, not architecturally.
 
 If tracker writes work, you may also mirror a brief summary to the ticket, but the filesystem note is canonical.
@@ -122,6 +126,7 @@ If tracker writes work, you may also mirror a brief summary to the ticket, but t
 5. Normalize the tree again until `git status --short` is clean.
 
 If the ticket is not closed, the note must not authorize advancement.
+If current repo state violates an earlier prerequisite leaf ticket, reopen that prerequisite ticket before closeout and lock the note to it.
 
 ## Final Report
 
