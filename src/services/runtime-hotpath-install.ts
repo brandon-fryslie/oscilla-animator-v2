@@ -15,10 +15,11 @@
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step } from '../compiler/ir/types';
-import type { ValueExprShapeRef } from '../compiler/ir/value-expr';
+import type { ValueExpr, ValueExprShapeRef } from '../compiler/ir/value-expr';
 import { getProgramTopology } from '../compiler/ir/program-topology';
 import { resolveArenaAddress } from '../runtime/ArenaValueStore';
 import { packDrawPrepSinkTableV1 } from '../runtime/DrawPrepSinkTablePacker';
+import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import {
   SHAPE_BANK_HEADER_WORDS,
   SHAPE_BANK_NO_CONTROL_POINT_SLOT,
@@ -44,6 +45,30 @@ function assertFiniteUint32(value: number, context: string): number {
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
+}
+
+// [RECOVER-04] Resolve through expression wrappers (broadcast, etc.) to find
+// the underlying shapeRef expression. The compiler wraps shapeRef in a broadcast
+// when the source isn't already a field extent, so materialize steps may point
+// to a broadcast rather than the shapeRef directly.
+function findShapeRefExpr(
+  rootExprIndex: number,
+  valueExprNodes: readonly ValueExpr[],
+): ValueExprShapeRef | undefined {
+  const stack = [rootExprIndex];
+  const visited = new Set<number>();
+  while (stack.length > 0) {
+    const idx = stack.pop()!;
+    if (visited.has(idx)) continue;
+    visited.add(idx);
+    const expr = valueExprNodes[idx];
+    if (!expr) continue;
+    if (expr.kind === 'shapeRef') return expr as ValueExprShapeRef;
+    for (const child of getValueExprChildren(expr)) {
+      stack.push(child as number);
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,12 +103,15 @@ function buildCanonicalTopologyHeaders(
 
   // Collect shapeRef materialize steps from the schedule.
   // Each produces one SHAPE_BANK_HEADER_WORDS header at a deterministic offset.
+  // [RECOVER-04] The compiler may wrap shapeRef in a broadcast when the source
+  // isn't already a field extent, so we resolve through expression wrappers
+  // rather than checking only the direct expression kind.
   const shapeRefSteps: { target: ValueSlot; expr: ValueExprShapeRef }[] = [];
   for (const step of program.schedule.steps as readonly Step[]) {
     if (step.kind !== 'materialize') continue;
-    const expr = valueExprNodes[step.field as number];
-    if (!expr || expr.kind !== 'shapeRef') continue;
-    shapeRefSteps.push({ target: step.target, expr: expr as ValueExprShapeRef });
+    const shapeRef = findShapeRefExpr(step.field as number, valueExprNodes);
+    if (!shapeRef) continue;
+    shapeRefSteps.push({ target: step.target, expr: shapeRef });
   }
 
   const totalWords = shapeRefSteps.length * SHAPE_BANK_HEADER_WORDS;

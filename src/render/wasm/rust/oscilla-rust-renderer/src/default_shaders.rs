@@ -496,6 +496,12 @@ fn msdf_median(r: f32, g: f32, b: f32) -> f32 {
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+  // [RECOVER-04] Compute UV derivatives unconditionally in uniform control flow.
+  // dpdx/dpdy are illegal inside non-uniform branches (shape_class is @interpolate(flat),
+  // so Chrome/Tint's uniformity analysis rejects derivatives guarded by it).
+  let uv_dpdx = dpdx(input.uv.x);
+  let uv_dpdy = dpdy(input.uv.y);
+
   // [RECOVER-11] Dispatch on shape class for fragment evaluation.
   if (input.shape_class == SHAPE_CLASS_TYPE5_TEXT) {
     // MSDF text fragment evaluation.
@@ -543,8 +549,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let dist = msdf_median(sample_rgb.x, sample_rgb.y, sample_rgb.z);
 
     // Screen-space derivative for scale-independent threshold
-    let dx = dpdx(input.uv.x) * atlasWidthF;
-    let dy = dpdy(input.uv.y) * atlasHeightF;
+    // (uses precomputed uv_dpdx/uv_dpdy from uniform control flow above)
+    let dx = uv_dpdx * atlasWidthF;
+    let dy = uv_dpdy * atlasHeightF;
     let screenPxRange = max(length(vec2<f32>(dx, dy)), 0.5);
 
     // Apply threshold: 0.5 is the edge, expand by screen pixel range
