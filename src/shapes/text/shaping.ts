@@ -14,17 +14,18 @@
 
 import type { FontAtlasDescriptor, GlyphRunResult, ShapedGlyph, GlyphMetrics } from './types';
 
-// Unicode replacement character for invalid/missing glyphs
-// Spec §III invariant 1: "Invalid byte sequences must default to U+FFFD"
+// Unicode replacement character for missing/unmappable glyphs at the JS string
+// boundary.
 const REPLACEMENT_CODEPOINT = 0xFFFD;
 
 /**
- * Shape a UTF-8 text string into positioned glyphs.
+ * Shape a JavaScript string into positioned glyphs.
  *
- * Basic Latin LTR shaping: codepoint → metrics lookup → advance accumulation.
- * Missing glyphs fall back to the replacement character or are skipped.
+ * Basic Latin LTR shaping: Unicode code point → metrics lookup → advance
+ * accumulation. Missing glyphs fall back to the replacement character or are
+ * skipped.
  *
- * @param text - Input text string (UTF-8)
+ * @param text - Input JavaScript string (iterated by UTF-16 code units / Unicode code points)
  * @param atlas - Font atlas descriptor with per-glyph metrics
  * @returns Shaped glyph run with positions and bounding box
  */

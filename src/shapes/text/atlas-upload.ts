@@ -13,6 +13,24 @@
 
 import type { FontAtlasDescriptor } from './types';
 
+function validateAtlasDescriptor(atlas: FontAtlasDescriptor): void {
+  const pixelCount = atlas.width * atlas.height;
+  const expectedTextureBytes = pixelCount * 4;
+  if (!Number.isInteger(atlas.width) || atlas.width <= 0) {
+    throw new Error(`packAtlasForUpload: atlas.width must be a positive integer (received ${String(atlas.width)})`);
+  }
+  if (!Number.isInteger(atlas.height) || atlas.height <= 0) {
+    throw new Error(`packAtlasForUpload: atlas.height must be a positive integer (received ${String(atlas.height)})`);
+  }
+  if (atlas.textureData.length !== expectedTextureBytes) {
+    // [LAW:single-enforcer] Atlas packing owns descriptor-shape validation so
+    // malformed atlas uploads fail once at the GPU upload boundary.
+    throw new Error(
+      `packAtlasForUpload: textureData length ${atlas.textureData.length} does not match width*height*4 ${expectedTextureBytes}`,
+    );
+  }
+}
+
 /**
  * Pack a FontAtlasDescriptor's texture data into a Uint32Array for GPU upload.
  *
@@ -20,6 +38,7 @@ import type { FontAtlasDescriptor } from './types';
  * @returns Packed Uint32Array: [width, height, ...pixels]
  */
 export function packAtlasForUpload(atlas: FontAtlasDescriptor): Uint32Array {
+  validateAtlasDescriptor(atlas);
   const pixelCount = atlas.width * atlas.height;
   const result = new Uint32Array(2 + pixelCount);
 

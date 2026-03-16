@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ShapeClass } from '../../types';
+import { packAtlasForUpload } from '../atlas-upload';
 import { generateBuiltinAtlas, getBuiltinAtlas } from '../builtin-atlas';
 import { shapeText } from '../shaping';
 import { Type5ShapeBankWord, Type5ShapeBankFlag } from '../types';
@@ -90,6 +91,14 @@ describe('built-in MSDF font atlas', () => {
     expect(a).toBe(b);
   });
 
+  it('rejects inconsistent atlas texture data length at upload-pack boundary', () => {
+    const atlas = generateBuiltinAtlas();
+    expect(() => packAtlasForUpload({
+      ...atlas,
+      textureData: atlas.textureData.subarray(0, atlas.textureData.length - 4),
+    })).toThrow(/textureData length/);
+  });
+
   it('texture data contains non-zero MSDF values for defined glyphs', () => {
     const atlas = generateBuiltinAtlas();
     // Check that 'A' (codepoint 65) has some non-zero pixels
@@ -162,6 +171,11 @@ describe('text shaping', () => {
     // Unicode snowman (not in our basic Latin atlas)
     const result = shapeText('☃', atlas);
     // Should produce either a replacement glyph or skip
+    expect(result.glyphs.length).toBeLessThanOrEqual(1);
+  });
+
+  it('handles astral-plane code points as JS string code points', () => {
+    const result = shapeText('😀', atlas);
     expect(result.glyphs.length).toBeLessThanOrEqual(1);
   });
 });
