@@ -5,6 +5,10 @@ This document defines the unattended two-agent loop for the `RECOVER-*` backlog:
 - implementer: `PROMPT-WEBGPU-PROGRESS.md`
 - evaluator: `PROMPT-WEBGPU-EVALUATOR.md`
 
+For the generalized method behind this WebGPU-specific operating procedure, see:
+
+- `docs/Spec-Constrained-Agent-Loop.md`
+
 `// [LAW:one-source-of-truth] The active `RECOVER-*` leaf ticket plus its cited docs/specs are the only implementation authority.`
 `// [LAW:verifiable-goals] Each run must end with a concrete verdict backed by local evidence.`
 
