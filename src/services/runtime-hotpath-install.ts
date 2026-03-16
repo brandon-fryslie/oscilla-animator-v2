@@ -79,7 +79,7 @@ function materializeProgramForGpuInstall(
   INSTALL_MATERIALIZE_SCRATCH.reset();
   state.time = resolveTime(nowMs, program.schedule.timeModel, state.timeState);
   // [LAW:single-enforcer] Dynamic instance counts are seeded through the shared
-  // InstanceCountResolver cache contract consumed by DrawPrepSinkTablePacker.
+  // InstanceCountResolver cache contract consumed by materialization.
   state.cache.instanceLaneCounts?.clear();
   state.cache.instanceLaneCountFrameId = state.cache.frameId;
   const pureFnContext = { kernelRegistry: program.kernelRegistry };
@@ -105,9 +105,9 @@ export function buildRuntimeHotpathInstallPlanes(
   nowMs: number,
 ): RuntimeHotpathInstallPlanes {
   materializeProgramForGpuInstall(program, state, nowMs);
-  // [LAW:one-source-of-truth] Sink-table metadata comes from one canonical
-  // packer contract for all program types (fluid and non-fluid).
-  const packed = packDrawPrepSinkTableV1(program, state);
+  // [RECOVER-05] Sink table is static metadata only — no runtime state reads.
+  // GPU draw-prep compute (RECOVER-06) derives per-frame command fields.
+  const packed = packDrawPrepSinkTableV1(program);
   const sinkTableWords = packed
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))
     : null;

@@ -5,7 +5,8 @@ pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
 pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
 pub const SINK_TABLE_HEADER_WORDS: usize = 8;
 pub const SINK_TABLE_RECORD_WORDS: usize = 8;
-pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 20;
+// [LAW:one-source-of-truth] Must match DrawPrepSinkTable.ts DRAW_PREP_SINK_DESCRIPTOR_WORDS.
+pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 25;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
@@ -70,8 +71,6 @@ pub struct GpuMemoryArena {
     pub topology_buffer: wgpu::Buffer,
     pub sink_table_buffer: wgpu::Buffer,
     pub indirect_buffer: wgpu::Buffer,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
     pub assembly_write_bind_group: wgpu::BindGroup,
     pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
@@ -84,8 +83,6 @@ pub struct GpuMemoryArena {
     topology_capacity_words: usize,
     sink_table_capacity_words: usize,
     indirect_capacity_words: usize,
-    vertex_capacity_bytes: u64,
-    index_capacity_bytes: u64,
     state_buffers: [wgpu::Buffer; 2],
     compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
@@ -229,28 +226,17 @@ impl GpuMemoryArena {
             + max_shapes.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
-        let initial_vertex_bytes = (max_shapes
-            .saturating_mul(8)
-            .saturating_mul(std::mem::size_of::<f32>())) as u64;
-        let initial_index_bytes = (max_shapes
-            .saturating_mul(12)
-            .saturating_mul(std::mem::size_of::<u32>())) as u64;
 
         let instance_capacity_bytes = initial_instance_bytes
             .max((INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64);
         let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
         let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
-        let vertex_capacity_bytes =
-            initial_vertex_bytes.max((8 * std::mem::size_of::<f32>()) as u64);
-        let index_capacity_bytes = initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
         let sink_table_buffer = Self::create_sink_table_buffer(device, sink_table_capacity_words);
         let indirect_buffer = Self::create_indirect_buffer(device, indirect_capacity_words);
-        let vertex_buffer = Self::create_vertex_buffer(device, vertex_capacity_bytes);
-        let index_buffer = Self::create_index_buffer(device, index_capacity_bytes);
 
         let assembly_write_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ShapeBank.AssemblyWrite.BindGroup"),
@@ -382,8 +368,6 @@ impl GpuMemoryArena {
             topology_buffer,
             sink_table_buffer,
             indirect_buffer,
-            vertex_buffer,
-            index_buffer,
             assembly_write_bind_group,
             draw_prep_bind_group,
             instance_bind_group,
@@ -396,8 +380,6 @@ impl GpuMemoryArena {
             topology_capacity_words,
             sink_table_capacity_words,
             indirect_capacity_words,
-            vertex_capacity_bytes,
-            index_capacity_bytes,
             state_buffers,
             compiler_arena_buffers,
             state_bind_groups,
@@ -498,25 +480,6 @@ impl GpuMemoryArena {
         }
     }
 
-    pub fn write_geometry_payload(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        vertices: &[f32],
-        indices: &[u32],
-    ) {
-        // [LAW:one-source-of-truth] Geometry payload upload happens through one
-        // canonical arena method so render buffers are never seeded from ad-hoc defaults.
-        self.ensure_vertex_capacity(device, vertices.len().max(2));
-        self.ensure_index_capacity(device, indices.len().max(3));
-        if !vertices.is_empty() {
-            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertices));
-        }
-        if !indices.is_empty() {
-            queue.write_buffer(&self.index_buffer, 0, cast_slice(indices));
-        }
-    }
-
     pub fn write_indirect_words(
         &mut self,
         device: &wgpu::Device,
@@ -574,24 +537,6 @@ impl GpuMemoryArena {
         })
     }
 
-    fn create_vertex_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Render.VertexBuffer"),
-            size: size_bytes.max(16),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-
-    fn create_index_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Render.IndexBuffer"),
-            size: size_bytes.max(16),
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-
     fn ensure_instance_capacity(&mut self, device: &wgpu::Device, required_floats: usize) -> bool {
         let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
         if required_bytes <= self.instance_capacity_bytes {
@@ -643,32 +588,6 @@ impl GpuMemoryArena {
         self.indirect_buffer = Self::create_indirect_buffer(device, next_capacity);
         self.indirect_capacity_words = next_capacity;
         true
-    }
-
-    fn ensure_vertex_capacity(&mut self, device: &wgpu::Device, required_floats: usize) {
-        let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
-        if required_bytes <= self.vertex_capacity_bytes {
-            return;
-        }
-        let mut next_capacity = self.vertex_capacity_bytes.max(16);
-        while next_capacity < required_bytes {
-            next_capacity = next_capacity.saturating_mul(2);
-        }
-        self.vertex_buffer = Self::create_vertex_buffer(device, next_capacity);
-        self.vertex_capacity_bytes = next_capacity;
-    }
-
-    fn ensure_index_capacity(&mut self, device: &wgpu::Device, required_words: usize) {
-        let required_bytes = (required_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
-        if required_bytes <= self.index_capacity_bytes {
-            return;
-        }
-        let mut next_capacity = self.index_capacity_bytes.max(16);
-        while next_capacity < required_bytes {
-            next_capacity = next_capacity.saturating_mul(2);
-        }
-        self.index_buffer = Self::create_index_buffer(device, next_capacity);
-        self.index_capacity_bytes = next_capacity;
     }
 
     fn rebuild_assembly_write_bind_group(&mut self, device: &wgpu::Device) {
