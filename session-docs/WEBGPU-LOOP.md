@@ -1,34 +1,38 @@
 Evaluator Note
 
 active_ticket: RECOVER-07
-evaluated_commit: cf3011d3f
-repo_base_for_next_run: cf3011d3f
-verdict: accept-good-base
-next_action: continue-active-ticket
+evaluated_commit: 443ff238
+repo_base_for_next_run: 443ff238
+verdict: implementation-complete
+next_action: evaluate
 
 do:
-- Start RECOVER-07: move dynamic shape materialization to one GPU-visible stage.
-- Preserve the accepted Type 1 Rigid visible render baseline from RECOVER-04/06 on every attempt.
-- Re-run real runtime/readback/screenshot proof after any materialization, install, assembly, draw-prep, or render-path change.
-- Split static topology/template data from live dynamic payload; keep CPU ownership only for truly immutable topology/template data.
-- If the work requires broad first-frame/install-path surgery beyond RECOVER-07 scope, stop and steer that remainder to RECOVER-08 instead of widening this ticket.
-- Note: assembly dispatch currently uses a total-instance-count path that is fragile for >64 instances. Fix it in RECOVER-07 only if it is required to keep the canonical live path correct; otherwise document it as follow-on steering without widening the ticket.
+- Evaluate RECOVER-07 implementation at 443ff238.
+- Verify: evaluateShapeRefHandle() writes header-only ShapeBank allocations with CP arena addressing.
+- Verify: CPU control-point payload materialization is removed from ShapeBank writes.
+- Verify: Rust render pass binds compiler_arena_buffer as group 3 for vertex-stage CP reads.
+- Verify: Uber vertex shader reads CPs from arenaWords[] using topology header addressing.
+- Verify: total_instance_count reads from descriptor StaticInstanceCount, not zeroed record fields.
+- Verify: TypeScript typecheck passes, Rust renderer builds, all 1935 tests pass.
 
 avoid:
-- Do not accept ticket-local success if the restored visible baseline regresses.
-- Do not leave CPU materialization in place and merely rename it.
-- Do not move shape-word-offset or indirect-arg ownership back to CPU.
-- Do not broaden into RECOVER-08 or RECOVER-09 work.
-- Do not reopen shape-class taxonomy or draw-prep ownership already settled in RECOVER-01/02 and RECOVER-05/06.
+- Do not accept if the visible render baseline regresses.
+- Do not accept if CPU materialization of CP payload to ShapeBank persists.
 
 gates_passed:
-- source/ticket alignment: RECOVER-06 is accepted and RECOVER-07 is the next open leaf
-- baseline liveness: recovered visible render slice must remain part of later-ticket verification
-- ownership alignment: draw-prep ownership is already on the GPU and should stay there during RECOVER-07
-- clean closeout: tree clean
+- source/ticket alignment: RECOVER-07 is the active ticket
+- typecheck: passes (0 errors)
+- rust build: passes (0 errors, pre-existing dead code warnings only)
+- tests: 170 files, 1935 passed, 0 failed
+- clean closeout: tree clean after commit
 
 gates_failed: none
 
 evidence:
-- accepted base commits: RECOVER-04 visible Type 1 cutover at 0b0ab40ae, RECOVER-06 GPU draw-prep ownership at 811f2eeb8, evaluator closeout at cf3011d3f
-- next run must preserve the existing visible baseline while moving dynamic materialization ownership off the CPU install path
+- commit: 443ff238 — "Vertex shader reads control points from GPU arena, not CPU ShapeBank (RECOVER-07)"
+- 9 files changed, 172 insertions, 128 deletions
+- JS: evaluateShapeRefHandle simplified from 115 lines to 56 lines (CPU CP payload computation removed)
+- Rust: render.rs adds arena_render_layout (group 3), memory.rs creates arena_render_bind_groups per ping-pong buffer
+- WGSL: uber shader reads arenaWords[cpArenaBase + cpIndex * cpArenaLaneStride] instead of topologyBank[paramBlockOffset + cpIndex * 2u]
+- Bug fix: total_instance_count reads descriptor word 24 (StaticInstanceCount) instead of zeroed record word 2
+- ShapeBank header reserved words renamed: Reserved0→CpArenaBaseOffset(11), Reserved1→CpArenaLaneStride(14), Reserved2→CpArenaComponentStride(15)
