@@ -322,7 +322,17 @@ const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
 
 // [LAW:one-type-per-behavior] ShapeClass discriminant values.
 const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2u;
 const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
+
+// [RECOVER-11] Type2 parametric header word offsets.
+// ParamBlockOffset (word 9) and ParamBlockWords (word 10) point to the
+// template t-value array in ShapeBank. BoundsMinPacked (word 12) stores
+// the curve degree; BoundsMaxPacked (word 13) stores the ribbon width.
+const SHAPE_WORD_PARAM_BLOCK_OFFSET: u32 = 9u;
+const SHAPE_WORD_PARAM_BLOCK_WORDS: u32 = 10u;
+const SHAPE_WORD_DEGREE: u32 = 12u;
+const SHAPE_WORD_RIBBON_WIDTH: u32 = 13u;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -420,6 +430,163 @@ fn vs_type5(
   return out;
 }
 
+// [RECOVER-11] Type 2 parametric vertex shader: evaluates a cubic Bezier
+// curve analytically from template t-values (ShapeBank) and per-instance
+// control points (Arena). Renders a 2D ribbon by offsetting perpendicular
+// to the tangent at each t-value.
+//
+// // [LAW:one-type-per-behavior] This is NOT a Type 1 extension. Type 1 pulls
+// // rigid CP positions; Type 2 evaluates the Bezier polynomial B(t) and its
+// // derivative B'(t) to compute vertex positions analytically.
+//
+// Vertex layout per segment (6 vertices = 2 triangles):
+//   v0: (t0, -side)  v1: (t0, +side)  v2: (t1, +side)
+//   v3: (t0, -side)  v4: (t1, +side)  v5: (t1, -side)
+fn vs_type2_parametric(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+) -> VertexOutput {
+  // Read parametric header fields from ShapeBank.
+  let paramBlockOffset = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_OFFSET];
+  let paramBlockWords = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_WORDS];
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+  let degree = topologyBank[topologyWordOffset + SHAPE_WORD_DEGREE];
+  let ribbonWidth = bitcast<f32>(topologyBank[topologyWordOffset + SHAPE_WORD_RIBBON_WIDTH]);
+
+  // Determine segment index and local vertex from vertex_index.
+  let segIdx = vertexIndex / 6u;
+  let localVtx = vertexIndex % 6u;
+
+  // Clamp segment index to valid template range.
+  let maxSeg = select(paramBlockWords - 1u, 0u, paramBlockWords <= 1u);
+  let safeSeg = min(segIdx, maxSeg);
+
+  // Read two consecutive t-values from the template.
+  let t0 = bitcast<f32>(topologyBank[paramBlockOffset + safeSeg]);
+  let t1 = bitcast<f32>(topologyBank[paramBlockOffset + min(safeSeg + 1u, maxSeg)]);
+
+  // Select t and ribbon side based on local vertex.
+  // Triangle 1: (t0,-1), (t0,+1), (t1,+1)
+  // Triangle 2: (t0,-1), (t1,+1), (t1,-1)
+  var t: f32;
+  var side: f32;
+  switch localVtx {
+    case 0u: { t = t0; side = -1.0; }
+    case 1u: { t = t0; side = 1.0; }
+    case 2u: { t = t1; side = 1.0; }
+    case 3u: { t = t0; side = -1.0; }
+    case 4u: { t = t1; side = 1.0; }
+    case 5u: { t = t1; side = -1.0; }
+    default: { t = 0.0; side = 0.0; }
+  }
+
+  // Evaluate cubic Bezier B(t) and tangent B'(t).
+  // Supports degrees 2 (linear), 3 (quadratic), 4 (cubic).
+  // Control points are read from the Arena SoA layout.
+  var pos = vec2<f32>(0.0, 0.0);
+  var tangent = vec2<f32>(1.0, 0.0);
+  let omt = 1.0 - t;
+
+  if (degree >= 4u) {
+    // Cubic Bezier: B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t) t^2 P2 + t^3 P3
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p2x = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride]);
+    let p2y = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p3x = bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaLaneStride]);
+    let p3y = bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    let omt2 = omt * omt;
+    let omt3 = omt2 * omt;
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    pos = vec2<f32>(
+      omt3 * p0x + 3.0 * omt2 * t * p1x + 3.0 * omt * t2 * p2x + t3 * p3x,
+      omt3 * p0y + 3.0 * omt2 * t * p1y + 3.0 * omt * t2 * p2y + t3 * p3y,
+    );
+    // B'(t) = 3(1-t)^2 (P1-P0) + 6(1-t)t (P2-P1) + 3t^2 (P3-P2)
+    tangent = vec2<f32>(
+      3.0 * omt2 * (p1x - p0x) + 6.0 * omt * t * (p2x - p1x) + 3.0 * t2 * (p3x - p2x),
+      3.0 * omt2 * (p1y - p0y) + 6.0 * omt * t * (p2y - p1y) + 3.0 * t2 * (p3y - p2y),
+    );
+  } else if (degree >= 3u) {
+    // Quadratic Bezier: B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p2x = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride]);
+    let p2y = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    let omt2 = omt * omt;
+    let t2 = t * t;
+
+    pos = vec2<f32>(
+      omt2 * p0x + 2.0 * omt * t * p1x + t2 * p2x,
+      omt2 * p0y + 2.0 * omt * t * p1y + t2 * p2y,
+    );
+    tangent = vec2<f32>(
+      2.0 * omt * (p1x - p0x) + 2.0 * t * (p2x - p1x),
+      2.0 * omt * (p1y - p0y) + 2.0 * t * (p2y - p1y),
+    );
+  } else {
+    // Linear (degree 2): B(t) = (1-t) P0 + t P1
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    pos = vec2<f32>(omt * p0x + t * p1x, omt * p0y + t * p1y);
+    tangent = vec2<f32>(p1x - p0x, p1y - p0y);
+  }
+
+  // Compute perpendicular normal for ribbon extrusion.
+  // Epsilon guard: if tangent is near-zero (collapsed CPs), use a default
+  // direction to prevent NaN from normalization.
+  let tangentLen = length(tangent);
+  let safeTangent = select(tangent / tangentLen, vec2<f32>(1.0, 0.0), tangentLen < 0.00001);
+  let normal = vec2<f32>(-safeTangent.y, safeTangent.x);
+
+  // Offset position perpendicular to curve by ribbon half-width.
+  let ribbonPos = pos + normal * side * ribbonWidth;
+
+  // Apply instance transform (same as Type 1).
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
+  );
+
+  let worldPos = model * vec4<f32>(ribbonPos.x, ribbonPos.y, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(t, side * 0.5 + 0.5);
+  out.shape_class = SHAPE_CLASS_TYPE2_PARAMETRIC;
+  return out;
+}
+
 // [RECOVER-07] Vertex pulling: control-point positions are read from the
 // compiler arena buffer (GPU-computed). Arena addressing is stored in the
 // topology header (words 11, 14, 15). Triangle fan generated from vertex_index.
@@ -436,6 +603,10 @@ fn vs_type5(
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
   if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
     return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+  // [RECOVER-11] Type 2 parametric dispatch: analytical Bezier evaluation.
+  if (shapeClass == SHAPE_CLASS_TYPE2_PARAMETRIC) {
+    return vs_type2_parametric(inst, topologyWordOffset, vertexIndex);
   }
 
   // --- Type1Rigid path (existing behavior) ---

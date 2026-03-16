@@ -15,6 +15,10 @@ describe('ShapeClass enum', () => {
     expect(ShapeClass.Type1Rigid).toBe(1);
   });
 
+  it('Type2Parametric has u32-compatible ABI value 2', () => {
+    expect(ShapeClass.Type2Parametric).toBe(2);
+  });
+
   it('Type5TextHybrid has u32-compatible ABI value 5', () => {
     expect(ShapeClass.Type5TextHybrid).toBe(5);
   });
@@ -23,7 +27,7 @@ describe('ShapeClass enum', () => {
     const defined = Object.values(ShapeClass).filter(
       (v): v is number => typeof v === 'number',
     );
-    expect(defined.sort()).toEqual([1, 5]);
+    expect(defined.sort()).toEqual([1, 2, 5]);
   });
 
   it('enum values are distinct positive integers', () => {

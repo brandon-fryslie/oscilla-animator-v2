@@ -33,8 +33,23 @@ export enum ShapeClass {
    * - Draw-prep buckets by compatible indexed topology
    */
   Type1Rigid = 1,
+
+  /**
+   * Type 2: Parametric Curve (Template Instancing)
+   * - Template topology in ShapeBank (t-value progression, not rigid CPs)
+   * - Per-instance control points in Arena (SoA layout)
+   * - Analytical vertex evaluation (Bezier math in vertex shader)
+   * - Draw-prep buckets by compatible resolution/degree
+   *
+   * // [LAW:one-type-per-behavior] Type 2 is NOT a Type 1 extension.
+   * // Type 1 pulls rigid CP positions; Type 2 evaluates Bezier curves
+   * // analytically from template t-values + Arena control points.
+   *
+   * Spec: docs/WebGPU-Complete/shapes/Shapes 2_ The Parametric Curve (Template Instancing).md
+   */
+  Type2Parametric = 2,
+
   // Future classes will be added as RECOVER tickets progress:
-  // Type2Parametric = 2,
   // Type3Ribbon = 3,
   // Type4ProceduralSDF = 4,
 
@@ -218,9 +233,48 @@ export interface PathTopologyDef extends TopologyDef {
   readonly hasCubic: boolean;
 }
 
+// =============================================================================
+// Parametric Topology (Type 2)
+// =============================================================================
+
+/**
+ * ParametricTopologyDef — Template topology for Type 2 parametric curves.
+ *
+ * // [LAW:one-type-per-behavior] This is NOT a PathTopologyDef extension.
+ * // PathTopologyDef stores verb sequences for rigid CP consumption.
+ * // ParametricTopologyDef stores template t-value progression metadata
+ * // for analytical Bezier evaluation in the vertex shader.
+ *
+ * The ShapeBank stores a 1D array of t-values (the "template") that the
+ * vertex shader samples to evaluate the parametric curve equation.
+ * Control points live in the Arena (SoA layout), not in ShapeBank.
+ *
+ * Spec: docs/WebGPU-Complete/shapes/Shapes 2_ The Parametric Curve (Template Instancing).md
+ */
+export interface ParametricTopologyDef extends TopologyDef {
+  /** Discriminant for runtime type checking */
+  readonly parametric: true;
+  /** Curve degree = number of control points (e.g., 4 for cubic Bezier) */
+  readonly degree: number;
+  /** Number of segments to evaluate along the curve (vertex count = resolution * 6 for ribbon) */
+  readonly resolution: number;
+  /** Whether the curve is closed (last segment connects back to start) */
+  readonly closed: boolean;
+  /** Half-width of the ribbon in local units (for 2.5D extrusion) */
+  readonly ribbonWidth: number;
+}
+
+/**
+ * Input type for registering a ParametricTopologyDef (without ID assignment).
+ */
+export type ParametricTopologyDefInput = Omit<ParametricTopologyDef, 'id'>;
+
 export type SerializableTopologyDef = TopologyDef & Partial<Pick<
   PathTopologyDef,
   'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+>> & Partial<Pick<
+  ParametricTopologyDef,
+  'parametric' | 'degree' | 'resolution' | 'closed' | 'ribbonWidth'
 >>;
 
 
