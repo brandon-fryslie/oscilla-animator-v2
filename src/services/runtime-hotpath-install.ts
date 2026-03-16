@@ -1,10 +1,20 @@
+// [RECOVER-08] Install-time asset publication.
+//
+// This module publishes canonical compile-time assets (ShapeBank topology
+// headers and sink table descriptors) to the renderer worker. It does NOT
+// run the CPU runtime schedule — the GPU simulation/draw-prep pipeline
+// handles all per-frame value computation for both the first frame and
+// every subsequent frame.
+//
+// [LAW:one-source-of-truth] The GPU pipeline is the single runtime
+// execution authority. Install publishes static assets only.
+
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { InstanceId, ValueSlot } from '../compiler/ir/Indices';
 import type { InstanceDecl, Step, StepMaterialize } from '../compiler/ir/types';
 import {
   packDrawPrepSinkTableV1,
   resetShapeBankFrameAllocator,
-  resolveTime,
   type RuntimeState,
 } from '../runtime';
 import { arenaEncodeFromAoS, type ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
@@ -29,7 +39,45 @@ function assertFiniteUint32(value: number, context: string): number {
   return value;
 }
 
-function materializeStepToArena(
+// [RECOVER-08] Materialize only shapeRef steps to produce canonical
+// ShapeBank topology headers and arena shape-handle values. All other
+// schedule steps (positions, colors, field values) are GPU-owned and
+// run through the simulation compute pipeline on every frame including
+// the first.
+function materializeCanonicalShapeAssets(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+): void {
+  const instances = program.schedule.instances;
+  const addressTable = getExprAddressTable(program);
+  // [LAW:one-source-of-truth] Worker materialization uses compiler-owned
+  // ExprAddressTable metadata; no local descriptor synthesis.
+  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
+  resetShapeBankFrameAllocator(state.shapeBank);
+  INSTALL_MATERIALIZE_SCRATCH.reset();
+
+  // [LAW:single-enforcer] Dynamic instance counts are seeded through the shared
+  // InstanceCountResolver cache contract consumed by materialization.
+  state.cache.instanceLaneCounts?.clear();
+  state.cache.instanceLaneCountFrameId = state.cache.frameId;
+  const pureFnContext = { kernelRegistry: program.kernelRegistry };
+  for (const instanceDecl of instances.values()) {
+    resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext);
+  }
+
+  const valueExprNodes = program.valueExprs.nodes;
+  for (const step of program.schedule.steps as readonly Step[]) {
+    if (step.kind !== 'materialize') continue;
+    // [RECOVER-08] Only materialize shapeRef expressions — these produce
+    // canonical ShapeBank headers and write the topology handle into the
+    // arena. All other expressions are GPU-owned frame products.
+    const expr = valueExprNodes[step.field as number];
+    if (!expr || expr.kind !== 'shapeRef') continue;
+    materializeShapeRefStepToArena(program, state, step, instances, addressTable.slotToArena, pureFnContext);
+  }
+}
+
+function materializeShapeRefStepToArena(
   program: CompiledProgramIR,
   state: RuntimeState,
   step: StepMaterialize,
@@ -65,33 +113,6 @@ function materializeStepToArena(
   arenaEncodeFromAoS(state.arena, arenaDesc, buffer);
 }
 
-function materializeProgramForGpuInstall(
-  program: CompiledProgramIR,
-  state: RuntimeState,
-  nowMs: number,
-): void {
-  const instances = program.schedule.instances;
-  const addressTable = getExprAddressTable(program);
-  // [LAW:one-source-of-truth] Worker materialization uses compiler-owned
-  // ExprAddressTable metadata; no local descriptor synthesis.
-  state.cache.scalarExprToArenaAddress = addressTable.scalarExprToArenaAddress;
-  resetShapeBankFrameAllocator(state.shapeBank);
-  INSTALL_MATERIALIZE_SCRATCH.reset();
-  state.time = resolveTime(nowMs, program.schedule.timeModel, state.timeState);
-  // [LAW:single-enforcer] Dynamic instance counts are seeded through the shared
-  // InstanceCountResolver cache contract consumed by materialization.
-  state.cache.instanceLaneCounts?.clear();
-  state.cache.instanceLaneCountFrameId = state.cache.frameId;
-  const pureFnContext = { kernelRegistry: program.kernelRegistry };
-  for (const instanceDecl of instances.values()) {
-    resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext);
-  }
-  for (const step of program.schedule.steps as readonly Step[]) {
-    if (step.kind !== 'materialize') continue;
-    materializeStepToArena(program, state, step, instances, addressTable.slotToArena, pureFnContext);
-  }
-}
-
 export interface RuntimeHotpathInstallPlanes {
   readonly sinkTableWords: Uint32Array | null;
   readonly sinkTableWordCount: number;
@@ -99,15 +120,17 @@ export interface RuntimeHotpathInstallPlanes {
   readonly shapeBankWordCount: number;
 }
 
+// [RECOVER-08] Build install planes from canonical compile-time assets only.
+// No CPU runtime schedule execution occurs here — only shapeRef topology
+// headers and sink table descriptors are published.
 export function buildRuntimeHotpathInstallPlanes(
   program: CompiledProgramIR,
   state: RuntimeState,
-  nowMs: number,
 ): RuntimeHotpathInstallPlanes {
-  materializeProgramForGpuInstall(program, state, nowMs);
+  materializeCanonicalShapeAssets(program, state);
   // [RECOVER-06] Sink table carries static metadata including shape word
-  // offsets resolved from the arena after materialization. GPU draw-prep
-  // compute derives per-frame command fields from these descriptors.
+  // offsets resolved from the arena after shapeRef materialization.
+  // GPU draw-prep compute derives per-frame command fields from these descriptors.
   const packed = packDrawPrepSinkTableV1(program, state.arena);
   const sinkTableWords = packed
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))

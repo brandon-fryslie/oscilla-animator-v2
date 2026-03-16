@@ -273,9 +273,10 @@ export class RuntimeService {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
       if (expectedProgram && this.compileState.currentProgram === expectedProgram) {
-        // [LAW:one-source-of-truth] Runtime hotpath install payload is built
-        // once from the canonical compiled program + RuntimeState after swap.
-        this.installRendererHotpathPlanes(performance.now());
+        // [RECOVER-08] Publish canonical compile-time assets (ShapeBank
+        // topology headers + sink table descriptors) to the renderer worker.
+        // No CPU runtime schedule execution — GPU handles all frame computation.
+        this.installRendererCanonicalAssets();
       }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
@@ -293,7 +294,10 @@ export class RuntimeService {
     }
   }
 
-  private installRendererHotpathPlanes(nowMs: number): void {
+  // [RECOVER-08] Install publishes canonical compile-time assets only.
+  // No CPU runtime schedule execution occurs — the GPU pipeline runs
+  // simulation/draw-prep for every frame including the first.
+  private installRendererCanonicalAssets(): void {
     const renderer = this.renderer;
     const canvas = this.canvas;
     const program = this.compileState.currentProgram;
@@ -302,7 +306,9 @@ export class RuntimeService {
       return;
     }
 
-    const planes = buildRuntimeHotpathInstallPlanes(program, state, nowMs);
+    // [LAW:one-source-of-truth] Install planes contain only ShapeBank topology
+    // headers and sink table descriptors — no CPU-materialized frame products.
+    const planes = buildRuntimeHotpathInstallPlanes(program, state);
     const viewport = this.store.viewport;
     const renderWidth = Math.max(1, Math.floor(viewport?.canvasWidth || canvas.width || 1));
     const renderHeight = Math.max(1, Math.floor(viewport?.canvasHeight || canvas.height || 1));
@@ -324,7 +330,7 @@ export class RuntimeService {
       zoom,
       panX,
       panY,
-      timeMs: nowMs,
+      timeMs: 0,
       inputMouseX: 0,
       inputMouseY: 0,
       inputMouseButtons: 0,
