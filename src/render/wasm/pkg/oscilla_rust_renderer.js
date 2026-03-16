@@ -115,6 +115,27 @@ export function take_frame_pacing_packet() {
     return takeFromExternrefTable0(ret[0]);
 }
 
+/**
+ * @returns {any}
+ */
+export function take_readback_snapshot() {
+    const ret = wasm.take_readback_snapshot();
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {Uint32Array} data
+ */
+export function upload_atlas_data(data) {
+    const ret = wasm.upload_atlas_data(data);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -322,9 +343,6 @@ function __wbg_get_imports() {
             const ret = arg0.has(getStringFromWasm0(arg1, arg2));
             return ret;
         },
-        __wbg_info_7d4e223bb1a7e671: function(arg0) {
-            console.info(arg0);
-        },
         __wbg_instanceof_DedicatedWorkerGlobalScope_c50082d7f5e65939: function(arg0) {
             let result;
             try {
@@ -481,6 +499,10 @@ function __wbg_get_imports() {
             const ret = new Uint8Array(arg0, arg1 >>> 0, arg2 >>> 0);
             return ret;
         },
+        __wbg_new_with_length_81c1c31d4432cb9f: function(arg0) {
+            const ret = new Float32Array(arg0 >>> 0);
+            return ret;
+        },
         __wbg_now_16f0c993d5dd6c27: function() {
             const ret = Date.now();
             return ret;
@@ -549,23 +571,11 @@ function __wbg_get_imports() {
         __wbg_setBindGroup_e7493a4d990b460a: function(arg0, arg1, arg2) {
             arg0.setBindGroup(arg1 >>> 0, arg2);
         },
-        __wbg_setIndexBuffer_4fb98e6d19bb7f33: function(arg0, arg1, arg2, arg3, arg4) {
-            arg0.setIndexBuffer(arg1, __wbindgen_enum_GpuIndexFormat[arg2], arg3, arg4);
-        },
-        __wbg_setIndexBuffer_7fdf61bb296c38e7: function(arg0, arg1, arg2, arg3) {
-            arg0.setIndexBuffer(arg1, __wbindgen_enum_GpuIndexFormat[arg2], arg3);
-        },
         __wbg_setPipeline_0c34cc40ab8d6499: function(arg0, arg1) {
             arg0.setPipeline(arg1);
         },
         __wbg_setPipeline_323a115b52180cad: function(arg0, arg1) {
             arg0.setPipeline(arg1);
-        },
-        __wbg_setVertexBuffer_e32a2441b1f7bfa3: function(arg0, arg1, arg2, arg3, arg4) {
-            arg0.setVertexBuffer(arg1 >>> 0, arg2, arg3, arg4);
-        },
-        __wbg_setVertexBuffer_f90b4b03dde32ab1: function(arg0, arg1, arg2, arg3) {
-            arg0.setVertexBuffer(arg1 >>> 0, arg2, arg3);
         },
         __wbg_set_7eaa4f96924fd6b3: function() { return handleError(function (arg0, arg1, arg2) {
             const ret = Reflect.set(arg0, arg1, arg2);
@@ -777,6 +787,9 @@ function __wbg_get_imports() {
         },
         __wbg_set_height_b6548a01bdcb689a: function(arg0, arg1) {
             arg0.height = arg1 >>> 0;
+        },
+        __wbg_set_index_f66997fc93f75edc: function(arg0, arg1, arg2) {
+            arg0[arg1 >>> 0] = arg2;
         },
         __wbg_set_label_0d9081f92dff44a8: function(arg0, arg1, arg2) {
             arg0.label = getStringFromWasm0(arg1, arg2);
@@ -1079,7 +1092,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 19, function: Function { arguments: [F64], shim_idx: 20, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 29, function: Function { arguments: [F64], shim_idx: 30, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h22c5c9496e43279b, wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22);
             return ret;
         },

@@ -26,6 +26,7 @@ export function computeRustRendererSinkTableWordCapacity(config: RustRendererBoo
 export interface RustRendererBootstrapMessage {
   readonly type: 'BOOTSTRAP';
   readonly canvas: OffscreenCanvas;
+  readonly rendererWasmBytes: ArrayBuffer;
   readonly sharedInput: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
   readonly sharedSinkTable: SharedArrayBuffer;
@@ -66,6 +67,13 @@ export interface RustRendererInjectPoisonAllocMessage {
   readonly type: 'INJECT_POISON_ALLOC';
 }
 
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+// Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+export interface RustRendererUploadAtlasMessage {
+  readonly type: 'UPLOAD_ATLAS';
+  readonly data: Uint32Array;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -73,7 +81,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
-  | RustRendererInjectPoisonAllocMessage;
+  | RustRendererInjectPoisonAllocMessage
+  | RustRendererUploadAtlasMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';
@@ -166,6 +175,24 @@ export interface RustRendererRuntimeEvent {
   readonly emittedAtMs: number;
 }
 
+// [RECOVER-10] [LAW:single-enforcer] One canonical readback snapshot type for
+// structured GPU-to-host observability data published by the worker.
+export interface RustRendererIndirectArgsRecord {
+  readonly indexCount: number;
+  readonly instanceCount: number;
+  readonly firstIndex: number;
+  readonly baseVertex: number;
+  readonly firstInstance: number;
+}
+
+export interface RustRendererReadbackSnapshot {
+  readonly type: 'READBACK_SNAPSHOT';
+  readonly frameCount: number;
+  readonly capturedAtMs: number;
+  readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
+  readonly instanceProbeValues: Float32Array;
+}
+
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererEngineError
@@ -173,4 +200,5 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
-  | RustRendererRuntimeEvent;
+  | RustRendererRuntimeEvent
+  | RustRendererReadbackSnapshot;

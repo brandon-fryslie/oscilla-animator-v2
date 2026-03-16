@@ -23,8 +23,9 @@ use crate::render::{
 };
 use crate::scheduler::WorkerScheduler;
 use crate::telemetry::{
-    build_scheduler_telemetry as build_scheduler_telemetry_packet, SchedulerState,
-    SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs, WorkerObservabilityPacket,
+    build_scheduler_telemetry as build_scheduler_telemetry_packet, IndirectArgsRecord,
+    ReadbackSnapshot, SchedulerState, SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs,
+    WorkerObservabilityPacket,
 };
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -65,6 +66,12 @@ pub struct Engine {
     frame_count: u64,
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
+    // [RECOVER-10] Separate in-flight gate for indirect-args readback so both
+    // staging buffers can overlap async map operations independently.
+    indirect_readback_in_flight: Arc<AtomicBool>,
+    // [RECOVER-10] [LAW:single-enforcer] Accumulated readback snapshot polled
+    // by the worker via take_readback_snapshot, mirroring scheduler telemetry.
+    pending_readback: Arc<std::sync::Mutex<Option<ReadbackSnapshot>>>,
     max_particles: u32,
     max_shapes: u32,
     draw_regions: IndirectRegionPlan,
@@ -159,118 +166,11 @@ fn create_msaa_color_target(
     None
 }
 
-const SHAPE_WORD_KIND: usize = 0;
-const SHAPE_WORD_FLAGS: usize = 2;
-const SHAPE_WORD_INDEX_COUNT: usize = 4;
-const SHAPE_WORD_FIRST_INDEX: usize = 5;
-const SHAPE_WORD_BASE_VERTEX: usize = 6;
-const SHAPE_WORD_VERTEX_COUNT: usize = 7;
-const SHAPE_WORD_FIRST_VERTEX: usize = 8;
-const SHAPE_WORD_PARAM_BLOCK_OFFSET: usize = 9;
-const SHAPE_WORD_PARAM_BLOCK_WORDS: usize = 10;
-const SHAPE_FLAG_CLOSED: u32 = 1;
-
-const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 2;
-
-fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
-    let mut vertex_floats: Vec<f32> = Vec::new();
-    let mut index_words: Vec<u32> = Vec::new();
-    let mut cursor: usize = 0;
-    while cursor < shape_bank_words.len() {
-        if cursor + SHAPE_BANK_HEADER_WORDS > shape_bank_words.len() {
-            panic!(
-                "shape bank payload truncated (cursor={}, words={}, header_words={})",
-                cursor,
-                shape_bank_words.len(),
-                SHAPE_BANK_HEADER_WORDS
-            );
-        }
-        let base = cursor;
-        let kind = shape_bank_words[base + SHAPE_WORD_KIND];
-        if kind == 0 {
-            panic!(
-                "shape bank contains non-shape record at word offset {} (kind=0)",
-                base
-            );
-        }
-        let vertex_count = shape_bank_words[base + SHAPE_WORD_VERTEX_COUNT];
-        let flags = shape_bank_words[base + SHAPE_WORD_FLAGS];
-        let param_block_offset = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_OFFSET] as usize;
-        let param_block_words = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_WORDS] as usize;
-        let first_vertex = (vertex_floats.len() / 2) as u32;
-        shape_bank_words[base + SHAPE_WORD_FIRST_VERTEX] = first_vertex;
-        shape_bank_words[base + SHAPE_WORD_BASE_VERTEX] = 0;
-        let first_index = index_words.len() as u32;
-        shape_bank_words[base + SHAPE_WORD_FIRST_INDEX] = first_index;
-
-        if vertex_count == 0 {
-            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = 0;
-        } else {
-            let expected_param_words = (vertex_count as usize).saturating_mul(2);
-            if param_block_words < expected_param_words {
-                panic!(
-                    "shape bank control-point payload too small (handle={}, vertex_count={}, param_words={}, expected={})",
-                    base,
-                    vertex_count,
-                    param_block_words,
-                    expected_param_words
-                );
-            }
-            let param_payload_end = param_block_offset.saturating_add(expected_param_words);
-            if param_payload_end > shape_bank_words.len() {
-                panic!(
-                    "shape bank control-point payload out of range (handle={}, offset={}, end={}, words={})",
-                    base,
-                    param_block_offset,
-                    param_payload_end,
-                    shape_bank_words.len()
-                );
-            }
-            // [LAW:one-source-of-truth] Geometry payload is realized directly from
-            // canonical ShapeHeaderV1 param-block control points.
-            for point in 0..vertex_count as usize {
-                let param_index = param_block_offset + point * 2;
-                let x = f32::from_bits(shape_bank_words[param_index]);
-                let y = f32::from_bits(shape_bank_words[param_index + 1]);
-                vertex_floats.push(x);
-                vertex_floats.push(y);
-            }
-
-            if (flags & SHAPE_FLAG_CLOSED) != 0 && vertex_count >= 3 {
-                for fan in 1..(vertex_count - 1) {
-                    index_words.push(first_vertex);
-                    index_words.push(first_vertex + fan);
-                    index_words.push(first_vertex + fan + 1);
-                }
-            }
-
-            let generated_index_count = (index_words.len() as u32).saturating_sub(first_index);
-            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = generated_index_count;
-        }
-        let next_cursor = if param_block_words == 0 {
-            base + SHAPE_BANK_HEADER_WORDS
-        } else {
-            param_block_offset
-                .saturating_add(param_block_words)
-                .max(base + SHAPE_BANK_HEADER_WORDS)
-        };
-        if next_cursor <= cursor {
-            panic!(
-                "shape bank cursor did not advance (cursor={}, next_cursor={})",
-                cursor, next_cursor
-            );
-        }
-        cursor = next_cursor;
-    }
-    if cursor != shape_bank_words.len() {
-        panic!(
-            "shape bank parser ended at unexpected offset (cursor={}, words={})",
-            cursor,
-            shape_bank_words.len()
-        );
-    }
-    (vertex_floats, index_words)
-}
+// [RECOVER-07] Descriptor word offsets for total_instance_count derivation.
+// RECOVER-05 zeroed all record fields; instance counts live in descriptors.
+const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
+const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
+const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 
 impl Engine {
     pub async fn new(canvas: OffscreenCanvas, config: EngineConfig) -> Result<Self, JsValue> {
@@ -395,6 +295,7 @@ impl Engine {
             &compute.draw_prep_layout,
             &render.instance_layout,
             &render.topology_layout,
+            &render.arena_render_layout,
             config.max_particles,
             config.max_shapes,
         );
@@ -432,6 +333,8 @@ impl Engine {
             frame_count: 0,
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
+            indirect_readback_in_flight: Arc::new(AtomicBool::new(false)),
+            pending_readback: Arc::new(std::sync::Mutex::new(None)),
             max_particles: config.max_particles as u32,
             max_shapes: config.max_shapes as u32,
             draw_regions: IndirectRegionPlan::default(),
@@ -527,6 +430,7 @@ impl Engine {
             &self.compute.draw_prep_layout,
             &self.render.instance_layout,
             &self.render.topology_layout,
+            &self.render.arena_render_layout,
             particle_count as usize,
             shape_count as usize,
         );
@@ -536,6 +440,12 @@ impl Engine {
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
         self.last_install_revision = 0;
+    }
+
+    // [RECOVER-11] Upload MSDF atlas data to the GPU atlas storage buffer.
+    // Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+    pub fn upload_atlas_data(&mut self, data: &[u32]) {
+        self.arena.write_atlas_data(&self.device, &self.queue, data);
     }
 
     pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
@@ -646,7 +556,8 @@ impl Engine {
                 let is_debug_tick = self.debug_readback_interval_frames > 0
                     && self.frame_count % self.debug_readback_interval_frames == 0;
                 if is_debug_tick {
-                    let copy_bytes = self
+                    // [RECOVER-10] Copy instance buffer to instance staging.
+                    let instance_copy_bytes = self
                         .arena
                         .debug_staging_buffer()
                         .size()
@@ -656,7 +567,20 @@ impl Engine {
                         0,
                         self.arena.debug_staging_buffer(),
                         0,
-                        copy_bytes,
+                        instance_copy_bytes,
+                    );
+                    // [RECOVER-10] Copy indirect args buffer to indirect staging.
+                    let indirect_copy_bytes = self
+                        .arena
+                        .indirect_staging_buffer()
+                        .size()
+                        .min(self.arena.indirect_buffer.size());
+                    encoder.copy_buffer_to_buffer(
+                        &self.arena.indirect_buffer,
+                        0,
+                        self.arena.indirect_staging_buffer(),
+                        0,
+                        indirect_copy_bytes,
                     );
                 }
 
@@ -807,16 +731,12 @@ impl Engine {
                 shape_bank_words, available_words
             );
         }
-        let mut plane_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
-        let (vertex_payload, index_payload) = realize_shape_bank_geometry(&mut plane_words);
-        self.arena.write_geometry_payload(
-            &self.device,
-            &self.queue,
-            vertex_payload.as_slice(),
-            index_payload.as_slice(),
-        );
+        // [RECOVER-04] Upload canonical ShapeBank words directly to topologyBank.
+        // GPU vertex pulling reads control points from the topology buffer —
+        // no CPU mesh realization needed.
+        let canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
         self.arena
-            .write_shape_bank_words(&self.device, &self.queue, &plane_words);
+            .write_shape_bank_words(&self.device, &self.queue, &canonical_words);
     }
 
     fn sync_sink_table_plane_and_parse_regions(
@@ -876,15 +796,25 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
+        // [RECOVER-07] Sum instance counts from descriptors, not zeroed record fields.
+        // RECOVER-05 zeroed all record fields; StaticInstanceCount in descriptors
+        // is the canonical source for assembly dispatch sizing.
+        let total_record_count_usize = total_record_count as usize;
+        let descriptor_region_base =
+            SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;
-        for record in 0..(total_record_count as usize) {
-            let record_base =
-                SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
-            if record_base + SINK_RECORD_WORD_INSTANCE_COUNT >= plane_words.len() {
+        for record in 0..total_record_count_usize {
+            let descriptor_base =
+                descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
                 break;
             }
-            total_instance_count = total_instance_count
-                .saturating_add(plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT]);
+            let mode = plane_words[descriptor_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
+            if mode == INSTANCE_COUNT_MODE_STATIC {
+                total_instance_count = total_instance_count.saturating_add(
+                    plane_words[descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT],
+                );
+            }
         }
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.
@@ -900,20 +830,20 @@ impl Engine {
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
-        let mut uniforms = self.arena.uniforms;
+        let mut header = self.arena.frame_header;
         if let Some(shared_input) = self.shared_input.as_ref() {
             if let Some(shared_input_signals) = self.shared_input_signals.as_ref() {
                 // [LAW:single-enforcer] Frame input publication uses one atomic
                 // signal word as the acquire fence before reading shared planes.
                 let _ = Atomics::load::<Int32Array>(shared_input_signals, 0);
             }
-            uniforms.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
-            uniforms.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
-            uniforms.time_seconds =
+            header.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
+            header.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
+            header.time_seconds =
                 (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
-            let viewport_width = uniforms.resolution[0].max(1.0);
-            let viewport_height = uniforms.resolution[1].max(1.0);
+            header.delta_time_seconds = (1.0 / 60.0) as f32;
+            let viewport_width = header.resolution[0].max(1.0);
+            let viewport_height = header.resolution[1].max(1.0);
             let raw_zoom = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
             let zoom = if raw_zoom.is_finite() && raw_zoom > 0.0 {
                 raw_zoom
@@ -928,13 +858,13 @@ impl Engine {
             let sy = -2.0 * zoom;
             let tx = -zoom + (2.0 * zoom * (safe_pan_x_px / viewport_width));
             let ty = zoom - (2.0 * zoom * (safe_pan_y_px / viewport_height));
-            uniforms.view_proj = [[0.0; 4]; 4];
-            uniforms.view_proj[0][0] = sx;
-            uniforms.view_proj[1][1] = sy;
-            uniforms.view_proj[2][2] = 1.0;
-            uniforms.view_proj[3][0] = tx;
-            uniforms.view_proj[3][1] = ty;
-            uniforms.view_proj[3][3] = 1.0;
+            header.view_proj = [[0.0; 4]; 4];
+            header.view_proj[0][0] = sx;
+            header.view_proj[1][1] = sy;
+            header.view_proj[2][2] = 1.0;
+            header.view_proj[3][0] = tx;
+            header.view_proj[3][1] = ty;
+            header.view_proj[3][3] = 1.0;
             let install_revision = parse_finite_u32(
                 shared_input
                     .get_index(INPUT_WORD_INSTALL_REVISION as u32)
@@ -996,66 +926,170 @@ impl Engine {
                 self.last_install_revision = install_revision;
             }
         } else {
-            uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
-            uniforms.view_proj = [[0.0; 4]; 4];
-            uniforms.view_proj[0][0] = 2.0;
-            uniforms.view_proj[1][1] = -2.0;
-            uniforms.view_proj[2][2] = 1.0;
-            uniforms.view_proj[3][0] = -1.0;
-            uniforms.view_proj[3][1] = 1.0;
-            uniforms.view_proj[3][3] = 1.0;
+            header.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
+            header.delta_time_seconds = (1.0 / 60.0) as f32;
+            header.view_proj = [[0.0; 4]; 4];
+            header.view_proj[0][0] = 2.0;
+            header.view_proj[1][1] = -2.0;
+            header.view_proj[2][2] = 1.0;
+            header.view_proj[3][0] = -1.0;
+            header.view_proj[3][1] = 1.0;
+            header.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
             self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
-        self.arena.update_uniforms(&self.queue, uniforms);
+        // [LAW:one-source-of-truth] publish_frame_header writes to the arena
+        // header zone (canonical) and the uniform buffer (derived transport).
+        self.arena.publish_frame_header(&self.queue, header);
     }
 
+    // [RECOVER-10] [LAW:single-enforcer] Canonical structured readback replaces
+    // the ad hoc console-only instance preview. Both instance probe and indirect
+    // args are read back through this one boundary.
     fn trigger_debug_readback(&self) {
-        if self
+        let frame_count = self.frame_count;
+        let captured_at_ms = worker_monotonic_now_ms();
+        let indexed_record_count = self.draw_regions.indexed_record_count as usize;
+        let non_indexed_record_count = self.draw_regions.non_indexed_record_count as usize;
+        let pending_readback = self.pending_readback.clone();
+
+        // --- Instance probe readback ---
+        let instance_gate_acquired = self
             .debug_readback_in_flight
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return;
-        }
+            .is_ok();
 
-        let readback_gate = self.debug_readback_in_flight.clone();
-        let slice = self.arena.debug_staging_buffer().slice(..);
-        let staging_buffer_for_callback = self.arena.debug_staging_buffer().clone();
-        let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
-            if result.is_ok() {
-                let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
-                let preview_f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
-                if preview_f32_count > 0 {
-                    let mut preview = String::new();
-                    for index in 0..preview_f32_count {
-                        if index > 0 {
-                            preview.push_str(", ");
-                        }
+        // [LAW:dataflow-not-control-flow] Both readbacks are initiated unconditionally;
+        // variability is in whether the in-flight gate was acquired.
+        let instance_values: Arc<std::sync::Mutex<Vec<f32>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        if instance_gate_acquired {
+            let readback_gate = self.debug_readback_in_flight.clone();
+            let instance_values_for_callback = instance_values.clone();
+            let instance_staging_for_callback = self.arena.debug_staging_buffer().clone();
+            let slice = self.arena.debug_staging_buffer().slice(..);
+            let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
+                if result.is_ok() {
+                    let mapped = instance_staging_for_callback.slice(..).get_mapped_range();
+                    let f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
+                    let mut values = Vec::with_capacity(f32_count);
+                    for index in 0..f32_count {
                         let byte_index = index * std::mem::size_of::<f32>();
-                        let value = f32::from_le_bytes([
+                        values.push(f32::from_le_bytes([
                             mapped[byte_index],
                             mapped[byte_index + 1],
                             mapped[byte_index + 2],
                             mapped[byte_index + 3],
-                        ]);
-                        preview.push_str(&format!("{value:.3}"));
+                        ]));
                     }
-                    // [LAW:single-enforcer] exception: temporary observability log
-                    // for instance payload verification during migration.
-                    console::info_1(&JsValue::from_str(&format!(
-                        "[instancePreview] {}",
-                        preview
-                    )));
+                    if let Ok(mut slot) = instance_values_for_callback.lock() {
+                        *slot = values;
+                    }
+                    drop(mapped);
                 }
-                drop(mapped);
-            }
-            staging_buffer_for_callback.unmap();
-            readback_gate.store(false, Ordering::SeqCst);
-        });
+                instance_staging_for_callback.unmap();
+                readback_gate.store(false, Ordering::SeqCst);
+            });
+        }
+
+        // --- Indirect args readback ---
+        let indirect_gate_acquired = self
+            .indirect_readback_in_flight
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok();
+
+        if indirect_gate_acquired {
+            let indirect_gate = self.indirect_readback_in_flight.clone();
+            let indirect_staging_for_callback = self.arena.indirect_staging_buffer().clone();
+            let slice = self.arena.indirect_staging_buffer().slice(..);
+            let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
+                let mut records = Vec::new();
+                if result.is_ok() {
+                    let mapped = indirect_staging_for_callback.slice(..).get_mapped_range();
+                    let u32_count = mapped.len() / std::mem::size_of::<u32>();
+                    // Decode indexed records (5 words each)
+                    for i in 0..indexed_record_count {
+                        let base = i * INDIRECT_INDEXED_STRIDE_WORDS;
+                        if base + 4 >= u32_count {
+                            break;
+                        }
+                        let word = |offset: usize| -> u32 {
+                            let byte_idx = (base + offset) * std::mem::size_of::<u32>();
+                            u32::from_le_bytes([
+                                mapped[byte_idx],
+                                mapped[byte_idx + 1],
+                                mapped[byte_idx + 2],
+                                mapped[byte_idx + 3],
+                            ])
+                        };
+                        records.push(IndirectArgsRecord {
+                            index_count: word(0),
+                            instance_count: word(1),
+                            first_index: word(2),
+                            base_vertex: word(3) as i32,
+                            first_instance: word(4),
+                        });
+                    }
+                    // Decode non-indexed records (4 words each) — they start
+                    // after the indexed region in the indirect buffer.
+                    let non_indexed_base_words =
+                        indexed_record_count * INDIRECT_INDEXED_STRIDE_WORDS;
+                    for i in 0..non_indexed_record_count {
+                        let base = non_indexed_base_words + i * INDIRECT_NON_INDEXED_STRIDE_WORDS;
+                        if base + 3 >= u32_count {
+                            break;
+                        }
+                        let word = |offset: usize| -> u32 {
+                            let byte_idx = (base + offset) * std::mem::size_of::<u32>();
+                            u32::from_le_bytes([
+                                mapped[byte_idx],
+                                mapped[byte_idx + 1],
+                                mapped[byte_idx + 2],
+                                mapped[byte_idx + 3],
+                            ])
+                        };
+                        records.push(IndirectArgsRecord {
+                            index_count: 0,
+                            instance_count: word(1),
+                            first_index: 0,
+                            base_vertex: 0,
+                            first_instance: word(3),
+                        });
+                    }
+                    drop(mapped);
+                }
+                indirect_staging_for_callback.unmap();
+                indirect_gate.store(false, Ordering::SeqCst);
+
+                // Assemble snapshot and store for polling.
+                let instance_probe_values = instance_values
+                    .lock()
+                    .ok()
+                    .map(|v| v.clone())
+                    .unwrap_or_default();
+                let snapshot = ReadbackSnapshot {
+                    frame_count,
+                    captured_at_ms,
+                    indirect_args: records,
+                    instance_probe_values,
+                };
+                if let Ok(mut slot) = pending_readback.lock() {
+                    *slot = Some(snapshot);
+                }
+            });
+        }
+    }
+
+    // [RECOVER-10] [LAW:single-enforcer] One polling boundary for readback
+    // snapshots, mirroring the take_frame_pacing_packet pattern.
+    pub fn take_readback_snapshot(&self) -> Option<ReadbackSnapshot> {
+        self.pending_readback
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take())
     }
 
     pub fn take_frame_pacing_packet(&mut self) -> Option<WorkerObservabilityPacket> {

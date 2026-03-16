@@ -19,27 +19,67 @@ import { createArena } from './ArenaValueStore';
  *
  * // [LAW:one-source-of-truth] Runtime and renderer consume one canonical
  * // shape-header ABI that matches WS-01/P1-2 contracts.
+ *
+ * ## Canonical vs. Realized Fields
+ *
+ * Canonical fields (words 0-4, 7, 9-15) are written once by
+ * `ValueExprMaterializer` and are immutable after materialization.
+ * They describe declarative topology metadata and parameter payload offsets.
+ *
+ * `indexCount` (word 4) is canonical precomputed topology metadata authored by
+ * JS/install for indexed path topologies.
+ *
+ * Realized geometry-offset fields (words 5, 6, 8) — `firstIndex`,
+ * `baseVertex`, `firstVertex` — are part of the canonical header layout for
+ * GPU-side consumption, but JS-side ShapeBank data leaves them at zero and the
+ * Rust worker derives them in its upload-local copy.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
 export enum ShapeBankHeaderWord {
+  // -- Canonical declarative fields (immutable after materialization) --
   Kind = 0,
   TopologyMode = 1,
   Flags = 2,
   MaterialClass = 3,
+
+  // -- Canonical topology metadata (continued) --
   IndexCount = 4,
+  // -- Realized geometry-offset fields (worker-derived, NOT canonical) --
+  // These words are reserved in the ABI for GPU-side geometry offsets.
+  // JS-side ShapeBankState.data leaves them as 0. The Rust worker fills
+  // them in its own local copy before GPU upload.
   FirstIndex = 5,
   BaseVertex = 6,
+
+  // -- Canonical declarative fields (continued) --
   VertexCount = 7,
+
+  // -- Realized geometry-offset field (worker-derived, NOT canonical) --
   FirstVertex = 8,
+
+  // -- Canonical declarative fields (continued) --
   ParamBlockOffset = 9,
   ParamBlockWords = 10,
-  Reserved0 = 11,
+  // [RECOVER-07] Arena addressing for control-point vertex data.
+  // Vertex shader reads CPs from compiler_arena_buffer using these offsets.
+  CpArenaBaseOffset = 11,
   BoundsMinPacked = 12,
   BoundsMaxPacked = 13,
-  Reserved1 = 14,
-  Reserved2 = 15,
+  CpArenaLaneStride = 14,
+  CpArenaComponentStride = 15,
 }
+
+/**
+ * Word offsets of worker-derived realized geometry-offset fields in ShapeHeaderV1.
+ * These are NOT canonical — they are derived by the Rust worker and
+ * must not be read from JS-side ShapeBankState.data.
+ */
+export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
+  ShapeBankHeaderWord.FirstIndex,
+  ShapeBankHeaderWord.BaseVertex,
+  ShapeBankHeaderWord.FirstVertex,
+] as const;
 
 export interface ShapeBankHeaderRecord {
   kind: number;
@@ -53,11 +93,11 @@ export interface ShapeBankHeaderRecord {
   firstVertex: number;
   paramBlockOffset: number;
   paramBlockWords: number;
-  reserved0: number;
+  cpArenaBaseOffset: number;
   boundsMinPacked: number;
   boundsMaxPacked: number;
-  reserved1: number;
-  reserved2: number;
+  cpArenaLaneStride: number;
+  cpArenaComponentStride: number;
 }
 
 export function createShapeBankHeaderV1(
@@ -75,11 +115,11 @@ export function createShapeBankHeaderV1(
     firstVertex: 0,
     paramBlockOffset: 0,
     paramBlockWords: 0,
-    reserved0: 0,
+    cpArenaBaseOffset: 0,
     boundsMinPacked: 0,
     boundsMaxPacked: 0,
-    reserved1: 0,
-    reserved2: 0,
+    cpArenaLaneStride: 0,
+    cpArenaComponentStride: 0,
     ...overrides,
   };
 }
@@ -201,11 +241,11 @@ export function readShapeBankHeader(
     firstVertex: bank[handle + ShapeBankHeaderWord.FirstVertex] >>> 0,
     paramBlockOffset: bank[handle + ShapeBankHeaderWord.ParamBlockOffset] >>> 0,
     paramBlockWords: bank[handle + ShapeBankHeaderWord.ParamBlockWords] >>> 0,
-    reserved0: bank[handle + ShapeBankHeaderWord.Reserved0] >>> 0,
+    cpArenaBaseOffset: bank[handle + ShapeBankHeaderWord.CpArenaBaseOffset] >>> 0,
     boundsMinPacked: bank[handle + ShapeBankHeaderWord.BoundsMinPacked] >>> 0,
     boundsMaxPacked: bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] >>> 0,
-    reserved1: bank[handle + ShapeBankHeaderWord.Reserved1] >>> 0,
-    reserved2: bank[handle + ShapeBankHeaderWord.Reserved2] >>> 0,
+    cpArenaLaneStride: bank[handle + ShapeBankHeaderWord.CpArenaLaneStride] >>> 0,
+    cpArenaComponentStride: bank[handle + ShapeBankHeaderWord.CpArenaComponentStride] >>> 0,
   };
 }
 
@@ -228,11 +268,11 @@ export function writeShapeBankHeader(
   bank[handle + ShapeBankHeaderWord.FirstVertex] = header.firstVertex >>> 0;
   bank[handle + ShapeBankHeaderWord.ParamBlockOffset] = header.paramBlockOffset >>> 0;
   bank[handle + ShapeBankHeaderWord.ParamBlockWords] = header.paramBlockWords >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved0] = header.reserved0 >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaBaseOffset] = header.cpArenaBaseOffset >>> 0;
   bank[handle + ShapeBankHeaderWord.BoundsMinPacked] = header.boundsMinPacked >>> 0;
   bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaLaneStride] = header.cpArenaLaneStride >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaComponentStride] = header.cpArenaComponentStride >>> 0;
 }
 
 /**
@@ -258,6 +298,64 @@ export function readShapeBankHandleMetadata(
     topologyId: shapeBank.topologyIdByHandle[handle] >>> 0,
     controlPointSlot: shapeBank.controlPointSlotByHandle[handle] ?? SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   };
+}
+
+export interface ShapeBankRecordSource {
+  readonly data: Uint32Array;
+  readonly volatilePtr: number;
+}
+
+export interface ShapeBankRecordView {
+  readonly handle: number;
+  readonly header: ShapeBankHeaderRecord;
+  readonly totalWords: number;
+  readonly headerHasPayload: boolean;
+}
+
+/**
+ * Iterate canonical ShapeBank records in handle order.
+ *
+ * // [LAW:one-source-of-truth] ShapeBank record boundaries are derived once
+ * // from `ShapeHeaderV1` (`SHAPE_BANK_HEADER_WORDS + ParamBlockWords`) and
+ * // shared by every reader that needs to walk ShapeBank records.
+ */
+export function* iterateShapeBankRecords(
+  source: ShapeBankRecordSource,
+): Generator<ShapeBankRecordView, void, undefined> {
+  let handle = 0;
+  while (handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr) {
+    const header = readShapeBankHeader(source.data, handle);
+    const totalWords = SHAPE_BANK_HEADER_WORDS + header.paramBlockWords;
+    if (handle + totalWords > source.volatilePtr) {
+      throw new Error(
+        `iterateShapeBankRecords: record at ${handle} overruns volatilePtr ${source.volatilePtr} ` +
+          `(totalWords=${totalWords})`,
+      );
+    }
+
+    let headerHasPayload = false;
+    for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
+      if (source.data[handle + word] !== 0) {
+        headerHasPayload = true;
+        break;
+      }
+    }
+
+    yield {
+      handle,
+      header,
+      totalWords,
+      headerHasPayload,
+    };
+
+    handle += totalWords;
+  }
+
+  if (handle !== source.volatilePtr) {
+    throw new Error(
+      `iterateShapeBankRecords: trailing words after last record (ended at ${handle}, volatilePtr ${source.volatilePtr})`,
+    );
+  }
 }
 
 // =============================================================================
@@ -497,11 +595,6 @@ export interface FrameCache {
   /** Frame stamp for `instanceLaneCounts` validity. */
   instanceLaneCountFrameId?: number;
 
-  /** Optional draw-prep sink-table scratch words for renderer handoff. */
-  drawPrepSinkTableWords?: Uint32Array;
-  drawPrepSinkTableWordCount?: number;
-  drawPrepSinkTableFrameId?: number;
-
 }
 
 /**
@@ -519,9 +612,6 @@ export function createFrameCache(
     scalarExprToArenaAddress: null,
     instanceLaneCounts: new Map<string, number>(),
     instanceLaneCountFrameId: 0,
-    drawPrepSinkTableWords: undefined,
-    drawPrepSinkTableWordCount: 0,
-    drawPrepSinkTableFrameId: 0,
   };
 }
 

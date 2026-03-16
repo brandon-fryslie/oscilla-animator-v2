@@ -5,7 +5,7 @@ pub const DEFAULT_SIMULATION_WGSL: &str = r#"
 @group(0) @binding(1) var<storage, read_write> arena_write: array<u32>;
 @group(0) @binding(2) var<storage, read> state_read: array<u32>;
 @group(0) @binding(3) var<storage, read_write> state_write: array<u32>;
-@group(0) @binding(4) var<uniform> global_uniforms: array<vec4<f32>, 5>;
+@group(0) @binding(4) var<uniform> frame_header_transport: array<vec4<f32>, 5>;
 
 @compute @workgroup_size(64)
 fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -14,24 +14,21 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   let base = state_read[index] + arena_read[index];
-  let dt_bits = bitcast<u32>(global_uniforms[4].y);
+  let dt_bits = bitcast<u32>(frame_header_transport[4].y);
   state_write[index] = base + dt_bits + 1u;
   arena_write[index] = state_write[index];
 }
 "#;
 
 pub const DEFAULT_ASSEMBLY_WGSL: &str = r#"
-@group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
+@group(0) @binding(0) var<uniform> frame_header_transport: array<vec4<f32>, 5>;
 @group(1) @binding(0) var<storage, read> arena_words: array<u32>;
 @group(2) @binding(0) var<storage, read_write> instance_words: array<f32>;
 @group(2) @binding(1) var<storage, read> sink_table_words: array<u32>;
 
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
-const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 20u;
-const RECORD_WORD_INSTANCE_COUNT: u32 = 2u;
-const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
-const RECORD_WORD_SHAPE_WORD_OFFSET: u32 = 6u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
 
 const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
 const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
@@ -53,6 +50,11 @@ const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
 const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
+// [RECOVER-06] Instance-count and shape-word-offset metadata
+const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
+const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
+const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
 
 const OPTIONAL_MODE_CONSTANT: u32 = 0u;
 const OPTIONAL_MODE_SLOT: u32 = 1u;
@@ -114,28 +116,28 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let sink_count = read_sink_word(1u);
     let records_base = SINK_TABLE_HEADER_WORDS;
     let descriptors_base = records_base + sink_count * SINK_TABLE_RECORD_WORDS;
+    // [RECOVER-06] Derive instanceCount and firstInstance from descriptors
+    // instead of reading zeroed record fields. Running prefix sum of
+    // instance counts determines the instance-to-sink mapping.
     var sink_index = 0u;
     var sink_found = false;
-    var sink_base = 0u;
     var sink_lane = 0u;
+    var running_first_instance = 0u;
 
     loop {
       if (sink_index >= sink_count) {
         break;
       }
-      let candidate_sink_base = records_base + sink_index * SINK_TABLE_RECORD_WORDS;
-      if (candidate_sink_base + RECORD_WORD_SHAPE_WORD_OFFSET >= sink_table_word_count) {
-        break;
-      }
-      let first_instance = read_sink_word(candidate_sink_base + RECORD_WORD_FIRST_INSTANCE);
-      let instance_count = read_sink_word(candidate_sink_base + RECORD_WORD_INSTANCE_COUNT);
-      let instance_end = first_instance + instance_count;
-      if (gid.x >= first_instance && gid.x < instance_end) {
-        sink_base = candidate_sink_base;
-        sink_lane = gid.x - first_instance;
+      let desc_base = descriptors_base + sink_index * SINK_TABLE_DESCRIPTOR_WORDS;
+      let ic_mode = read_sink_word(desc_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE);
+      let instance_count = select(0u, read_sink_word(desc_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT), ic_mode == INSTANCE_COUNT_MODE_STATIC);
+      let instance_end = running_first_instance + instance_count;
+      if (gid.x >= running_first_instance && gid.x < instance_end) {
+        sink_lane = gid.x - running_first_instance;
         sink_found = true;
         break;
       }
+      running_first_instance = instance_end;
       sink_index = sink_index + 1u;
     }
 
@@ -247,7 +249,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       );
       scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
       scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
-      shape_word_offset = read_sink_word(sink_base + RECORD_WORD_SHAPE_WORD_OFFSET);
+      // [RECOVER-06] Shape word offset from descriptor (resolved at pack time)
+      shape_word_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET);
     }
   }
 
@@ -266,8 +269,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+// [RECOVER-04] Vertex-pulling uber shader. Reads control-point positions
+// directly from topologyBank (canonical ShapeBank data) instead of a
+// CPU-realized vertex buffer. Triangle fan geometry is generated
+// algorithmically from @builtin(vertex_index).
+// [RECOVER-11] Extended with Type5 text/glyph dispatch: unit-quad vertices
+// with per-glyph UV from ShapeBank, MSDF fragment evaluation from atlas.
 pub const DEFAULT_UBER_SHADER_WGSL: &str = r#"
-struct GlobalUniforms {
+// [LAW:one-source-of-truth] FrameHeader mirrors the Rust FrameHeader struct.
+// The uniform binding is derived transport; the canonical source is the arena
+// header zone (offset 0..ARENA_HEADER_FLOATS of the compiler arena buffer).
+struct FrameHeader {
   view_proj: mat4x4<f32>,
   resolution: vec2<f32>,
   time_seconds: f32,
@@ -280,13 +292,55 @@ struct InstanceData {
   color: vec4<f32>,
 };
 
-@group(0) @binding(0) var<uniform> global: GlobalUniforms;
+@group(0) @binding(0) var<uniform> frame_header: FrameHeader;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
+// [RECOVER-11] Atlas data storage buffer for Type5 text MSDF evaluation.
+@group(2) @binding(1) var<storage, read> atlasData: array<u32>;
+// [RECOVER-07] Compiler arena buffer for vertex-stage control-point reads.
+@group(3) @binding(0) var<storage, read> arenaWords: array<u32>;
+
+// ShapeBankHeaderWord offsets (must match TypeScript ShapeBankHeaderWord enum)
+const SHAPE_WORD_KIND: u32 = 0u;
+const SHAPE_WORD_FLAGS: u32 = 2u;
+// [RECOVER-07] CP arena addressing stored in header words 11, 14, 15.
+const SHAPE_WORD_CP_ARENA_BASE_OFFSET: u32 = 11u;
+const SHAPE_WORD_CP_ARENA_LANE_STRIDE: u32 = 14u;
+const SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE: u32 = 15u;
+const SHAPE_FLAG_CLOSED: u32 = 1u;
+
+// [RECOVER-11] Type5 ShapeBank header word offsets for glyph UV and atlas data.
+const TYPE5_WORD_UV_MIN_X: u32 = 4u;
+const TYPE5_WORD_UV_MIN_Y: u32 = 5u;
+const TYPE5_WORD_UV_MAX_X: u32 = 6u;
+const TYPE5_WORD_UV_MAX_Y: u32 = 7u;
+const TYPE5_WORD_QUAD_WIDTH: u32 = 8u;
+const TYPE5_WORD_QUAD_HEIGHT: u32 = 9u;
+const TYPE5_WORD_ATLAS_WIDTH: u32 = 10u;
+const TYPE5_WORD_ATLAS_HEIGHT: u32 = 11u;
+const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
+
+// [LAW:one-type-per-behavior] ShapeClass discriminant values.
+const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2u;
+const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
+
+// [RECOVER-11] Type2 parametric header word offsets.
+// ParamBlockOffset (word 9) and ParamBlockWords (word 10) point to the
+// template t-value array in ShapeBank. BoundsMinPacked (word 12) stores
+// the curve degree; BoundsMaxPacked (word 13) stores the ribbon width.
+const SHAPE_WORD_PARAM_BLOCK_OFFSET: u32 = 9u;
+const SHAPE_WORD_PARAM_BLOCK_WORDS: u32 = 10u;
+const SHAPE_WORD_DEGREE: u32 = 12u;
+const SHAPE_WORD_RIBBON_WIDTH: u32 = 13u;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
+  // [RECOVER-11] UV coordinates for Type5 MSDF glyph evaluation.
+  @location(1) uv: vec2<f32>,
+  // [RECOVER-11] Shape class discriminant for fragment shader dispatch.
+  @location(2) @interpolate(flat) shape_class: u32,
 };
 
 fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
@@ -313,14 +367,269 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   );
 }
 
+fn safe_color_from_instance(inst: InstanceData) -> vec4<f32> {
+  let rawH = inst.color.x;
+  let rawC = inst.color.y;
+  let rawL = inst.color.z;
+  let rawA = inst.color.w;
+  let safeH = select(0.0, rawH, rawH == rawH);
+  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
+  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
+  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
+  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
+  return vec4<f32>(safeRgb, safeA);
+}
+
+// [RECOVER-11] Type5 text vertex shader: generates a unit quad (6 vertices)
+// and reads per-glyph UV rect and dimensions from the ShapeBank header.
+fn vs_type5(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+) -> VertexOutput {
+  // Unit quad vertices (two triangles: 0-1-2, 1-3-2)
+  let quadX = array<f32, 6>(0.0, 1.0, 0.0, 1.0, 1.0, 0.0);
+  let quadY = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+  let vi = vertexIndex % 6u;
+  let localX = quadX[vi];
+  let localY = quadY[vi];
+
+  // Read glyph quad dimensions from ShapeBank header
+  let quadWidth = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_QUAD_WIDTH]);
+  let quadHeight = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_QUAD_HEIGHT]);
+
+  // Read UV rect from ShapeBank header
+  let uvMinX = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MIN_X]);
+  let uvMinY = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MIN_Y]);
+  let uvMaxX = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MAX_X]);
+  let uvMaxY = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MAX_Y]);
+
+  // Interpolate UV across the quad
+  let uv = vec2<f32>(
+    mix(uvMinX, uvMaxX, localX),
+    mix(uvMinY, uvMaxY, localY),
+  );
+
+  // Position: instance center + scaled local quad position
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScale = inst.transform0.z;
+  let scale = clamp(abs(select(1.0, rawScale, rawScale == rawScale)), 0.001, 1024.0);
+
+  let worldX = centerX + localX * quadWidth * scale;
+  let worldY = centerY + localY * quadHeight * scale;
+  let worldPos = vec4<f32>(worldX, worldY, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = uv;
+  out.shape_class = SHAPE_CLASS_TYPE5_TEXT;
+  return out;
+}
+
+// [RECOVER-11] Type 2 parametric vertex shader: evaluates a cubic Bezier
+// curve analytically from template t-values (ShapeBank) and per-instance
+// control points (Arena). Renders a 2D ribbon by offsetting perpendicular
+// to the tangent at each t-value.
+//
+// // [LAW:one-type-per-behavior] This is NOT a Type 1 extension. Type 1 pulls
+// // rigid CP positions; Type 2 evaluates the Bezier polynomial B(t) and its
+// // derivative B'(t) to compute vertex positions analytically.
+//
+// Vertex layout per segment (6 vertices = 2 triangles):
+//   v0: (t0, -side)  v1: (t0, +side)  v2: (t1, +side)
+//   v3: (t0, -side)  v4: (t1, +side)  v5: (t1, -side)
+fn vs_type2_parametric(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+) -> VertexOutput {
+  // Read parametric header fields from ShapeBank.
+  let paramBlockOffset = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_OFFSET];
+  let paramBlockWords = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_WORDS];
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+  let degree = topologyBank[topologyWordOffset + SHAPE_WORD_DEGREE];
+  let ribbonWidth = bitcast<f32>(topologyBank[topologyWordOffset + SHAPE_WORD_RIBBON_WIDTH]);
+
+  // Determine segment index and local vertex from vertex_index.
+  let segIdx = vertexIndex / 6u;
+  let localVtx = vertexIndex % 6u;
+
+  // Clamp segment index to valid template range.
+  let maxSeg = select(paramBlockWords - 1u, 0u, paramBlockWords <= 1u);
+  let safeSeg = min(segIdx, maxSeg);
+
+  // Read two consecutive t-values from the template.
+  let t0 = bitcast<f32>(topologyBank[paramBlockOffset + safeSeg]);
+  let t1 = bitcast<f32>(topologyBank[paramBlockOffset + min(safeSeg + 1u, maxSeg)]);
+
+  // Select t and ribbon side based on local vertex.
+  // Triangle 1: (t0,-1), (t0,+1), (t1,+1)
+  // Triangle 2: (t0,-1), (t1,+1), (t1,-1)
+  var t: f32;
+  var side: f32;
+  switch localVtx {
+    case 0u: { t = t0; side = -1.0; }
+    case 1u: { t = t0; side = 1.0; }
+    case 2u: { t = t1; side = 1.0; }
+    case 3u: { t = t0; side = -1.0; }
+    case 4u: { t = t1; side = 1.0; }
+    case 5u: { t = t1; side = -1.0; }
+    default: { t = 0.0; side = 0.0; }
+  }
+
+  // Evaluate cubic Bezier B(t) and tangent B'(t).
+  // Supports degrees 2 (linear), 3 (quadratic), 4 (cubic).
+  // Control points are read from the Arena SoA layout.
+  var pos = vec2<f32>(0.0, 0.0);
+  var tangent = vec2<f32>(1.0, 0.0);
+  let omt = 1.0 - t;
+
+  if (degree >= 4u) {
+    // Cubic Bezier: B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t) t^2 P2 + t^3 P3
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p2x = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride]);
+    let p2y = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p3x = bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaLaneStride]);
+    let p3y = bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    let omt2 = omt * omt;
+    let omt3 = omt2 * omt;
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    pos = vec2<f32>(
+      omt3 * p0x + 3.0 * omt2 * t * p1x + 3.0 * omt * t2 * p2x + t3 * p3x,
+      omt3 * p0y + 3.0 * omt2 * t * p1y + 3.0 * omt * t2 * p2y + t3 * p3y,
+    );
+    // B'(t) = 3(1-t)^2 (P1-P0) + 6(1-t)t (P2-P1) + 3t^2 (P3-P2)
+    tangent = vec2<f32>(
+      3.0 * omt2 * (p1x - p0x) + 6.0 * omt * t * (p2x - p1x) + 3.0 * t2 * (p3x - p2x),
+      3.0 * omt2 * (p1y - p0y) + 6.0 * omt * t * (p2y - p1y) + 3.0 * t2 * (p3y - p2y),
+    );
+  } else if (degree >= 3u) {
+    // Quadratic Bezier: B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p2x = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride]);
+    let p2y = bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    let omt2 = omt * omt;
+    let t2 = t * t;
+
+    pos = vec2<f32>(
+      omt2 * p0x + 2.0 * omt * t * p1x + t2 * p2x,
+      omt2 * p0y + 2.0 * omt * t * p1y + t2 * p2y,
+    );
+    tangent = vec2<f32>(
+      2.0 * omt * (p1x - p0x) + 2.0 * t * (p2x - p1x),
+      2.0 * omt * (p1y - p0y) + 2.0 * t * (p2y - p1y),
+    );
+  } else {
+    // Linear (degree 2): B(t) = (1-t) P0 + t P1
+    let p0x = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride]);
+    let p0y = bitcast<f32>(arenaWords[cpArenaBase + 0u * cpArenaLaneStride + cpArenaComponentStride]);
+    let p1x = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride]);
+    let p1y = bitcast<f32>(arenaWords[cpArenaBase + 1u * cpArenaLaneStride + cpArenaComponentStride]);
+
+    pos = vec2<f32>(omt * p0x + t * p1x, omt * p0y + t * p1y);
+    tangent = vec2<f32>(p1x - p0x, p1y - p0y);
+  }
+
+  // Compute perpendicular normal for ribbon extrusion.
+  // Epsilon guard: if tangent is near-zero (collapsed CPs), use a default
+  // direction to prevent NaN from normalization.
+  let tangentLen = length(tangent);
+  let safeTangent = select(tangent / tangentLen, vec2<f32>(1.0, 0.0), tangentLen < 0.00001);
+  let normal = vec2<f32>(-safeTangent.y, safeTangent.x);
+
+  // Offset position perpendicular to curve by ribbon half-width.
+  let ribbonPos = pos + normal * side * ribbonWidth;
+
+  // Apply instance transform (same as Type 1).
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
+  );
+
+  let worldPos = model * vec4<f32>(ribbonPos.x, ribbonPos.y, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(t, side * 0.5 + 0.5);
+  out.shape_class = SHAPE_CLASS_TYPE2_PARAMETRIC;
+  return out;
+}
+
+// [RECOVER-07] Vertex pulling: control-point positions are read from the
+// compiler arena buffer (GPU-computed). Arena addressing is stored in the
+// topology header (words 11, 14, 15). Triangle fan generated from vertex_index.
 @vertex fn vs_main(
-  @location(0) localPos: vec2<f32>,
   @builtin(instance_index) instanceIndex: u32,
+  @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
-  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
-  let topologyFlags = topologyBank[topologyWordOffset + 3u];
-  let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
+  // [RECOVER-04] Assembly shader stores shape_word_offset via bitcast<f32>(u32).
+  // Recover the original u32 bit pattern — numeric f32→u32 truncates denorms to 0.
+  let topologyWordOffset = bitcast<u32>(inst.transform1.z);
+
+  // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
+  let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
+  if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
+    return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+  // [RECOVER-11] Type 2 parametric dispatch: analytical Bezier evaluation.
+  if (shapeClass == SHAPE_CLASS_TYPE2_PARAMETRIC) {
+    return vs_type2_parametric(inst, topologyWordOffset, vertexIndex);
+  }
+
+  // --- Type1Rigid path (existing behavior) ---
+  let flags = topologyBank[topologyWordOffset + SHAPE_WORD_FLAGS];
+  let isClosed = (flags & SHAPE_FLAG_CLOSED) != 0u;
+
+  // [RECOVER-07] CP arena addressing from topology header reserved words.
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+
+  // [LAW:dataflow-not-control-flow] Both fan and sequential control-point
+  // indices are computed; the flags data selects which one is used.
+  let tri = vertexIndex / 3u;
+  let loc = vertexIndex % 3u;
+  let fanCpIndex = select(tri + loc, 0u, loc == 0u);
+  let cpIndex = select(vertexIndex, fanCpIndex, isClosed);
+
+  // [RECOVER-07] Read CP positions from compiler arena (GPU-computed data).
+  let xAddr = cpArenaBase + cpIndex * cpArenaLaneStride;
+  let yAddr = cpArenaBase + cpIndex * cpArenaLaneStride + cpArenaComponentStride;
+  let pulledX = bitcast<f32>(arenaWords[xAddr]);
+  let pulledY = bitcast<f32>(arenaWords[yAddr]);
 
   let rawCenterX = inst.transform0.x;
   let rawCenterY = inst.transform0.y;
@@ -342,26 +651,94 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
     vec4<f32>(centerX, centerY, 0.0, 1.0),
   );
 
-  let worldPos = model * vec4<f32>(localPos.x, localPos.y, 0.0, 1.0);
+  let worldPos = model * vec4<f32>(pulledX, pulledY, 0.0, 1.0);
 
   var out: VertexOutput;
-  out.position = global.view_proj * worldPos;
-
-  let rawH = inst.color.x;
-  let rawC = inst.color.y;
-  let rawL = inst.color.z;
-  let rawA = inst.color.w;
-  let safeH = select(0.0, rawH, rawH == rawH);
-  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
-  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
-  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
-  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
-  out.color = vec4<f32>(safeRgb, safeA) * (1.0 + closedMask * 0.0);
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(0.0, 0.0);
+  out.shape_class = SHAPE_CLASS_TYPE1_RIGID;
   return out;
+}
+
+// [RECOVER-11] MSDF median function: takes the median of three channels
+// to reconstruct the true distance from multi-channel signed distance data.
+fn msdf_median(r: f32, g: f32, b: f32) -> f32 {
+  return max(min(r, g), min(max(r, g), b));
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+  // [RECOVER-04] Compute UV derivatives unconditionally in uniform control flow.
+  // dpdx/dpdy are illegal inside non-uniform branches (shape_class is @interpolate(flat),
+  // so Chrome/Tint's uniformity analysis rejects derivatives guarded by it).
+  let uv_dpdx = dpdx(input.uv.x);
+  let uv_dpdy = dpdy(input.uv.y);
+
+  // [RECOVER-11] Dispatch on shape class for fragment evaluation.
+  if (input.shape_class == SHAPE_CLASS_TYPE5_TEXT) {
+    // MSDF text fragment evaluation.
+    // Sample atlas data at the interpolated UV coordinates.
+    let atlasLen = arrayLength(&atlasData);
+    if (atlasLen == 0u) {
+      discard;
+    }
+    // Read atlas dimensions from the first two words of atlasData.
+    // Layout: [0]=width, [1]=height, [2..]=RGBA pixel data packed as u32.
+    let atlasWidth = atlasData[0u];
+    let atlasHeight = atlasData[1u];
+    let atlasWidthF = f32(atlasWidth);
+    let atlasHeightF = f32(atlasHeight);
+
+    // Compute texel coordinates from UV
+    let texX = clamp(input.uv.x * atlasWidthF, 0.0, atlasWidthF - 1.0);
+    let texY = clamp(input.uv.y * atlasHeightF, 0.0, atlasHeightF - 1.0);
+
+    // Bilinear interpolation: sample 4 nearest texels
+    let x0 = u32(floor(texX));
+    let y0 = u32(floor(texY));
+    let x1 = min(x0 + 1u, atlasWidth - 1u);
+    let y1 = min(y0 + 1u, atlasHeight - 1u);
+    let fx = fract(texX);
+    let fy = fract(texY);
+
+    // Read RGBA from packed u32 (each pixel = 1 u32: R|G|B|A bytes)
+    let p00_raw = atlasData[2u + y0 * atlasWidth + x0];
+    let p10_raw = atlasData[2u + y0 * atlasWidth + x1];
+    let p01_raw = atlasData[2u + y1 * atlasWidth + x0];
+    let p11_raw = atlasData[2u + y1 * atlasWidth + x1];
+
+    let p00 = vec3<f32>(f32(p00_raw & 0xFFu), f32((p00_raw >> 8u) & 0xFFu), f32((p00_raw >> 16u) & 0xFFu)) / 255.0;
+    let p10 = vec3<f32>(f32(p10_raw & 0xFFu), f32((p10_raw >> 8u) & 0xFFu), f32((p10_raw >> 16u) & 0xFFu)) / 255.0;
+    let p01 = vec3<f32>(f32(p01_raw & 0xFFu), f32((p01_raw >> 8u) & 0xFFu), f32((p01_raw >> 16u) & 0xFFu)) / 255.0;
+    let p11 = vec3<f32>(f32(p11_raw & 0xFFu), f32((p11_raw >> 8u) & 0xFFu), f32((p11_raw >> 16u) & 0xFFu)) / 255.0;
+
+    // Bilinear blend
+    let top = mix(p00, p10, fx);
+    let bottom = mix(p01, p11, fx);
+    let sample_rgb = mix(top, bottom, fy);
+
+    // MSDF: take median of R, G, B channels
+    let dist = msdf_median(sample_rgb.x, sample_rgb.y, sample_rgb.z);
+
+    // Screen-space derivative for scale-independent threshold
+    // (uses precomputed uv_dpdx/uv_dpdy from uniform control flow above)
+    let dx = uv_dpdx * atlasWidthF;
+    let dy = uv_dpdy * atlasHeightF;
+    let screenPxRange = max(length(vec2<f32>(dx, dy)), 0.5);
+
+    // Apply threshold: 0.5 is the edge, expand by screen pixel range
+    let alpha = clamp((dist - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
+
+    if (alpha < 0.01) {
+      discard;
+    }
+
+    let textColor = input.color;
+    let finalAlpha = textColor.a * alpha;
+    return vec4<f32>(textColor.rgb * finalAlpha, finalAlpha);
+  }
+
   // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
   // compositing and pipeline blending share one canonical alpha contract.
   return vec4<f32>(input.color.rgb * input.color.a, input.color.a);

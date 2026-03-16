@@ -3,6 +3,7 @@
 import { compileFromFrontend } from '../compiler';
 import { compileFrontend } from '../compiler/frontend';
 import { compileProgramWithNaga } from '../compiler/naga-compile';
+import { primeNagaShimWasmBytes } from '../compiler/wasm/oscilla_naga_shim';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
@@ -145,6 +146,7 @@ async function handleCompileMessage(
   }
 
   const patch = decoded.patch;
+  primeNagaShimWasmBytes(message.nagaShimWasmBytes);
   const frontendResult = compileFrontend(patch, frontendOptions);
   const backendResult = frontendResult.backendReady
     ? await toBackendResult(

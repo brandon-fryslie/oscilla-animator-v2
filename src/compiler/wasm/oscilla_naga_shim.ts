@@ -1,5 +1,6 @@
 import type { NagaModuleIR } from '../ir/naga-emitter';
 import type { WasmInitModuleOrPath } from '../../wasm/init-types';
+import { fetchNagaShimWasmBytes } from './naga-shim-asset';
 
 export interface ShimFormattedError {
   readonly message: string;
@@ -38,6 +39,11 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 let compileImpl: RustCompileFn | null = null;
 const initStageListeners = new Set<(stage: ShimBootStage) => void>();
+let primedShimBytes: ArrayBuffer | null = null;
+
+export function primeNagaShimWasmBytes(bytes: ArrayBuffer): void {
+  primedShimBytes = bytes;
+}
 
 function compileInitError(message: string, path: string): ShimCompilationResult {
   return {
@@ -74,10 +80,10 @@ export default async function init(options?: ShimInitOptions): Promise<void> {
         }
         const module = rawModule as unknown as ShimModule;
         if (typeof module.default === 'function') {
-          // [LAW:one-source-of-truth] WASM binary URL ownership is centralized
-          // at this bridge boundary so every caller initializes identically.
-          const wasmUrl = new URL('./pkg/oscilla_naga_shim_bg.wasm', import.meta.url);
-          await module.default({ module_or_path: wasmUrl });
+          const shimBytes = primedShimBytes ?? await fetchNagaShimWasmBytes();
+          // [LAW:one-source-of-truth] Both main-thread and compile-worker boot
+          // consume the same page-owned validated shim bytes.
+          await module.default({ module_or_path: shimBytes });
         }
         for (const listener of initStageListeners) {
           listener('binding');

@@ -16,6 +16,8 @@ export interface HclDemo {
   hcl: string;
 }
 
+export const GPU_BOOTSTRAP_DEMO_FILENAME = 'gpu-bootstrap-triangle.hcl';
+
 // Vite glob import: all .hcl files as raw strings, eagerly loaded at build time
 const hclModules = import.meta.glob('./hcl/*.hcl', { query: '?raw', eager: true }) as Record<
   string,

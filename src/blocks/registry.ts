@@ -353,6 +353,13 @@ export interface BlockDef {
   // Compilation metadata
   readonly form: BlockForm;
   readonly capability: Capability;
+  /**
+   * Whether this block is verified against the current canonical WebGPU render path.
+   *
+   * [LAW:one-source-of-truth] GPU compatibility is declared on the canonical
+   * block definition rather than in scattered demo allowlists.
+   */
+  readonly gpuVerified?: boolean;
 
   /**
    * Whether this block has state that breaks combinatorial cycles.
@@ -529,33 +536,38 @@ export function requireBlockDef(blockType: string): BlockDef {
  * Register a block definition.
  */
 export function registerBlock(def: BlockDef): void {
-  if (declaredRegistry.has(def.type)) {
+  const normalizedDef: BlockDef = {
+    ...def,
+    gpuVerified: def.gpuVerified ?? false,
+  };
+
+  if (declaredRegistry.has(normalizedDef.type)) {
     throw new Error(`Block type already registered: ${def.type}`);
   }
 
   // Validate: object keys are inherently unique, but check input/output collision
-  const outputKeys = Object.keys(def.outputs);
+  const outputKeys = Object.keys(normalizedDef.outputs);
 
   for (const key of outputKeys) {
-    if (key in def.inputs) {
-      throw new Error(`Port ID used as both input and output in block ${def.type}: ${key}`);
+    if (key in normalizedDef.inputs) {
+      throw new Error(`Port ID used as both input and output in block ${normalizedDef.type}: ${key}`);
     }
   }
 
   // Validate collect constraints
-  for (const [portId, inputDef] of Object.entries(def.inputs)) {
+  for (const [portId, inputDef] of Object.entries(normalizedDef.inputs)) {
     if (inputDef.collectAccepts) {
       if (inputDef.collectAccepts.payloads.length === 0) {
         throw new Error(
-          `Collect input "${portId}" in block ${def.type} must allow at least one payload type`
+          `Collect input "${portId}" in block ${normalizedDef.type} must allow at least one payload type`
         );
       }
     }
   }
 
-  declaredRegistry.set(def.type, def);
+  declaredRegistry.set(normalizedDef.type, normalizedDef);
   if (registryActivated) {
-    registry.set(def.type, def);
+    registry.set(normalizedDef.type, normalizedDef);
     registryRevision++;
   }
 }
@@ -1019,24 +1031,28 @@ export function validateCompositeDefinition(
  * Validates the composite and throws if invalid.
  */
 export function registerComposite(def: CompositeBlockDef): void {
+  const normalizedDef: CompositeBlockDef = {
+    ...def,
+    gpuVerified: def.gpuVerified ?? false,
+  };
   // Check for name collision with primitive blocks
-  if (registry.has(def.type)) {
-    throw new Error(`Block type already registered as primitive: ${def.type}`);
+  if (registry.has(normalizedDef.type)) {
+    throw new Error(`Block type already registered as primitive: ${normalizedDef.type}`);
   }
 
   // Check for duplicate composite registration
-  if (compositeRegistry.has(def.type)) {
-    throw new Error(`Composite block type already registered: ${def.type}`);
+  if (compositeRegistry.has(normalizedDef.type)) {
+    throw new Error(`Composite block type already registered: ${normalizedDef.type}`);
   }
 
   // Validate the definition
-  const errors = validateCompositeDefinition(def);
+  const errors = validateCompositeDefinition(normalizedDef);
   if (errors.length > 0) {
     const errorMessages = errors.map(e => `  - ${e.code}: ${e.message}`).join('\n');
-    throw new Error(`Invalid composite block definition "${def.type}":\n${errorMessages}`);
+    throw new Error(`Invalid composite block definition "${normalizedDef.type}":\n${errorMessages}`);
   }
 
-  compositeRegistry.set(def.type, def);
+  compositeRegistry.set(normalizedDef.type, normalizedDef);
 }
 
 /**

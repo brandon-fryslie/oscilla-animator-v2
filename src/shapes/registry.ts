@@ -12,6 +12,7 @@ import type {
   TopologyId,
   TopologyDef,
   PathTopologyDef,
+  ParametricTopologyDef,
   AbstractTopologyDef,
   PathSegmentKind,
   SerializableTopologyDef,
@@ -129,6 +130,16 @@ function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
 }
 
 /**
+ * Type guard for ParametricTopologyDef.
+ *
+ * // [LAW:one-type-per-behavior] Parametric topologies are distinct from path
+ * // topologies — they have degree/resolution instead of verbs/pointsPerVerb.
+ */
+export function isParametricTopology(topology: TopologyDef): topology is ParametricTopologyDef {
+  return (topology as Partial<ParametricTopologyDef>).parametric === true;
+}
+
+/**
  * Export topology metadata as a packed u32 bank for GPU upload.
  *
  * Record layout (4 words):
@@ -234,7 +245,7 @@ function computePathDispatchData(verbs: readonly PathVerb[]): {
  * @returns Assigned numeric TopologyId
  */
 export function registerDynamicTopology(
-  topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'>,
+  topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'> | Omit<ParametricTopologyDef, 'id'>,
   debugName?: string
 ): TopologyId {
   // Check if this is a PathTopologyDef (has 'verbs' field)
@@ -244,6 +255,7 @@ export function registerDynamicTopology(
     const dispatchData = computePathDispatchData(topology.verbs);
     shapeTopology = { ...topology, ...dispatchData } as Omit<PathTopologyDef, 'id'>;
   } else {
+    // ParametricTopologyDef and AbstractTopologyDef both pass through directly.
     shapeTopology = { ...topology } as Omit<TopologyDef, 'id'>;
   }
 
@@ -296,9 +308,20 @@ function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'> | 
           hasCubic: topology.hasCubic,
         }
       : null;
+  // [RECOVER-11] Parametric topology fields in signature for structural interning.
+  const parametricFields =
+    'parametric' in topology && topology.parametric === true
+      ? {
+          degree: topology.degree,
+          resolution: topology.resolution,
+          closed: topology.closed,
+          ribbonWidth: topology.ribbonWidth,
+        }
+      : null;
   return JSON.stringify({
     params: topology.params,
     path: pathFields,
+    parametric: parametricFields,
   });
 }
 
@@ -356,4 +379,50 @@ export function installSerializableTopologies(topologies: readonly SerializableT
   if (changed) {
     topologyRegistryRevision++;
   }
+}
+
+// =============================================================================
+// Type 2 Parametric Template Generation
+// =============================================================================
+
+/**
+ * Generate a template t-value array for a parametric topology.
+ *
+ * // [LAW:one-source-of-truth] Template t-values are derived from the
+ * // ParametricTopologyDef's resolution field. This is the single canonical
+ * // source for template progression data stored in ShapeBank.
+ *
+ * For a curve with resolution R, this produces R+1 evenly-spaced t-values
+ * from 0.0 to 1.0 (inclusive). These are stored as f32 values in ShapeBank's
+ * param block and read by the vertex shader to evaluate the parametric curve.
+ *
+ * @param resolution - Number of segments (produces resolution + 1 t-values)
+ * @returns Float32Array of t-values, bitcast-ready for u32 ShapeBank storage
+ */
+export function generateParametricTemplate(resolution: number): Float32Array {
+  if (!Number.isInteger(resolution) || resolution < 1) {
+    // [LAW:single-enforcer] Parametric template generation owns the
+    // `resolution >= 1` invariant for the canonical template payload.
+    throw new Error(`generateParametricTemplate: resolution must be an integer >= 1 (received ${resolution})`);
+  }
+  const count = resolution + 1;
+  const template = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    template[i] = i / resolution;
+  }
+  return template;
+}
+
+/**
+ * Compute the vertex count for a Type 2 parametric ribbon.
+ *
+ * Each segment of the curve produces a quad (2 triangles = 6 vertices).
+ * The vertex shader determines which segment and which triangle vertex
+ * from @builtin(vertex_index).
+ *
+ * @param resolution - Number of segments
+ * @returns Total vertex count for non-indexed draw
+ */
+export function parametricRibbonVertexCount(resolution: number): number {
+  return resolution * 6;
 }

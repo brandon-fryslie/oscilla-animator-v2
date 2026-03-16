@@ -10,6 +10,80 @@
  * - Renderer dispatches on path verbs only
  */
 
+// =============================================================================
+// Shape Taxonomy — Compile/Runtime Execution Contract
+// =============================================================================
+
+/**
+ * ShapeClass — Canonical shape taxonomy discriminant.
+ *
+ * // [LAW:one-type-per-behavior] Shape classes reflect real execution differences
+ * // (topology source, dominant cost, command stream ABI). Each class maps to a
+ * // concrete data contract across compile → runtime → draw-prep → render.
+ *
+ * Spec: docs/WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
+ *
+ * Values are u32-compatible for direct ShapeBankHeaderWord.Kind storage.
+ */
+export enum ShapeClass {
+  /**
+   * Type 1: Rigid Stamp
+   * - Immutable local topology in ShapeBank (indexed path)
+   * - Per-instance transforms in Arena
+   * - Draw-prep buckets by compatible indexed topology
+   */
+  Type1Rigid = 1,
+
+  /**
+   * Type 2: Parametric Curve (Template Instancing)
+   * - Template topology in ShapeBank (t-value progression, not rigid CPs)
+   * - Per-instance control points in Arena (SoA layout)
+   * - Analytical vertex evaluation (Bezier math in vertex shader)
+   * - Draw-prep buckets by compatible resolution/degree
+   *
+   * // [LAW:one-type-per-behavior] Type 2 is NOT a Type 1 extension.
+   * // Type 1 pulls rigid CP positions; Type 2 evaluates Bezier curves
+   * // analytically from template t-values + Arena control points.
+   *
+   * Spec: docs/WebGPU-Complete/shapes/Shapes 2_ The Parametric Curve (Template Instancing).md
+   */
+  Type2Parametric = 2,
+
+  // Future classes will be added as RECOVER tickets progress:
+  // Type3Ribbon = 3,
+  // Type4ProceduralSDF = 4,
+
+  /**
+   * Type 5: Text/Glyph Hybrid
+   * - CPU/worker text shaping (glyph positioning + atlas lookup)
+   * - GPU instanced glyph-quad rendering with MSDF fragment evaluation
+   * - Shared unit-quad topology; per-glyph UV rects in ShapeBank entries
+   * - Draw-prep produces per-glyph non-indexed indirect draw commands
+   *
+   * // [LAW:one-type-per-behavior] Text has a fundamentally different ownership
+   * // split from rigid/path geometry: CPU owns shaping, GPU owns rendering.
+   *
+   * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
+   */
+  Type5TextHybrid = 5,
+}
+
+/**
+ * TopologyMode — How the topology is represented in ShapeBank.
+ *
+ * Stored in ShapeBankHeaderWord.TopologyMode. Values are u32-compatible.
+ */
+export enum TopologyMode {
+  /** Non-path topology (abstract params only, no verbs) */
+  NonPath = 0,
+  /** Path-based topology with verb sequence and control points */
+  Path = 1,
+}
+
+// =============================================================================
+// Topology IDs
+// =============================================================================
+
 /**
  * TopologyId - Numeric identifier for a topology (array index)
  *
@@ -159,9 +233,48 @@ export interface PathTopologyDef extends TopologyDef {
   readonly hasCubic: boolean;
 }
 
+// =============================================================================
+// Parametric Topology (Type 2)
+// =============================================================================
+
+/**
+ * ParametricTopologyDef — Template topology for Type 2 parametric curves.
+ *
+ * // [LAW:one-type-per-behavior] This is NOT a PathTopologyDef extension.
+ * // PathTopologyDef stores verb sequences for rigid CP consumption.
+ * // ParametricTopologyDef stores template t-value progression metadata
+ * // for analytical Bezier evaluation in the vertex shader.
+ *
+ * The ShapeBank stores a 1D array of t-values (the "template") that the
+ * vertex shader samples to evaluate the parametric curve equation.
+ * Control points live in the Arena (SoA layout), not in ShapeBank.
+ *
+ * Spec: docs/WebGPU-Complete/shapes/Shapes 2_ The Parametric Curve (Template Instancing).md
+ */
+export interface ParametricTopologyDef extends TopologyDef {
+  /** Discriminant for runtime type checking */
+  readonly parametric: true;
+  /** Curve degree = number of control points (e.g., 4 for cubic Bezier) */
+  readonly degree: number;
+  /** Number of segments to evaluate along the curve (vertex count = resolution * 6 for ribbon) */
+  readonly resolution: number;
+  /** Whether the curve is closed (last segment connects back to start) */
+  readonly closed: boolean;
+  /** Half-width of the ribbon in local units (for 2.5D extrusion) */
+  readonly ribbonWidth: number;
+}
+
+/**
+ * Input type for registering a ParametricTopologyDef (without ID assignment).
+ */
+export type ParametricTopologyDefInput = Omit<ParametricTopologyDef, 'id'>;
+
 export type SerializableTopologyDef = TopologyDef & Partial<Pick<
   PathTopologyDef,
   'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+>> & Partial<Pick<
+  ParametricTopologyDef,
+  'parametric' | 'degree' | 'resolution' | 'closed' | 'ribbonWidth'
 >>;
 
 

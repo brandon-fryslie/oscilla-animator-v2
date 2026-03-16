@@ -406,6 +406,62 @@ fn set_value(target: &Object, key: &str, value: &JsValue) -> Result<(), JsValue>
     Ok(())
 }
 
+// -- RECOVER-10: Structured readback snapshot ----------------------------
+
+/// [LAW:single-enforcer] One canonical readback snapshot type for all
+/// GPU-to-host observability data (indirect args + instance probe).
+#[derive(Clone, Debug)]
+pub struct ReadbackSnapshot {
+    pub frame_count: u64,
+    pub captured_at_ms: f64,
+    pub indirect_args: Vec<IndirectArgsRecord>,
+    pub instance_probe_values: Vec<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IndirectArgsRecord {
+    pub index_count: u32,
+    pub instance_count: u32,
+    pub first_index: u32,
+    pub base_vertex: i32,
+    pub first_instance: u32,
+}
+
+impl ReadbackSnapshot {
+    pub fn to_js_value(&self) -> Result<JsValue, JsValue> {
+        let payload = Object::new();
+        set_number(&payload, "frameCount", self.frame_count as f64)?;
+        set_number(&payload, "capturedAtMs", self.captured_at_ms)?;
+        let indirect_args_js = serialize_indirect_args_records(&self.indirect_args)?;
+        set_value(&payload, "indirectArgs", &indirect_args_js)?;
+        let probe_js = serialize_f32_array(&self.instance_probe_values);
+        set_value(&payload, "instanceProbeValues", &probe_js)?;
+        Ok(payload.into())
+    }
+}
+
+fn serialize_indirect_args_records(records: &[IndirectArgsRecord]) -> Result<JsValue, JsValue> {
+    let array = Array::new();
+    for record in records {
+        let object = Object::new();
+        set_number(&object, "indexCount", record.index_count as f64)?;
+        set_number(&object, "instanceCount", record.instance_count as f64)?;
+        set_number(&object, "firstIndex", record.first_index as f64)?;
+        set_number(&object, "baseVertex", record.base_vertex as f64)?;
+        set_number(&object, "firstInstance", record.first_instance as f64)?;
+        array.push(&object.into());
+    }
+    Ok(array.into())
+}
+
+fn serialize_f32_array(values: &[f32]) -> JsValue {
+    let array = js_sys::Float32Array::new_with_length(values.len() as u32);
+    for (i, &v) in values.iter().enumerate() {
+        array.set_index(i as u32, v);
+    }
+    array.into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::TimingAggregator;

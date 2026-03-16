@@ -205,6 +205,21 @@ pub fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
     })
 }
 
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+// Data is a Uint32Array: [0]=width, [1]=height, [2..]=packed RGBA pixels.
+#[wasm_bindgen]
+pub fn upload_atlas_data(data: js_sys::Uint32Array) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before upload_atlas_data")
+        })?;
+        let words = data.to_vec();
+        engine.upload_atlas_data(&words);
+        Ok(())
+    })
+}
+
 #[wasm_bindgen]
 pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
@@ -240,6 +255,22 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
             // [LAW:single-enforcer] JS serialization of scheduler observability
             // packets is owned by telemetry.rs so this boundary stays thin.
             return packet.to_js_value();
+        }
+        Ok(JsValue::NULL)
+    })
+}
+
+// [RECOVER-10] [LAW:single-enforcer] One polling boundary for structured
+// readback data (indirect args + instance probe), mirroring telemetry pattern.
+#[wasm_bindgen]
+pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
+    ENGINE.with(|engine_cell| {
+        let engine_ref = engine_cell.borrow();
+        let engine = engine_ref.as_ref().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before take_readback_snapshot")
+        })?;
+        if let Some(snapshot) = engine.take_readback_snapshot() {
+            return snapshot.to_js_value();
         }
         Ok(JsValue::NULL)
     })

@@ -1,5 +1,6 @@
 import type { FrontendOptions } from '../compiler/frontend';
 import type { CompileResult } from '../compiler/compile';
+import { fetchNagaShimWasmBytes } from '../compiler/wasm/naga-shim-asset';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import type { Patch } from '../graph';
@@ -102,12 +103,27 @@ export class CompileWorkerClient {
   private inFlight: InFlightRequest | null = null;
   private queued: InFlightRequest | null = null;
   private destroyed = false;
+  private cachedNagaShimBytes: Uint8Array | null = null;
+  private nagaShimBytesPromise: Promise<Uint8Array> | null = null;
 
-  private buildPayload(inFlight: InFlightRequest): CompileWorkerRequest {
+  private async cloneNagaShimWasmBytes(): Promise<ArrayBuffer> {
+    if (this.cachedNagaShimBytes) {
+      return this.cachedNagaShimBytes.slice().buffer;
+    }
+    if (!this.nagaShimBytesPromise) {
+      this.nagaShimBytesPromise = fetchNagaShimWasmBytes().then((bytes) => new Uint8Array(bytes));
+    }
+    const cachedBytes = await this.nagaShimBytesPromise;
+    this.cachedNagaShimBytes = cachedBytes;
+    return cachedBytes.slice().buffer;
+  }
+
+  private async buildPayload(inFlight: InFlightRequest): Promise<CompileWorkerRequest> {
     return {
       kind: 'compile',
       requestId: inFlight.requestId,
       patchRevision: inFlight.request.patchRevision,
+      nagaShimWasmBytes: await this.cloneNagaShimWasmBytes(),
       serializedPatch: serializePatch(inFlight.request.patch, 0),
       // [LAW:single-enforcer] Worker boundary sanitizes options to plain data.
       frontendOptions: sanitizeFrontendOptions(inFlight.request.frontendOptions),
@@ -117,9 +133,13 @@ export class CompileWorkerClient {
   private startRequest(inFlight: InFlightRequest): void {
     const worker = this.ensureWorker();
     this.inFlight = inFlight;
+    void this.dispatchRequest(worker, inFlight);
+  }
 
+  private async dispatchRequest(worker: Worker, inFlight: InFlightRequest): Promise<void> {
     try {
-      worker.postMessage(this.buildPayload(inFlight));
+      const payload = await this.buildPayload(inFlight);
+      worker.postMessage(payload, [payload.nagaShimWasmBytes]);
     } catch (err) {
       if (this.inFlight?.requestId === inFlight.requestId) {
         this.inFlight = null;

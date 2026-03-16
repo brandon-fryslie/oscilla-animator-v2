@@ -7,7 +7,7 @@ The current runtime is not "still mostly CPU". The simulation/update path is alr
 1. CPU still materializes shape payloads and draw-prep source data.
 2. CPU still expands `ShapeBank` records into classic vertex/index buffers.
 3. The render pass still consumes those realized mesh buffers instead of pulling geometry from canonical GPU-owned shape data.
-4. Some supporting contracts around arena headers, taxonomy, observability, and text are still behind the spec.
+4. Some supporting contracts around arena headers, taxonomy, observability, and post-core class expansion are still behind the spec.
 
 // [LAW:one-source-of-truth] Every migration topic below is framed around restoring one canonical GPU-owned representation instead of maintaining CPU mirrors.
 // [LAW:dataflow-not-control-flow] The target architecture keeps the same frame stages every frame; variability lives in buffer contents, not optional CPU preparation branches.
@@ -35,7 +35,7 @@ The spec target is:
 - [08 - Arena Header And Uniform Ownership](./08-Arena-Header-And-Uniform-Ownership.md)
 - [09 - Shape Taxonomy And Draw Mode Classification](./09-Shape-Taxonomy-And-Draw-Mode-Classification.md)
 - [10 - Observability And Readback](./10-Observability-And-Readback.md)
-- [11 - Type 5 Text Pipeline](./11-Type-5-Text-Pipeline.md)
+- [11 - Type 2 Parametric Foundation](./11-Type-2-Parametric-Foundation.md)
 
 ## Scope note
 
