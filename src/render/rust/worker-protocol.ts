@@ -26,6 +26,7 @@ export function computeRustRendererSinkTableWordCapacity(config: RustRendererBoo
 export interface RustRendererBootstrapMessage {
   readonly type: 'BOOTSTRAP';
   readonly canvas: OffscreenCanvas;
+  readonly rendererWasmBytes: ArrayBuffer;
   readonly sharedInput: SharedArrayBuffer;
   readonly sharedShapeBank: SharedArrayBuffer;
   readonly sharedSinkTable: SharedArrayBuffer;

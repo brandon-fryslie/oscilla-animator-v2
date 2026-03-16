@@ -94,7 +94,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   }
   bootstrapInFlight = true;
   try {
-    await initRustRendererWasm();
+    await initRustRendererWasm(message.rendererWasmBytes);
     await initRustRendererEngine(message.canvas, message.config);
     attachRustRendererSharedInput(message.sharedInput);
     attachRustRendererSharedShapeBank(message.sharedShapeBank);

@@ -31,6 +31,7 @@ import {
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
+import { fetchRustRendererWasmBytes } from '../wasm/renderer-wasm-asset';
 import {
   extractPassDebugConstants,
   formatWgslWithLineNumbers,
@@ -1465,9 +1466,11 @@ export class WebGPURenderer {
     sharedSinkTable: SharedArrayBuffer,
     config: RustRendererBootstrapConfig,
   ): Promise<void> {
+    const rendererWasmBytes = await fetchRustRendererWasmBytes();
     const message: RustRendererWorkerInboundMessage = {
       type: 'BOOTSTRAP',
       canvas: offscreenCanvas,
+      rendererWasmBytes,
       sharedInput,
       sharedShapeBank,
       sharedSinkTable,
@@ -1478,7 +1481,7 @@ export class WebGPURenderer {
       successType: 'BOOTSTRAP_SUCCESS',
       context: 'bootstrap',
       dispatch: () => {
-        this.worker.postMessage(message, [offscreenCanvas]);
+        this.worker.postMessage(message, [offscreenCanvas, rendererWasmBytes]);
       },
     });
     this.bootstrapped = true;

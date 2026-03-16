@@ -63,6 +63,7 @@ export interface CompileWorkerRequest {
   readonly kind: 'compile';
   readonly requestId: number;
   readonly patchRevision: number;
+  readonly nagaShimWasmBytes: ArrayBuffer;
   /**
    * Serialized patch payload.
    * [LAW:single-enforcer] Worker message boundary is the single clone-safety boundary.
