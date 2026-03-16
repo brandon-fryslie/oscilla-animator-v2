@@ -950,13 +950,14 @@ function classifyShapeForRenderStep(
     );
   }
 
-  // // [LAW:one-type-per-behavior] All current shapes are Type 1 Rigid:
-  // path-based closed topology with indexed draw, or path-based open topology
-  // with non-indexed draw. Non-path topologies also classify as Type 1 Rigid
-  // (non-indexed). Future shape classes (parametric, ribbon, SDF, text) will
-  // add new classification branches here.
-  const drawMode: DrawPrepSinkIR['drawMode'] =
-    Array.isArray(topology.verbs) && topology.closed ? 'indexed' : 'nonIndexed';
+  // [LAW:one-type-per-behavior] All current shapes are Type 1 Rigid and use
+  // non-indexed draws with GPU vertex pulling. The vertex shader generates
+  // triangle fan geometry from canonical ShapeBank topology data. Future shape
+  // classes (parametric, ribbon, SDF, text) will add new classification
+  // branches here.
+  // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
+  // to nonIndexed (GPU vertex pulling from topologyBank).
+  const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
 
   return { drawMode, shapeClass: ShapeClass.Type1Rigid };
 }

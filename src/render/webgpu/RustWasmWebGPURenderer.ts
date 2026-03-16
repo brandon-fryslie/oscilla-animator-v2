@@ -1048,19 +1048,17 @@ export class WebGPURenderer {
   /**
    * Seam entry point for shapes classified as shapeBankDirect.
    *
-   * RECOVER-03 establishes this call site in the active render path.
-   * RECOVER-04 will implement direct ShapeBank topology consumption here,
-   * replacing the worker CPU mesh realization for Type 1 Rigid shapes.
-   *
-   * Currently both direct and legacy routes proceed through the same
-   * SharedArrayBuffer copy path. This method is the exact integration point
-   * that RECOVER-04 will modify.
+   * RECOVER-04: Type 1 Rigid shapes now use GPU vertex pulling from the
+   * topology storage buffer. The uber shader reads control points directly
+   * from topologyBank — no CPU mesh realization needed.
    */
   private handleDirectGeometryRoute(_geometry: ShapeBankDirectGeometry): void {
-    // RECOVER-04: implement direct ShapeBank topology consumption here.
-    // The geometry parameter carries canonical header fields (shapeWordOffset,
-    // shapeClass, topologyMode, vertexCount, paramBlockOffset, paramBlockWords)
-    // needed to set up direct vertex pulling from the topology storage buffer.
+    // [RECOVER-04] Direct ShapeBank topology consumption is active.
+    // Vertex pulling happens entirely in the uber shader — the shader reads
+    // control points from topologyBank at paramBlockOffset and generates
+    // triangle fan geometry from @builtin(vertex_index). No JS-side geometry
+    // work is needed; this callback exists for route dispatch observability
+    // and as the integration point for future per-shape GPU resource management.
   }
 
   private throwIfFatalError(): void {

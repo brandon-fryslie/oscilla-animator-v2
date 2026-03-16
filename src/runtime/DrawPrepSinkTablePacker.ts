@@ -216,12 +216,10 @@ interface DrawCommandFields {
 /**
  * Resolve draw command fields from canonical ShapeBank header.
  *
- * // [LAW:one-source-of-truth] Only canonical header fields (indexCount,
- * // vertexCount, materialClass) are read here. The geometry-offset fields
- * // (firstIndex, firstVertex, baseVertex) are zero in the JS-side ShapeBank
- * // because the Rust worker derives realized offsets separately. These zero
- * // values are the correct canonical state — the GPU draw-prep compute shader
- * // will eventually derive real offsets from GPU-side state (RECOVER-06).
+ * // [LAW:one-source-of-truth] Draw command count is derived from canonical
+ * // header fields only. For non-indexed vertex-pulled closed shapes, the
+ * // count is the triangle fan vertex count (indexCount = (vertexCount-2)*3).
+ * // For open shapes, it is raw vertexCount.
  */
 function resolveDrawCommandFields(
   state: RuntimeState,
@@ -232,16 +230,21 @@ function resolveDrawCommandFields(
   if (sink.drawMode === 'indexed') {
     return {
       count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
-      // firstIndex is 0 in canonical JS-side header (realized offsets are worker-derived).
       first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
       baseVertex: shapeHeader.baseVertex | 0,
       materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
     };
   }
+  // [RECOVER-04] Non-indexed vertex pulling: closed shapes use triangle fan
+  // vertex count (indexCount = (vertexCount-2)*3), open shapes use raw vertexCount.
+  // The GPU vertex shader generates triangle fan geometry from vertex_index.
+  const isClosed = (shapeHeader.flags & 1) !== 0;
+  const count = isClosed && shapeHeader.indexCount > 0
+    ? shapeHeader.indexCount
+    : shapeHeader.vertexCount;
   return {
-    count: assertFiniteUint32(shapeHeader.vertexCount, `nonIndexed.count sinkIndex=${sink.sinkIndex}`),
-    // firstVertex is 0 in canonical JS-side header (realized offsets are worker-derived).
-    first: assertFiniteUint32(shapeHeader.firstVertex, `nonIndexed.first sinkIndex=${sink.sinkIndex}`),
+    count: assertFiniteUint32(count, `nonIndexed.count sinkIndex=${sink.sinkIndex}`),
+    first: 0,
     baseVertex: 0,
     materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
   };

@@ -549,23 +549,11 @@ function __wbg_get_imports() {
         __wbg_setBindGroup_e7493a4d990b460a: function(arg0, arg1, arg2) {
             arg0.setBindGroup(arg1 >>> 0, arg2);
         },
-        __wbg_setIndexBuffer_4fb98e6d19bb7f33: function(arg0, arg1, arg2, arg3, arg4) {
-            arg0.setIndexBuffer(arg1, __wbindgen_enum_GpuIndexFormat[arg2], arg3, arg4);
-        },
-        __wbg_setIndexBuffer_7fdf61bb296c38e7: function(arg0, arg1, arg2, arg3) {
-            arg0.setIndexBuffer(arg1, __wbindgen_enum_GpuIndexFormat[arg2], arg3);
-        },
         __wbg_setPipeline_0c34cc40ab8d6499: function(arg0, arg1) {
             arg0.setPipeline(arg1);
         },
         __wbg_setPipeline_323a115b52180cad: function(arg0, arg1) {
             arg0.setPipeline(arg1);
-        },
-        __wbg_setVertexBuffer_e32a2441b1f7bfa3: function(arg0, arg1, arg2, arg3, arg4) {
-            arg0.setVertexBuffer(arg1 >>> 0, arg2, arg3, arg4);
-        },
-        __wbg_setVertexBuffer_f90b4b03dde32ab1: function(arg0, arg1, arg2, arg3) {
-            arg0.setVertexBuffer(arg1 >>> 0, arg2, arg3);
         },
         __wbg_set_7eaa4f96924fd6b3: function() { return handleError(function (arg0, arg1, arg2) {
             const ret = Reflect.set(arg0, arg1, arg2);
@@ -1079,7 +1067,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 19, function: Function { arguments: [F64], shim_idx: 20, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 24, function: Function { arguments: [F64], shim_idx: 25, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h22c5c9496e43279b, wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22);
             return ret;
         },

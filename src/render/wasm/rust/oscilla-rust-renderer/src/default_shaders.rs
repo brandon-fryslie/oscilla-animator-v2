@@ -266,6 +266,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+// [RECOVER-04] Vertex-pulling uber shader. Reads control-point positions
+// directly from topologyBank (canonical ShapeBank data) instead of a
+// CPU-realized vertex buffer. Triangle fan geometry is generated
+// algorithmically from @builtin(vertex_index).
 pub const DEFAULT_UBER_SHADER_WGSL: &str = r#"
 struct GlobalUniforms {
   view_proj: mat4x4<f32>,
@@ -283,6 +287,11 @@ struct InstanceData {
 @group(0) @binding(0) var<uniform> global: GlobalUniforms;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
+
+// ShapeBankHeaderWord offsets (must match TypeScript ShapeBankHeaderWord enum)
+const SHAPE_WORD_FLAGS: u32 = 2u;
+const SHAPE_WORD_PARAM_BLOCK_OFFSET: u32 = 9u;
+const SHAPE_FLAG_CLOSED: u32 = 1u;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -313,14 +322,30 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   );
 }
 
+// [RECOVER-04] Vertex pulling: positions are read from topologyBank at
+// the shape's paramBlockOffset. Triangle fan is generated from vertex_index.
+// No vertex buffer is bound.
 @vertex fn vs_main(
-  @location(0) localPos: vec2<f32>,
   @builtin(instance_index) instanceIndex: u32,
+  @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
   let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
-  let topologyFlags = topologyBank[topologyWordOffset + 3u];
-  let closedMask = select(0.0, 1.0, (topologyFlags & 1u) != 0u);
+  let flags = topologyBank[topologyWordOffset + SHAPE_WORD_FLAGS];
+  let isClosed = (flags & SHAPE_FLAG_CLOSED) != 0u;
+  let paramBlockOffset = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_OFFSET];
+
+  // [LAW:dataflow-not-control-flow] Both fan and sequential control-point
+  // indices are computed; the flags data selects which one is used.
+  let tri = vertexIndex / 3u;
+  let loc = vertexIndex % 3u;
+  let fanCpIndex = select(tri + loc, 0u, loc == 0u);
+  let cpIndex = select(vertexIndex, fanCpIndex, isClosed);
+
+  let xBits = topologyBank[paramBlockOffset + cpIndex * 2u];
+  let yBits = topologyBank[paramBlockOffset + cpIndex * 2u + 1u];
+  let pulledX = bitcast<f32>(xBits);
+  let pulledY = bitcast<f32>(yBits);
 
   let rawCenterX = inst.transform0.x;
   let rawCenterY = inst.transform0.y;
@@ -342,7 +367,7 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
     vec4<f32>(centerX, centerY, 0.0, 1.0),
   );
 
-  let worldPos = model * vec4<f32>(localPos.x, localPos.y, 0.0, 1.0);
+  let worldPos = model * vec4<f32>(pulledX, pulledY, 0.0, 1.0);
 
   var out: VertexOutput;
   out.position = global.view_proj * worldPos;
@@ -356,7 +381,7 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
   let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
-  out.color = vec4<f32>(safeRgb, safeA) * (1.0 + closedMask * 0.0);
+  out.color = vec4<f32>(safeRgb, safeA);
   return out;
 }
 
