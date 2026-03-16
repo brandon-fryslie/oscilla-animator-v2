@@ -17,12 +17,23 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 ## Shared Rules
 
 1. Loop memory lives only in:
-   - the active ticket body and comments in `lit`
+   - the active ticket body in `lit`
+   - evaluator note files in `.codex/webgpu-loop/`
    - git history and the current worktree
 2. The active leaf ticket plus cited docs/specs outrank everything else.
 3. Evaluator guidance is steering only. It cannot widen scope or override the ticket/spec.
 4. Work on exactly one `RECOVER-*` leaf ticket per run.
 5. The worktree must be clean at the end of every run.
+
+## Filesystem Notes
+
+`// [LAW:one-source-of-truth] Evaluator note files are the canonical loop-memory artifact for run-to-run steering.`
+
+Use one file per ticket:
+
+- `.codex/webgpu-loop/<ticket-id>.md`
+
+The evaluator owns writing that file. The implementer reads it when present.
 
 ## Dirty Tree Normalization
 
@@ -62,7 +73,7 @@ The evaluator:
 
 ## Evaluator Note
 
-The evaluator writes a ticket comment whose first line is exactly:
+The evaluator writes `.codex/webgpu-loop/<ticket-id>.md` whose first line is exactly:
 
 `Evaluator Note`
 
@@ -92,6 +103,8 @@ Allowed `next_action:` values:
 - `continue-active-ticket`
 - `revise-active-ticket`
 - `stop-blocked`
+
+If tracker writes work, the evaluator may also mirror a summary to the ticket, but the filesystem note is the canonical steering artifact.
 
 ## Gates
 
