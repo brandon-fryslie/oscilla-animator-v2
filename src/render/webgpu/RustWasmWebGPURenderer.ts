@@ -1,5 +1,11 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
+import {
+  dispatchGeometryRoutes,
+  type GeometryRoute,
+  type GeometryRouteDispatchResult,
+  type ShapeBankDirectGeometry,
+} from './ShapeBankGeometrySeam';
 import type {
   DrawPrepRenderContract,
   MatrixViewportContract,
@@ -491,6 +497,9 @@ export class WebGPURenderer {
   private executionState: WebGPURendererExecutionState = 'active';
   private circuitBreakerTimer: ReturnType<typeof setInterval> | null = null;
   private circuitBreakerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+  // -- Geometry route dispatch (RECOVER-03 seam) --
+  private latestGeometryRoutes: ReadonlyMap<number, GeometryRoute> = new Map();
+  private directRouteDispatchCount = 0;
 
   private reportEngineError(
     source: string,
@@ -831,6 +840,10 @@ export class WebGPURenderer {
     }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
+    // [LAW:one-source-of-truth] Geometry route classification runs in the
+    // active render path after ShapeBank data is synced to shared memory.
+    // RECOVER-03 establishes this seam; RECOVER-04 implements the direct path.
+    this.classifyAndDispatchGeometryRoutes(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
@@ -981,6 +994,26 @@ export class WebGPURenderer {
     return this.latestSinkTableSample;
   }
 
+  /**
+   * Geometry routes classified during the most recent render() call.
+   *
+   * Returns the route map (shape word offset → GeometryRoute) from the latest
+   * frame. Empty map before the first render().
+   */
+  getLatestGeometryRoutes(): ReadonlyMap<number, GeometryRoute> {
+    return this.latestGeometryRoutes;
+  }
+
+  /**
+   * Cumulative count of shapeBankDirect geometry dispatches across all frames.
+   *
+   * This counter proves the dispatch seam is reachable from the active render
+   * path. It increments once per shapeBankDirect shape per render() call.
+   */
+  getDirectRouteDispatchCount(): number {
+    return this.directRouteDispatchCount;
+  }
+
   // [LAW:single-enforcer] GPU fault callback is set once by RuntimeService;
   // renderer handlers invoke it for all GPU error/device-lost classifications.
   setGpuFaultCallback(callback: GpuFaultCallback | null): void {
@@ -989,6 +1022,45 @@ export class WebGPURenderer {
 
   private emitGpuFault(fault: GpuFault): void {
     this.gpuFaultCallback?.(fault);
+  }
+
+  // -- Geometry route dispatch (RECOVER-03 seam) --
+
+  /**
+   * Classify geometry routes for the current ShapeBank and dispatch
+   * shapeBankDirect routes through the seam handler.
+   *
+   * Called from render() every frame after ShapeBank data is synced to shared
+   * memory. Both direct and legacy routes currently proceed through the same
+   * SharedArrayBuffer → worker path. The branch exists so RECOVER-04 can
+   * implement direct geometry consumption for Type 1 Rigid shapes without
+   * restructuring the render method.
+   */
+  private classifyAndDispatchGeometryRoutes(shapeBank: RenderShapeBankSource): void {
+    const result = dispatchGeometryRoutes(
+      shapeBank,
+      (geometry) => this.handleDirectGeometryRoute(geometry),
+    );
+    this.latestGeometryRoutes = result.routes;
+    this.directRouteDispatchCount += result.directDispatchCount;
+  }
+
+  /**
+   * Seam entry point for shapes classified as shapeBankDirect.
+   *
+   * RECOVER-03 establishes this call site in the active render path.
+   * RECOVER-04 will implement direct ShapeBank topology consumption here,
+   * replacing the worker CPU mesh realization for Type 1 Rigid shapes.
+   *
+   * Currently both direct and legacy routes proceed through the same
+   * SharedArrayBuffer copy path. This method is the exact integration point
+   * that RECOVER-04 will modify.
+   */
+  private handleDirectGeometryRoute(_geometry: ShapeBankDirectGeometry): void {
+    // RECOVER-04: implement direct ShapeBank topology consumption here.
+    // The geometry parameter carries canonical header fields (shapeWordOffset,
+    // shapeClass, topologyMode, vertexCount, paramBlockOffset, paramBlockWords)
+    // needed to set up direct vertex pulling from the topology storage buffer.
   }
 
   private throwIfFatalError(): void {

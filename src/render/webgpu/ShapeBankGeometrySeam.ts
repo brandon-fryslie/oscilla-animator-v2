@@ -167,3 +167,47 @@ export function hasDirectRoutes(routes: Map<number, GeometryRoute>): boolean {
   }
   return false;
 }
+
+// =============================================================================
+// Geometry Route Dispatch
+// =============================================================================
+
+/**
+ * Dispatch result returned from geometry route classification + dispatch.
+ */
+export interface GeometryRouteDispatchResult {
+  /** All classified geometry routes by shape word offset. */
+  readonly routes: ReadonlyMap<number, GeometryRoute>;
+  /** Number of shapes dispatched to the direct (shapeBankDirect) handler. */
+  readonly directDispatchCount: number;
+}
+
+/**
+ * Classify geometry routes for all shapes in a ShapeBank source and dispatch
+ * each shapeBankDirect route through the provided callback.
+ *
+ * This is the integration function that the active render path calls every
+ * frame. The callback is the seam entry point where RECOVER-04 will implement
+ * direct ShapeBank topology consumption, bypassing worker CPU mesh realization
+ * for Type 1 Rigid shapes.
+ *
+ * // [LAW:one-source-of-truth] Route classification and dispatch iteration
+ * // happen in one function so the renderer cannot classify without dispatching
+ * // or dispatch without classifying.
+ */
+export function dispatchGeometryRoutes(
+  source: RenderShapeBankSource,
+  onDirectRoute: (geometry: ShapeBankDirectGeometry) => void,
+): GeometryRouteDispatchResult {
+  const routes = classifyAllGeometryRoutes(source);
+  let directDispatchCount = 0;
+
+  for (const route of routes.values()) {
+    if (route.kind === 'shapeBankDirect') {
+      onDirectRoute(route.geometry);
+      directDispatchCount++;
+    }
+  }
+
+  return { routes, directDispatchCount };
+}
