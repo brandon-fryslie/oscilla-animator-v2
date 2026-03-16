@@ -113,11 +113,12 @@ Every run should be explainable as gates:
 
 1. source/ticket alignment
 2. design or verdict alignment
-3. verification quality: checks and tests prove the intended behavior
-4. static verification
-5. runtime/readback verification when relevant
-6. ownership/spec alignment
-7. clean closeout
+3. live-path alignment: seam/cutover tickets alter the active path required by the ticket, not only helper code
+4. verification quality: checks and tests prove the intended behavior
+5. static verification
+6. runtime/readback verification when relevant
+7. ownership/spec alignment
+8. clean closeout
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 

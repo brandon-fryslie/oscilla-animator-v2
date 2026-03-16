@@ -54,6 +54,7 @@ Check:
 3. verification can be replayed locally
 4. the tests and checks actually verify the intended behavior instead of implementation shape only
 5. the change did not introduce dual authority, fallback ownership, or unrelated churn
+6. seam or cutover tickets modify the live path required by the ticket rather than only adding helper, classifier, or test-only code
 
 Re-run the needed proof:
 
