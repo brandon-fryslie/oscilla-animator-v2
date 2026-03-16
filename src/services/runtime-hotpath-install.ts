@@ -125,9 +125,16 @@ function buildCanonicalTopologyHeaders(
   for (const { target, expr } of shapeRefSteps) {
     const topology = getProgramTopology(program, expr.topologyId);
     const isPath = isPathTopology(topology);
-    const vertexCount = isPath ? topology.totalControlPoints : 0;
-    const indexCount = isPath && topology.closed && vertexCount >= 3
-      ? (vertexCount - 2) * 3
+    // [RECOVER-04] Fan triangulation: the vertex shader generates triangle fans
+    // from @builtin(vertex_index). For closed paths with N control points, the
+    // fan produces (N-2) triangles × 3 vertices each. For open paths, vertices
+    // are consumed sequentially (triangle list from CPs).
+    const cpCount = isPath ? topology.totalControlPoints : 0;
+    const vertexCount = isPath && topology.closed && cpCount >= 3
+      ? (cpCount - 2) * 3
+      : cpCount;
+    const indexCount = isPath && topology.closed && cpCount >= 3
+      ? (cpCount - 2) * 3
       : 0;
     // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly
     // from compile-time topology metadata (bit0 = closed path).

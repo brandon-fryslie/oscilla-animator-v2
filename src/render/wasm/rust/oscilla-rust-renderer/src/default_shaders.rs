@@ -428,7 +428,9 @@ fn vs_type5(
   @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
-  let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
+  // [RECOVER-04] Assembly shader stores shape_word_offset via bitcast<f32>(u32).
+  // Recover the original u32 bit pattern — numeric f32→u32 truncates denorms to 0.
+  let topologyWordOffset = bitcast<u32>(inst.transform1.z);
 
   // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
