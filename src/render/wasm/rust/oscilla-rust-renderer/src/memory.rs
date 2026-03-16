@@ -44,9 +44,15 @@ impl Iterator for BufferClearPlan {
     }
 }
 
+// [LAW:one-source-of-truth] FrameHeader is the single canonical frame-state
+// type. Arena header zone (offset 0..ARENA_HEADER_FLOATS) is the authoritative
+// home; the uniform buffer is derived transport for GPU binding convenience.
+pub const ARENA_HEADER_FLOATS: usize = 64;
+pub const ARENA_HEADER_BYTES: usize = ARENA_HEADER_FLOATS * std::mem::size_of::<f32>();
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct GlobalUniforms {
+pub struct FrameHeader {
     pub view_proj: [[f32; 4]; 4],
     pub resolution: [f32; 2],
     pub time_seconds: f32,
@@ -63,7 +69,7 @@ pub struct SlotDescriptor {
 }
 
 pub struct GpuMemoryArena {
-    pub uniforms: GlobalUniforms,
+    pub frame_header: FrameHeader,
     pub slot_descriptors: Vec<SlotDescriptor>,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
@@ -128,14 +134,16 @@ impl GpuMemoryArena {
         max_particles: usize,
         max_shapes: usize,
     ) -> Self {
+        // [LAW:one-source-of-truth] Uniform buffer is derived transport that
+        // mirrors the canonical arena header. See publish_frame_header().
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("GlobalUniforms"),
-            size: std::mem::size_of::<GlobalUniforms>() as u64,
+            label: Some("FrameHeader.UniformTransport"),
+            size: std::mem::size_of::<FrameHeader>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("GlobalUniforms.BindGroup"),
+            label: Some("FrameHeader.UniformTransport.BindGroup"),
             layout: uniform_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -384,7 +392,7 @@ impl GpuMemoryArena {
         ];
 
         Self {
-            uniforms: GlobalUniforms::default(),
+            frame_header: FrameHeader::default(),
             slot_descriptors: Vec::with_capacity(64),
             uniform_buffer,
             uniform_bind_group,
@@ -415,9 +423,24 @@ impl GpuMemoryArena {
         }
     }
 
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, next_uniforms: GlobalUniforms) {
-        self.uniforms = next_uniforms;
-        queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
+    // [LAW:one-source-of-truth] Frame header is written to the arena's read
+    // buffer at offset 0 (canonical Zone 1 home) and mirrored to the uniform
+    // buffer (derived transport for GPU binding convenience).
+    // [LAW:single-enforcer] This method is the single write boundary for
+    // per-frame state publication to GPU memory.
+    pub fn publish_frame_header(&mut self, queue: &wgpu::Queue, header: FrameHeader) {
+        self.frame_header = header;
+        // Canonical write: arena header zone (offset 0) of the read buffer.
+        // The compiler reserves ARENA_HEADER_FLOATS at the start of every
+        // arena buffer (storage-class.ts DEFAULT_ARENA_ALIGNMENT_POLICY).
+        queue.write_buffer(
+            &self.compiler_arena_buffers[self.ping_pong_index],
+            0,
+            bytes_of(&self.frame_header),
+        );
+        // Derived transport: uniform buffer mirrors the arena header so
+        // existing shader bindings (var<uniform>) continue to work.
+        queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.frame_header));
     }
 
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {

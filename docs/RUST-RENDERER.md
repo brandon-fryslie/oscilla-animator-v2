@@ -43,7 +43,7 @@ use std::mem;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct GlobalUniforms {
+pub struct FrameHeader {
     pub view_proj: [[f32; 4]; 4], // 64 bytes
     pub resolution: [f32; 2],     // 8 bytes
     pub time: f32,                // 4 bytes
@@ -110,7 +110,7 @@ impl GpuMemoryArena {
         // 1. Uniforms
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Global_Uniforms"),
-            size: mem::size_of::<GlobalUniforms>() as u64,
+            size: mem::size_of::<FrameHeader>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -306,7 +306,7 @@ impl ComputeDispatcher {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: None, // Can be strictly sized based on GlobalUniforms struct
+                    min_binding_size: None, // Can be strictly sized based on FrameHeader struct
                 },
                 count: None,
             }],
@@ -491,7 +491,7 @@ Before we write the Rust executor, you must understand what the Rust executor is
 
 ```wgsl
 // Group 0: Global Uniforms
-@group(0) @binding(0) var<uniform> global: GlobalUniforms;
+@group(0) @binding(0) var<uniform> frame_header: FrameHeader;
 
 // Group 1: The ShapeBank (SSBO Pulling)
 struct ShapeInstance {
