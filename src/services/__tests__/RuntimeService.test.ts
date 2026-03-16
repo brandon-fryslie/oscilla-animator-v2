@@ -15,7 +15,6 @@ vi.mock('../../render', async () => {
 import { RuntimeService } from '../RuntimeService';
 import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from '../compile-worker-protocol';
 import { RootStore } from '../../stores/RootStore';
-import type { GpuFault } from '../../render';
 
 function makePass(passId: string): CompiledGpuPassArtifact {
   return {
@@ -47,25 +46,22 @@ describe('RuntimeService', () => {
     hoisted.createWebGPURendererMock.mockReset();
   });
 
-  it('preserves the last-known-good GPU bundle when pipeline publication fails', async () => {
+  it('leaves the active renderer in place when pipeline publication fails', async () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
       renderer: ReturnType<typeof makeRendererStub>;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      lastKnownGoodGpuBundle: CompiledGpuArtifactBundle | null;
       publishRendererPipelines: (artifacts: {
         readonly backendResult: { readonly kind: 'ok' };
         readonly compiledGpuBundle: CompiledGpuArtifactBundle;
       }) => Promise<void>;
     };
-    const initialBundle = makeBundle('stable');
     const candidateBundle = makeBundle('candidate');
     const renderer = makeRendererStub();
     renderer.rebuildGpuPipelines.mockRejectedValue(new Error('reject install'));
     serviceAccess.renderer = renderer;
     serviceAccess.rendererExecutionState = 'active';
-    serviceAccess.lastKnownGoodGpuBundle = initialBundle;
 
     await expect(
       serviceAccess.publishRendererPipelines({
@@ -75,34 +71,26 @@ describe('RuntimeService', () => {
     ).rejects.toThrow('reject install');
 
     expect(renderer.rebuildGpuPipelines).toHaveBeenCalledWith(candidateBundle.passes);
-    expect(serviceAccess.lastKnownGoodGpuBundle).toBe(initialBundle);
+    expect(serviceAccess.renderer).toBe(renderer);
   });
 
-  it('rebuilds a fresh renderer from the last-known-good bundle after a fatal GPU fault', async () => {
+  it('disposes the renderer and preserves app state after a fatal GPU fault', async () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
-      arena: object | null;
-      canvas: HTMLCanvasElement | null;
       renderer: ReturnType<typeof makeRendererStub> | null;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      lastKnownGoodGpuBundle: CompiledGpuArtifactBundle | null;
-      rendererRecoveryPromise: Promise<void> | null;
-      installRendererHotpathPlanes: (nowMs: number) => void;
-      restartAnimationLoopAfterRecovery: () => void;
-      handleGpuFault: (fault: GpuFault) => void;
+      handleGpuFault: (fault: {
+        severity: 'fatal';
+        code: string;
+        message: string;
+        source: string;
+        recoverable: false;
+      }) => void;
     };
     const activeRenderer = makeRendererStub();
-    const recoveredRenderer = makeRendererStub();
-    const bundle = makeBundle('stable');
-    hoisted.createWebGPURendererMock.mockResolvedValue(recoveredRenderer);
-    serviceAccess.canvas = document.createElement('canvas');
-    serviceAccess.arena = {};
     serviceAccess.renderer = activeRenderer;
     serviceAccess.rendererExecutionState = 'active';
-    serviceAccess.lastKnownGoodGpuBundle = bundle;
-    serviceAccess.installRendererHotpathPlanes = vi.fn();
-    serviceAccess.restartAnimationLoopAfterRecovery = vi.fn();
     store.playback.play();
 
     serviceAccess.handleGpuFault({
@@ -112,16 +100,12 @@ describe('RuntimeService', () => {
       source: 'GPU_DRIVER',
       recoverable: false,
     });
-    await serviceAccess.rendererRecoveryPromise;
 
     expect(store.playback.isPlaying).toBe(false);
     expect(activeRenderer.setGpuFaultCallback).toHaveBeenCalledWith(null);
     expect(activeRenderer.dispose).toHaveBeenCalledTimes(1);
-    expect(hoisted.createWebGPURendererMock).toHaveBeenCalledTimes(1);
-    expect(recoveredRenderer.rebuildGpuPipelines).toHaveBeenCalledWith(bundle.passes);
-    expect(serviceAccess.renderer).toBe(recoveredRenderer);
-    expect(serviceAccess.rendererExecutionState).toBe('active');
-    expect(serviceAccess.installRendererHotpathPlanes).toHaveBeenCalledTimes(1);
-    expect(serviceAccess.restartAnimationLoopAfterRecovery).toHaveBeenCalledTimes(1);
+    expect(hoisted.createWebGPURendererMock).not.toHaveBeenCalled();
+    expect(serviceAccess.renderer).toBeNull();
+    expect(serviceAccess.rendererExecutionState).toBe('fatal');
   });
 });
