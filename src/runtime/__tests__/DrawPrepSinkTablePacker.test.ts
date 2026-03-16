@@ -140,17 +140,12 @@ function descriptorBaseWord(totalRecordCount: number, recordIndex: number): numb
     + recordIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
 }
 
-// [RECOVER-06] Tests verify static-only packer with arena-resolved shape word
+// [RECOVER-07] Tests verify static-only packer with compile-time shape word
 // offsets. Record fields except drawMode are zero. Descriptors carry shape word
-// offsets resolved from the arena.
+// offsets from the topology install stage (no arena round-trip).
 
-function makeTestArena(entries: Array<[offset: number, value: number]>): Float32Array {
-  const maxOffset = entries.reduce((max, [off]) => Math.max(max, off), 0);
-  const arena = new Float32Array(maxOffset + 1);
-  for (const [offset, value] of entries) {
-    arena[offset] = value;
-  }
-  return arena;
+function makeShapeWordOffsets(entries: Array<[slot: ValueSlot, wordOffset: number]>): ReadonlyMap<ValueSlot, number> {
+  return new Map(entries);
 }
 
 describe('packDrawPrepSinkTableV1 static metadata only', () => {
@@ -182,9 +177,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
-    const arena = makeTestArena([[0, 42], [80, 128]]);
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
 
-    const packed = packDrawPrepSinkTableV1(program, arena);
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
     expect(packed).not.toBeNull();
     const words = packed!.words;
 
@@ -232,9 +227,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
-    const arena = makeTestArena([[0, 42], [80, 128]]);
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
 
-    const packed = packDrawPrepSinkTableV1(program, arena);
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
     expect(packed).not.toBeNull();
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
@@ -290,9 +285,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
-    const arena = makeTestArena([[0, 42], [80, 128]]);
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
 
-    const packed = packDrawPrepSinkTableV1(program, arena);
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
     expect(packed).not.toBeNull();
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
@@ -306,7 +301,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     // Instance count metadata: static mode with count=2
     expect(words[descA + DrawPrepSinkDescriptorWord.InstanceCountMode]).toBe(0); // static
     expect(words[descA + DrawPrepSinkDescriptorWord.StaticInstanceCount]).toBe(2);
-    // [RECOVER-06] Shape word offset resolved from arena
+    // [RECOVER-07] Shape word offset from compile-time topology install
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeWordOffset]).toBe(42);
 
     const descB = descriptorBaseWord(totalRecords, 1);
@@ -316,7 +311,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     // Instance count metadata: static mode with count=3
     expect(words[descB + DrawPrepSinkDescriptorWord.InstanceCountMode]).toBe(0); // static
     expect(words[descB + DrawPrepSinkDescriptorWord.StaticInstanceCount]).toBe(3);
-    // [RECOVER-06] Shape word offset resolved from arena
+    // [RECOVER-07] Shape word offset from compile-time topology install
     expect(words[descB + DrawPrepSinkDescriptorWord.ShapeWordOffset]).toBe(128);
   });
 
@@ -334,7 +329,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       },
     } as unknown as CompiledProgramIR;
 
-    const packed = packDrawPrepSinkTableV1(program, new Float32Array(0));
+    const packed = packDrawPrepSinkTableV1(program, new Map());
     expect(packed).toBeNull();
   });
 
@@ -362,8 +357,8 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       sinks: [program.drawPrepProgram.sinks[0]],
     };
 
-    const arena = makeTestArena([[0, 16]]);
-    const packed = packDrawPrepSinkTableV1(program, arena);
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 16]]);
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
     expect(packed).not.toBeNull();
     // header(8) + records(1*8) + descriptors(1*26) = 42
     expect(packed!.wordCount).toBe(DRAW_PREP_SINK_TABLE_HEADER_WORDS + 1 * DRAW_PREP_SINK_TABLE_RECORD_WORDS + 1 * DRAW_PREP_SINK_DESCRIPTOR_WORDS);
