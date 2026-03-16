@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { registerAllBlocks } from '../../blocks/all';
 import { DemoStore } from '../DemoStore';
 import { GPU_BOOTSTRAP_DEMO_FILENAME } from '../../demo';
+import type { HclDemo } from '../../demo';
 
 registerAllBlocks();
 
@@ -10,6 +11,29 @@ describe('DemoStore bootstrap default', () => {
     const loadFromHCL = vi.fn();
     const store = new DemoStore({ loadFromHCL } as never);
 
+    store.loadDefault();
+
+    expect(store.currentFilename).toBe(GPU_BOOTSTRAP_DEMO_FILENAME);
+    expect(loadFromHCL).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not admit parse-invalid demos as GPU-verified defaults', () => {
+    const loadFromHCL = vi.fn();
+    const store = new DemoStore({ loadFromHCL } as never);
+    const demos: HclDemo[] = [
+      {
+        filename: 'broken.hcl',
+        name: 'Broken',
+        hcl: 'this is not valid hcl',
+      },
+      {
+        filename: GPU_BOOTSTRAP_DEMO_FILENAME,
+        name: 'Bootstrap',
+        hcl: store.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME)!.hcl,
+      },
+    ];
+
+    (store as { demos: readonly HclDemo[] }).demos = demos;
     store.loadDefault();
 
     expect(store.currentFilename).toBe(GPU_BOOTSTRAP_DEMO_FILENAME);

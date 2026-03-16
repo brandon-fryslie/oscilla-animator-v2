@@ -18,21 +18,26 @@ import {
   SHAPE_BANK_HEADER_WORDS,
   ShapeBankHeaderWord,
   createShapeBankHeaderV1,
+  iterateShapeBankRecords,
   writeShapeBankHeader,
 } from '../../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../../shapes/types';
 import type { RenderShapeBankSource } from '../WebGPUShapeBankManager';
 
 function createTestShapeBankSource(
-  shapeCount: number,
-  headers: Array<{ handle: number; header: ReturnType<typeof createShapeBankHeaderV1> }> = [],
+  requestedWords: number,
+  records: Array<{ handle: number; header: ReturnType<typeof createShapeBankHeaderV1>; payloadWords?: number[] }> = [],
 ): { data: Uint32Array; source: RenderShapeBankSource } {
-  const totalWords = shapeCount * SHAPE_BANK_HEADER_WORDS;
+  const totalWords = records.reduce((maxWords, { handle, header, payloadWords = [] }) => {
+    const recordWords = SHAPE_BANK_HEADER_WORDS + Math.max(header.paramBlockWords, payloadWords.length);
+    return Math.max(maxWords, handle + recordWords);
+  }, requestedWords);
   const data = new Uint32Array(totalWords);
   const topologyIdByHandle = new Uint32Array(totalWords);
 
-  for (const { handle, header } of headers) {
+  for (const { handle, header, payloadWords = [] } of records) {
     writeShapeBankHeader(data, handle, header);
+    data.set(payloadWords, handle + SHAPE_BANK_HEADER_WORDS);
   }
 
   return {
@@ -48,7 +53,7 @@ function createTestShapeBankSource(
 
 describe('classifyGeometryRoute', () => {
   it('classifies Type1Rigid as shapeBankDirect', () => {
-    const { data } = createTestShapeBankSource(1, [
+    const { data } = createTestShapeBankSource(SHAPE_BANK_HEADER_WORDS, [
       {
         handle: 0,
         header: createShapeBankHeaderV1({
@@ -92,7 +97,7 @@ describe('classifyGeometryRoute', () => {
   });
 
   it('reads canonical header fields only (not worker-derived offsets)', () => {
-    const { data } = createTestShapeBankSource(1, [
+    const { data } = createTestShapeBankSource(SHAPE_BANK_HEADER_WORDS, [
       {
         handle: 0,
         header: createShapeBankHeaderV1({
@@ -170,8 +175,8 @@ describe('classifyAllGeometryRoutes', () => {
       topologyMode: TopologyMode.Path,
       flags: 1,
       vertexCount: 3,
-      paramBlockOffset: 48,
-      paramBlockWords: 6,
+      paramBlockOffset: 0,
+      paramBlockWords: 0,
     }));
 
     // Shape 1: Unknown kind (legacy)
@@ -187,8 +192,8 @@ describe('classifyAllGeometryRoutes', () => {
       topologyMode: TopologyMode.Path,
       flags: 0,
       vertexCount: 6,
-      paramBlockOffset: 80,
-      paramBlockWords: 12,
+      paramBlockOffset: 0,
+      paramBlockWords: 0,
     }));
 
     const source: RenderShapeBankSource = {
@@ -228,6 +233,42 @@ describe('classifyAllGeometryRoutes', () => {
     expect(routes.size).toBe(1);
     expect(routes.has(0)).toBe(false);
     expect(routes.get(SHAPE_BANK_HEADER_WORDS)!.kind).toBe('shapeBankDirect');
+  });
+
+  it('advances across variable-length ShapeBank records by header plus param payload', () => {
+    const firstHandle = 0;
+    const secondHandle = SHAPE_BANK_HEADER_WORDS + 4;
+    const totalWords = secondHandle + SHAPE_BANK_HEADER_WORDS;
+    const { source } = createTestShapeBankSource(totalWords, [
+      {
+        handle: firstHandle,
+        header: createShapeBankHeaderV1({
+          kind: ShapeClass.Type1Rigid,
+          topologyMode: TopologyMode.Path,
+          vertexCount: 3,
+          paramBlockOffset: SHAPE_BANK_HEADER_WORDS,
+          paramBlockWords: 4,
+        }),
+        payloadWords: [1, 2, 3, 4],
+      },
+      {
+        handle: secondHandle,
+        header: createShapeBankHeaderV1({
+          kind: 99 as ShapeClass,
+          topologyMode: TopologyMode.NonPath,
+          vertexCount: 5,
+          paramBlockWords: 0,
+        }),
+      },
+    ]);
+
+    const handles = Array.from(iterateShapeBankRecords(source), (record) => record.handle);
+    expect(handles).toEqual([firstHandle, secondHandle]);
+
+    const routes = classifyAllGeometryRoutes(source);
+    expect(routes.size).toBe(2);
+    expect(routes.get(firstHandle)?.kind).toBe('shapeBankDirect');
+    expect(routes.get(secondHandle)?.kind).toBe('legacy');
   });
 });
 
@@ -271,15 +312,15 @@ describe('route utility functions', () => {
 
 describe('dispatchGeometryRoutes', () => {
   it('dispatches shapeBankDirect routes via callback', () => {
-    const { source } = createTestShapeBankSource(2, [
+    const { source } = createTestShapeBankSource(SHAPE_BANK_HEADER_WORDS * 2, [
       {
         handle: 0,
         header: createShapeBankHeaderV1({
           kind: ShapeClass.Type1Rigid,
           topologyMode: TopologyMode.Path,
           vertexCount: 3,
-          paramBlockOffset: 48,
-          paramBlockWords: 6,
+          paramBlockOffset: 0,
+          paramBlockWords: 0,
         }),
       },
       {
@@ -288,8 +329,8 @@ describe('dispatchGeometryRoutes', () => {
           kind: ShapeClass.Type1Rigid,
           topologyMode: TopologyMode.NonPath,
           vertexCount: 5,
-          paramBlockOffset: 80,
-          paramBlockWords: 10,
+          paramBlockOffset: 0,
+          paramBlockWords: 0,
         }),
       },
     ]);
@@ -305,7 +346,7 @@ describe('dispatchGeometryRoutes', () => {
   });
 
   it('does not dispatch legacy routes via callback', () => {
-    const { source } = createTestShapeBankSource(2, [
+    const { source } = createTestShapeBankSource(SHAPE_BANK_HEADER_WORDS * 2, [
       {
         handle: 0,
         header: createShapeBankHeaderV1({
@@ -333,7 +374,7 @@ describe('dispatchGeometryRoutes', () => {
   });
 
   it('dispatches only Type1Rigid in mixed bank', () => {
-    const { source } = createTestShapeBankSource(3, [
+    const { source } = createTestShapeBankSource(SHAPE_BANK_HEADER_WORDS * 3, [
       {
         handle: 0,
         header: createShapeBankHeaderV1({

@@ -12,8 +12,8 @@
  */
 
 import {
-  SHAPE_BANK_HEADER_WORDS,
   ShapeBankHeaderWord,
+  iterateShapeBankRecords,
 } from '../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../shapes/types';
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
@@ -119,25 +119,12 @@ export function classifyAllGeometryRoutes(
   source: RenderShapeBankSource,
 ): Map<number, GeometryRoute> {
   const routes = new Map<number, GeometryRoute>();
-
-  for (
-    let handle = 0;
-    handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr;
-    handle += SHAPE_BANK_HEADER_WORDS
-  ) {
-    // Skip empty headers (all zeros)
-    let hasPayload = false;
-    for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
-      if (source.data[handle + word] !== 0) {
-        hasPayload = true;
-        break;
-      }
-    }
-    if (!hasPayload) {
+  for (const record of iterateShapeBankRecords(source)) {
+    if (!record.headerHasPayload) {
       continue;
     }
 
-    routes.set(handle, classifyGeometryRoute(source.data, handle));
+    routes.set(record.handle, classifyGeometryRoute(source.data, record.handle));
   }
 
   return routes;

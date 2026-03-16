@@ -15,6 +15,13 @@ import { deserializePatchFromHCL } from '../patch-dsl';
 import { verifyGpuPatchCompatibility } from '../services/GpuPatchCompatibility';
 import type { PatchStore } from './PatchStore';
 
+function isVerifiedGpuDemo(hcl: string): boolean {
+  const parsed = deserializePatchFromHCL(hcl);
+  // [LAW:single-enforcer] DemoStore owns the default-demo admission boundary,
+  // so parse success and GPU-compatibility are enforced together here.
+  return parsed.errors.length === 0 && verifyGpuPatchCompatibility(parsed.patch).ok;
+}
+
 export class DemoStore {
   readonly demos: readonly HclDemo[] = hclDemos;
   currentFilename: string | null = null;
@@ -47,11 +54,8 @@ export class DemoStore {
    */
   loadDefault(): void {
     const preferredDemo = this.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME);
-    const verifiedDemo = this.demos.find((demo) => {
-      const parsed = deserializePatchFromHCL(demo.hcl);
-      return verifyGpuPatchCompatibility(parsed.patch).ok;
-    });
-    const defaultDemo = preferredDemo && verifyGpuPatchCompatibility(deserializePatchFromHCL(preferredDemo.hcl).patch).ok
+    const verifiedDemo = this.demos.find((demo) => isVerifiedGpuDemo(demo.hcl));
+    const defaultDemo = preferredDemo && isVerifiedGpuDemo(preferredDemo.hcl)
       ? preferredDemo
       : verifiedDemo
         ?? preferredDemo

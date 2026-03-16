@@ -138,6 +138,10 @@ describe('generateParametricTemplate', () => {
     // Last value is 1.0, which bitcasts to u32(0x3F800000)
     expect(u32View[4]).toBe(0x3F800000);
   });
+
+  it('rejects non-positive resolutions at the template boundary', () => {
+    expect(() => generateParametricTemplate(0)).toThrow(/resolution must be an integer >= 1/);
+  });
 });
 
 // ---------------------------------------------------------------------------

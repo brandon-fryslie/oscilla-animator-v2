@@ -22,15 +22,17 @@ import { createArena } from './ArenaValueStore';
  *
  * ## Canonical vs. Realized Fields
  *
- * Canonical fields (words 0-3, 7, 9-15) are written once by
+ * Canonical fields (words 0-4, 7, 9-15) are written once by
  * `ValueExprMaterializer` and are immutable after materialization.
  * They describe declarative topology metadata and parameter payload offsets.
  *
- * Geometry-offset fields (words 4-6, 8) — `indexCount`, `firstIndex`,
+ * `indexCount` (word 4) is canonical precomputed topology metadata authored by
+ * JS/install for indexed path topologies.
+ *
+ * Realized geometry-offset fields (words 5, 6, 8) — `firstIndex`,
  * `baseVertex`, `firstVertex` — are part of the canonical header layout for
- * GPU-side consumption. GPU draw-prep compute reads these fields to derive
- * indirect command arguments. JS-side code MUST NOT read or depend on these
- * fields from `ShapeBankState.data`.
+ * GPU-side consumption, but JS-side ShapeBank data leaves them at zero and the
+ * Rust worker derives them in its upload-local copy.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
@@ -41,11 +43,12 @@ export enum ShapeBankHeaderWord {
   Flags = 2,
   MaterialClass = 3,
 
+  // -- Canonical topology metadata (continued) --
+  IndexCount = 4,
   // -- Realized geometry-offset fields (worker-derived, NOT canonical) --
   // These words are reserved in the ABI for GPU-side geometry offsets.
   // JS-side ShapeBankState.data leaves them as 0. The Rust worker fills
   // them in its own local copy before GPU upload.
-  IndexCount = 4,
   FirstIndex = 5,
   BaseVertex = 6,
 
@@ -68,12 +71,11 @@ export enum ShapeBankHeaderWord {
 }
 
 /**
- * Word offsets of realized geometry-offset fields in ShapeHeaderV1.
+ * Word offsets of worker-derived realized geometry-offset fields in ShapeHeaderV1.
  * These are NOT canonical — they are derived by the Rust worker and
  * must not be read from JS-side ShapeBankState.data.
  */
 export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
-  ShapeBankHeaderWord.IndexCount,
   ShapeBankHeaderWord.FirstIndex,
   ShapeBankHeaderWord.BaseVertex,
   ShapeBankHeaderWord.FirstVertex,
@@ -296,6 +298,64 @@ export function readShapeBankHandleMetadata(
     topologyId: shapeBank.topologyIdByHandle[handle] >>> 0,
     controlPointSlot: shapeBank.controlPointSlotByHandle[handle] ?? SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   };
+}
+
+export interface ShapeBankRecordSource {
+  readonly data: Uint32Array;
+  readonly volatilePtr: number;
+}
+
+export interface ShapeBankRecordView {
+  readonly handle: number;
+  readonly header: ShapeBankHeaderRecord;
+  readonly totalWords: number;
+  readonly headerHasPayload: boolean;
+}
+
+/**
+ * Iterate canonical ShapeBank records in handle order.
+ *
+ * // [LAW:one-source-of-truth] ShapeBank record boundaries are derived once
+ * // from `ShapeHeaderV1` (`SHAPE_BANK_HEADER_WORDS + ParamBlockWords`) and
+ * // shared by every reader that needs to walk ShapeBank records.
+ */
+export function* iterateShapeBankRecords(
+  source: ShapeBankRecordSource,
+): Generator<ShapeBankRecordView, void, undefined> {
+  let handle = 0;
+  while (handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr) {
+    const header = readShapeBankHeader(source.data, handle);
+    const totalWords = SHAPE_BANK_HEADER_WORDS + header.paramBlockWords;
+    if (handle + totalWords > source.volatilePtr) {
+      throw new Error(
+        `iterateShapeBankRecords: record at ${handle} overruns volatilePtr ${source.volatilePtr} ` +
+          `(totalWords=${totalWords})`,
+      );
+    }
+
+    let headerHasPayload = false;
+    for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
+      if (source.data[handle + word] !== 0) {
+        headerHasPayload = true;
+        break;
+      }
+    }
+
+    yield {
+      handle,
+      header,
+      totalWords,
+      headerHasPayload,
+    };
+
+    handle += totalWords;
+  }
+
+  if (handle !== source.volatilePtr) {
+    throw new Error(
+      `iterateShapeBankRecords: trailing words after last record (ended at ${handle}, volatilePtr ${source.volatilePtr})`,
+    );
+  }
 }
 
 // =============================================================================

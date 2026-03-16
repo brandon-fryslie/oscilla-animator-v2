@@ -44,6 +44,13 @@ function makeEmptyPatch(): Patch {
   };
 }
 
+async function flushAsyncDispatch(turns: number = 4): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    await Promise.resolve();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('CompileWorkerClient', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -52,12 +59,20 @@ describe('CompileWorkerClient', () => {
 
   it('keeps only the latest queued compile while one request is in flight', async () => {
     vi.stubGlobal('Worker', FakeWorker as unknown as typeof Worker);
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: () => 'application/wasm' },
+      arrayBuffer: async () => new Uint8Array([0x00, 0x61, 0x73, 0x6d]).buffer,
+    })) as unknown as typeof fetch);
 
     const client = new CompileWorkerClient();
     const patch = makeEmptyPatch();
 
     const p1 = client.compile({ patch, patchRevision: 1 });
     const worker = FakeWorker.instances[0]!;
+    await flushAsyncDispatch();
     expect(worker.posted.map((msg) => msg.patchRevision)).toEqual([1]);
 
     const p2 = client.compile({ patch, patchRevision: 2 });
@@ -67,10 +82,11 @@ describe('CompileWorkerClient', () => {
     await expect(p2).rejects.toBeInstanceOf(CompileSupersededError);
 
     // No worker backlog while request #1 is still running.
+    await flushAsyncDispatch();
     expect(worker.posted.map((msg) => msg.patchRevision)).toEqual([1]);
 
     worker.emitCompiled(1, 1);
-    await Promise.resolve();
+    await flushAsyncDispatch();
     expect(worker.posted.map((msg) => msg.patchRevision)).toEqual([1, 3]);
 
     worker.emitCompiled(3, 3);
@@ -80,4 +96,3 @@ describe('CompileWorkerClient', () => {
     expect(worker.terminated).toBe(true);
   });
 });
-

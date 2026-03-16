@@ -1,5 +1,5 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
-import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
+import { iterateShapeBankRecords } from '../../runtime/RuntimeState';
 import type { GpuBindGroup, GpuBuffer, GpuDevice, GpuRenderPipeline } from './gpu-api';
 import { type GeometryRoute, classifyAllGeometryRoutes } from './ShapeBankGeometrySeam';
 
@@ -89,7 +89,10 @@ export class WebGPUShapeBankManager {
     this.assertVolatilePtr(source.volatilePtr, source.data.length);
     this.assertTopologyCoverage(source.topologyIdByHandle.length, source.volatilePtr);
     this.assertStaticBoundary(source.staticBoundary, source.volatilePtr);
-    this.assertShapeBankAlignment(source.volatilePtr);
+    for (const _record of iterateShapeBankRecords(source)) {
+      // [LAW:single-enforcer] Shared ShapeBank record iteration is the one
+      // validation boundary for variable-length record layout.
+    }
   }
 
   private assertShapeBankArrays(source: RenderShapeBankSource): void {
@@ -129,14 +132,6 @@ export class WebGPUShapeBankManager {
     }
   }
 
-  private assertShapeBankAlignment(volatilePtr: number): void {
-    if ((volatilePtr % SHAPE_BANK_HEADER_WORDS) !== 0) {
-      throw new Error(
-        `WebGPUShapeBankManager: shapeBank volatilePtr ${volatilePtr} is not aligned to ${SHAPE_BANK_HEADER_WORDS} words`,
-      );
-    }
-  }
-
   private ensureShapeBankCapacity(requiredWords: number): void {
     if (requiredWords > this.shapeBankCapacityWords) {
       let nextCapacity = this.shapeBankCapacityWords;
@@ -172,22 +167,15 @@ export class WebGPUShapeBankManager {
 
   private buildTopologyWordOffsetMap(source: RenderShapeBankSource): Map<number, number> {
     const byTopologyId = new Map<number, number>();
-    for (let handle = 0; handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr; handle += SHAPE_BANK_HEADER_WORDS) {
-      const topologyId = source.topologyIdByHandle[handle] >>> 0;
-      let hasHeaderPayload = false;
-      for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
-        if (source.data[handle + word] !== 0) {
-          hasHeaderPayload = true;
-          break;
-        }
-      }
-      if (!hasHeaderPayload && topologyId === 0) {
+    for (const record of iterateShapeBankRecords(source)) {
+      const topologyId = source.topologyIdByHandle[record.handle] >>> 0;
+      if (!record.headerHasPayload && topologyId === 0) {
         continue;
       }
       if (!byTopologyId.has(topologyId)) {
         // [LAW:one-source-of-truth] Topology->GPU offset lookup is derived from
         // one canonical handle stream in RuntimeState.shapeBank.
-        byTopologyId.set(topologyId, handle);
+        byTopologyId.set(topologyId, record.handle);
       }
     }
     return byTopologyId;
