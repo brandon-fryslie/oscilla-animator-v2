@@ -866,8 +866,7 @@ impl Engine {
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;
         for record in 0..total_record_count_usize {
-            let descriptor_base =
-                descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
             if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
                 break;
             }
