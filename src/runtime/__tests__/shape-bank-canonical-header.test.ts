@@ -21,6 +21,7 @@ import {
   writeShapeBankHeader,
   createRuntimeState,
 } from '../RuntimeState';
+import { ShapeClass, TopologyMode } from '../../shapes/types';
 
 describe('ShapeHeaderV1 canonical header contract', () => {
   it('realized geometry-offset words are zero after canonical header write', () => {
@@ -33,8 +34,8 @@ describe('ShapeHeaderV1 canonical header contract', () => {
       state.shapeBank!.data,
       handle,
       createShapeBankHeaderV1({
-        kind: 1,
-        topologyMode: 1,
+        kind: ShapeClass.Type1Rigid,
+        topologyMode: TopologyMode.Path,
         flags: 1,
         vertexCount: 6,
         paramBlockOffset: 0,
@@ -45,8 +46,8 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     const header = readShapeBankHeader(state.shapeBank!.data, handle);
 
     // Canonical declarative fields are set correctly.
-    expect(header.kind).toBe(1);
-    expect(header.topologyMode).toBe(1);
+    expect(header.kind).toBe(ShapeClass.Type1Rigid);
+    expect(header.topologyMode).toBe(TopologyMode.Path);
     expect(header.flags).toBe(1);
     expect(header.vertexCount).toBe(6);
 
@@ -82,8 +83,8 @@ describe('ShapeHeaderV1 canonical header contract', () => {
       state.shapeBank!.data,
       handle,
       createShapeBankHeaderV1({
-        kind: 1,
-        topologyMode: 1,
+        kind: ShapeClass.Type1Rigid,
+        topologyMode: TopologyMode.Path,
         flags: 1,
         indexCount: 12, // pre-computed: (6-2)*3
         vertexCount: 6,
@@ -113,6 +114,26 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     expect(header.baseVertex).toBe(0);
     // indexCount IS set (it's a canonical pre-computed topology value).
     expect(header.indexCount).toBe(12);
+  });
+
+  it('ShapeClass enum value is stored in ShapeBankHeaderWord.Kind', () => {
+    const state = createRuntimeState(0, 0, 0, 0, 64, 0);
+    const handle = allocShapeBankWords(state.shapeBank!, SHAPE_BANK_HEADER_WORDS);
+    writeShapeBankHeader(
+      state.shapeBank!.data,
+      handle,
+      createShapeBankHeaderV1({
+        kind: ShapeClass.Type1Rigid,
+        topologyMode: TopologyMode.Path,
+        flags: 0,
+        vertexCount: 3,
+        paramBlockOffset: 0,
+        paramBlockWords: 0,
+      }),
+    );
+    // Raw u32 word at Kind position matches ShapeClass enum value.
+    expect(state.shapeBank!.data[handle + ShapeBankHeaderWord.Kind]).toBe(ShapeClass.Type1Rigid);
+    expect(state.shapeBank!.data[handle + ShapeBankHeaderWord.TopologyMode]).toBe(TopologyMode.Path);
   });
 
   it('header word layout matches expected ABI positions', () => {

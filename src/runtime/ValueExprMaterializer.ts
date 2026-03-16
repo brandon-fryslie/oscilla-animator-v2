@@ -30,6 +30,7 @@ import { evaluateValueExprScalar, type ScalarEvalContext } from './ValueExprScal
 import { requireInst } from '../core/canonical-types';
 import { payloadStride } from '../core/canonical-types';
 import { constValueAsNumber, type ConstValue } from '../core/canonical-types';
+import { ShapeClass, TopologyMode } from '../shapes/types';
 import type { PathTopologyDef, TopologyDef } from '../shapes/types';
 import { applyOpcode } from './OpcodeInterpreter';
 import {
@@ -173,12 +174,14 @@ function evaluateShapeRefHandle(
   const paramBlockOffset = paramBlockWords > 0 ? handle + SHAPE_BANK_HEADER_WORDS : 0;
   // [LAW:one-source-of-truth] Handle semantics are anchored in ShapeBank:
   // header stores draw topology dimensions, sidecar stores topology/control-slot metadata.
+  // [LAW:one-type-per-behavior] ShapeClass and TopologyMode are named enums,
+  // not magic numbers — classification is compiler-owned and propagated here.
   writeShapeBankHeader(
     shapeBank.data,
     handle,
     createShapeBankHeaderV1({
-      kind: 1,
-      topologyMode: isPath ? 1 : 0,
+      kind: ShapeClass.Type1Rigid,
+      topologyMode: isPath ? TopologyMode.Path : TopologyMode.NonPath,
       flags,
       indexCount,
       vertexCount,

@@ -4,6 +4,7 @@ import type { StepRender } from '../../compiler/ir/types';
 import { valueSlot, type ValueSlot } from '../../compiler/ir/Indices';
 import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import { instanceId } from '../../core/ids';
+import { ShapeClass } from '../../shapes/types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 import {
   createRuntimeState,
@@ -86,6 +87,7 @@ function makeMinimalProgram(
           indirectRecordIndex: 0,
           instanceCountMode: 'static',
           staticInstanceCount: 2,
+          shapeClass: ShapeClass.Type1Rigid,
           drawMode: 'indexed',
           indirectRegion: 'indexed',
           indirectStrideBytes: 20,
@@ -101,6 +103,7 @@ function makeMinimalProgram(
           indirectRecordIndex: 1,
           instanceCountMode: 'static',
           staticInstanceCount: 3,
+          shapeClass: ShapeClass.Type1Rigid,
           drawMode: 'indexed',
           indirectRegion: 'indexed',
           indirectStrideBytes: 20,
