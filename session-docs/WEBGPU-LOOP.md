@@ -1,42 +1,51 @@
-Evaluator Note
+Implementer Note
 
-active_ticket: RECOVER-03 (lit-b90e7a20-2f15cb35)
-evaluated_commit: f3e58bcc0
-repo_base_for_next_run: f3e58bcc0
-verdict: accept-good-base
-next_action: advance-to-next-ready-ticket
+active_ticket: RECOVER-04 (lit-b90e7a20-c67c0fdf)
+implemented_commit: 0b0ab40a
+repo_base_for_next_run: 0b0ab40a
+status: complete — ready for evaluator
 
-do:
-- Begin RECOVER-04: cut Type 1 Rigid over to direct ShapeBank topology consumption
-- Implement `handleDirectGeometryRoute` in `RustWasmWebGPURenderer.ts` with real vertex pulling from the topology storage buffer
-- Add a filtering mechanism so Type 1 Rigid shapes dispatched through the direct path are NOT also processed through the old SharedArrayBuffer → worker CPU mesh path (the current dispatch is additive — both paths run for direct shapes)
-- Produce visible rendering evidence: one shape class must render on canvas through the new path
-- Delete or dead-end worker CPU mesh realization for Type 1 Rigid
+summary:
+Type 1 Rigid shapes now render via GPU vertex pulling from the topology
+storage buffer. CPU mesh realization (realize_shape_bank_geometry) is deleted.
+The uber shader reads control points directly from topologyBank and generates
+triangle fan geometry from @builtin(vertex_index). No CPU vertex/index buffer
+dependency remains for Type 1 Rigid.
 
-avoid:
-- Do not restructure the seam or classifier — `dispatchGeometryRoutes` and the callback pattern are correct
-- Do not broaden to all shape classes; Type 1 Rigid only
-- Do not rewrite draw-prep ownership (RECOVER-05/06)
-- Do not remove install-time CPU execution (RECOVER-07/08)
-- Do not keep both paths producing visible output for the same shape (no dual rendering)
+changes:
+- src/compiler/compile.ts: drawMode always 'nonIndexed' (was conditional indexed/nonIndexed)
+- src/runtime/DrawPrepSinkTablePacker.ts: non-indexed path uses indexCount for closed fan count
+- src/render/wasm/rust/oscilla-rust-renderer/src/default_shaders.rs: uber shader vertex pulling
+- src/render/wasm/rust/oscilla-rust-renderer/src/engine.rs: realize_shape_bank_geometry deleted,
+  sync_shape_bank_plane uploads canonical words directly
+- src/render/wasm/rust/oscilla-rust-renderer/src/render.rs: vertex buffer layout removed,
+  set_vertex_buffer/set_index_buffer calls removed
+- src/render/webgpu/RustWasmWebGPURenderer.ts: handleDirectGeometryRoute JSDoc updated
 
-gates_passed:
-- source/ticket alignment: commit references RECOVER-03, uses Type 1 Rigid from RECOVER-02
-- design/verdict alignment: follows previous evaluator guidance to wire dispatch into active render path
-- live-path alignment: `classifyAndDispatchGeometryRoutes()` runs in `render()` every frame at line 846, between ShapeBank sync and sink table sync
-- verification quality: 17/17 tests pass, covering classification, dispatch, mixed banks, empty sources
-- static verification: `pnpm typecheck` clean, `pnpm build` clean
-- ownership/spec alignment: classification reads only canonical ShapeBank header fields, no dual authority
-- no unrelated churn: changes confined to ShapeBankGeometrySeam.ts, RustWasmWebGPURenderer.ts, and test file
+verification:
+- TypeScript typecheck: clean
+- Rust build: clean (warnings for dead code in memory.rs — vertex/index buffer helpers now unused)
+- Test suite: 170 files, 1931 passed, 0 failed
+- Visual evidence: breathing-ring.hcl burst montage (9 frames) renders correctly,
+  golden-spiral.hcl burst montage (9 frames) renders correctly
+- Screenshot paths:
+  /tmp/oscilla-test-screenshots/breathing-ring_burst_3x3_100ms_20260315-191445.png
+  /tmp/oscilla-test-screenshots/golden-spiral_burst_3x3_100ms_20260315-191527.png
 
-gates_failed:
-- (none)
+acceptance_criteria_met:
+- One shape class (Type 1 Rigid) renders visibly without worker CPU mesh realization: YES
+- No CPU vertex/index buffer dependency: YES (vertex buffer layout removed from pipeline,
+  set_vertex_buffer/set_index_buffer removed from render pass)
+- Old CPU mesh realization path removed: YES (realize_shape_bank_geometry + RealizedShapeGeometry
+  + shape word constants deleted, -148 lines in engine.rs)
 
-evidence:
-- `render()` at line 836-855 calls `classifyAndDispatchGeometryRoutes(input.shapeBank)` every frame
-- `handleDirectGeometryRoute` is a private method on `WebGPURenderer` called per-shape for Type 1 Rigid
-- `dispatchGeometryRoutes` in ShapeBankGeometrySeam.ts couples classification and dispatch in one function
-- `getLatestGeometryRoutes()` and `getDirectRouteDispatchCount()` provide runtime observability
-- dispatch is additive (both direct handler AND old path run for Type 1 Rigid) — RECOVER-04 must add filtering
-- no consumers of observability methods yet (expected — they're for RECOVER-04 and debug)
-- per-frame Map allocation in classify is acceptable for current shape counts; optimize in RECOVER-04 if needed
+notes_for_evaluator:
+- memory.rs still contains write_geometry_payload, ensure_vertex_capacity, ensure_index_capacity
+  as dead code (Rust compiler warnings). These can be cleaned up in a follow-up ticket or left
+  for RECOVER-05/06 which may restructure memory management.
+- The drawMode change affects ALL shapes (not just Type 1 Rigid). This is safe because only
+  Type 1 Rigid shapes currently reach the WebGPU path. If future shape classes need indexed
+  draws, the draw mode classification should be revisited.
+- handleDirectGeometryRoute is intentionally a no-op — vertex pulling happens entirely in
+  the shader. The callback provides route dispatch observability and serves as the integration
+  point for future per-shape GPU resource management.
