@@ -3,9 +3,9 @@
 This document extends the canonical authoring model so it can express GPU-native simulation compatible with:
 
 - [P6-1__GPU_Physics_Engine_with_Compute_Shaders.md](../WebGPU-Complete/P6-1__GPU_Physics_Engine_with_Compute_Shaders.md)
-- [CANONICAL-AUTHORING-MODEL-DESIGN.md](./CANONICAL-AUTHORING-MODEL-DESIGN.md)
-- [CANONICAL-PATCH-STRUCTURE-DESIGN.md](./CANONICAL-PATCH-STRUCTURE-DESIGN.md)
-- [CANONICAL-RENDER-SINK-DESIGN.md](./CANONICAL-RENDER-SINK-DESIGN.md)
+- [4-CANONICAL-AUTHORING-MODEL-DESIGN.md](./4-CANONICAL-AUTHORING-MODEL-DESIGN.md)
+- [3-CANONICAL-PATCH-STRUCTURE-DESIGN.md](./3-CANONICAL-PATCH-STRUCTURE-DESIGN.md)
+- [1-CANONICAL-RENDER-SINK-DESIGN.md](./1-CANONICAL-RENDER-SINK-DESIGN.md)
 
 It answers one gap in the current design:
 

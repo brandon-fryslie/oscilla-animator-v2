@@ -11,10 +11,10 @@ It exists to prevent the new authoring system from degenerating into:
 
 It is the policy companion to:
 
-- [CANONICAL-AUTHORING-MODEL-DESIGN.md](./CANONICAL-AUTHORING-MODEL-DESIGN.md)
-- [CANONICAL-AUTHORING-BLOCK-CATALOG.md](./CANONICAL-AUTHORING-BLOCK-CATALOG.md)
-- [CANONICAL-PATCH-STRUCTURE-DESIGN.md](./CANONICAL-PATCH-STRUCTURE-DESIGN.md)
-- [CANONICAL-RENDER-SINK-DESIGN.md](./CANONICAL-RENDER-SINK-DESIGN.md)
+- [4-CANONICAL-AUTHORING-MODEL-DESIGN.md](./4-CANONICAL-AUTHORING-MODEL-DESIGN.md)
+- [6-CANONICAL-AUTHORING-BLOCK-CATALOG.md](./6-CANONICAL-AUTHORING-BLOCK-CATALOG.md)
+- [3-CANONICAL-PATCH-STRUCTURE-DESIGN.md](./3-CANONICAL-PATCH-STRUCTURE-DESIGN.md)
+- [1-CANONICAL-RENDER-SINK-DESIGN.md](./1-CANONICAL-RENDER-SINK-DESIGN.md)
 
 // [LAW:single-enforcer] This document is the single high-level rule source for authoring-model boundaries and extension constraints.
 // [LAW:verifiable-goals] Every rule below is phrased so it can be enforced by schema checks, editor constraints, compiler validation, or tests.

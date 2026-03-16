@@ -1,6 +1,6 @@
 # Canonical Patch Structure Design
 
-This document defines a new patch structure that is aligned with the clean-sheet render pipeline in [CANONICAL-RENDER-SINK-DESIGN.md](./CANONICAL-RENDER-SINK-DESIGN.md).
+This document defines a new patch structure that is aligned with the clean-sheet render pipeline in [1-CANONICAL-RENDER-SINK-DESIGN.md](./1-CANONICAL-RENDER-SINK-DESIGN.md).
 
 It is not a repair plan for the old patch graph. It is a new authoring model designed so user intent translates directly into the right renderer inputs.
 

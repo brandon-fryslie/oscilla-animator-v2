@@ -77,15 +77,15 @@ These files form one coherent stack:
 
 | File | Purpose |
 |---|---|
-| [CANONICAL-RENDER-SINK-DESIGN.md](./CANONICAL-RENDER-SINK-DESIGN.md) | Defines the canonical scene-to-render contract: `RenderPrimitive`, `RenderView`, `SceneRenderSink`, extraction, prepare, and queue boundaries. |
-| [COMPATIBILITY-MIGRATION-PLAN.md](./COMPATIBILITY-MIGRATION-PLAN.md) | Defines how the current patch/block system temporarily feeds that canonical boundary without becoming permanent architecture. |
-| [CANONICAL-PATCH-STRUCTURE-DESIGN.md](./CANONICAL-PATCH-STRUCTURE-DESIGN.md) | Defines the new patch root and the four canonical authoring strata: resources, modulation, scene assembly, and outputs. |
-| [CANONICAL-AUTHORING-MODEL-DESIGN.md](./CANONICAL-AUTHORING-MODEL-DESIGN.md) | Defines the finite user-facing authoring vocabulary that sits on top of the patch structure. |
-| [CANONICAL-AUTHORING-GUARDRAILS.md](./CANONICAL-AUTHORING-GUARDRAILS.md) | Defines the invariants and enforcement rules that keep the new authoring model from regressing into render-shaped graph soup. |
-| [CANONICAL-AUTHORING-BLOCK-CATALOG.md](./CANONICAL-AUTHORING-BLOCK-CATALOG.md) | Defines the MVP block set needed to prove the render-only authoring slice, starting with triangle geometry and flat-color material. |
-| [CANONICAL-AUTHORING-UI-DESIGN.md](./CANONICAL-AUTHORING-UI-DESIGN.md) | Defines the editor structure that matches the canonical layers instead of collapsing everything into one graph canvas. |
-| [CANONICAL-IMPLEMENTATION-ROADMAP.md](./CANONICAL-IMPLEMENTATION-ROADMAP.md) | Defines dependency order, implementation order, and shipping phases across the full stack. |
-| [CANONICAL-PHYSICS-AUTHORING-DESIGN.md](./CANONICAL-PHYSICS-AUTHORING-DESIGN.md) | Extends the same authoring model to simulation-driven animation without introducing a second top-level architecture. |
+| [1-CANONICAL-RENDER-SINK-DESIGN.md](./1-CANONICAL-RENDER-SINK-DESIGN.md) | Defines the canonical scene-to-render contract: `RenderPrimitive`, `RenderView`, `SceneRenderSink`, extraction, prepare, and queue boundaries. |
+| [2-COMPATIBILITY-MIGRATION-PLAN.md](./2-COMPATIBILITY-MIGRATION-PLAN.md) | Defines how the current patch/block system temporarily feeds that canonical boundary without becoming permanent architecture. |
+| [3-CANONICAL-PATCH-STRUCTURE-DESIGN.md](./3-CANONICAL-PATCH-STRUCTURE-DESIGN.md) | Defines the new patch root and the four canonical authoring strata: resources, modulation, scene assembly, and outputs. |
+| [4-CANONICAL-AUTHORING-MODEL-DESIGN.md](./4-CANONICAL-AUTHORING-MODEL-DESIGN.md) | Defines the finite user-facing authoring vocabulary that sits on top of the patch structure. |
+| [5-CANONICAL-AUTHORING-GUARDRAILS.md](./5-CANONICAL-AUTHORING-GUARDRAILS.md) | Defines the invariants and enforcement rules that keep the new authoring model from regressing into render-shaped graph soup. |
+| [6-CANONICAL-AUTHORING-BLOCK-CATALOG.md](./6-CANONICAL-AUTHORING-BLOCK-CATALOG.md) | Defines the MVP block set needed to prove the render-only authoring slice, starting with triangle geometry and flat-color material. |
+| [7-CANONICAL-AUTHORING-UI-DESIGN.md](./7-CANONICAL-AUTHORING-UI-DESIGN.md) | Defines the editor structure that matches the canonical layers instead of collapsing everything into one graph canvas. |
+| [8-CANONICAL-PHYSICS-AUTHORING-DESIGN.md](./8-CANONICAL-PHYSICS-AUTHORING-DESIGN.md) | Extends the same authoring model to simulation-driven animation without introducing a second top-level architecture. |
+| [9-CANONICAL-IMPLEMENTATION-ROADMAP.md](./9-CANONICAL-IMPLEMENTATION-ROADMAP.md) | Defines dependency order, implementation order, and shipping phases across the full stack. |
 
 ## 5. Execution Order After The First Triangle
 
