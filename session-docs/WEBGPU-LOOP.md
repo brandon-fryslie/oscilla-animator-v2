@@ -1,51 +1,60 @@
-Implementer Note
+Evaluator Note
 
 active_ticket: RECOVER-04 (lit-b90e7a20-c67c0fdf)
-implemented_commit: 0b0ab40a
-repo_base_for_next_run: 0b0ab40a
-status: complete — ready for evaluator
+evaluated_commit: 0b0ab40ae
+repo_base_for_next_run: 29871df56
+verdict: accept-complete
+next_action: advance-to-next-ready-ticket
 
-summary:
-Type 1 Rigid shapes now render via GPU vertex pulling from the topology
-storage buffer. CPU mesh realization (realize_shape_bank_geometry) is deleted.
-The uber shader reads control points directly from topologyBank and generates
-triangle fan geometry from @builtin(vertex_index). No CPU vertex/index buffer
-dependency remains for Type 1 Rigid.
+do:
+- Start RECOVER-05 (reduce CPU draw-prep packer to static metadata only)
+- Clean up dead code in memory.rs (write_geometry_payload, ensure_vertex_capacity,
+  ensure_index_capacity) as part of RECOVER-05 or a dedicated cleanup
+- Update the stale comment in RuntimeState.ts lines 32-34 that still references
+  realize_shape_bank_geometry() as if it exists
 
-changes:
-- src/compiler/compile.ts: drawMode always 'nonIndexed' (was conditional indexed/nonIndexed)
-- src/runtime/DrawPrepSinkTablePacker.ts: non-indexed path uses indexCount for closed fan count
-- src/render/wasm/rust/oscilla-rust-renderer/src/default_shaders.rs: uber shader vertex pulling
-- src/render/wasm/rust/oscilla-rust-renderer/src/engine.rs: realize_shape_bank_geometry deleted,
-  sync_shape_bank_plane uploads canonical words directly
-- src/render/wasm/rust/oscilla-rust-renderer/src/render.rs: vertex buffer layout removed,
-  set_vertex_buffer/set_index_buffer calls removed
-- src/render/webgpu/RustWasmWebGPURenderer.ts: handleDirectGeometryRoute JSDoc updated
+avoid:
+- Do not reopen geometry source ownership — vertex pulling from topologyBank is settled
+- Do not attempt full multi-class taxonomy rollout — stay within one-class-at-a-time scope
+- Do not change the indexed draw path for future shape classes without a new ticket
 
-verification:
-- TypeScript typecheck: clean
-- Rust build: clean (warnings for dead code in memory.rs — vertex/index buffer helpers now unused)
-- Test suite: 170 files, 1931 passed, 0 failed
-- Visual evidence: breathing-ring.hcl burst montage (9 frames) renders correctly,
-  golden-spiral.hcl burst montage (9 frames) renders correctly
-- Screenshot paths:
-  /tmp/oscilla-test-screenshots/breathing-ring_burst_3x3_100ms_20260315-191445.png
-  /tmp/oscilla-test-screenshots/golden-spiral_burst_3x3_100ms_20260315-191527.png
+gates_passed:
+- source/ticket alignment: changes match RECOVER-04 scope exactly
+- design alignment: vertex pulling approach matches accepted design comment
+- live-path alignment: uber shader is the active vertex stage, topologyBank is geometry source,
+  no vertex/index buffer dependency remains
+- verification quality: typecheck clean, 1931/1931 tests pass, build succeeds,
+  burst montage screenshots prove visible rendering
+- static verification: pnpm typecheck — clean
+- runtime verification: breathing-ring.hcl 9-frame burst + golden-spiral.hcl 9-frame burst
+- ownership alignment: geometry source is GPU-owned canonical ShapeBank data
+- clean closeout: tree clean, commits well-scoped
 
-acceptance_criteria_met:
-- One shape class (Type 1 Rigid) renders visibly without worker CPU mesh realization: YES
-- No CPU vertex/index buffer dependency: YES (vertex buffer layout removed from pipeline,
-  set_vertex_buffer/set_index_buffer removed from render pass)
-- Old CPU mesh realization path removed: YES (realize_shape_bank_geometry + RealizedShapeGeometry
-  + shape word constants deleted, -148 lines in engine.rs)
+gates_failed: (none)
 
-notes_for_evaluator:
-- memory.rs still contains write_geometry_payload, ensure_vertex_capacity, ensure_index_capacity
-  as dead code (Rust compiler warnings). These can be cleaned up in a follow-up ticket or left
-  for RECOVER-05/06 which may restructure memory management.
-- The drawMode change affects ALL shapes (not just Type 1 Rigid). This is safe because only
-  Type 1 Rigid shapes currently reach the WebGPU path. If future shape classes need indexed
-  draws, the draw mode classification should be revisited.
-- handleDirectGeometryRoute is intentionally a no-op — vertex pulling happens entirely in
-  the shader. The callback provides route dispatch observability and serves as the integration
-  point for future per-shape GPU resource management.
+evidence:
+- typecheck: clean (pnpm typecheck — no errors)
+- tests: 170 files, 1931 passed, 0 failed
+- build: vite build succeeds, 13719 modules, no errors
+- visual: breathing-ring_burst_3x3_100ms_20260315-191445.png — 9 frames, ring of
+  animated circles renders correctly with smooth motion
+- visual: golden-spiral_burst_3x3_100ms_20260315-191527.png — 9 frames, spiral of
+  animated dots renders correctly with smooth motion
+- code audit: realize_shape_bank_geometry + RealizedShapeGeometry deleted from engine.rs
+  (-148 lines). set_vertex_buffer/set_index_buffer removed from render.rs. Vertex buffer
+  layout removed from pipeline. Uber shader reads control points from topologyBank via
+  @builtin(vertex_index). ShapeBankHeaderWord offsets (FLAGS=2, PARAM_BLOCK_OFFSET=9)
+  verified consistent across TS and WGSL boundaries.
+- dead code: memory.rs still contains write_geometry_payload, ensure_vertex_capacity,
+  ensure_index_capacity (unreachable). Non-blocking — cleanup candidate for RECOVER-05.
+- stale comment: RuntimeState.ts line 32 still references realize_shape_bank_geometry().
+  Non-blocking — documentation update candidate.
+
+milestone_impact:
+- RECOVER-M1 exit criteria are now fully met:
+  1. One shape class (Type 1 Rigid) renders visibly through canonical GPU-owned geometry
+  2. Worker no longer realizes mesh buffers on CPU for that slice
+  3. Old path not silently retained as active geometry source
+- RECOVER-03 also accept-complete (seam fully consumed by RECOVER-04 cutover)
+- RECOVER-M0 was already closed
+- Next ready ticket: RECOVER-05
