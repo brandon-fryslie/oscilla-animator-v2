@@ -10,6 +10,52 @@
  * - Renderer dispatches on path verbs only
  */
 
+// =============================================================================
+// Shape Taxonomy — Compile/Runtime Execution Contract
+// =============================================================================
+
+/**
+ * ShapeClass — Canonical shape taxonomy discriminant.
+ *
+ * // [LAW:one-type-per-behavior] Shape classes reflect real execution differences
+ * // (topology source, dominant cost, command stream ABI). Each class maps to a
+ * // concrete data contract across compile → runtime → draw-prep → render.
+ *
+ * Spec: docs/WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
+ *
+ * Values are u32-compatible for direct ShapeBankHeaderWord.Kind storage.
+ */
+export enum ShapeClass {
+  /**
+   * Type 1: Rigid Stamp
+   * - Immutable local topology in ShapeBank (indexed path)
+   * - Per-instance transforms in Arena
+   * - Draw-prep buckets by compatible indexed topology
+   */
+  Type1Rigid = 1,
+  // Future classes will be added as RECOVER tickets progress:
+  // Type2Parametric = 2,
+  // Type3Ribbon = 3,
+  // Type4ProceduralSDF = 4,
+  // Type5TextHybrid = 5,
+}
+
+/**
+ * TopologyMode — How the topology is represented in ShapeBank.
+ *
+ * Stored in ShapeBankHeaderWord.TopologyMode. Values are u32-compatible.
+ */
+export enum TopologyMode {
+  /** Non-path topology (abstract params only, no verbs) */
+  NonPath = 0,
+  /** Path-based topology with verb sequence and control points */
+  Path = 1,
+}
+
+// =============================================================================
+// Topology IDs
+// =============================================================================
+
 /**
  * TopologyId - Numeric identifier for a topology (array index)
  *
