@@ -5,4 +5,4 @@
  * Each patch is a self-contained example with its own visual style and features.
  */
 
-export { type HclDemo, hclDemos } from './hcl-demos';
+export { type HclDemo, hclDemos, GPU_BOOTSTRAP_DEMO_FILENAME } from './hcl-demos';

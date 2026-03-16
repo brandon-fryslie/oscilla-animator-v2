@@ -10,7 +10,9 @@
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import { hclDemos, type HclDemo } from '../demo';
+import { GPU_BOOTSTRAP_DEMO_FILENAME, hclDemos, type HclDemo } from '../demo';
+import { deserializePatchFromHCL } from '../patch-dsl';
+import { verifyGpuPatchCompatibility } from '../services/GpuPatchCompatibility';
 import type { PatchStore } from './PatchStore';
 
 export class DemoStore {
@@ -41,10 +43,19 @@ export class DemoStore {
   }
 
   /**
-   * Load the default demo ('simple.hcl' or first available).
+   * Load the default demo (GPU bootstrap demo when verified).
    */
   loadDefault(): void {
-    const defaultDemo = this.demos.find(d => d.filename === 'simple.hcl') ?? this.demos[0];
+    const preferredDemo = this.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME);
+    const verifiedDemo = this.demos.find((demo) => {
+      const parsed = deserializePatchFromHCL(demo.hcl);
+      return verifyGpuPatchCompatibility(parsed.patch).ok;
+    });
+    const defaultDemo = preferredDemo && verifyGpuPatchCompatibility(deserializePatchFromHCL(preferredDemo.hcl).patch).ok
+      ? preferredDemo
+      : verifiedDemo
+        ?? preferredDemo
+        ?? this.demos[0];
     if (defaultDemo) {
       this.selectDemo(defaultDemo.filename);
     }

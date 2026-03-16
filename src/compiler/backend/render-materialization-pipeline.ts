@@ -67,6 +67,7 @@ interface RenderTargetInfo {
   controlPoints: { id: ValueExprId; stride: number };
   color: { id: ValueExprId; stride: number };
   scale?: { id: ValueExprId; stride: number };
+  rotation?: { id: ValueExprId; stride: number };
   shape?: { sourceExprId: ValueExprId };
 }
 
@@ -114,6 +115,14 @@ function getInputRef(
   if (!sourceOutputs) return undefined;
 
   return sourceOutputs.get(edge.fromPort);
+}
+
+function getOutputRef(
+  blockIndex: BlockIndex,
+  portId: string,
+  blockOutputs: Map<BlockIndex, Map<string, ValueRefPacked>>,
+): ValueRefPacked | undefined {
+  return blockOutputs.get(blockIndex)?.get(portId);
 }
 
 function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; stride: number } | undefined {
@@ -238,6 +247,36 @@ function collectRenderTargets(
   const renderBlocks = findRenderBlocks(blocks);
 
   for (const { block, index } of renderBlocks) {
+    if (block.type === 'WebGPUType1Sink') {
+      const position = asExprValueRef(getOutputRef(index, '_position', blockOutputs));
+      const color = asExprValueRef(getOutputRef(index, '_color', blockOutputs));
+      const scale = asExprValueRef(getOutputRef(index, '_scale', blockOutputs));
+      const rotation = asExprValueRef(getOutputRef(index, '_rotation', blockOutputs));
+      const shape = asExprValueRef(getOutputRef(index, '_shape', blockOutputs));
+
+      if (!position || !color || !shape) {
+        continue;
+      }
+
+      if (!isFieldExtent(position.id, valueExprs)) continue;
+
+      const instanceId = inferFieldInstanceFromExprs(position.id, valueExprs);
+      if (!instanceId) {
+        continue;
+      }
+
+      targets.push({
+        renderBlockId: block.id,
+        instanceId,
+        controlPoints: { id: position.id, stride: position.stride },
+        color: { id: color.id, stride: color.stride },
+        scale: scale ? { id: scale.id, stride: scale.stride } : undefined,
+        rotation: rotation ? { id: rotation.id, stride: rotation.stride } : undefined,
+        shape: { sourceExprId: shape.id },
+      });
+      continue;
+    }
+
     const controlPointsRef = getInputRef(index, 'controlPoints', edges, blockOutputs);
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
@@ -284,6 +323,7 @@ function collectRenderTargets(
       controlPoints: { id: controlPoints.id, stride: controlPoints.stride },
       color: { id: color.id, stride: color.stride },
       scale,
+      rotation: undefined,
       shape,
     });
   }
@@ -641,6 +681,21 @@ function buildRenderStepForTarget(args: {
     renderScaleRoleKey(scaleFieldExprId),
   );
 
+  const rotationSlot = target.rotation
+    ? getFieldSlot(
+        resolveFieldExprId({
+          sourceExprId: target.rotation.id,
+          renderInstance,
+          valueExprs,
+          builder,
+          renderBlockId: target.renderBlockId,
+          label: 'rotation',
+        }),
+        renderCustomSemantic(),
+        `${target.renderBlockId}:rotation`,
+      )
+    : undefined;
+
   if (!target.shape) {
     throw new Error(renderMissingShapeInputMessage(target.instanceId));
   }
@@ -661,6 +716,7 @@ function buildRenderStepForTarget(args: {
     scale: slotRef(scaleSlot),
     shape: shapeOutputs.shape,
     ...(shapeOutputs.controlPoints && { controlPoints: shapeOutputs.controlPoints }),
+    ...(rotationSlot !== undefined && { rotationSlot }),
   };
 }
 
