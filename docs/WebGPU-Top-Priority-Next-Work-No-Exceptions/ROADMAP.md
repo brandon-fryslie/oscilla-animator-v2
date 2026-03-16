@@ -173,22 +173,34 @@ Done when:
 - indirect args and targeted probe slices can be read back through one real worker-backed path
 - debug data is published structurally rather than through console previews and stubs
 
-## Post-Core Work
+## Validation Gate
 
-### Milestone 5: Type 5 Text
+After `RECOVER-10`, pause for deliberate validation of the recovered base path before expanding the taxonomy further.
+
+`// [LAW:verifiable-goals]` Post-core class work should not begin until the corrected Type 1/base-path behavior has been re-validated end-to-end with real runtime evidence.
+
+Validate at least:
+
+- visible Type 1 output remains stable across swaps and frame updates
+- recovered ownership boundaries from `RECOVER-07` through `RECOVER-10` still hold in the active path
+- readback/observability is sufficient to debug the next class without falling back to ad hoc inspection
+- no hidden CPU precompute or compatibility route has re-entered the canonical path
+
+### Milestone 5: Type 2 Parametric Foundation
 
 Topics:
 
-- [11 - Type 5 Text Pipeline](./11-Type-5-Text-Pipeline.md)
+- [11 - Type 2 Parametric Foundation](./11-Type-2-Parametric-Foundation.md)
 
 This is intentionally **not** on the critical path for getting the renderer working again.
 
-Do this after the base ShapeBank/draw-prep/render ownership model is corrected.
+Do this only after the post-`RECOVER-10` validation gate is complete.
 
 Done when:
 
-- text enters the system as a real shape class with its own ownership split
-- text is not forced through the generic realized-mesh compatibility path
+- Type 2 exists as an explicit shape-class foundation on top of the corrected base path
+- template topology and Arena control-point ownership are modeled canonically
+- the renderer has the required class-specific seams for analytical Type 2 vertex evaluation
 
 ## Recommended Execution Order
 
@@ -204,7 +216,8 @@ The practical order should be:
 8. 03 install-time CPU runtime execution removal
 9. 08 arena header and uniform ownership unification
 10. 10 observability and readback hardening
-11. 11 Type 5 text
+11. post-RECOVER-10 validation gate
+12. 11 Type 2 parametric foundation
 
 This order is not "spec order". It is "fastest route back to a working renderer while removing the highest-risk duplicate ownership first."
 
@@ -225,7 +238,7 @@ Once that gate is passed, the rest of the roadmap becomes much less speculative.
 Avoid these traps:
 
 1. Do not try to finish all shape classes before one class works end-to-end.
-2. Do not mix draw-prep ownership migration with text or post-processing work.
+2. Do not mix draw-prep ownership migration with post-core class expansion work.
 3. Do not keep both CPU and GPU versions of the same runtime-derived command/data product longer than necessary.
 4. Do not broaden Milestone 1 into a full future-architecture rewrite.
 5. Do not let observability remain a stub once the new path becomes hard to debug.
@@ -248,5 +261,5 @@ This roadmap is narrower:
 - [07 - Render Pass Geometry Consumption](./07-Render-Pass-Geometry-Consumption.md)
 - [04 - Draw Prep Sink Table Packing](./04-Draw-Prep-Sink-Table-Packing.md)
 - [05 - Draw Prep Compute Shader Scope](./05-Draw-Prep-Compute-Shader-Scope.md)
+- [11 - Type 2 Parametric Foundation](./11-Type-2-Parametric-Foundation.md)
 - [docs/WebGPU-Future/README.md](../WebGPU-Future/README.md)
-

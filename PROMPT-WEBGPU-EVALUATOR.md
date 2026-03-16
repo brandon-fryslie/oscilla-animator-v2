@@ -58,6 +58,7 @@ Check:
 6. seam or cutover tickets modify the live path required by the ticket rather than only adding helper, classifier, or test-only code
 7. any previously accepted visible runtime baseline still works unless the active ticket explicitly allowed a temporary regression
 8. no earlier prerequisite leaf ticket has become invalid again in current repo state
+9. any explicit validation or approval gate named by the ticket/docs was actually satisfied before implementation started
 
 Re-run the needed proof:
 
@@ -84,6 +85,7 @@ Use exactly one:
 
 If the implementation is wrong enough that it should not remain as the next base, and the bad work is isolated, you may `git revert` it. Never use destructive history edits.
 Do not use `accept-complete` or `advance-to-next-ready-ticket` if the active ticket's local goals are met but a previously accepted visible runtime baseline no longer works.
+Do not accept or advance a ticket that required an explicit validation gate if that gate was skipped or only assumed.
 
 ## Evaluator Note
 

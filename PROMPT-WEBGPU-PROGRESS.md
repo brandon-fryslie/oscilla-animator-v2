@@ -64,6 +64,7 @@ If a prerequisite leaf ticket has been reopened, treat that reopened prerequisit
    - dependencies complete
    - all `Source Docs` exist
    - local verification is possible
+   - any explicit validation or approval gate named by the ticket/docs is already satisfied
    - no later ticket is required first
    - the current accepted runtime baseline can still be re-verified after your change if this ticket touches render, draw-prep, materialization, install, or another live-path boundary
 2. Add a design comment on the ticket with:
@@ -101,6 +102,7 @@ Run the smallest sufficient set of:
 
 If runtime behavior changed, inspect real runtime evidence. Passing tests alone is not enough when ownership/render behavior is the point.
 If the repository already has an accepted visible render baseline, re-run that baseline proof after your change when you touch a live-path boundary. Do not report `completed` if the active ticket passes locally but the accepted baseline regresses.
+If the active ticket says to pause for explicit validation or approval before starting, do not implement the ticket until that gate is recorded in the ticket or evaluator note. Block instead of assuming it happened.
 
 ## Closeout
 

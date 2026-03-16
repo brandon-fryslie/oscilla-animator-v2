@@ -16,8 +16,8 @@ do:
 - Read this note before choosing or continuing any work. The note is an exclusive lock on RECOVER-07.
 
 avoid:
-- Do NOT advance to RECOVER-08, RECOVER-11, or any other ticket while RECOVER-07 is open.
-- Do NOT treat RECOVER-11 or any later closed ticket as authority to skip RECOVER-07.
+- Do NOT advance to RECOVER-08, RECOVER-11, or any other later ticket while RECOVER-07 is open.
+- Do NOT treat RECOVER-11 or any later-ticket work as authority to skip RECOVER-07.
 - Do NOT leave `materializeValueExpr(...)` calls for canonical `shapeRef` handling in the install/materializer path.
 - Do NOT leave `allocShapeBankWords` or `writeShapeBankHeader` calls in CPU install/materializer code for the canonical path.
 - Do NOT leave `resolveInstanceLaneCount` in the install path for the canonical pipeline.
@@ -26,7 +26,7 @@ avoid:
 gates_passed:
 - typecheck: clean
 - build: clean (vite 6.4.1, 13719 modules)
-- RECOVER-11 isolation: the Type 5 text commit (5d065b9e6) is additive and does not worsen RECOVER-07 or RECOVER-08 violations; kept rather than reverted
+- RECOVER-11 isolation: later post-core class work in commit `5d065b9e6` is additive and does not worsen RECOVER-07 or RECOVER-08 violations; kept rather than reverted
 - prerequisite identification: RECOVER-07 correctly identified as earliest open prerequisite preempting all later work
 
 gates_failed:
@@ -34,7 +34,7 @@ gates_failed:
 - RECOVER-07 acceptance: `src/runtime/ValueExprMaterializer.ts` line 128 still calls `allocShapeBankWords()` and lines 132-147 write canonical shape headers from CPU code
 - RECOVER-07 acceptance: `src/services/runtime-hotpath-install.ts` lines 64-66 still resolve dynamic instance counts via `resolveInstanceLaneCount()` during install
 - RECOVER-08 acceptance: install still evaluates runtime expressions for canonical path (blocked behind RECOVER-07)
-- implementer protocol compliance: implementer advanced to RECOVER-11 despite evaluator note locking active_ticket to RECOVER-07 with next_action revise-active-ticket (violates loop protocol §6 and §11)
+- implementer protocol compliance: implementer advanced to later-ticket work despite evaluator note locking active_ticket to RECOVER-07 with next_action revise-active-ticket (violates loop protocol §6 and §11)
 
 evidence:
 - `src/services/runtime-hotpath-install.ts:102`: `const buffer = materializeValueExpr(step.field, program.valueExprs, step.instanceId, count, state, program, undefined, INSTALL_MATERIALIZE_SCRATCH, pureFnContext);`
@@ -44,4 +44,4 @@ evidence:
 - `src/services/runtime-hotpath-install.ts:22`: imports `resolveInstanceLaneCount` from InstanceCountResolver
 - `src/services/runtime-hotpath-install.ts:24`: imports `materializeValueExpr` from ValueExprMaterializer
 - all three violations are identical to those flagged in the previous evaluator note at commit 93dd46460; no remediation was attempted
-- RECOVER-11 commit (5d065b9e6) added 1151 lines of text/glyph shape class code while RECOVER-07 remained unaddressed
+- later-ticket commit `5d065b9e6` added post-core class code while RECOVER-07 remained unaddressed
