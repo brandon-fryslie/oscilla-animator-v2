@@ -68,7 +68,6 @@ const OPTIONAL_MODE_CONSTANT = 0;
 const OPTIONAL_MODE_SLOT = 1;
 
 const INSTANCE_COUNT_MODE_STATIC = 0;
-const INSTANCE_COUNT_MODE_DYNAMIC = 1;
 
 function resolveSlotArenaAddress(
   program: CompiledProgramIR,
@@ -225,12 +224,19 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset] = shapeSlotAddress.baseOffset;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride] = shapeSlotAddress.laneStride;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride] = shapeSlotAddress.componentStride;
+    if (sink.instanceCountMode !== 'static') {
+      // [LAW:single-enforcer] Draw-prep sink packing is the single boundary
+      // that rejects unsupported runtime-owned dynamic instance counts until
+      // GPU derivation exists for `instanceCountMode=dynamic`.
+      throw new Error(
+        `DrawPrepSinkTablePacker: unsupported dynamic instance count for sinkIndex=${sink.sinkIndex} ` +
+          `(instanceId=${String(sink.instanceId)})`,
+      );
+    }
     words[descriptorBase + DrawPrepSinkDescriptorWord.InstanceCountMode] =
-      sink.instanceCountMode === 'static' ? INSTANCE_COUNT_MODE_STATIC : INSTANCE_COUNT_MODE_DYNAMIC;
+      INSTANCE_COUNT_MODE_STATIC;
     words[descriptorBase + DrawPrepSinkDescriptorWord.StaticInstanceCount] =
-      sink.instanceCountMode === 'static'
-        ? assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`)
-        : 0;
+      assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`);
 
     // [RECOVER-07] Shape word offset comes from the compile-time topology
     // install stage — no arena round-trip through CPU materialization.

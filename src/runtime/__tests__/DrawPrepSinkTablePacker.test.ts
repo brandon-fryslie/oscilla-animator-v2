@@ -364,4 +364,36 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(packed!.wordCount).toBe(DRAW_PREP_SINK_TABLE_HEADER_WORDS + 1 * DRAW_PREP_SINK_TABLE_RECORD_WORDS + 1 * DRAW_PREP_SINK_DESCRIPTOR_WORDS);
     expect(packed!.wordCount).toBe(8 + 8 + 26);
   });
+
+  it('fails fast for unsupported dynamic instance counts', () => {
+    const slots: TestSinkSlotSet = {
+      shape: valueSlot(1),
+      controlPoints: valueSlot(2),
+      color: valueSlot(3),
+      scale: valueSlot(4),
+    };
+    const instance = instanceId('instance-dynamic');
+    const steps = [makeRenderStep(instance, slots)];
+    const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
+      [slots.shape, { offset: 0, stride: 1, laneCount: 1, length: 1 }],
+      [slots.controlPoints, { offset: 10, stride: 2, laneCount: 1, length: 2 }],
+      [slots.color, { offset: 20, stride: 4, laneCount: 1, length: 4 }],
+      [slots.scale, { offset: 30, stride: 1, laneCount: 1, length: 1 }],
+    ]);
+    const program = makeMinimalProgram(steps, slotToArena);
+    (program as any).drawPrepProgram = {
+      ...program.drawPrepProgram,
+      sinks: [
+        {
+          ...program.drawPrepProgram.sinks[0],
+          instanceCountMode: 'dynamic',
+          staticInstanceCount: undefined,
+        },
+      ],
+    };
+
+    expect(() => packDrawPrepSinkTableV1(program, makeShapeWordOffsets([[slots.shape, 16]]))).toThrow(
+      /unsupported dynamic instance count/,
+    );
+  });
 });
