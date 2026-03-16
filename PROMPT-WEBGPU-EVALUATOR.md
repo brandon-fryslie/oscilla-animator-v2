@@ -22,7 +22,7 @@ Your job is to judge the latest implementation state for exactly one `RECOVER-*`
    - `git log --oneline -n 10`
    - `lit ls --query "status:open RECOVER" --json`
    - `lit ls --query "status:closed RECOVER" --json`
-5. Ensure `.codex/webgpu-loop/` exists.
+5. Ensure `session-docs/` exists.
 
 ## Choose Ticket
 
@@ -41,7 +41,7 @@ Read in this order:
 4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket
 6. `docs/WebGPU-Complete/` specs listed in the ticket
-7. `.codex/webgpu-loop/<ticket-id>.md`, if it exists, only as prior steering context
+7. `session-docs/WEBGPU-LOOP.md`, if it exists, only as prior steering context
 
 If these disagree on scope, owner, boundary, or acceptance target, block.
 
@@ -80,12 +80,13 @@ If the implementation is wrong enough that it should not remain as the next base
 
 ## Evaluator Note
 
-Write `.codex/webgpu-loop/<ticket-id>.md` whose first line is exactly:
+Write `session-docs/WEBGPU-LOOP.md` whose first line is exactly:
 
 `Evaluator Note`
 
 Include:
 
+- `active_ticket:`
 - `evaluated_commit:`
 - `repo_base_for_next_run:`
 - `verdict:`
