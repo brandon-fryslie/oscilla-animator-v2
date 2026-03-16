@@ -24,6 +24,7 @@ import type { KernelRegistry } from '../../runtime/KernelRegistry';
 import type { ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
 import type { NagaLoweringProgramIR } from './naga-emitter';
 import type { SerializableTopologyDef, TopologyId } from '../../shapes/types';
+import { ShapeClass } from '../../shapes/types';
 
 // =============================================================================
 // Version and Core Types
@@ -374,6 +375,14 @@ export interface DrawPrepSinkIR {
   readonly instanceCountMode: 'static' | 'dynamic';
   /** Present only when instanceCountMode==='static' */
   readonly staticInstanceCount?: number;
+  /**
+   * Canonical shape taxonomy class for this sink.
+   *
+   * // [LAW:one-type-per-behavior] Shape class is the primary execution contract
+   * // discriminant. Draw-prep, render, and geometry consumption branch on this
+   * // rather than on thin indexed/nonIndexed classification alone.
+   */
+  readonly shapeClass: ShapeClass;
   /**
    * Canonical indirect command mode for this sink record.
    *

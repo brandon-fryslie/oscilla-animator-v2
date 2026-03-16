@@ -46,6 +46,7 @@ import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import type { SerializableTopologyDef } from '../shapes/types';
+import { ShapeClass } from '../shapes/types';
 import { lowerScheduleToNagaModule, type NagaLoweringCoverageIR } from './ir/naga-emitter';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
@@ -903,12 +904,25 @@ function convertLinkedIRToProgram(
   return program;
 }
 
-function inferDrawModeForRenderStep(
+interface ShapeClassification {
+  readonly drawMode: DrawPrepSinkIR['drawMode'];
+  readonly shapeClass: ShapeClass;
+}
+
+/**
+ * Classify a render step's shape class and draw mode from compile-owned topology evidence.
+ *
+ * // [LAW:one-type-per-behavior] Shape class reflects real execution differences.
+ * // Draw mode is derived from the class's topology characteristics.
+ * // Currently all existing shapes are Type 1 Rigid (closed-path indexed topology
+ * // in ShapeBank with per-instance transforms in Arena).
+ */
+function classifyShapeForRenderStep(
   step: Extract<Step, { kind: 'render' }>,
   valueExprNodes: readonly ValueExpr[],
   topologyById: ReadonlyMap<number, SerializableTopologyDef>,
   materializedFieldExprBySlot: ReadonlyMap<number, number>,
-): DrawPrepSinkIR['drawMode'] {
+): ShapeClassification {
   const shapeExprId = materializedFieldExprBySlot.get(step.shape.slot as number);
   if (shapeExprId === undefined) {
     // [LAW:no-silent-fallbacks] Draw-mode inference must fail fast when shape
@@ -935,10 +949,17 @@ function inferDrawModeForRenderStep(
         `(topologyId=${String(shapeExpr.topologyId)})`,
     );
   }
-  if (!Array.isArray(topology.verbs)) {
-    return 'nonIndexed';
-  }
-  return topology.closed ? 'indexed' : 'nonIndexed';
+
+  // [LAW:one-type-per-behavior] All current shapes are Type 1 Rigid and use
+  // non-indexed draws with GPU vertex pulling. The vertex shader generates
+  // triangle fan geometry from canonical ShapeBank topology data. Future shape
+  // classes (parametric, ribbon, SDF, text) will add new classification
+  // branches here.
+  // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
+  // to nonIndexed (GPU vertex pulling from topologyBank).
+  const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
+
+  return { drawMode, shapeClass: ShapeClass.Type1Rigid };
 }
 
 function resolveShapeRefExprId(
@@ -1026,9 +1047,9 @@ function buildDrawPrepProgram(
       );
     }
 
-    // [LAW:one-source-of-truth] Draw mode is derived from compile-owned shape
-    // topology metadata, never hard-coded in runtime/draw-prep packing.
-    const drawMode = inferDrawModeForRenderStep(
+    // [LAW:one-source-of-truth] Shape class and draw mode are derived from
+    // compile-owned topology metadata, never hard-coded in runtime/draw-prep.
+    const { drawMode, shapeClass } = classifyShapeForRenderStep(
       step,
       valueExprNodes,
       topologyById,
@@ -1047,6 +1068,8 @@ function buildDrawPrepProgram(
       indirectRecordIndex,
       instanceCountMode: staticInstanceCount === undefined ? 'dynamic' : 'static',
       staticInstanceCount,
+      // [LAW:one-type-per-behavior] Shape class is the primary execution contract.
+      shapeClass,
       // [LAW:one-source-of-truth] Draw-prep command ABI metadata is emitted by
       // compiler and consumed by runtime/renderer as one canonical contract.
       drawMode,

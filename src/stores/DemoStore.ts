@@ -10,8 +10,17 @@
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import { hclDemos, type HclDemo } from '../demo';
+import { GPU_BOOTSTRAP_DEMO_FILENAME, hclDemos, type HclDemo } from '../demo';
+import { deserializePatchFromHCL } from '../patch-dsl';
+import { verifyGpuPatchCompatibility } from '../services/GpuPatchCompatibility';
 import type { PatchStore } from './PatchStore';
+
+function isVerifiedGpuDemo(hcl: string): boolean {
+  const parsed = deserializePatchFromHCL(hcl);
+  // [LAW:single-enforcer] DemoStore owns the default-demo admission boundary,
+  // so parse success and GPU-compatibility are enforced together here.
+  return parsed.errors.length === 0 && verifyGpuPatchCompatibility(parsed.patch).ok;
+}
 
 export class DemoStore {
   readonly demos: readonly HclDemo[] = hclDemos;
@@ -41,10 +50,16 @@ export class DemoStore {
   }
 
   /**
-   * Load the default demo ('simple.hcl' or first available).
+   * Load the default demo (GPU bootstrap demo when verified).
    */
   loadDefault(): void {
-    const defaultDemo = this.demos.find(d => d.filename === 'simple.hcl') ?? this.demos[0];
+    const preferredDemo = this.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME);
+    const verifiedDemo = this.demos.find((demo) => isVerifiedGpuDemo(demo.hcl));
+    const defaultDemo = preferredDemo && isVerifiedGpuDemo(preferredDemo.hcl)
+      ? preferredDemo
+      : verifiedDemo
+        ?? preferredDemo
+        ?? this.demos[0];
     if (defaultDemo) {
       this.selectDemo(defaultDemo.filename);
     }

@@ -1,5 +1,11 @@
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
 import type { IndirectArgsReadbackSnapshot } from './WebGPUIndirectArgsInspector';
+import {
+  dispatchGeometryRoutes,
+  type GeometryRoute,
+  type GeometryRouteDispatchResult,
+  type ShapeBankDirectGeometry,
+} from './ShapeBankGeometrySeam';
 import type {
   DrawPrepRenderContract,
   MatrixViewportContract,
@@ -12,6 +18,7 @@ import {
   computeRustRendererSinkTableWordCapacity,
   type RustRendererBootstrapConfig,
   type RustRendererGpuPass,
+  type RustRendererReadbackSnapshot,
   type RustRendererSchedulerState,
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
@@ -24,6 +31,7 @@ import {
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
+import { fetchRustRendererWasmBytes } from '../wasm/renderer-wasm-asset';
 import {
   extractPassDebugConstants,
   formatWgslWithLineNumbers,
@@ -491,6 +499,12 @@ export class WebGPURenderer {
   private executionState: WebGPURendererExecutionState = 'active';
   private circuitBreakerTimer: ReturnType<typeof setInterval> | null = null;
   private circuitBreakerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+  // -- Geometry route dispatch (RECOVER-03 seam) --
+  private latestGeometryRoutes: ReadonlyMap<number, GeometryRoute> = new Map();
+  private directRouteDispatchCount = 0;
+  // [RECOVER-10] [LAW:single-enforcer] Latest structured readback snapshot
+  // from the worker, replacing the stubbed readIndirectArgsDebugView.
+  private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
 
   private reportEngineError(
     source: string,
@@ -831,6 +845,10 @@ export class WebGPURenderer {
     }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
+    // [LAW:one-source-of-truth] Geometry route classification runs in the
+    // active render path after ShapeBank data is synced to shared memory.
+    // RECOVER-03 establishes this seam; RECOVER-04 implements the direct path.
+    this.classifyAndDispatchGeometryRoutes(input.shapeBank);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
@@ -877,11 +895,33 @@ export class WebGPURenderer {
     };
   }
 
-  async readIndirectArgsDebugView(maxRecords: number = 0): Promise<IndirectArgsReadbackSnapshot> {
+  // [RECOVER-10] [LAW:single-enforcer] Structured readback snapshot accessor
+  // for debug consumers. Returns the latest worker-backed GPU readback data.
+  getLatestReadbackSnapshot(): RustRendererReadbackSnapshot | null {
+    return this.latestReadbackSnapshot;
+  }
+
+  // [RECOVER-10] [LAW:single-enforcer] Indirect args debug view is now backed
+  // by real worker readback data instead of an empty stub.
+  async readIndirectArgsDebugView(_maxRecords: number = 0): Promise<IndirectArgsReadbackSnapshot> {
+    const snapshot = this.latestReadbackSnapshot;
+    if (snapshot === null || snapshot.indirectArgs.length === 0) {
+      return {
+        capturedAtMs: performance.now(),
+        recordCount: 0,
+        records: [],
+      };
+    }
     return {
-      capturedAtMs: performance.now(),
-      recordCount: Math.max(0, Math.floor(maxRecords)),
-      records: [],
+      capturedAtMs: snapshot.capturedAtMs,
+      recordCount: snapshot.indirectArgs.length,
+      records: snapshot.indirectArgs.map((r) => ({
+        indexCount: r.indexCount,
+        instanceCount: r.instanceCount,
+        firstIndex: r.firstIndex,
+        baseVertex: r.baseVertex,
+        firstInstance: r.firstInstance,
+      })),
     };
   }
 
@@ -981,6 +1021,26 @@ export class WebGPURenderer {
     return this.latestSinkTableSample;
   }
 
+  /**
+   * Geometry routes classified during the most recent render() call.
+   *
+   * Returns the route map (shape word offset → GeometryRoute) from the latest
+   * frame. Empty map before the first render().
+   */
+  getLatestGeometryRoutes(): ReadonlyMap<number, GeometryRoute> {
+    return this.latestGeometryRoutes;
+  }
+
+  /**
+   * Cumulative count of shapeBankDirect geometry dispatches across all frames.
+   *
+   * This counter proves the dispatch seam is reachable from the active render
+   * path. It increments once per shapeBankDirect shape per render() call.
+   */
+  getDirectRouteDispatchCount(): number {
+    return this.directRouteDispatchCount;
+  }
+
   // [LAW:single-enforcer] GPU fault callback is set once by RuntimeService;
   // renderer handlers invoke it for all GPU error/device-lost classifications.
   setGpuFaultCallback(callback: GpuFaultCallback | null): void {
@@ -989,6 +1049,43 @@ export class WebGPURenderer {
 
   private emitGpuFault(fault: GpuFault): void {
     this.gpuFaultCallback?.(fault);
+  }
+
+  // -- Geometry route dispatch (RECOVER-03 seam) --
+
+  /**
+   * Classify geometry routes for the current ShapeBank and dispatch
+   * shapeBankDirect routes through the seam handler.
+   *
+   * Called from render() every frame after ShapeBank data is synced to shared
+   * memory. Both direct and legacy routes currently proceed through the same
+   * SharedArrayBuffer → worker path. The branch exists so RECOVER-04 can
+   * implement direct geometry consumption for Type 1 Rigid shapes without
+   * restructuring the render method.
+   */
+  private classifyAndDispatchGeometryRoutes(shapeBank: RenderShapeBankSource): void {
+    const result = dispatchGeometryRoutes(
+      shapeBank,
+      (geometry) => this.handleDirectGeometryRoute(geometry),
+    );
+    this.latestGeometryRoutes = result.routes;
+    this.directRouteDispatchCount += result.directDispatchCount;
+  }
+
+  /**
+   * Seam entry point for shapes classified as shapeBankDirect.
+   *
+   * RECOVER-04: Type 1 Rigid shapes now use GPU vertex pulling from the
+   * topology storage buffer. The uber shader reads control points directly
+   * from topologyBank — no CPU mesh realization needed.
+   */
+  private handleDirectGeometryRoute(_geometry: ShapeBankDirectGeometry): void {
+    // [RECOVER-04] Direct ShapeBank topology consumption is active.
+    // Vertex pulling happens entirely in the uber shader — the shader reads
+    // control points from topologyBank at paramBlockOffset and generates
+    // triangle fan geometry from @builtin(vertex_index). No JS-side geometry
+    // work is needed; this callback exists for route dispatch observability
+    // and as the integration point for future per-shape GPU resource management.
   }
 
   private throwIfFatalError(): void {
@@ -1039,6 +1136,15 @@ export class WebGPURenderer {
 
   private createShutdownMessage(): RustRendererWorkerInboundMessage {
     return { type: 'SHUTDOWN' };
+  }
+
+  // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+  // Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+  uploadAtlasData(data: Uint32Array): void {
+    this.tryPostWorkerMessage(
+      { type: 'UPLOAD_ATLAS', data } as RustRendererWorkerInboundMessage,
+      'Failed to upload atlas data to worker',
+    );
   }
 
   private postWorkerMessage(message: RustRendererWorkerInboundMessage): void {
@@ -1360,9 +1466,11 @@ export class WebGPURenderer {
     sharedSinkTable: SharedArrayBuffer,
     config: RustRendererBootstrapConfig,
   ): Promise<void> {
+    const rendererWasmBytes = await fetchRustRendererWasmBytes();
     const message: RustRendererWorkerInboundMessage = {
       type: 'BOOTSTRAP',
       canvas: offscreenCanvas,
+      rendererWasmBytes,
       sharedInput,
       sharedShapeBank,
       sharedSinkTable,
@@ -1373,7 +1481,7 @@ export class WebGPURenderer {
       successType: 'BOOTSTRAP_SUCCESS',
       context: 'bootstrap',
       dispatch: () => {
-        this.worker.postMessage(message, [offscreenCanvas]);
+        this.worker.postMessage(message, [offscreenCanvas, rendererWasmBytes]);
       },
     });
     this.bootstrapped = true;
@@ -1625,6 +1733,11 @@ export class WebGPURenderer {
     }
     if (payload.type === 'SCHEDULER_HEARTBEAT') {
       this.handleSchedulerHeartbeatMessage(payload);
+      return;
+    }
+    // [RECOVER-10] Store latest readback snapshot for debug consumers.
+    if (payload.type === 'READBACK_SNAPSHOT') {
+      this.latestReadbackSnapshot = payload;
     }
   };
 }

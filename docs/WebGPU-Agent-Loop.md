@@ -24,6 +24,10 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 3. Evaluator guidance is steering only. It cannot widen scope or override the ticket/spec.
 4. Work on exactly one `RECOVER-*` leaf ticket per run.
 5. The worktree must be clean at the end of every run.
+6. `session-docs/WEBGPU-LOOP.md` is also the run-to-run ticket lock. The implementer must not advance to a different leaf ticket unless that note explicitly authorizes advancement and the previously active ticket is already evaluator-closed.
+7. Once the loop has an accepted visible runtime baseline, later tickets must preserve that baseline unless the active ticket explicitly allows a temporary regression.
+8. If an earlier prerequisite leaf ticket is reopened, it immediately preempts later tickets and becomes the active boundary again.
+9. A broken visible runtime baseline is not excused by being pre-existing. If the baseline is broken, the loop must route to the earliest ticket that owns restoring it and must not advance past that breakage.
 
 ## Filesystem Notes
 
@@ -34,6 +38,7 @@ Use one shared file:
 - `session-docs/WEBGPU-LOOP.md`
 
 The evaluator owns writing that file. The implementer reads it when present.
+The evaluator note is a hard handoff artifact, not advisory queue metadata.
 
 ## Dirty Tree Normalization
 
@@ -57,6 +62,11 @@ The implementer:
 5. Must verify the ticket's acceptance criteria locally.
 6. Must never close the active `RECOVER-*` ticket.
 7. Must leave a clean tree and a commit when repo state changed.
+8. Must treat the evaluator note as an exclusive lock on the named `active_ticket:` until the evaluator both closes that ticket and writes `next_action: advance-to-next-ready-ticket`.
+9. Must not treat `lit ready` as authority to advance when an active ticket remains open.
+10. Must re-prove the accepted visible runtime baseline after changing a live-path boundary unless the active ticket explicitly allows temporary regression.
+11. Must not work a later leaf ticket while an earlier prerequisite leaf ticket is open.
+12. Must not treat a broken accepted baseline as "out of scope because it was already broken" unless the evaluator note explicitly authorizes a ticket that owns that regression.
 
 ## Evaluator Contract
 
@@ -70,6 +80,10 @@ The evaluator:
 6. Owns `RECOVER-*` ticket closure when the verdict is `accept-complete`.
 7. May safely revert isolated bad implementation commits with `git revert`.
 8. Must leave a clean tree and a commit when repo state changed.
+9. Must never authorize advancement while the active ticket remains open.
+10. Must not accept or advance work that regresses the last accepted visible runtime baseline unless the active ticket explicitly allowed that regression.
+11. Must reopen and preempt to the earliest violated prerequisite leaf ticket when current repo state no longer satisfies that prerequisite's boundary.
+12. Must treat a broken accepted baseline as a live ownership problem, not historical trivia; if it is still broken, route to the earliest owning ticket and do not advance.
 
 ## Evaluator Note
 
@@ -105,6 +119,8 @@ Allowed `next_action:` values:
 - `revise-active-ticket`
 - `stop-blocked`
 
+`advance-to-next-ready-ticket` is valid only when the evaluator has just accepted and closed the `active_ticket:`. Otherwise the active ticket remains locked for the implementer.
+
 If tracker writes work, the evaluator may also mirror a summary to the ticket, but the filesystem note is the canonical steering artifact.
 
 ## Gates
@@ -113,11 +129,16 @@ Every run should be explainable as gates:
 
 1. source/ticket alignment
 2. design or verdict alignment
-3. verification quality: checks and tests prove the intended behavior
-4. static verification
-5. runtime/readback verification when relevant
-6. ownership/spec alignment
-7. clean closeout
+3. live-path alignment: seam/cutover tickets alter the active path required by the ticket, not only helper code
+4. verification quality: checks and tests prove the intended behavior
+5. static verification
+6. runtime/readback verification when relevant
+7. baseline liveness: previously accepted visible runtime behavior still works after later live-path changes
+8. ownership/spec alignment
+9. clean closeout
+10. prerequisite integrity: no earlier leaf ticket has become false again in current repo state
+11. explicit validation gates: any ticket/doc-required pause or validation checkpoint happened before implementation continued
+12. baseline ownership: if the visible runtime baseline is broken, the run is attached to the ticket that owns repairing it rather than a later unrelated ticket
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 

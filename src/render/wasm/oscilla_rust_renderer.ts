@@ -19,9 +19,12 @@ interface RendererWasmModule {
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_frame_pacing_packet?: () => unknown;
+  readonly take_readback_snapshot?: () => unknown;
   readonly rebuild_gpu_pipelines?: (
     passes: readonly RustRendererGpuPass[],
   ) => Promise<void> | void;
+  // [RECOVER-11] Atlas upload for Type5 MSDF text rendering.
+  readonly upload_atlas_data?: (data: Uint32Array) => void;
 }
 
 let initialized = false;
@@ -35,9 +38,12 @@ let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
+let takeReadbackSnapshotImpl: RendererWasmModule['take_readback_snapshot'] | null = null;
 let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null = null;
+// [RECOVER-11] Atlas upload binding.
+let uploadAtlasDataImpl: RendererWasmModule['upload_atlas_data'] | null = null;
 
-export async function initRustRendererWasm(): Promise<void> {
+export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Promise<void> {
   if (initialized) {
     return;
   }
@@ -51,8 +57,9 @@ export async function initRustRendererWasm(): Promise<void> {
       const rawModule = await import('./pkg/oscilla_rust_renderer.js');
       const wasmModule = rawModule as RendererWasmModule;
       if (typeof wasmModule.default === 'function') {
-        const wasmUrl = new URL('./pkg/oscilla_rust_renderer_bg.wasm', import.meta.url);
-        await wasmModule.default({ module_or_path: wasmUrl });
+        // [LAW:one-source-of-truth] The page owns renderer wasm byte loading;
+        // worker bootstrap consumes only the transferred canonical bytes.
+        await wasmModule.default({ module_or_path: rendererWasmBytes });
       }
       if (typeof wasmModule.init_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing init_engine export');
@@ -84,6 +91,9 @@ export async function initRustRendererWasm(): Promise<void> {
       if (typeof wasmModule.take_frame_pacing_packet !== 'function') {
         throw new Error('Rust renderer wasm module missing take_frame_pacing_packet export');
       }
+      if (typeof wasmModule.take_readback_snapshot !== 'function') {
+        throw new Error('Rust renderer wasm module missing take_readback_snapshot export');
+      }
       initEngineImpl = wasmModule.init_engine.bind(wasmModule);
       attachSharedInputImpl = wasmModule.attach_shared_input.bind(wasmModule);
       attachSharedShapeBankImpl = wasmModule.attach_shared_shape_bank.bind(wasmModule);
@@ -93,7 +103,12 @@ export async function initRustRendererWasm(): Promise<void> {
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
+      takeReadbackSnapshotImpl = wasmModule.take_readback_snapshot.bind(wasmModule);
       rebuildGpuPipelinesImpl = wasmModule.rebuild_gpu_pipelines.bind(wasmModule);
+      // [RECOVER-11] Atlas upload is optional (only present in builds with Type5).
+      uploadAtlasDataImpl = wasmModule.upload_atlas_data
+        ? wasmModule.upload_atlas_data.bind(wasmModule)
+        : null;
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -177,6 +192,14 @@ export function takeRustRendererFramePacingPacket(): unknown {
   return takeFramePacingPacketImpl();
 }
 
+// [RECOVER-10] [LAW:single-enforcer] One readback polling boundary.
+export function takeRustRendererReadbackSnapshot(): unknown {
+  if (!initialized || !takeReadbackSnapshotImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  return takeReadbackSnapshotImpl();
+}
+
 export async function rebuildRustRendererGpuPipelines(
   passes: readonly RustRendererGpuPass[],
 ): Promise<void> {
@@ -184,4 +207,12 @@ export async function rebuildRustRendererGpuPipelines(
     throw new Error('Rust renderer wasm is not initialized');
   }
   await rebuildGpuPipelinesImpl(passes);
+}
+
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+export function uploadRustRendererAtlasData(data: Uint32Array): void {
+  if (!initialized || !uploadAtlasDataImpl) {
+    throw new Error('Rust renderer wasm is not initialized or missing upload_atlas_data export');
+  }
+  uploadAtlasDataImpl(data);
 }

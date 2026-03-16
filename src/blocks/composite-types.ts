@@ -129,6 +129,11 @@ export interface CompositeBlockDef {
    * - etc.
    */
   readonly capability: Capability;
+  /**
+   * Whether this composite is verified against the canonical WebGPU render path.
+   * Defaults to false at registration time.
+   */
+  readonly gpuVerified?: boolean;
 
   /**
    * Whether this composite is read-only (library composite).

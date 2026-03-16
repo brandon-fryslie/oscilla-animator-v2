@@ -1,10 +1,14 @@
 use crate::memory::GpuMemoryArena;
 
+// [RECOVER-06] Draw-prep compute derives indirect args from canonical GPU state.
+// [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
+// geometry source. Descriptors carry static metadata resolved at pack time.
 const DEFAULT_DRAW_PREP_WGSL: &str = r#"
 const DRAW_MODE_INDEXED: u32 = 0u;
 const DRAW_MODE_NON_INDEXED: u32 = 1u;
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
 const DEFAULT_INDEXED_STRIDE_WORDS: u32 = 5u;
 const DEFAULT_NON_INDEXED_STRIDE_WORDS: u32 = 4u;
 
@@ -16,14 +20,31 @@ const TABLE_WORD_INDEXED_STRIDE_WORDS: u32 = 6u;
 const TABLE_WORD_NON_INDEXED_STRIDE_WORDS: u32 = 7u;
 
 const RECORD_WORD_DRAW_MODE: u32 = 0u;
-const RECORD_WORD_COUNT: u32 = 1u;
-const RECORD_WORD_INSTANCE_COUNT: u32 = 2u;
-const RECORD_WORD_FIRST: u32 = 3u;
-const RECORD_WORD_BASE_VERTEX: u32 = 4u;
-const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
+
+// Descriptor word offsets for instance-count and shape metadata
+const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
+const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
+
+const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
+
+// ShapeHeaderV1 word offsets (must match RuntimeState.ts ShapeBankHeaderWord)
+const SHAPE_WORD_INDEX_COUNT: u32 = 4u;
+const SHAPE_WORD_FIRST_INDEX: u32 = 5u;
+const SHAPE_WORD_BASE_VERTEX: u32 = 6u;
+const SHAPE_WORD_VERTEX_COUNT: u32 = 7u;
+const SHAPE_WORD_FIRST_VERTEX: u32 = 8u;
 
 @group(0) @binding(0) var<storage, read> sinkTableWords: array<u32>;
+@group(0) @binding(1) var<storage, read> topologyBank: array<u32>;
 @group(0) @binding(2) var<storage, read_write> indirectWords: array<atomic<u32>>;
+
+fn readTopology(offset: u32) -> u32 {
+  if (offset >= arrayLength(&topologyBank)) {
+    return 0u;
+  }
+  return topologyBank[offset];
+}
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -38,26 +59,45 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
 
   let recordBase = SINK_TABLE_HEADER_WORDS + recordIndex * SINK_TABLE_RECORD_WORDS;
-  if (recordBase + RECORD_WORD_FIRST_INSTANCE >= arrayLength(&sinkTableWords)) {
+  if (recordBase >= arrayLength(&sinkTableWords)) {
     return;
   }
 
   let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
-  let count = sinkTableWords[recordBase + RECORD_WORD_COUNT];
-  let instanceCount = sinkTableWords[recordBase + RECORD_WORD_INSTANCE_COUNT];
-  let first = sinkTableWords[recordBase + RECORD_WORD_FIRST];
-  let baseVertex = sinkTableWords[recordBase + RECORD_WORD_BASE_VERTEX];
-  let firstInstance = sinkTableWords[recordBase + RECORD_WORD_FIRST_INSTANCE];
   let indexedRecordCount = sinkTableWords[TABLE_WORD_INDEXED_COUNT];
   let indexedRegionBaseWords = sinkTableWords[TABLE_WORD_INDEXED_REGION_BASE_WORDS];
   let nonIndexedRegionBaseWords = sinkTableWords[TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS];
   let indexedStrideWords = max(sinkTableWords[TABLE_WORD_INDEXED_STRIDE_WORDS], DEFAULT_INDEXED_STRIDE_WORDS);
   let nonIndexedStrideWords = max(sinkTableWords[TABLE_WORD_NON_INDEXED_STRIDE_WORDS], DEFAULT_NON_INDEXED_STRIDE_WORDS);
 
+  // [RECOVER-06] Read descriptor for this record
+  let descriptorsBase = SINK_TABLE_HEADER_WORDS + totalRecordCount * SINK_TABLE_RECORD_WORDS;
+  let descriptorBase = descriptorsBase + recordIndex * SINK_TABLE_DESCRIPTOR_WORDS;
+
+  // Derive instanceCount from descriptor
+  let instanceCountMode = sinkTableWords[descriptorBase + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
+  let instanceCount = select(0u, sinkTableWords[descriptorBase + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT], instanceCountMode == INSTANCE_COUNT_MODE_STATIC);
+
+  // Derive firstInstance as prefix sum of instance counts for all earlier records
+  var firstInstance = 0u;
+  for (var i = 0u; i < recordIndex; i = i + 1u) {
+    let prevDescBase = descriptorsBase + i * SINK_TABLE_DESCRIPTOR_WORDS;
+    let prevMode = sinkTableWords[prevDescBase + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
+    firstInstance = firstInstance + select(0u, sinkTableWords[prevDescBase + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT], prevMode == INSTANCE_COUNT_MODE_STATIC);
+  }
+
+  // Read shape word offset from descriptor and derive geometry from topology bank
+  let shapeWordOffset = sinkTableWords[descriptorBase + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET];
+
   if (drawMode == DRAW_MODE_INDEXED) {
     if (recordIndex >= indexedRecordCount) {
       return;
     }
+    // Derive indexed draw args from ShapeHeaderV1
+    let count = readTopology(shapeWordOffset + SHAPE_WORD_INDEX_COUNT);
+    let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_INDEX);
+    let baseVertex = readTopology(shapeWordOffset + SHAPE_WORD_BASE_VERTEX);
+
     let base = indexedRegionBaseWords + recordIndex * indexedStrideWords;
     if (base + 4u >= arrayLength(&indirectWords)) {
       return;
@@ -73,6 +113,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (drawMode != DRAW_MODE_NON_INDEXED || recordIndex < indexedRecordCount) {
     return;
   }
+  // Derive non-indexed draw args from ShapeHeaderV1
+  let count = readTopology(shapeWordOffset + SHAPE_WORD_VERTEX_COUNT);
+  let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_VERTEX);
+
   let nonIndexedRecordIndex = recordIndex - indexedRecordCount;
   let base = nonIndexedRegionBaseWords + nonIndexedRecordIndex * nonIndexedStrideWords;
   if (base + 3u >= arrayLength(&indirectWords)) {
@@ -145,8 +189,11 @@ impl ComputeDispatcher {
         particle_count: u32,
         _shape_count: u32,
     ) -> Self {
+        // [LAW:one-source-of-truth] This layout defines the uniform transport
+        // binding for FrameHeader. The canonical source is the arena header
+        // zone; this uniform binding mirrors that data for GPU binding compat.
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Compute.Uniform.Layout"),
+            label: Some("FrameHeader.UniformTransport.Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE

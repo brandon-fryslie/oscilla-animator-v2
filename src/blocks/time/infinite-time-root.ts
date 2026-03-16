@@ -18,6 +18,7 @@ export function register(): void {
     description: 'Root block for patches with infinite time',
     form: 'primitive',
     capability: 'time',
+    gpuVerified: true,
     loweringPurity: 'impure',
     inputs: {
       periodAMs: { type: canonicalType(FLOAT), defaultValue: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },

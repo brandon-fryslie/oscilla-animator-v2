@@ -5,7 +5,8 @@ pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
 pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
 pub const SINK_TABLE_HEADER_WORDS: usize = 8;
 pub const SINK_TABLE_RECORD_WORDS: usize = 8;
-pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 20;
+// [LAW:one-source-of-truth] Must match DrawPrepSinkTable.ts DRAW_PREP_SINK_DESCRIPTOR_WORDS.
+pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 26;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
@@ -43,9 +44,15 @@ impl Iterator for BufferClearPlan {
     }
 }
 
+// [LAW:one-source-of-truth] FrameHeader is the single canonical frame-state
+// type. Arena header zone (offset 0..ARENA_HEADER_FLOATS) is the authoritative
+// home; the uniform buffer is derived transport for GPU binding convenience.
+pub const ARENA_HEADER_FLOATS: usize = 64;
+pub const ARENA_HEADER_BYTES: usize = ARENA_HEADER_FLOATS * std::mem::size_of::<f32>();
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct GlobalUniforms {
+pub struct FrameHeader {
     pub view_proj: [[f32; 4]; 4],
     pub resolution: [f32; 2],
     pub time_seconds: f32,
@@ -62,7 +69,7 @@ pub struct SlotDescriptor {
 }
 
 pub struct GpuMemoryArena {
-    pub uniforms: GlobalUniforms,
+    pub frame_header: FrameHeader,
     pub slot_descriptors: Vec<SlotDescriptor>,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
@@ -70,8 +77,8 @@ pub struct GpuMemoryArena {
     pub topology_buffer: wgpu::Buffer,
     pub sink_table_buffer: wgpu::Buffer,
     pub indirect_buffer: wgpu::Buffer,
-    pub vertex_buffer: wgpu::Buffer,
-    pub index_buffer: wgpu::Buffer,
+    // [RECOVER-11] Atlas data storage buffer for Type5 MSDF text rendering.
+    pub atlas_buffer: wgpu::Buffer,
     pub assembly_write_bind_group: wgpu::BindGroup,
     pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
@@ -84,14 +91,17 @@ pub struct GpuMemoryArena {
     topology_capacity_words: usize,
     sink_table_capacity_words: usize,
     indirect_capacity_words: usize,
-    vertex_capacity_bytes: u64,
-    index_capacity_bytes: u64,
     state_buffers: [wgpu::Buffer; 2],
     compiler_arena_buffers: [wgpu::Buffer; 2],
     state_bind_groups: [wgpu::BindGroup; 2],
     compiler_arena_bind_groups: [wgpu::BindGroup; 2],
     compiler_simulation_bind_groups: [wgpu::BindGroup; 2],
+    // [RECOVER-07] Bind groups for vertex-stage arena reads (one per ping-pong buffer).
+    arena_render_bind_groups: [wgpu::BindGroup; 2],
     staging_buffers: [wgpu::Buffer; 2],
+    // [RECOVER-10] Dedicated staging buffer for indirect-args readback so
+    // instance staging and indirect-args staging can be in-flight independently.
+    indirect_staging_buffer: wgpu::Buffer,
     ping_pong_index: usize,
 }
 
@@ -125,17 +135,20 @@ impl GpuMemoryArena {
         draw_prep_layout: &wgpu::BindGroupLayout,
         instance_layout: &wgpu::BindGroupLayout,
         topology_layout: &wgpu::BindGroupLayout,
+        arena_render_layout: &wgpu::BindGroupLayout,
         max_particles: usize,
         max_shapes: usize,
     ) -> Self {
+        // [LAW:one-source-of-truth] Uniform buffer is derived transport that
+        // mirrors the canonical arena header. See publish_frame_header().
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("GlobalUniforms"),
-            size: std::mem::size_of::<GlobalUniforms>() as u64,
+            label: Some("FrameHeader.UniformTransport"),
+            size: std::mem::size_of::<FrameHeader>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("GlobalUniforms.BindGroup"),
+            label: Some("FrameHeader.UniformTransport.BindGroup"),
             layout: uniform_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -229,28 +242,19 @@ impl GpuMemoryArena {
             + max_shapes.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS);
         let initial_indirect_words = max_shapes
             .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
-        let initial_vertex_bytes = (max_shapes
-            .saturating_mul(8)
-            .saturating_mul(std::mem::size_of::<f32>())) as u64;
-        let initial_index_bytes = (max_shapes
-            .saturating_mul(12)
-            .saturating_mul(std::mem::size_of::<u32>())) as u64;
 
         let instance_capacity_bytes = initial_instance_bytes
             .max((INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64);
         let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
         let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
         let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
-        let vertex_capacity_bytes =
-            initial_vertex_bytes.max((8 * std::mem::size_of::<f32>()) as u64);
-        let index_capacity_bytes = initial_index_bytes.max((6 * std::mem::size_of::<u32>()) as u64);
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
         let sink_table_buffer = Self::create_sink_table_buffer(device, sink_table_capacity_words);
         let indirect_buffer = Self::create_indirect_buffer(device, indirect_capacity_words);
-        let vertex_buffer = Self::create_vertex_buffer(device, vertex_capacity_bytes);
-        let index_buffer = Self::create_index_buffer(device, index_capacity_bytes);
+        // [RECOVER-11] Placeholder atlas buffer (empty until text is rendered).
+        let atlas_buffer = Self::create_atlas_buffer(device, 4);
 
         let assembly_write_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ShapeBank.AssemblyWrite.BindGroup"),
@@ -292,13 +296,20 @@ impl GpuMemoryArena {
                 resource: instance_buffer.as_entire_binding(),
             }],
         });
+        // [RECOVER-11] Topology bind group includes atlas data buffer.
         let topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render.Topology.BindGroup"),
             layout: topology_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: topology_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: atlas_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let staging_size = state_buffer_bytes.max(16);
@@ -316,6 +327,17 @@ impl GpuMemoryArena {
                 mapped_at_creation: false,
             }),
         ];
+        // [RECOVER-10] [LAW:single-enforcer] Dedicated indirect-args readback
+        // staging buffer so instance and indirect readback are independent.
+        let indirect_staging_bytes =
+            (indirect_capacity_words.max(INDIRECT_WORDS_PER_RECORD) * std::mem::size_of::<u32>())
+                as u64;
+        let indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Debug.IndirectStaging"),
+            size: indirect_staging_bytes.max(16),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         // [LAW:single-enforcer] Compiler simulation bind groups are constructed
         // once at arena creation from the canonical compiler layout.
         let compiler_simulation_bind_groups = [
@@ -373,8 +395,29 @@ impl GpuMemoryArena {
             }),
         ];
 
+        // [RECOVER-07] Bind groups for vertex-stage arena reads (one per
+        // ping-pong buffer). The render pass binds the final simulation output.
+        let arena_render_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.A"),
+                layout: arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.B"),
+                layout: arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
+
         Self {
-            uniforms: GlobalUniforms::default(),
+            frame_header: FrameHeader::default(),
             slot_descriptors: Vec::with_capacity(64),
             uniform_buffer,
             uniform_bind_group,
@@ -382,8 +425,7 @@ impl GpuMemoryArena {
             topology_buffer,
             sink_table_buffer,
             indirect_buffer,
-            vertex_buffer,
-            index_buffer,
+            atlas_buffer,
             assembly_write_bind_group,
             draw_prep_bind_group,
             instance_bind_group,
@@ -396,21 +438,36 @@ impl GpuMemoryArena {
             topology_capacity_words,
             sink_table_capacity_words,
             indirect_capacity_words,
-            vertex_capacity_bytes,
-            index_capacity_bytes,
             state_buffers,
             compiler_arena_buffers,
             state_bind_groups,
             compiler_arena_bind_groups,
             compiler_simulation_bind_groups,
+            arena_render_bind_groups,
             staging_buffers,
+            indirect_staging_buffer,
             ping_pong_index: 0,
         }
     }
 
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, next_uniforms: GlobalUniforms) {
-        self.uniforms = next_uniforms;
-        queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.uniforms));
+    // [LAW:one-source-of-truth] Frame header is written to the arena's read
+    // buffer at offset 0 (canonical Zone 1 home) and mirrored to the uniform
+    // buffer (derived transport for GPU binding convenience).
+    // [LAW:single-enforcer] This method is the single write boundary for
+    // per-frame state publication to GPU memory.
+    pub fn publish_frame_header(&mut self, queue: &wgpu::Queue, header: FrameHeader) {
+        self.frame_header = header;
+        // Canonical write: arena header zone (offset 0) of the read buffer.
+        // The compiler reserves ARENA_HEADER_FLOATS at the start of every
+        // arena buffer (storage-class.ts DEFAULT_ARENA_ALIGNMENT_POLICY).
+        queue.write_buffer(
+            &self.compiler_arena_buffers[self.ping_pong_index],
+            0,
+            bytes_of(&self.frame_header),
+        );
+        // Derived transport: uniform buffer mirrors the arena header so
+        // existing shader bindings (var<uniform>) continue to work.
+        queue.write_buffer(&self.uniform_buffer, 0, bytes_of(&self.frame_header));
     }
 
     pub fn get_compute_read_bind_group(&self) -> &wgpu::BindGroup {
@@ -446,12 +503,25 @@ impl GpuMemoryArena {
         &self.compiler_simulation_bind_groups[read_index & 1]
     }
 
+    // [RECOVER-07] Returns the arena bind group for the current ping-pong read
+    // buffer. After simulation completes, ping_pong_index points to the buffer
+    // containing the final computed arena data.
+    pub fn get_arena_render_bind_group(&self) -> &wgpu::BindGroup {
+        &self.arena_render_bind_groups[self.ping_pong_index]
+    }
+
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {
         &self.state_buffers[self.ping_pong_index]
     }
 
     pub fn debug_staging_buffer(&self) -> &wgpu::Buffer {
         &self.staging_buffers[self.ping_pong_index & 1]
+    }
+
+    // [RECOVER-10] [LAW:single-enforcer] One canonical staging buffer for
+    // indirect-args readback, independent of instance-payload staging.
+    pub fn indirect_staging_buffer(&self) -> &wgpu::Buffer {
+        &self.indirect_staging_buffer
     }
 
     pub fn swap_ping_pong(&mut self) {
@@ -495,25 +565,6 @@ impl GpuMemoryArena {
         }
         if !words.is_empty() {
             queue.write_buffer(&self.sink_table_buffer, 0, cast_slice(words));
-        }
-    }
-
-    pub fn write_geometry_payload(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        vertices: &[f32],
-        indices: &[u32],
-    ) {
-        // [LAW:one-source-of-truth] Geometry payload upload happens through one
-        // canonical arena method so render buffers are never seeded from ad-hoc defaults.
-        self.ensure_vertex_capacity(device, vertices.len().max(2));
-        self.ensure_index_capacity(device, indices.len().max(3));
-        if !vertices.is_empty() {
-            queue.write_buffer(&self.vertex_buffer, 0, cast_slice(vertices));
-        }
-        if !indices.is_empty() {
-            queue.write_buffer(&self.index_buffer, 0, cast_slice(indices));
         }
     }
 
@@ -574,24 +625,6 @@ impl GpuMemoryArena {
         })
     }
 
-    fn create_vertex_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Render.VertexBuffer"),
-            size: size_bytes.max(16),
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-
-    fn create_index_buffer(device: &wgpu::Device, size_bytes: u64) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Render.IndexBuffer"),
-            size: size_bytes.max(16),
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-
     fn ensure_instance_capacity(&mut self, device: &wgpu::Device, required_floats: usize) -> bool {
         let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
         if required_bytes <= self.instance_capacity_bytes {
@@ -641,34 +674,17 @@ impl GpuMemoryArena {
             next_capacity = next_capacity.saturating_mul(2);
         }
         self.indirect_buffer = Self::create_indirect_buffer(device, next_capacity);
+        // [RECOVER-10] Resize indirect staging buffer to match new capacity.
+        let staging_bytes =
+            (next_capacity * std::mem::size_of::<u32>()) as u64;
+        self.indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Debug.IndirectStaging"),
+            size: staging_bytes.max(16),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         self.indirect_capacity_words = next_capacity;
         true
-    }
-
-    fn ensure_vertex_capacity(&mut self, device: &wgpu::Device, required_floats: usize) {
-        let required_bytes = (required_floats.saturating_mul(std::mem::size_of::<f32>())) as u64;
-        if required_bytes <= self.vertex_capacity_bytes {
-            return;
-        }
-        let mut next_capacity = self.vertex_capacity_bytes.max(16);
-        while next_capacity < required_bytes {
-            next_capacity = next_capacity.saturating_mul(2);
-        }
-        self.vertex_buffer = Self::create_vertex_buffer(device, next_capacity);
-        self.vertex_capacity_bytes = next_capacity;
-    }
-
-    fn ensure_index_capacity(&mut self, device: &wgpu::Device, required_words: usize) {
-        let required_bytes = (required_words.saturating_mul(std::mem::size_of::<u32>())) as u64;
-        if required_bytes <= self.index_capacity_bytes {
-            return;
-        }
-        let mut next_capacity = self.index_capacity_bytes.max(16);
-        while next_capacity < required_bytes {
-            next_capacity = next_capacity.saturating_mul(2);
-        }
-        self.index_buffer = Self::create_index_buffer(device, next_capacity);
-        self.index_capacity_bytes = next_capacity;
     }
 
     fn rebuild_assembly_write_bind_group(&mut self, device: &wgpu::Device) {
@@ -720,15 +736,51 @@ impl GpuMemoryArena {
         });
     }
 
+    // [RECOVER-11] Topology bind group includes atlas data buffer.
     fn rebuild_topology_bind_group(&mut self, device: &wgpu::Device) {
         self.topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render.Topology.BindGroup"),
             layout: &self.topology_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: self.topology_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.atlas_buffer.as_entire_binding(),
+                },
+            ],
         });
+    }
+
+    // [RECOVER-11] Create atlas storage buffer for Type5 MSDF text rendering.
+    fn create_atlas_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.AtlasBuffer"),
+            size: ((words.max(4) * std::mem::size_of::<u32>()) as u64).max(16),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    // [RECOVER-11] Upload MSDF atlas texture data to the atlas storage buffer.
+    // Layout: [0]=width (u32), [1]=height (u32), [2..]=packed RGBA pixels (u32 each).
+    pub fn write_atlas_data(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let required_words = words.len();
+        let current_words = (self.atlas_buffer.size() as usize) / std::mem::size_of::<u32>();
+        if required_words > current_words {
+            self.atlas_buffer = Self::create_atlas_buffer(device, required_words);
+            self.rebuild_topology_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.atlas_buffer, 0, cast_slice(words));
+        }
     }
 }
 
