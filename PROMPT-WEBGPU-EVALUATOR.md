@@ -55,6 +55,7 @@ Check:
 4. the tests and checks actually verify the intended behavior instead of implementation shape only
 5. the change did not introduce dual authority, fallback ownership, or unrelated churn
 6. seam or cutover tickets modify the live path required by the ticket rather than only adding helper, classifier, or test-only code
+7. any previously accepted visible runtime baseline still works unless the active ticket explicitly allowed a temporary regression
 
 Re-run the needed proof:
 
@@ -63,6 +64,7 @@ Re-run the needed proof:
 - `pnpm build`
 - relevant WebGPU/runtime/readback checks
 - any ticket-specific gates
+- the last accepted visible runtime baseline when later tickets touch a live-path boundary
 
 Do not trust the implementer's report without replaying evidence.
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
@@ -78,6 +80,7 @@ Use exactly one:
 - `blocked`
 
 If the implementation is wrong enough that it should not remain as the next base, and the bad work is isolated, you may `git revert` it. Never use destructive history edits.
+Do not use `accept-complete` or `advance-to-next-ready-ticket` if the active ticket's local goals are met but a previously accepted visible runtime baseline no longer works.
 
 ## Evaluator Note
 

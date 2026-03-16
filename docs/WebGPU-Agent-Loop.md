@@ -25,6 +25,7 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 4. Work on exactly one `RECOVER-*` leaf ticket per run.
 5. The worktree must be clean at the end of every run.
 6. `session-docs/WEBGPU-LOOP.md` is also the run-to-run ticket lock. The implementer must not advance to a different leaf ticket unless that note explicitly authorizes advancement and the previously active ticket is already evaluator-closed.
+7. Once the loop has an accepted visible runtime baseline, later tickets must preserve that baseline unless the active ticket explicitly allows a temporary regression.
 
 ## Filesystem Notes
 
@@ -61,6 +62,7 @@ The implementer:
 7. Must leave a clean tree and a commit when repo state changed.
 8. Must treat the evaluator note as an exclusive lock on the named `active_ticket:` until the evaluator both closes that ticket and writes `next_action: advance-to-next-ready-ticket`.
 9. Must not treat `lit ready` as authority to advance when an active ticket remains open.
+10. Must re-prove the accepted visible runtime baseline after changing a live-path boundary unless the active ticket explicitly allows temporary regression.
 
 ## Evaluator Contract
 
@@ -75,6 +77,7 @@ The evaluator:
 7. May safely revert isolated bad implementation commits with `git revert`.
 8. Must leave a clean tree and a commit when repo state changed.
 9. Must never authorize advancement while the active ticket remains open.
+10. Must not accept or advance work that regresses the last accepted visible runtime baseline unless the active ticket explicitly allowed that regression.
 
 ## Evaluator Note
 
@@ -124,8 +127,9 @@ Every run should be explainable as gates:
 4. verification quality: checks and tests prove the intended behavior
 5. static verification
 6. runtime/readback verification when relevant
-7. ownership/spec alignment
-8. clean closeout
+7. baseline liveness: previously accepted visible runtime behavior still works after later live-path changes
+8. ownership/spec alignment
+9. clean closeout
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 
