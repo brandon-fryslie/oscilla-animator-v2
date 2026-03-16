@@ -60,6 +60,8 @@ Check:
 8. no earlier prerequisite leaf ticket has become invalid again in current repo state
 9. any explicit validation or approval gate named by the ticket/docs was actually satisfied before implementation started
 10. a broken visible runtime baseline is being actively repaired by the correct ticket rather than explained away as pre-existing
+11. the proof used for acceptance is actually proof of the ticket claim rather than a convenient but weak signal
+12. any new verifier added by the implementer would fail if the old wrong behavior were still active
 
 Re-run the needed proof:
 
@@ -74,6 +76,15 @@ Do not trust the implementer's report without replaying evidence.
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
 `// [LAW:one-way-deps] If a later ticket exposes that an earlier prerequisite boundary is still wrong, reopen the earliest violated prerequisite and steer the loop back to it before allowing more downstream work.`
 `// [LAW:verifiable-goals] "It was broken when I got here" is not evidence. A broken accepted baseline must be assigned to the earliest owning ticket and must block downstream advancement until restored or explicitly allowed by that ticket.`
+
+Classify each piece of evidence as:
+
+- acceptance proof
+- supporting signal
+- diagnostic tool
+
+Do not unlock advancement on supporting signals or diagnostics alone.
+If no acceptance proof exists yet for the behavior the ticket changes, the correct verdict is usually `revise` or `blocked` with instruction to add the smallest proof seam needed.
 
 ## Verdict
 
