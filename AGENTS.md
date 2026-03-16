@@ -1,34 +1,18 @@
 # AGENTS.md — Repository Workflow Rules
 
-## Issue Workflow (GitHub Project + PR Review)
+## PR Review Workflow
 
-Use this workflow for each implementation ticket in project `oscilla work items`:
+1. Open a PR as soon as implementation is in reviewable shape.
+2. Wait for Copilot review and human review feedback.
+3. For each review thread, comment before making changes with the proposed resolution approach or the explicit reason for no change.
+4. After pushing changes, add a follow-up comment describing exactly how the thread was addressed.
+5. Do not resolve review threads; leave them open for user resolution or follow-up requests.
+6. Wait for required checks and address every failing check before requesting final review.
+7. When review feedback is addressed and checks are green, notify the user.
 
-1. Start ticket:
-   - Move the issue to `Status: Design`.
-2. Design proposal:
-   - Post a design comment on the issue before writing implementation code.
-   - The comment must include scope, touched files/modules, invariants/contracts, validation plan, and explicit dependency assumptions.
-3. Design acceptance gate:
-   - Do not begin implementation until design acceptance is confirmed on the issue.
-4. Implementation start:
-   - Move the issue to `Status: In progress`.
-   - Implement exactly what was accepted in design.
-5. PR creation:
-   - Open a PR as soon as implementation is in reviewable shape.
-6. Copilot/code review handling:
-   - Wait for Copilot review and human review feedback.
-   - For each review thread, comment before making changes with the proposed resolution approach (or explicit reason for no change).
-   - After pushing changes, add a follow-up comment describing exactly how the thread was addressed.
-   - Do not resolve review threads; leave them open for user resolution or follow-up requests.
-7. Checks and regressions:
-   - Wait for required checks and address every failing check before requesting final review.
-8. Ready-for-review handoff:
-   - When review feedback is addressed and checks are green, move the issue to `Status: Ready to Merge` and notify the user.
-
-// [LAW:single-enforcer] This file is the single enforcement boundary for ticket-state/review-thread handling.
-// [LAW:verifiable-goals] State transitions, issue comments, review thread comments, PR status, and check results are deterministic evidence.
-// [LAW:one-source-of-truth] Project `Status` + issue/PR timeline are the canonical workflow record.
+// [LAW:single-enforcer] This file is the single enforcement boundary for PR review-thread handling.
+// [LAW:verifiable-goals] Review thread comments, PR status, and check results are deterministic evidence.
+// [LAW:one-source-of-truth] The PR timeline and review threads are the canonical review record.
 
 <!-- BEGIN LINKS INTEGRATION -->
 ## links Agent-Native Workflow
@@ -41,9 +25,10 @@ Session bootstrap (every session / after compaction):
 Work acquisition:
 1. Use the issue ID already assigned in context when present.
 2. Check current ready work with `lit ready`.
-3. For significant , create one with `lit new ...`.
-4. Mark work in progress with `lit update <issue-id> --status in_progress` (or `lit start ...`).
-5. Record work start with `lit comment add <issue-id> --body "Starting: <plan>"`.
+3. Create a new issue only for an independent app work item that needs its own tracking.
+4. Do not create a new issue for small tweaks, doc wording changes, prompt edits, minor cleanups, or a few-line changes. Fold that work into an existing issue when one already owns it, or commit it directly without opening a ticket.
+5. Mark work in progress with `lit update <issue-id> --status in_progress` (or `lit start ...`) only when an issue already exists for the work.
+6. Record work start with `lit comment add <issue-id> --body "Starting: <plan>"` only when an issue already exists for the work.
 
 Execution:
 - Prefer `--json` on reads and writes.
