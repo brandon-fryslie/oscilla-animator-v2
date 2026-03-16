@@ -116,7 +116,10 @@ function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[
  */
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
-  arena: Float32Array,
+  // [RECOVER-07] Compile-time shape word offsets keyed by the render step's
+  // shape slot. Replaces the old arena round-trip where CPU-materialized
+  // shapeRef handles were read back from the Float32Array arena.
+  shapeWordOffsetBySlot: ReadonlyMap<ValueSlot, number>,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
   // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
@@ -229,10 +232,15 @@ export function packDrawPrepSinkTableV1(
         ? assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`)
         : 0;
 
-    // [RECOVER-06] Resolve topology bank word offset from arena. After
-    // materialization the shape handle (a u32 word offset into the topology
-    // bank) is stored at the shape slot's arena base address.
-    const shapeWordOffset = arena[shapeSlotAddress.baseOffset];
+    // [RECOVER-07] Shape word offset comes from the compile-time topology
+    // install stage — no arena round-trip through CPU materialization.
+    const shapeWordOffset = shapeWordOffsetBySlot.get(renderStep.shape.slot);
+    if (shapeWordOffset === undefined) {
+      throw new Error(
+        `DrawPrepSinkTablePacker: missing compile-time shapeWordOffset for ` +
+          `shape.slot ${String(renderStep.shape.slot)} (sinkIndex=${sink.sinkIndex})`,
+      );
+    }
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeWordOffset] = assertFiniteUint32(
       shapeWordOffset,
       `shapeWordOffset sinkIndex=${sink.sinkIndex}`,

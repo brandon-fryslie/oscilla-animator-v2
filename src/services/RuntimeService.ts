@@ -294,21 +294,21 @@ export class RuntimeService {
     }
   }
 
-  // [RECOVER-08] Install publishes canonical compile-time assets only.
-  // No CPU runtime schedule execution occurs — the GPU pipeline runs
-  // simulation/draw-prep for every frame including the first.
+  // [RECOVER-07] Install publishes compile-time topology headers and sink
+  // table descriptors only. No CPU materialization, no instance count
+  // resolution, no ShapeBank allocator. The compile-time topology install
+  // stage is the single GPU-visible runtime stage for shape-handle production.
   private installRendererCanonicalAssets(): void {
     const renderer = this.renderer;
     const canvas = this.canvas;
     const program = this.compileState.currentProgram;
-    const state = this.compileState.currentState;
-    if (!renderer || !canvas || !program || !state || this.rendererExecutionState !== 'active') {
+    if (!renderer || !canvas || !program || this.rendererExecutionState !== 'active') {
       return;
     }
 
-    // [LAW:one-source-of-truth] Install planes contain only ShapeBank topology
-    // headers and sink table descriptors — no CPU-materialized frame products.
-    const planes = buildRuntimeHotpathInstallPlanes(program, state);
+    // [RECOVER-07] Install planes are built from compile-time topology data
+    // only — no RuntimeState dependency.
+    const planes = buildRuntimeHotpathInstallPlanes(program);
     const viewport = this.store.viewport;
     const renderWidth = Math.max(1, Math.floor(viewport?.canvasWidth || canvas.width || 1));
     const renderHeight = Math.max(1, Math.floor(viewport?.canvasHeight || canvas.height || 1));
@@ -320,8 +320,11 @@ export class RuntimeService {
       shapeBank: {
         data: planes.shapeBankWords,
         volatilePtr: planes.shapeBankWordCount,
-        staticBoundary: state.shapeBank.staticBoundary,
-        topologyIdByHandle: state.shapeBank.topologyIdByHandle,
+        // [RECOVER-07] staticBoundary is 0: all topology headers are
+        // produced by the compile-time install stage, not the ShapeBank
+        // frame allocator.
+        staticBoundary: 0,
+        topologyIdByHandle: planes.topologyIdByHandle,
       },
       drawPrepSinkTableV1: planes.sinkTableWords ?? EMPTY_U32_WORDS,
       drawPrepSinkTableWordCount: planes.sinkTableWordCount,
