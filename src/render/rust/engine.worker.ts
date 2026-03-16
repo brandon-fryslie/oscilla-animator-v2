@@ -20,6 +20,7 @@ import type {
   RustRendererEngineError,
   RustRendererIndirectArgsRecord,
   RustRendererReadbackSnapshot,
+  RustRendererRebuildGpuPipelinesFailure,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from './worker-protocol';
@@ -40,8 +41,32 @@ function postWorkerFatalError(code: string, message: string): void {
   postWorkerMessage({ type: 'FATAL_ERROR', code, message });
 }
 
+function postPipelineRebuildFailure(code: string, passId: string, message: string): void {
+  const payload: RustRendererRebuildGpuPipelinesFailure = {
+    type: 'REBUILD_GPU_PIPELINES_FAILURE',
+    code,
+    passId,
+    message,
+  };
+  postWorkerMessage(payload);
+}
+
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isPipelineRebuildFailurePayload(
+  payload: unknown,
+): payload is { readonly code: string; readonly passId: string; readonly message: string } {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  const candidate = payload as Partial<{ readonly code: string; readonly passId: string; readonly message: string }>;
+  return (
+    typeof candidate.code === 'string'
+    && typeof candidate.passId === 'string'
+    && typeof candidate.message === 'string'
+  );
 }
 
 function postRuntimePollFatalError(code: string, message: string): void {
@@ -115,7 +140,15 @@ async function handleRebuildGpuPipelines(
   if (message.passes.length === 0) {
     throw new Error('Rust worker rebuild contract violation: REBUILD_GPU_PIPELINES requires at least one pass');
   }
-  await rebuildRustRendererGpuPipelines(message.passes);
+  try {
+    await rebuildRustRendererGpuPipelines(message.passes);
+  } catch (error) {
+    if (isPipelineRebuildFailurePayload(error)) {
+      postPipelineRebuildFailure(error.code, error.passId, error.message);
+      return;
+    }
+    throw error;
+  }
   postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
 }
 
