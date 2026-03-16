@@ -207,11 +207,9 @@ impl RenderDispatcher {
                 module: &shader_module,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: (std::mem::size_of::<f32>() * 2) as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x2],
-                }],
+                // [RECOVER-04] No vertex buffer layout — vertex pulling from
+                // topologyBank storage buffer in the vertex shader.
+                buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
@@ -295,8 +293,6 @@ impl RenderDispatcher {
         render_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
         render_pass.set_bind_group(1, &arena.instance_bind_group, &[]);
         render_pass.set_bind_group(2, &arena.topology_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, arena.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(arena.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
         let indexed_stride_words = plan.indexed_stride_words.max(5);
         let non_indexed_stride_words = plan.non_indexed_stride_words.max(4);
