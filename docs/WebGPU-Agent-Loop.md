@@ -17,12 +17,23 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 ## Shared Rules
 
 1. Loop memory lives only in:
-   - the active ticket body and comments in `lit`
+   - the active ticket body in `lit`
+   - the shared evaluator note file `session-docs/WEBGPU-LOOP.md`
    - git history and the current worktree
 2. The active leaf ticket plus cited docs/specs outrank everything else.
 3. Evaluator guidance is steering only. It cannot widen scope or override the ticket/spec.
 4. Work on exactly one `RECOVER-*` leaf ticket per run.
 5. The worktree must be clean at the end of every run.
+
+## Filesystem Notes
+
+`// [LAW:one-source-of-truth] Evaluator note files are the canonical loop-memory artifact for run-to-run steering.`
+
+Use one shared file:
+
+- `session-docs/WEBGPU-LOOP.md`
+
+The evaluator owns writing that file. The implementer reads it when present.
 
 ## Dirty Tree Normalization
 
@@ -40,11 +51,12 @@ Normalize first:
 The implementer:
 
 1. Chooses the active leaf ticket.
-2. Reads the latest valid evaluator note for that ticket, if one exists.
+2. Reads `session-docs/WEBGPU-LOOP.md` before choosing or continuing work.
 3. Works only inside the active ticket's accepted boundary.
 4. May try bounded alternative implementations inside the same ticket.
 5. Must verify the ticket's acceptance criteria locally.
-6. Must leave a clean tree and a commit when repo state changed.
+6. Must never close the active `RECOVER-*` ticket.
+7. Must leave a clean tree and a commit when repo state changed.
 
 ## Evaluator Contract
 
@@ -52,19 +64,22 @@ The evaluator:
 
 1. Identifies the ticket that owns current repo state.
 2. Re-runs enough verification to judge the latest implementation independently.
-3. Chooses one bounded verdict.
-4. Prepares the next run by leaving a structured evaluator note.
-5. May safely revert isolated bad implementation commits with `git revert`.
-6. Must leave a clean tree and a commit when repo state changed.
+3. Audits whether the tests and checks actually verify the intended behavior rather than only the current implementation shape.
+4. Chooses one bounded verdict.
+5. Prepares the next run by leaving a structured evaluator note.
+6. Owns `RECOVER-*` ticket closure when the verdict is `accept-complete`.
+7. May safely revert isolated bad implementation commits with `git revert`.
+8. Must leave a clean tree and a commit when repo state changed.
 
 ## Evaluator Note
 
-The evaluator writes a ticket comment whose first line is exactly:
+The evaluator writes `session-docs/WEBGPU-LOOP.md` whose first line is exactly:
 
 `Evaluator Note`
 
 Required fields:
 
+- `active_ticket:`
 - `evaluated_commit:`
 - `repo_base_for_next_run:`
 - `verdict:`
@@ -90,16 +105,19 @@ Allowed `next_action:` values:
 - `revise-active-ticket`
 - `stop-blocked`
 
+If tracker writes work, the evaluator may also mirror a summary to the ticket, but the filesystem note is the canonical steering artifact.
+
 ## Gates
 
 Every run should be explainable as gates:
 
 1. source/ticket alignment
 2. design or verdict alignment
-3. static verification
-4. runtime/readback verification when relevant
-5. ownership/spec alignment
-6. clean closeout
+3. verification quality: checks and tests prove the intended behavior
+4. static verification
+5. runtime/readback verification when relevant
+6. ownership/spec alignment
+7. clean closeout
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 

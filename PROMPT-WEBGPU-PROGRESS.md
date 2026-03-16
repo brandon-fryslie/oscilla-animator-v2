@@ -21,12 +21,13 @@ Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
 4. Inspect ready work:
    - `lit ready --json`
    - `lit ls --query "status:open RECOVER" --json`
+5. Ensure `session-docs/` exists.
 
 ## Choose Work
 
 1. If the user named a `RECOVER-*` leaf ticket, use it.
-2. Otherwise, find the most likely active open/in-progress leaf ticket and read its latest valid `Evaluator Note`, if any.
-3. If that note says `continue-active-ticket` or `revise-active-ticket`, use that ticket.
+2. Otherwise, read `session-docs/WEBGPU-LOOP.md`, if it exists.
+3. If that note names an `active_ticket:` and says `continue-active-ticket` or `revise-active-ticket`, use that ticket.
 4. If that note says `stop-blocked`, stop and report the blocker.
 5. Otherwise, use the highest-priority ready `RECOVER-*` leaf task.
 
@@ -37,7 +38,7 @@ Never select an epic or milestone container.
 Read in this order:
 
 1. active leaf ticket
-2. latest valid `Evaluator Note` on that ticket, if any
+2. `session-docs/WEBGPU-LOOP.md`, if it exists
 3. parent/dependency tickets
 4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket
@@ -93,7 +94,7 @@ If runtime behavior changed, inspect real runtime evidence. Passing tests alone 
    - what ran
    - runtime/readback proof
    - remaining risks
-2. Close the ticket only if the ticket is actually complete.
+2. Never close the ticket. The evaluator owns closure.
 3. If repo state changed, commit it.
 4. Normalize the tree again until `git status --short` is clean.
 

@@ -22,6 +22,7 @@ Your job is to judge the latest implementation state for exactly one `RECOVER-*`
    - `git log --oneline -n 10`
    - `lit ls --query "status:open RECOVER" --json`
    - `lit ls --query "status:closed RECOVER" --json`
+5. Ensure `session-docs/` exists.
 
 ## Choose Ticket
 
@@ -40,7 +41,7 @@ Read in this order:
 4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket
 6. `docs/WebGPU-Complete/` specs listed in the ticket
-7. latest valid `Evaluator Note` on that ticket, only as prior steering context
+7. `session-docs/WEBGPU-LOOP.md`, if it exists, only as prior steering context
 
 If these disagree on scope, owner, boundary, or acceptance target, block.
 
@@ -51,7 +52,8 @@ Check:
 1. the current repo state belongs to this ticket and not a later one
 2. the implemented owner/boundary matches the ticket/spec
 3. verification can be replayed locally
-4. the change did not introduce dual authority, fallback ownership, or unrelated churn
+4. the tests and checks actually verify the intended behavior instead of implementation shape only
+5. the change did not introduce dual authority, fallback ownership, or unrelated churn
 
 Re-run the needed proof:
 
@@ -62,6 +64,7 @@ Re-run the needed proof:
 - any ticket-specific gates
 
 Do not trust the implementer's report without replaying evidence.
+`// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
 
 ## Verdict
 
@@ -77,12 +80,13 @@ If the implementation is wrong enough that it should not remain as the next base
 
 ## Evaluator Note
 
-Leave a ticket comment whose first line is exactly:
+Write `session-docs/WEBGPU-LOOP.md` whose first line is exactly:
 
 `Evaluator Note`
 
 Include:
 
+- `active_ticket:`
 - `evaluated_commit:`
 - `repo_base_for_next_run:`
 - `verdict:`
@@ -102,12 +106,15 @@ Allowed `next_action:` values:
 
 Steer tactically, not architecturally.
 
+If tracker writes work, you may also mirror a brief summary to the ticket, but the filesystem note is canonical.
+
 ## Closeout
 
-1. Leave the evaluator note.
-2. Reopen or close the ticket if the verdict requires it and tracker writes work.
-3. If you changed repo state, commit it.
-4. Normalize the tree again until `git status --short` is clean.
+1. Write the evaluator note file.
+2. Close the ticket if and only if the verdict is `accept-complete` and tracker writes work.
+3. Reopen or leave the ticket open for every other verdict.
+4. If you changed repo state, commit it.
+5. Normalize the tree again until `git status --short` is clean.
 
 ## Final Report
 
