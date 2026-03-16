@@ -36,16 +36,14 @@ Use this workflow for each implementation ticket in project `oscilla work items`
 This repository is configured for agent-native issue tracking with `lit`.
 
 Session bootstrap (every session / after compaction):
-1. Run `lit quickstart --json`.
-2. Run `lit workspace --json`.
-3. If remotes are configured, run `lit sync pull --json` (uses upstream remote when configured, otherwise the single configured remote; debug override: `LINKS_DEBUG_DOLT_SYNC_BRANCH`).
+1. Run `lit quickstart`.
 
 Work acquisition:
 1. Use the issue ID already assigned in context when present.
-2. Check current ready work with `lit ready --json`.
-3. If no issue exists for the task, create one with `lit new ... --json`.
-4. Mark work in progress with `lit update <issue-id> --status in_progress --json` (or `lit start ... --json`).
-5. Record work start with `lit comment add <issue-id> --body "Starting: <plan>" --json`.
+2. Check current ready work with `lit ready`.
+3. For significant , create one with `lit new ...`.
+4. Mark work in progress with `lit update <issue-id> --status in_progress` (or `lit start ...`).
+5. Record work start with `lit comment add <issue-id> --body "Starting: <plan>"`.
 
 Execution:
 - Prefer `--json` on reads and writes.
@@ -55,7 +53,7 @@ Closeout:
 1. Add implementation summary comments as work progresses and when the PR reaches reviewable shape.
 2. You MUST create a git commit for the work before starting the next issue: `git add -A && git commit -m "<summary>"`.
 3. Do not close the issue at local implementation or commit time. Keep it open through review/checks and move it to `Status: Ready to Merge` when that workflow is satisfied.
-4. Work is complete only after the change is merged into `master`; close the issue then with `lit close <issue-id> --reason "<merge summary>" --json`.
+4. Work is complete only after the change is merged into `master`; close the issue then with `lit close <issue-id> --reason "<merge summary>"`.
 
 Traceability:
 - `git push` triggers hook-driven `lit sync push` attempts (warn-only on failure).
