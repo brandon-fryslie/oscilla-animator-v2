@@ -140,6 +140,8 @@ export class RuntimeService {
   private startupStorageResetArmed = false;
   private startupStorageResetTimer: ReturnType<typeof setTimeout> | null = null;
   private rendererExecutionState: WebGPURendererExecutionState = 'active';
+  private lastKnownGoodGpuBundle: CompiledGpuArtifactBundle | null = null;
+  private rendererRecoveryPromise: Promise<void> | null = null;
 
   constructor(
     private readonly store: RootStore,
@@ -370,6 +372,7 @@ export class RuntimeService {
     // compiler-emitted GPU shader artifacts into the active renderer.
     shaderInspector.setPasses(bundlePasses);
     await renderer.rebuildGpuPipelines(bundlePasses);
+    this.lastKnownGoodGpuBundle = artifacts.compiledGpuBundle;
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
@@ -467,6 +470,57 @@ export class RuntimeService {
     });
   }
 
+  private restartAnimationLoopAfterRecovery(): void {
+    if (this.animationLoop || !this.renderer || !this.arena || !this.canvas) {
+      return;
+    }
+    if (!this.compileState.currentProgram || !this.compileState.currentState) {
+      return;
+    }
+    this.animationState = createAnimationLoopState();
+    this.animationLoop = startAnimationLoop(
+      this.animationLoopDeps(),
+      this.animationState,
+      this.handleAnimationLoopError,
+    );
+  }
+
+  private async recoverRendererFromLastKnownGood(fault: GpuFault): Promise<void> {
+    if (this.rendererRecoveryPromise) {
+      return this.rendererRecoveryPromise;
+    }
+    const recoveryTask = (async () => {
+      const bundlePasses = this.lastKnownGoodGpuBundle?.passes ?? null;
+      if (!this.canvas || !bundlePasses) {
+        return;
+      }
+      const recoveredRenderer = await createWebGPURenderer(this.canvas, {
+        onGpuFault: this.handleGpuFault,
+      });
+      await recoveredRenderer.rebuildGpuPipelines(bundlePasses);
+      this.renderer = recoveredRenderer;
+      this.rendererExecutionState = 'active';
+      this.installRendererHotpathPlanes(performance.now());
+      this.restartAnimationLoopAfterRecovery();
+      this.store.diagnostics.log({
+        level: 'warn',
+        message: `Recovered the WebGPU renderer using the last known-good pipeline after [${fault.code}] and left playback paused.`,
+      });
+    })();
+    this.rendererRecoveryPromise = recoveryTask
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.store.diagnostics.log({
+          level: 'error',
+          message: `WebGPU recovery failed: ${message}`,
+        });
+      })
+      .finally(() => {
+        this.rendererRecoveryPromise = null;
+      });
+    return this.rendererRecoveryPromise;
+  }
+
   private handleGpuFault = (fault: GpuFault): void => {
     const { store } = this;
     const level = fault.severity === 'fatal' ? 'error' : 'warn';
@@ -494,16 +548,21 @@ export class RuntimeService {
     if (fault.severity !== 'fatal') {
       return;
     }
+    if (store.playback.isPlaying) {
+      store.playback.pause();
+    }
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.renderer?.setGpuFaultCallback(null);
     this.renderer?.dispose();
     this.renderer = null;
     store.diagnostics.log({
       level: 'error',
       message: fault.source === 'CIRCUIT_BREAKER'
         ? 'Rendering stopped by the WebGPU circuit breaker to protect the system.'
-        : 'GPU device lost — rendering stopped. Reload the page to recover.',
+        : 'GPU device lost — rendering stopped. Attempting recovery with the last known-good pipeline.',
     });
+    void this.recoverRendererFromLastKnownGood(fault);
   };
 
   /**
