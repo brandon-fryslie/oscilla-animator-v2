@@ -151,3 +151,13 @@ The core idea is simple:
 - build the new patch and authoring model above it
 - keep UI and physics aligned to the same architecture
 - delete compatibility once the new path is proven
+
+## 9. Unattended Loop
+
+The implementation backlog for this roadmap now has a dedicated unattended two-agent loop:
+
+- [docs/WebGPU-Future-Agent-Loop.md](../WebGPU-Future-Agent-Loop.md)
+- [PROMPT-WEBGPU-FUTURE-PROGRESS.md](../../PROMPT-WEBGPU-FUTURE-PROGRESS.md)
+- [PROMPT-WEBGPU-FUTURE-EVALUATOR.md](../../PROMPT-WEBGPU-FUTURE-EVALUATOR.md)
+
+That loop is intended to run against the `FUTURE-*` implementation tickets and uses `session-docs/WEBGPU-FUTURE-LOOP.md` as the run-to-run handoff artifact.
