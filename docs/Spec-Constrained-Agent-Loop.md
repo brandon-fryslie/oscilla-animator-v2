@@ -233,6 +233,111 @@ If we want to keep using this pattern, the best follow-up improvements are:
 6. **Migrate tracker commands from `lit` to `lnks`**
    - the toolchain is already signaling that transition
 
+## Building Proof While The Loop Runs
+
+The hardest question is usually:
+
+> How do we create proof before the proof exists?
+
+The answer is: proof-building is part of the work. It is not a postscript.
+
+For any ticket, the loop should first ask:
+
+1. what exact behavior claim is this ticket making?
+2. what observable consequence would necessarily follow if that claim were true?
+3. what is the cheapest deterministic boundary where that consequence can be checked?
+
+If no such boundary exists yet, the first deliverable of the ticket is to create the smallest proof seam needed to make later work safe.
+
+That means the loop may legitimately spend a run on:
+
+- adding readback
+- exposing telemetry
+- freezing a canonical fixture
+- adding a runtime probe
+- adding a contract test around an ownership boundary
+
+`// [LAW:verifiable-goals] If the system cannot yet prove the ticket's success condition, creating the proof seam is part of implementing the ticket, not auxiliary work.`
+
+### Proof Should Be Grown From Primitive Truths
+
+When starting from almost nothing, the loop should not wait for a perfect end-to-end oracle.
+
+Instead, build proofs in layers:
+
+1. boot succeeds
+2. no fatal logs / no GPU loss / no bootstrap failure
+3. canonical fixture compiles
+4. indirect args or readback become non-zero
+5. expected shape class / route / sink record appears
+6. visible output baseline remains stable
+7. optional screenshot or image diff once the earlier layers are trustworthy
+
+The loop should start with the strongest primitive truth it can obtain cheaply, then accumulate stronger proofs on top.
+
+### Changing Behavior Requires Overlapping Proofs
+
+Behavior-changing refactors should not discard old proof and hope the new proof is enough.
+
+During migration, the acceptance shape is usually:
+
+- the old accepted baseline still works
+- and the new ownership or boundary claim is now provably true
+
+That overlap is how the loop changes behavior without going blind.
+
+Examples:
+
+- old baseline: canonical patch still renders
+- new proof: CPU-packed indirect fields remain zero while GPU draw-prep produces non-zero indirect args
+
+Both matter during transition.
+
+### Proofs Are Not Whatever The Implementer Can Measure
+
+The implementer should not be free to invent an arbitrary check and call it proof.
+
+The evaluator should reject a proposed proof if any of these are true:
+
+1. it only proves implementation structure
+2. it can pass while the intended behavior is still wrong
+3. it does not distinguish old ownership from new ownership
+4. it is not derived from the active ticket/spec claim
+5. it cannot be replayed locally
+
+The key question is:
+
+> Could this check still pass if the ticket were actually wrong?
+
+If yes, it is not sufficient proof.
+
+### Proof Quality Rubric
+
+Classify every check as one of these:
+
+1. **Acceptance proof**
+   - required to move on
+2. **Supporting signal**
+   - increases confidence but is not enough on its own
+3. **Diagnostic tool**
+   - useful for debugging but does not prove correctness
+
+The loop should advance only on acceptance proof, not merely on supporting signals.
+
+### Practical Rule
+
+A proof is acceptable only if all are true:
+
+1. it is derived from the ticket/spec claim
+2. it would fail if the old wrong behavior were still active
+3. it is replayable by the evaluator
+4. it is stronger than structural coincidence
+5. it becomes part of the baseline for later tickets when appropriate
+
+If proof quality is uncertain, the loop should slow down and improve the proof instead of continuing the refactor.
+
+`// [LAW:single-enforcer] The evaluator is the single authority that decides whether a proposed proof is strong enough to unlock advancement.`
+
 ## Recommended Immediate Follow-Up For This Repo
 
 The process itself is now proven enough to document, but the implementation around it can be improved:

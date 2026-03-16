@@ -69,13 +69,25 @@ The visible runtime baseline is a repository invariant, not a per-run courtesy. 
    - no later ticket is required first
    - the current accepted runtime baseline can still be re-verified after your change if this ticket touches render, draw-prep, materialization, install, or another live-path boundary
    - if that baseline is already broken, the active ticket explicitly owns restoring it or the evaluator note explicitly routes the run to the ticket that does
-2. Add a design comment on the ticket with:
+2. Identify the proof target before coding:
+   - what exact behavior claim this ticket is making
+   - what observable consequence would necessarily follow if that claim were true
+   - what deterministic local boundary can prove that consequence
+3. If no trustworthy proof boundary exists yet, make the smallest proof seam part of this run:
+   - canonical fixture
+   - telemetry/readback
+   - runtime probe
+   - contract test around the ownership boundary
+4. Do not treat a weak check as proof just because it is easy to run.
+5. Reject your own proposed proof if it could still pass while the ticket is actually wrong.
+6. Add a design comment on the ticket with:
    - scope
    - touched files
    - invariant/ownership boundary
    - validation plan
+   - proof target and why the chosen verifier would fail if the old wrong behavior were still active
    - exact explanation of how the touched files create or modify the live path required by the ticket
-3. Move the ticket to `in_progress` if tracker writes work.
+7. Move the ticket to `in_progress` if tracker writes work.
 
 ## Implementation
 
@@ -103,6 +115,11 @@ Run the smallest sufficient set of:
 - any ticket-specific gates
 
 If runtime behavior changed, inspect real runtime evidence. Passing tests alone is not enough when ownership/render behavior is the point.
+Classify your evidence before using it:
+- acceptance proof
+- supporting signal
+- diagnostic tool
+Only acceptance proof may justify `completed`.
 If the repository already has an accepted visible render baseline, re-run that baseline proof after your change when you touch a live-path boundary. Do not report `completed` if the active ticket passes locally but the accepted baseline regresses.
 If the repository baseline is already broken on arrival and the active ticket does not explicitly own that breakage, do not continue to later work. Block or route back to the earliest ticket that owns restoring the baseline.
 If the active ticket says to pause for explicit validation or approval before starting, do not implement the ticket until that gate is recorded in the ticket or evaluator note. Block instead of assuming it happened.
