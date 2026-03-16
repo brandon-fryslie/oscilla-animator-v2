@@ -22,6 +22,7 @@ Your job is to judge the latest implementation state for exactly one `RECOVER-*`
    - `git log --oneline -n 10`
    - `lit ls --query "status:open RECOVER" --json`
    - `lit ls --query "status:closed RECOVER" --json`
+5. Ensure `.codex/webgpu-loop/` exists.
 
 ## Choose Ticket
 
@@ -40,7 +41,7 @@ Read in this order:
 4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket
 6. `docs/WebGPU-Complete/` specs listed in the ticket
-7. latest valid `Evaluator Note` on that ticket, only as prior steering context
+7. `.codex/webgpu-loop/<ticket-id>.md`, if it exists, only as prior steering context
 
 If these disagree on scope, owner, boundary, or acceptance target, block.
 
@@ -79,7 +80,7 @@ If the implementation is wrong enough that it should not remain as the next base
 
 ## Evaluator Note
 
-Leave a ticket comment whose first line is exactly:
+Write `.codex/webgpu-loop/<ticket-id>.md` whose first line is exactly:
 
 `Evaluator Note`
 
@@ -104,9 +105,11 @@ Allowed `next_action:` values:
 
 Steer tactically, not architecturally.
 
+If tracker writes work, you may also mirror a brief summary to the ticket, but the filesystem note is canonical.
+
 ## Closeout
 
-1. Leave the evaluator note.
+1. Write the evaluator note file.
 2. Close the ticket if and only if the verdict is `accept-complete` and tracker writes work.
 3. Reopen or leave the ticket open for every other verdict.
 4. If you changed repo state, commit it.
