@@ -1,4 +1,6 @@
 use crate::memory::GpuMemoryArena;
+use naga::valid::{Capabilities, ValidationFlags, Validator};
+use naga::Module;
 
 // [RECOVER-06] Draw-prep compute derives indirect args from canonical GPU state.
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
@@ -147,39 +149,165 @@ pub struct CompilerComputePassSpec {
     pub wgsl: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WorkgroupSize {
+    x: u32,
+    y: u32,
+    z: u32,
+}
+
 struct CompiledComputePassPipeline {
     _pass_id: String,
     pipeline: wgpu::ComputePipeline,
     workgroup_count: u32,
 }
 
+#[derive(Clone, Debug)]
+struct ValidatedComputePassProgram {
+    pass_id: String,
+    entry_point: String,
+    wgsl: String,
+    workgroup_count: u32,
+}
+
+pub struct StagedSimulationPipelines {
+    programs: Vec<ValidatedComputePassProgram>,
+}
+
 impl ComputeDispatcher {
-    fn parse_workgroup_size_x(simulation_wgsl: &str) -> u32 {
-        const DEFAULT_WORKGROUP_SIZE_X: u32 = 64;
-        let start = match simulation_wgsl.find("@workgroup_size(") {
-            Some(index) => index + "@workgroup_size(".len(),
-            None => return DEFAULT_WORKGROUP_SIZE_X,
-        };
-        let end = match simulation_wgsl[start..].find(')') {
-            Some(relative_end) => start + relative_end,
-            None => return DEFAULT_WORKGROUP_SIZE_X,
-        };
-        let maybe_x = simulation_wgsl[start..end]
-            .split(',')
-            .next()
-            .map(str::trim)
-            .unwrap_or_default()
-            .parse::<u32>()
-            .ok();
-        maybe_x
-            .filter(|x| *x > 0)
-            .unwrap_or(DEFAULT_WORKGROUP_SIZE_X)
+    fn validate_workgroup_size(
+        limits: &wgpu::Limits,
+        pass_id: &str,
+        workgroup_size: WorkgroupSize,
+    ) -> Result<(), String> {
+        if workgroup_size.x == 0 || workgroup_size.y == 0 || workgroup_size.z == 0 {
+            return Err(format!(
+                "pass \"{}\" workgroup_size dimensions must all be at least 1",
+                pass_id
+            ));
+        }
+        if workgroup_size.y != 1 || workgroup_size.z != 1 {
+            return Err(format!(
+                "pass \"{}\" workgroup_size must be 1D because runtime dispatch indexes only global_invocation_id.x",
+                pass_id
+            ));
+        }
+        if workgroup_size.x > limits.max_compute_workgroup_size_x {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.x={} exceeds device limit {}",
+                pass_id, workgroup_size.x, limits.max_compute_workgroup_size_x
+            ));
+        }
+        if workgroup_size.y > limits.max_compute_workgroup_size_y {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.y={} exceeds device limit {}",
+                pass_id, workgroup_size.y, limits.max_compute_workgroup_size_y
+            ));
+        }
+        if workgroup_size.z > limits.max_compute_workgroup_size_z {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.z={} exceeds device limit {}",
+                pass_id, workgroup_size.z, limits.max_compute_workgroup_size_z
+            ));
+        }
+        let total_invocations = workgroup_size
+            .x
+            .saturating_mul(workgroup_size.y)
+            .saturating_mul(workgroup_size.z);
+        if total_invocations > limits.max_compute_invocations_per_workgroup {
+            return Err(format!(
+                "pass \"{}\" total workgroup invocations={} exceeds device limit {}",
+                pass_id, total_invocations, limits.max_compute_invocations_per_workgroup
+            ));
+        }
+        Ok(())
     }
 
-    fn simulation_dispatch_count_for_wgsl(particle_count: u32, simulation_wgsl: &str) -> u32 {
-        let workgroup_size_x = Self::parse_workgroup_size_x(simulation_wgsl);
-        ((particle_count.saturating_add(workgroup_size_x.saturating_sub(1))) / workgroup_size_x)
+    fn simulation_dispatch_count_for_workgroup_size(
+        particle_count: u32,
+        workgroup_size: WorkgroupSize,
+    ) -> u32 {
+        ((particle_count.saturating_add(workgroup_size.x.saturating_sub(1))) / workgroup_size.x)
             .max(1)
+    }
+
+    fn find_compute_entry_point(
+        pass_id: &str,
+        module: &Module,
+        entry_point: &str,
+    ) -> Result<WorkgroupSize, String> {
+        let entry = module
+            .entry_points
+            .iter()
+            .find(|candidate| candidate.name == entry_point)
+            .ok_or_else(|| {
+                format!(
+                    "pass \"{}\" entry point \"{}\" was not found in WGSL module",
+                    pass_id, entry_point
+                )
+            })?;
+        if entry.stage != naga::ShaderStage::Compute {
+            return Err(format!(
+                "pass \"{}\" entry point \"{}\" must be a compute stage",
+                pass_id, entry_point
+            ));
+        }
+        if entry.workgroup_size_overrides.is_some() {
+            return Err(format!(
+                "pass \"{}\" entry point \"{}\" uses unsupported override-based workgroup sizing",
+                pass_id, entry_point
+            ));
+        }
+        Ok(WorkgroupSize {
+            x: entry.workgroup_size[0],
+            y: entry.workgroup_size[1],
+            z: entry.workgroup_size[2],
+        })
+    }
+
+    fn validate_compute_program_contract(
+        limits: &wgpu::Limits,
+        particle_count: u32,
+        spec: &CompilerComputePassSpec,
+    ) -> Result<ValidatedComputePassProgram, String> {
+        // [LAW:single-enforcer] Candidate shader admission is derived from the
+        // uploaded WGSL program and device limits at one Rust boundary.
+        let module = naga::front::wgsl::parse_str(spec.wgsl.as_str()).map_err(|error| {
+            format!(
+                "pass \"{}\" WGSL parsing failed:\n{}",
+                spec.pass_id,
+                error.emit_to_string(spec.wgsl.as_str())
+            )
+        })?;
+        Validator::new(ValidationFlags::all(), Capabilities::all())
+            .validate(&module)
+            .map_err(|error| {
+                format!(
+                    "pass \"{}\" WGSL validation failed: {}",
+                    spec.pass_id, error
+                )
+            })?;
+        let workgroup_size = Self::find_compute_entry_point(
+            spec.pass_id.as_str(),
+            &module,
+            spec.entry_point.as_str(),
+        )?;
+        Self::validate_workgroup_size(limits, spec.pass_id.as_str(), workgroup_size)?;
+        let workgroup_count =
+            Self::simulation_dispatch_count_for_workgroup_size(particle_count, workgroup_size)
+                .max(1);
+        if workgroup_count > limits.max_compute_workgroups_per_dimension {
+            return Err(format!(
+                "pass \"{}\" dispatch count {} exceeds device limit {}",
+                spec.pass_id, workgroup_count, limits.max_compute_workgroups_per_dimension
+            ));
+        }
+        Ok(ValidatedComputePassProgram {
+            pass_id: spec.pass_id.clone(),
+            entry_point: spec.entry_point.clone(),
+            wgsl: spec.wgsl.clone(),
+            workgroup_count,
+        })
     }
 
     pub fn new(
@@ -287,16 +415,22 @@ impl ComputeDispatcher {
         });
 
         let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
-        let simulation_pipelines = Self::compile_simulation_passes(
-            device,
-            &compiler_simulation_layout,
+        let default_program = Self::validate_compute_program_contract(
+            &device.limits(),
             particle_count,
-            &[CompilerComputePassSpec {
+            &CompilerComputePassSpec {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: simulation_wgsl.to_string(),
-            }],
-        );
+            },
+        )
+        .expect("default simulation shader must satisfy canonical compute-program contract");
+        let simulation_pipelines = Self::compile_runtime_simulation_pipelines(
+            device,
+            &compiler_simulation_layout,
+            &[default_program],
+        )
+        .expect("default simulation pipeline must satisfy canonical workgroup/device limits");
         let assembly_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.Assembly.Shader"),
             source: wgpu::ShaderSource::Wgsl(assembly_wgsl.into()),
@@ -375,35 +509,31 @@ impl ComputeDispatcher {
         })
     }
 
-    fn compile_simulation_passes(
+    fn compile_runtime_simulation_pipelines(
         device: &wgpu::Device,
         compiler_simulation_layout: &wgpu::BindGroupLayout,
-        particle_count: u32,
-        pass_specs: &[CompilerComputePassSpec],
-    ) -> Vec<CompiledComputePassPipeline> {
-        if pass_specs.is_empty() {
-            panic!(
-                "[LAW:no-silent-fallbacks] compile_simulation_passes requires at least one pass spec"
+        programs: &[ValidatedComputePassProgram],
+    ) -> Result<Vec<CompiledComputePassPipeline>, String> {
+        if programs.is_empty() {
+            return Err(
+                "[LAW:no-silent-fallbacks] compile_runtime_simulation_pipelines requires at least one validated program".to_string(),
             );
         }
-        let mut compiled = Vec::with_capacity(pass_specs.len().max(1));
-        for spec in pass_specs {
+        let mut compiled = Vec::with_capacity(programs.len().max(1));
+        for program in programs {
             let pipeline = Self::create_compiler_simulation_pipeline(
                 device,
-                spec.wgsl.as_str(),
-                spec.entry_point.as_str(),
+                program.wgsl.as_str(),
+                program.entry_point.as_str(),
                 compiler_simulation_layout,
             );
-            let workgroup_count =
-                Self::simulation_dispatch_count_for_wgsl(particle_count, spec.wgsl.as_str())
-                    .max(1);
             compiled.push(CompiledComputePassPipeline {
-                _pass_id: spec.pass_id.clone(),
+                _pass_id: program.pass_id.clone(),
                 pipeline,
-                workgroup_count,
+                workgroup_count: program.workgroup_count,
             });
         }
-        compiled
+        Ok(compiled)
     }
 
     fn create_compiler_simulation_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -464,18 +594,71 @@ impl ComputeDispatcher {
         })
     }
 
-    pub fn rebuild_gpu_pipelines_with_compiler_wgsl(
-        &mut self,
+    async fn validate_program_only_pipeline_compilation(
+        device: &wgpu::Device,
+        program: &ValidatedComputePassProgram,
+    ) -> Result<(), String> {
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let simulation_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Compute.CandidateShaderAdmission.Shader"),
+            source: wgpu::ShaderSource::Wgsl(program.wgsl.as_str().into()),
+        });
+        let _pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute.CandidateShaderAdmission.Pipeline"),
+            layout: None,
+            module: &simulation_module,
+            entry_point: Some(program.entry_point.as_str()),
+            cache: None,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        });
+        if let Some(error) = device.pop_error_scope().await {
+            return Err(format!(
+                "pass \"{}\" generic pipeline compilation failed: {}",
+                program.pass_id, error
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn stage_gpu_pipelines_with_compiler_wgsl(
+        &self,
         device: &wgpu::Device,
         pass_specs: &[CompilerComputePassSpec],
         particle_count: u32,
-    ) {
-        self.simulation_pipelines = Self::compile_simulation_passes(
+    ) -> Result<StagedSimulationPipelines, String> {
+        if pass_specs.is_empty() {
+            return Err(
+                "[LAW:no-silent-fallbacks] stage_gpu_pipelines_with_compiler_wgsl requires at least one pass spec".to_string(),
+            );
+        }
+        // [LAW:one-source-of-truth] Stage decisions come from WGSL program
+        // contents plus device limits, not application-owned runtime planes.
+        let limits = device.limits();
+        let mut programs = Vec::with_capacity(pass_specs.len());
+        for spec in pass_specs {
+            let program = Self::validate_compute_program_contract(&limits, particle_count, spec)?;
+            Self::validate_program_only_pipeline_compilation(device, &program).await?;
+            programs.push(program);
+        }
+        Ok(StagedSimulationPipelines { programs })
+    }
+
+    pub async fn activate_staged_gpu_pipelines(
+        &mut self,
+        device: &wgpu::Device,
+        staged: StagedSimulationPipelines,
+    ) -> Result<(), String> {
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let pipelines = Self::compile_runtime_simulation_pipelines(
             device,
             &self.compiler_simulation_layout,
-            particle_count,
-            pass_specs,
-        );
+            staged.programs.as_slice(),
+        )?;
+        if let Some(error) = device.pop_error_scope().await {
+            return Err(error.to_string());
+        }
+        self.simulation_pipelines = pipelines;
+        Ok(())
     }
 
     pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
@@ -524,7 +707,11 @@ impl ComputeDispatcher {
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
             // [LAW:one-source-of-truth] Instance assembly reads the final
             // simulation output bank resolved by deterministic pass chaining.
-            compute_pass.set_bind_group(1, arena.get_compiler_arena_bind_group_for_index(read_index), &[]);
+            compute_pass.set_bind_group(
+                1,
+                arena.get_compiler_arena_bind_group_for_index(read_index),
+                &[],
+            );
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             // [LAW:single-enforcer] Runtime sink-table instance totals are the
             // canonical source for per-frame assembly dispatch size.
@@ -549,9 +736,78 @@ impl ComputeDispatcher {
         compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
         // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
         // canonical stage; record count data governs in-shader no-op behavior.
-        let draw_prep_workgroup_count =
-            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
+        let draw_prep_workgroup_count = ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
         compute_pass.dispatch_workgroups(draw_prep_workgroup_count, 1, 1);
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::{CompilerComputePassSpec, ComputeDispatcher, WorkgroupSize};
+
+    #[test]
+    fn validate_compute_program_contract_rejects_missing_entry_point() {
+        let result = ComputeDispatcher::validate_compute_program_contract(
+            &wgpu::Limits::default(),
+            1_024,
+            &CompilerComputePassSpec {
+                pass_id: "simulation".to_string(),
+                entry_point: "compute_main".to_string(),
+                wgsl: "@compute @workgroup_size(64) fn other_main() {}".to_string(),
+            },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("entry point \"compute_main\" was not found")));
+    }
+
+    #[test]
+    fn dispatch_count_uses_x_dimension_only() {
+        let count = ComputeDispatcher::simulation_dispatch_count_for_workgroup_size(
+            65_536,
+            WorkgroupSize { x: 64, y: 1, z: 1 },
+        );
+        assert_eq!(count, 1_024);
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_total_invocations_over_limit() {
+        let mut limits = wgpu::Limits::default();
+        limits.max_compute_workgroup_size_x = 512;
+        limits.max_compute_workgroup_size_y = 256;
+        limits.max_compute_workgroup_size_z = 64;
+        limits.max_compute_invocations_per_workgroup = 256;
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &limits,
+            "simulation",
+            WorkgroupSize { x: 300, y: 1, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("total workgroup invocations")));
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_zero_dimension() {
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &wgpu::Limits::default(),
+            "simulation",
+            WorkgroupSize { x: 0, y: 1, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("at least 1")));
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_non_1d_shapes() {
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &wgpu::Limits::default(),
+            "simulation",
+            WorkgroupSize { x: 64, y: 2, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("must be 1D")));
+    }
 }
