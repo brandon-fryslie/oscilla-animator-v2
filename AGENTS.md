@@ -6,9 +6,9 @@
 2. Wait for Copilot review and human review feedback.
 3. For each review thread, comment before making changes with the proposed resolution approach or the explicit reason for no change.
 4. After pushing changes, add a follow-up comment describing exactly how the thread was addressed.
-5. Do not resolve review threads; leave them open for user resolution or follow-up requests.
+5. Resolve review threads after the follow-up comment is posted and the thread is fully addressed.
 6. Wait for required checks and address every failing check before requesting final review.
-7. When review feedback is addressed and checks are green, notify the user.
+7. When review feedback is addressed, threads are resolved, and checks are green, notify the user.
 
 // [LAW:single-enforcer] This file is the single enforcement boundary for PR review-thread handling.
 // [LAW:verifiable-goals] Review thread comments, PR status, and check results are deterministic evidence.
