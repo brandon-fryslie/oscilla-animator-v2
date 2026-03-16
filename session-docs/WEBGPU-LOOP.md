@@ -1,47 +1,45 @@
 Evaluator Note
 
-active_ticket: RECOVER-07
-evaluated_commit: 5d065b9e6
+active_ticket: RECOVER-08
+evaluated_commit: d089721e0
 repo_base_for_next_run: HEAD
-verdict: revise
-next_action: revise-active-ticket
+verdict: accept-complete
+next_action: advance-to-next-ready-ticket
 
 do:
-- Address RECOVER-07 directly. The three violations listed below have been unchanged across two consecutive evaluator runs.
-- Remove CPU authorship of canonical `shapeRef` render payload: `materializeValueExpr(...)` must no longer be called for `shapeRef` steps in the install path.
-- Remove CPU ShapeBank allocation and header writes from install/materializer code for the canonical path.
-- Remove dynamic instance count resolution (`resolveInstanceLaneCount`) from the install path.
-- Establish one explicit GPU-visible runtime stage that owns canonical shape-handle and dynamic payload generation.
+- RECOVER-08 is the next ready leaf ticket: remove install-time CPU runtime execution.
+- Read the RECOVER-08 ticket body and `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/03-Install-Time-CPU-Runtime-Execution.md` before starting.
+- The install path (`runtime-hotpath-install.ts`) has already been cleaned of CPU materialization by RECOVER-07. RECOVER-08 asks whether the install path still evaluates any runtime expressions or dynamic counts for the canonical pipeline — inspect and verify.
 - Keep the accepted visible render baseline working.
-- Read this note before choosing or continuing any work. The note is an exclusive lock on RECOVER-07.
+- Read this note before choosing or continuing any work.
 
 avoid:
-- Do NOT advance to RECOVER-08, RECOVER-11, or any other later ticket while RECOVER-07 is open.
-- Do NOT treat RECOVER-11 or any later-ticket work as authority to skip RECOVER-07.
-- Do NOT leave `materializeValueExpr(...)` calls for canonical `shapeRef` handling in the install/materializer path.
-- Do NOT leave `allocShapeBankWords` or `writeShapeBankHeader` calls in CPU install/materializer code for the canonical path.
-- Do NOT leave `resolveInstanceLaneCount` in the install path for the canonical pipeline.
-- Do NOT treat evaluator steering as advisory — the note is a hard lock (loop protocol §6, §8).
+- Do NOT advance to RECOVER-11 or any later ticket while RECOVER-08 is open.
+- Do NOT reintroduce `materializeValueExpr`, `allocShapeBankWords`, `writeShapeBankHeader`, or `resolveInstanceLaneCount` into the canonical install path.
+- Do NOT treat RECOVER-08 as a naming cleanup — the ticket requires removing actual runtime evaluation from install.
 
 gates_passed:
-- typecheck: clean
-- build: clean (vite 6.4.1, 13719 modules)
-- RECOVER-11 isolation: later post-core class work in commit `5d065b9e6` is additive and does not worsen RECOVER-07 or RECOVER-08 violations; kept rather than reverted
-- prerequisite identification: RECOVER-07 correctly identified as earliest open prerequisite preempting all later work
+- typecheck: clean (0 errors)
+- build: clean (vite 6.4.1, built in 18.34s)
+- runtime tests: 474/474 passed (35 files)
+- DrawPrepSinkTablePacker tests: 5/5 passed (updated for compile-time shape word offset API)
+- shape-bank-canonical-header tests: 5/5 passed
+- shape-handle-control-point-slot tests: 3/3 passed
+- RECOVER-07 violation 1 (materializeValueExpr in install): FIXED — `runtime-hotpath-install.ts` no longer imports or calls `materializeValueExpr`
+- RECOVER-07 violation 2 (allocShapeBankWords/writeShapeBankHeader in install): FIXED — headers written directly into `Uint32Array` output buffer; no ShapeBankState mutation
+- RECOVER-07 violation 3 (resolveInstanceLaneCount in install): FIXED — `buildRuntimeHotpathInstallPlanes` takes only `CompiledProgramIR`, no `RuntimeState` dependency
+- ownership boundary: `buildCanonicalTopologyHeaders` is the single GPU-visible runtime stage for canonical shape-handle production (LAW:single-enforcer cited)
+- DrawPrepSinkTablePacker: updated to accept `ReadonlyMap<ValueSlot, number>` instead of arena `Float32Array` — no arena round-trip
+- RuntimeService.installRendererCanonicalAssets: no longer passes `RuntimeState` to install planes builder
+- no unrelated churn: doc changes are editorial corrections matching earlier RECOVER-11 reframe decision
 
 gates_failed:
-- RECOVER-07 acceptance: `src/services/runtime-hotpath-install.ts` line 102 still calls `materializeValueExpr(...)` for canonical `shapeRef` steps
-- RECOVER-07 acceptance: `src/runtime/ValueExprMaterializer.ts` line 128 still calls `allocShapeBankWords()` and lines 132-147 write canonical shape headers from CPU code
-- RECOVER-07 acceptance: `src/services/runtime-hotpath-install.ts` lines 64-66 still resolve dynamic instance counts via `resolveInstanceLaneCount()` during install
-- RECOVER-08 acceptance: install still evaluates runtime expressions for canonical path (blocked behind RECOVER-07)
-- implementer protocol compliance: implementer advanced to later-ticket work despite evaluator note locking active_ticket to RECOVER-07 with next_action revise-active-ticket (violates loop protocol §6 and §11)
+- (none)
 
 evidence:
-- `src/services/runtime-hotpath-install.ts:102`: `const buffer = materializeValueExpr(step.field, program.valueExprs, step.instanceId, count, state, program, undefined, INSTALL_MATERIALIZE_SCRATCH, pureFnContext);`
-- `src/runtime/ValueExprMaterializer.ts:128`: `const handle = allocShapeBankWords(shapeBank, SHAPE_BANK_HEADER_WORDS);`
-- `src/runtime/ValueExprMaterializer.ts:132-147`: `writeShapeBankHeader(shapeBank.data, handle, createShapeBankHeaderV1({...}));` followed by `writeShapeBankHandleMetadata(shapeBank, handle, {...});`
-- `src/services/runtime-hotpath-install.ts:64-66`: install loop calls `resolveInstanceLaneCount(instanceDecl, program, state, pureFnContext)` for every instance declaration
-- `src/services/runtime-hotpath-install.ts:22`: imports `resolveInstanceLaneCount` from InstanceCountResolver
-- `src/services/runtime-hotpath-install.ts:24`: imports `materializeValueExpr` from ValueExprMaterializer
-- all three violations are identical to those flagged in the previous evaluator note at commit 93dd46460; no remediation was attempted
-- later-ticket commit `5d065b9e6` added post-core class code while RECOVER-07 remained unaddressed
+- `src/services/runtime-hotpath-install.ts`: complete rewrite — imports only `CompiledProgramIR`, `getProgramTopology`, `resolveArenaAddress`, `packDrawPrepSinkTableV1`, `ShapeBankHeaderWord` enums, and shape types. No imports from `ValueExprMaterializer`, `InstanceCountResolver`, `MaterializeScratch`, or `RuntimeState`.
+- `buildRuntimeHotpathInstallPlanes(program: CompiledProgramIR)`: signature takes only compiled program, no runtime state.
+- `buildCanonicalTopologyHeaders(program)`: derives topology from `getProgramTopology` + `runtimeAddressTable` — both compile-time artifacts. Writes headers directly into `Uint32Array` at deterministic offsets.
+- `packDrawPrepSinkTableV1(program, topology.shapeWordOffsetBySlot)`: receives compile-time shape word offsets directly, no arena read.
+- `evaluateShapeRefHandle` in `ValueExprMaterializer.ts` still exists but is NOT reachable from the canonical install/render path — only callable through `materializeValueExpr` which is used only by `ValueExprEventEvaluator` (secondary path) and tests.
+- `RuntimeService.installRendererCanonicalAssets`: calls `buildRuntimeHotpathInstallPlanes(program)` without `state` parameter; `staticBoundary: 0` (all headers from compile-time install stage).
