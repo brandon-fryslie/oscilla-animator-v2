@@ -5,6 +5,10 @@ This document defines the unattended two-agent loop for the `RECOVER-*` backlog:
 - implementer: `PROMPT-WEBGPU-PROGRESS.md`
 - evaluator: `PROMPT-WEBGPU-EVALUATOR.md`
 
+For the generalized method behind this WebGPU-specific operating procedure, see:
+
+- `docs/Spec-Constrained-Agent-Loop.md`
+
 `// [LAW:one-source-of-truth] The active `RECOVER-*` leaf ticket plus its cited docs/specs are the only implementation authority.`
 `// [LAW:verifiable-goals] Each run must end with a concrete verdict backed by local evidence.`
 
@@ -143,6 +147,50 @@ Every run should be explainable as gates:
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 
 If a gate fails because of spec mismatch, doc mismatch, missing prerequisite, missing verifier, or environment trouble, block instead of improvising.
+
+## Proof Strategy
+
+The loop must treat proof-building as part of the work.
+
+When a ticket changes live behavior and no trustworthy verifier exists yet, the next correct step is often to create the smallest proof seam required to judge that behavior safely.
+
+Acceptable proof-building work includes:
+
+- adding canonical fixtures
+- exposing readback or telemetry
+- adding runtime probes
+- adding contract tests around ownership boundaries
+- turning a visible baseline into a replayable check
+
+The loop should prefer proof ladders over single weak checks:
+
+1. boot / no fatal failure
+2. canonical fixture compiles
+3. readback / indirect args / ownership signal
+4. visible baseline still works
+
+`// [LAW:verifiable-goals] A ticket is not safely complete if the loop cannot tell, mechanically, whether the intended behavior actually changed.`
+
+## Proof Quality
+
+Not every check is strong enough to unlock advancement.
+
+Use this rubric:
+
+1. **Acceptance proof**
+   - required to advance
+2. **Supporting signal**
+   - useful but insufficient
+3. **Diagnostic tool**
+   - helps debug but proves nothing on its own
+
+The evaluator should reject a proposed proof when it can still pass while the ticket is wrong, when it proves only implementation structure, or when it does not distinguish the old path from the new one.
+
+The key test is:
+
+> Would this check still pass if the old wrong behavior were still active?
+
+If yes, it is not acceptance proof.
 
 ## Reverts
 

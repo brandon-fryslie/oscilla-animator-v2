@@ -8,21 +8,22 @@ mod render;
 mod scheduler;
 mod telemetry;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
-use js_sys::{Array, Function};
+use js_sys::{Array, Function, Object, Reflect};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
 use crate::compute::CompilerComputePassSpec;
-use crate::engine::{Engine, EngineConfig};
+use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
     static LOOP_CALLBACK: RefCell<Option<Closure<dyn FnMut(f64)>>> = RefCell::new(None);
+    static LOOP_ARMED: Cell<bool> = const { Cell::new(false) };
 }
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
@@ -34,6 +35,26 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     raw.as_string().ok_or_else(|| {
         JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str())
     })
+}
+
+fn pipeline_rebuild_failure_to_js_value(error: PipelineRebuildFailure) -> JsValue {
+    let object = Object::new();
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("code"),
+        &JsValue::from_str(error.code),
+    );
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("passId"),
+        &JsValue::from_str(error.pass_id.as_str()),
+    );
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("message"),
+        &JsValue::from_str(error.message.as_str()),
+    );
+    object.into()
 }
 
 fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>, JsValue> {
@@ -80,6 +101,54 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
         ));
     }
     Ok(specs)
+}
+
+fn should_schedule_next_frame() -> bool {
+    ENGINE.with(|engine_cell| {
+        engine_cell
+            .borrow()
+            .as_ref()
+            .map(Engine::should_schedule_next_frame)
+            .unwrap_or(false)
+    })
+}
+
+fn arm_worker_loop_if_needed() -> Result<(), JsValue> {
+    if !should_schedule_next_frame() {
+        return Ok(());
+    }
+    let was_armed = LOOP_ARMED.with(|armed| {
+        let already_armed = armed.get();
+        armed.set(true);
+        already_armed
+    });
+    if was_armed {
+        return Ok(());
+    }
+    let callback = LOOP_CALLBACK.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|installed| installed.as_ref().unchecked_ref::<Function>().clone())
+    });
+    let worker = worker_scope();
+    match (callback, worker) {
+        (Some(callback), Ok(worker)) => {
+            // [LAW:single-enforcer] requestAnimationFrame arming is centralized
+            // at one worker boundary so rebuild and tick reuse one cadence gate.
+            worker.request_animation_frame(callback.unchecked_ref())?;
+            Ok(())
+        }
+        (Some(_), Err(error)) => {
+            LOOP_ARMED.with(|armed| armed.set(false));
+            Err(error)
+        }
+        (None, _) => {
+            LOOP_ARMED.with(|armed| armed.set(false));
+            Err(JsValue::from_str(
+                "Rust engine failed to install worker loop callback",
+            ))
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -193,16 +262,19 @@ pub fn rebuild_pipeline(
 }
 
 #[wasm_bindgen]
-pub fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
+pub async fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
     let pass_specs = parse_gpu_pass_specs(passes)?;
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
+    let mut engine = ENGINE.with(|engine_cell| {
+        engine_cell.borrow_mut().take().ok_or_else(|| {
             JsValue::from_str("Rust engine must be initialized before rebuild_gpu_pipelines")
-        })?;
-        engine.rebuild_gpu_pipelines(pass_specs.as_slice());
-        Ok(())
-    })
+        })
+    })?;
+    let rebuild_result = engine.rebuild_gpu_pipelines(pass_specs.as_slice()).await;
+    ENGINE.with(|engine_cell| {
+        *engine_cell.borrow_mut() = Some(engine);
+    });
+    arm_worker_loop_if_needed()?;
+    rebuild_result.map_err(pipeline_rebuild_failure_to_js_value)
 }
 
 // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
@@ -277,8 +349,8 @@ pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
 }
 
 fn start_worker_loop() -> Result<(), JsValue> {
-    let global = worker_scope()?;
     let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
+        LOOP_ARMED.with(|armed| armed.set(false));
         ENGINE.with(|engine_cell| {
             if let Some(engine) = engine_cell.borrow_mut().as_mut() {
                 if let Err(error) = engine.tick(timestamp_ms) {
@@ -286,31 +358,12 @@ fn start_worker_loop() -> Result<(), JsValue> {
                 }
             }
         });
-
-        if let Ok(worker) = worker_scope() {
-            LOOP_CALLBACK.with(|slot| {
-                if let Some(next_callback) = slot.borrow().as_ref() {
-                    // [LAW:single-enforcer] Scheduling is owned at this worker
-                    // boundary so tick cadence cannot diverge across callsites.
-                    let _ = worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
-                }
-            });
-        }
+        let _ = arm_worker_loop_if_needed();
     }) as Box<dyn FnMut(f64)>);
 
-    let first_callback = LOOP_CALLBACK.with(|slot| {
+    LOOP_CALLBACK.with(|slot| {
         let mut slot_mut = slot.borrow_mut();
         *slot_mut = Some(closure);
-        slot_mut
-            .as_ref()
-            .map(|callback| callback.as_ref().unchecked_ref::<Function>().clone())
     });
-    if let Some(callback) = first_callback {
-        global.request_animation_frame(callback.unchecked_ref())?;
-        Ok(())
-    } else {
-        Err(JsValue::from_str(
-            "Rust engine failed to install worker loop callback",
-        ))
-    }
+    arm_worker_loop_if_needed()
 }

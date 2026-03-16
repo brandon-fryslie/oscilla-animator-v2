@@ -37,7 +37,10 @@ impl Iterator for BufferClearPlan {
         let remaining = self.total_bytes - self.next_offset;
         let chunk_len_u64 = remaining.min(CLEAR_BUFFER_CHUNK_BYTES as u64);
         let chunk_len = chunk_len_u64 as usize;
-        debug_assert!(chunk_len > 0, "BufferClearPlan produced a zero-length chunk");
+        debug_assert!(
+            chunk_len > 0,
+            "BufferClearPlan produced a zero-length chunk"
+        );
         let chunk_offset = self.next_offset;
         self.next_offset = self.next_offset.saturating_add(chunk_len_u64);
         Some((chunk_offset, chunk_len))
@@ -329,9 +332,8 @@ impl GpuMemoryArena {
         ];
         // [RECOVER-10] [LAW:single-enforcer] Dedicated indirect-args readback
         // staging buffer so instance and indirect readback are independent.
-        let indirect_staging_bytes =
-            (indirect_capacity_words.max(INDIRECT_WORDS_PER_RECORD) * std::mem::size_of::<u32>())
-                as u64;
+        let indirect_staging_bytes = (indirect_capacity_words.max(INDIRECT_WORDS_PER_RECORD)
+            * std::mem::size_of::<u32>()) as u64;
         let indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Debug.IndirectStaging"),
             size: indirect_staging_bytes.max(16),
@@ -675,8 +677,7 @@ impl GpuMemoryArena {
         }
         self.indirect_buffer = Self::create_indirect_buffer(device, next_capacity);
         // [RECOVER-10] Resize indirect staging buffer to match new capacity.
-        let staging_bytes =
-            (next_capacity * std::mem::size_of::<u32>()) as u64;
+        let staging_bytes = (next_capacity * std::mem::size_of::<u32>()) as u64;
         self.indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Debug.IndirectStaging"),
             size: staging_bytes.max(16),
@@ -766,12 +767,7 @@ impl GpuMemoryArena {
 
     // [RECOVER-11] Upload MSDF atlas texture data to the atlas storage buffer.
     // Layout: [0]=width (u32), [1]=height (u32), [2..]=packed RGBA pixels (u32 each).
-    pub fn write_atlas_data(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        words: &[u32],
-    ) {
+    pub fn write_atlas_data(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, words: &[u32]) {
         let required_words = words.len();
         let current_words = (self.atlas_buffer.size() as usize) / std::mem::size_of::<u32>();
         if required_words > current_words {
