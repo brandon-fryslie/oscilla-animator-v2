@@ -93,7 +93,7 @@ If runtime behavior changed, inspect real runtime evidence. Passing tests alone 
    - what ran
    - runtime/readback proof
    - remaining risks
-2. Close the ticket only if the ticket is actually complete.
+2. Never close the ticket. The evaluator owns closure.
 3. If repo state changed, commit it.
 4. Normalize the tree again until `git status --short` is clean.
 
