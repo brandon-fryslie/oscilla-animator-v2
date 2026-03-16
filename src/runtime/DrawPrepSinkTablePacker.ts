@@ -116,6 +116,7 @@ function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[
  */
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
+  arena: Float32Array,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
   // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
@@ -227,6 +228,15 @@ export function packDrawPrepSinkTableV1(
       sink.instanceCountMode === 'static'
         ? assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`)
         : 0;
+
+    // [RECOVER-06] Resolve topology bank word offset from arena. After
+    // materialization the shape handle (a u32 word offset into the topology
+    // bank) is stored at the shape slot's arena base address.
+    const shapeWordOffset = arena[shapeSlotAddress.baseOffset];
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeWordOffset] = assertFiniteUint32(
+      shapeWordOffset,
+      `shapeWordOffset sinkIndex=${sink.sinkIndex}`,
+    );
 
     recordWriteIndex += 1;
   }
