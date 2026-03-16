@@ -37,7 +37,10 @@ impl Iterator for BufferClearPlan {
         let remaining = self.total_bytes - self.next_offset;
         let chunk_len_u64 = remaining.min(CLEAR_BUFFER_CHUNK_BYTES as u64);
         let chunk_len = chunk_len_u64 as usize;
-        debug_assert!(chunk_len > 0, "BufferClearPlan produced a zero-length chunk");
+        debug_assert!(
+            chunk_len > 0,
+            "BufferClearPlan produced a zero-length chunk"
+        );
         let chunk_offset = self.next_offset;
         self.next_offset = self.next_offset.saturating_add(chunk_len_u64);
         Some((chunk_offset, chunk_len))
