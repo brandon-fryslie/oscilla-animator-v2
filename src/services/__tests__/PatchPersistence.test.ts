@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Patch } from '../../graph';
 import {
+  clearPatchFromStorage,
   clearPatchPersistenceIssues,
   deserializePatch,
   getPatchPersistenceIssues,
@@ -95,6 +96,44 @@ describe('PatchPersistence issue reporting', () => {
       level: 'warn',
       op: 'load',
       message: 'Failed to load patch from local storage',
+    });
+  });
+
+  it('clears the persisted patch key without reloading', () => {
+    const removeItem = vi.fn();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem,
+      },
+    });
+
+    clearPatchFromStorage();
+
+    expect(removeItem).toHaveBeenCalledWith('oscilla-v2-patch-v11');
+  });
+
+  it('records clear failures as warn issues', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(() => {
+          throw new Error('remove unavailable');
+        }),
+      },
+    });
+
+    clearPatchFromStorage();
+
+    expect(getPatchPersistenceIssues()).toHaveLength(1);
+    expect(getPatchPersistenceIssues()[0]).toMatchObject({
+      level: 'warn',
+      op: 'clear',
+      message: 'Failed to clear stored patch',
     });
   });
 

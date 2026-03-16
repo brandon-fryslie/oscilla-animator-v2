@@ -52,10 +52,10 @@ Execution:
 - Keep structure current with `lit parent` / `lit dep` / `lit label` / `lit comment`.
 
 Closeout:
-1. Add completion summary: `lit comment add <issue-id> --body "Done: <summary>" --json`.
-2. Close completed issue: `lit close <issue-id> --reason "<completion reason>" --json`.
-3. You MUST create a git commit for the completed work: `git add -A && git commit -m "<summary>"`.
-4. Work is NOT complete until the commit exists. Do NOT start the next issue before committing.
+1. Add implementation summary comments as work progresses and when the PR reaches reviewable shape.
+2. You MUST create a git commit for the work before starting the next issue: `git add -A && git commit -m "<summary>"`.
+3. Do not close the issue at local implementation or commit time. Keep it open through review/checks and move it to `Status: Ready to Merge` when that workflow is satisfied.
+4. Work is complete only after the change is merged into `master`; close the issue then with `lit close <issue-id> --reason "<merge summary>" --json`.
 
 Traceability:
 - `git push` triggers hook-driven `lit sync push` attempts (warn-only on failure).
