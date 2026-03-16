@@ -166,6 +166,24 @@ export interface RustRendererRuntimeEvent {
   readonly emittedAtMs: number;
 }
 
+// [RECOVER-10] [LAW:single-enforcer] One canonical readback snapshot type for
+// structured GPU-to-host observability data published by the worker.
+export interface RustRendererIndirectArgsRecord {
+  readonly indexCount: number;
+  readonly instanceCount: number;
+  readonly firstIndex: number;
+  readonly baseVertex: number;
+  readonly firstInstance: number;
+}
+
+export interface RustRendererReadbackSnapshot {
+  readonly type: 'READBACK_SNAPSHOT';
+  readonly frameCount: number;
+  readonly capturedAtMs: number;
+  readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
+  readonly instanceProbeValues: Float32Array;
+}
+
 export type RustRendererWorkerOutboundMessage =
   | RustRendererBootstrapSuccess
   | RustRendererEngineError
@@ -173,4 +191,5 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
-  | RustRendererRuntimeEvent;
+  | RustRendererRuntimeEvent
+  | RustRendererReadbackSnapshot;

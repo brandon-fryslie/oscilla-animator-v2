@@ -18,6 +18,7 @@ import {
   computeRustRendererSinkTableWordCapacity,
   type RustRendererBootstrapConfig,
   type RustRendererGpuPass,
+  type RustRendererReadbackSnapshot,
   type RustRendererSchedulerState,
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
@@ -500,6 +501,9 @@ export class WebGPURenderer {
   // -- Geometry route dispatch (RECOVER-03 seam) --
   private latestGeometryRoutes: ReadonlyMap<number, GeometryRoute> = new Map();
   private directRouteDispatchCount = 0;
+  // [RECOVER-10] [LAW:single-enforcer] Latest structured readback snapshot
+  // from the worker, replacing the stubbed readIndirectArgsDebugView.
+  private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
 
   private reportEngineError(
     source: string,
@@ -890,11 +894,33 @@ export class WebGPURenderer {
     };
   }
 
-  async readIndirectArgsDebugView(maxRecords: number = 0): Promise<IndirectArgsReadbackSnapshot> {
+  // [RECOVER-10] [LAW:single-enforcer] Structured readback snapshot accessor
+  // for debug consumers. Returns the latest worker-backed GPU readback data.
+  getLatestReadbackSnapshot(): RustRendererReadbackSnapshot | null {
+    return this.latestReadbackSnapshot;
+  }
+
+  // [RECOVER-10] [LAW:single-enforcer] Indirect args debug view is now backed
+  // by real worker readback data instead of an empty stub.
+  async readIndirectArgsDebugView(_maxRecords: number = 0): Promise<IndirectArgsReadbackSnapshot> {
+    const snapshot = this.latestReadbackSnapshot;
+    if (snapshot === null || snapshot.indirectArgs.length === 0) {
+      return {
+        capturedAtMs: performance.now(),
+        recordCount: 0,
+        records: [],
+      };
+    }
     return {
-      capturedAtMs: performance.now(),
-      recordCount: Math.max(0, Math.floor(maxRecords)),
-      records: [],
+      capturedAtMs: snapshot.capturedAtMs,
+      recordCount: snapshot.indirectArgs.length,
+      records: snapshot.indirectArgs.map((r) => ({
+        indexCount: r.indexCount,
+        instanceCount: r.instanceCount,
+        firstIndex: r.firstIndex,
+        baseVertex: r.baseVertex,
+        firstInstance: r.firstInstance,
+      })),
     };
   }
 
@@ -1695,6 +1721,11 @@ export class WebGPURenderer {
     }
     if (payload.type === 'SCHEDULER_HEARTBEAT') {
       this.handleSchedulerHeartbeatMessage(payload);
+      return;
+    }
+    // [RECOVER-10] Store latest readback snapshot for debug consumers.
+    if (payload.type === 'READBACK_SNAPSHOT') {
+      this.latestReadbackSnapshot = payload;
     }
   };
 }

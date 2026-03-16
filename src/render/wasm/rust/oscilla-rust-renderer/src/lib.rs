@@ -245,6 +245,22 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
     })
 }
 
+// [RECOVER-10] [LAW:single-enforcer] One polling boundary for structured
+// readback data (indirect args + instance probe), mirroring telemetry pattern.
+#[wasm_bindgen]
+pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
+    ENGINE.with(|engine_cell| {
+        let engine_ref = engine_cell.borrow();
+        let engine = engine_ref.as_ref().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before take_readback_snapshot")
+        })?;
+        if let Some(snapshot) = engine.take_readback_snapshot() {
+            return snapshot.to_js_value();
+        }
+        Ok(JsValue::NULL)
+    })
+}
+
 fn start_worker_loop() -> Result<(), JsValue> {
     let global = worker_scope()?;
     let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
