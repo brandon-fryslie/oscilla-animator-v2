@@ -1,60 +1,40 @@
-Evaluator Note
+Implementer Note
 
-active_ticket: RECOVER-04 (lit-b90e7a20-c67c0fdf)
-evaluated_commit: 0b0ab40ae
-repo_base_for_next_run: 29871df56
-verdict: accept-complete
-next_action: advance-to-next-ready-ticket
+active_ticket: RECOVER-05
+implementation_commit: be0ebffe
+repo_base_for_next_run: be0ebffe
+status: ready-for-evaluation
 
-do:
-- Start RECOVER-05 (reduce CPU draw-prep packer to static metadata only)
-- Clean up dead code in memory.rs (write_geometry_payload, ensure_vertex_capacity,
-  ensure_index_capacity) as part of RECOVER-05 or a dedicated cleanup
-- Update the stale comment in RuntimeState.ts lines 32-34 that still references
-  realize_shape_bank_geometry() as if it exists
+summary:
+RECOVER-05 implementation complete. CPU draw-prep packer reduced to static
+metadata only. All evaluator cleanup items from RECOVER-04 addressed.
 
-avoid:
-- Do not reopen geometry source ownership — vertex pulling from topologyBank is settled
-- Do not attempt full multi-class taxonomy rollout — stay within one-class-at-a-time scope
-- Do not change the indexed draw path for future shape classes without a new ticket
+changes:
+- DrawPrepSinkTablePacker: stripped all per-frame dynamic command derivation.
+  Record fields (count, instanceCount, first, baseVertex, firstInstance,
+  shapeWordOffset, materialId) are now zero. Signature changed from
+  packDrawPrepSinkTableV1(program, state) to packDrawPrepSinkTableV1(program).
+- Sink descriptor expanded from 20 to 25 words: ShapeSlotBaseOffset(20),
+  ShapeSlotLaneStride(21), ShapeSlotComponentStride(22),
+  InstanceCountMode(23), StaticInstanceCount(24) — metadata for RECOVER-06
+  GPU draw-prep compute derivation.
+- RuntimeState: removed dead cache fields (drawPrepSinkTableWords,
+  drawPrepSinkTableWordCount, drawPrepSinkTableFrameId). Fixed stale comment
+  referencing realize_shape_bank_geometry().
+- memory.rs: deleted write_geometry_payload, create_vertex_buffer,
+  create_index_buffer, ensure_vertex_capacity, ensure_index_capacity,
+  vertex_buffer/index_buffer struct fields + capacity tracking (-85 lines).
+- default_shaders.rs: WGSL SINK_TABLE_DESCRIPTOR_WORDS 20→25.
+- runtime-hotpath-install.ts: updated callsite, removed state arg.
+- Tests: 5 packer tests rewritten for static-only behavior, all passing.
 
-gates_passed:
-- source/ticket alignment: changes match RECOVER-04 scope exactly
-- design alignment: vertex pulling approach matches accepted design comment
-- live-path alignment: uber shader is the active vertex stage, topologyBank is geometry source,
-  no vertex/index buffer dependency remains
-- verification quality: typecheck clean, 1931/1931 tests pass, build succeeds,
-  burst montage screenshots prove visible rendering
-- static verification: pnpm typecheck — clean
-- runtime verification: breathing-ring.hcl 9-frame burst + golden-spiral.hcl 9-frame burst
-- ownership alignment: geometry source is GPU-owned canonical ShapeBank data
-- clean closeout: tree clean, commits well-scoped
+evaluator_cleanup_addressed:
+- memory.rs dead code: DONE (write_geometry_payload + vertex/index buffer infra)
+- RuntimeState.ts stale comment: DONE (realize_shape_bank_geometry → GPU draw-prep)
 
-gates_failed: (none)
-
-evidence:
-- typecheck: clean (pnpm typecheck — no errors)
-- tests: 170 files, 1931 passed, 0 failed
-- build: vite build succeeds, 13719 modules, no errors
-- visual: breathing-ring_burst_3x3_100ms_20260315-191445.png — 9 frames, ring of
-  animated circles renders correctly with smooth motion
-- visual: golden-spiral_burst_3x3_100ms_20260315-191527.png — 9 frames, spiral of
-  animated dots renders correctly with smooth motion
-- code audit: realize_shape_bank_geometry + RealizedShapeGeometry deleted from engine.rs
-  (-148 lines). set_vertex_buffer/set_index_buffer removed from render.rs. Vertex buffer
-  layout removed from pipeline. Uber shader reads control points from topologyBank via
-  @builtin(vertex_index). ShapeBankHeaderWord offsets (FLAGS=2, PARAM_BLOCK_OFFSET=9)
-  verified consistent across TS and WGSL boundaries.
-- dead code: memory.rs still contains write_geometry_payload, ensure_vertex_capacity,
-  ensure_index_capacity (unreachable). Non-blocking — cleanup candidate for RECOVER-05.
-- stale comment: RuntimeState.ts line 32 still references realize_shape_bank_geometry().
-  Non-blocking — documentation update candidate.
-
-milestone_impact:
-- RECOVER-M1 exit criteria are now fully met:
-  1. One shape class (Type 1 Rigid) renders visibly through canonical GPU-owned geometry
-  2. Worker no longer realizes mesh buffers on CPU for that slice
-  3. Old path not silently retained as active geometry source
-- RECOVER-03 also accept-complete (seam fully consumed by RECOVER-04 cutover)
-- RECOVER-M0 was already closed
-- Next ready ticket: RECOVER-05
+verification:
+- typecheck: clean (tsc --noEmit — no errors)
+- tests: 170 files, 1935 passed, 0 failed
+- rust build: succeeds (release profile, 3 dead-code warnings for still-used
+  but test-unreachable functions)
+- tree: clean after commit
