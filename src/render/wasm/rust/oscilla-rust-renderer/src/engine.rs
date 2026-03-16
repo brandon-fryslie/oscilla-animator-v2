@@ -442,6 +442,12 @@ impl Engine {
         self.last_install_revision = 0;
     }
 
+    // [RECOVER-11] Upload MSDF atlas data to the GPU atlas storage buffer.
+    // Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+    pub fn upload_atlas_data(&mut self, data: &[u32]) {
+        self.arena.write_atlas_data(&self.device, &self.queue, data);
+    }
+
     pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
         // [LAW:single-enforcer] Compiler-owned GPU pass artifacts are published
         // at one engine boundary so runtime hot path never recompiles ad hoc.

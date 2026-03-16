@@ -66,6 +66,13 @@ export interface RustRendererInjectPoisonAllocMessage {
   readonly type: 'INJECT_POISON_ALLOC';
 }
 
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+// Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+export interface RustRendererUploadAtlasMessage {
+  readonly type: 'UPLOAD_ATLAS';
+  readonly data: Uint32Array;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -73,7 +80,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
-  | RustRendererInjectPoisonAllocMessage;
+  | RustRendererInjectPoisonAllocMessage
+  | RustRendererUploadAtlasMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';

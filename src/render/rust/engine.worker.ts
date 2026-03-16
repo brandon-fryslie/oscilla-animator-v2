@@ -13,6 +13,7 @@ import {
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
+  uploadRustRendererAtlasData,
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
@@ -137,6 +138,11 @@ function handleResume(): void {
 
 function handleInjectPoisonAlloc(): void {
   injectRustRendererPoisonAlloc();
+}
+
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+function handleUploadAtlas(message: Extract<RustRendererWorkerInboundMessage, { type: 'UPLOAD_ATLAS' }>): void {
+  uploadRustRendererAtlasData(message.data);
 }
 
 function stopRuntimePolling(): void {
@@ -287,6 +293,12 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   },
   INJECT_POISON_ALLOC: () => {
     handleInjectPoisonAlloc();
+  },
+  // [RECOVER-11] Atlas upload for Type5 MSDF text.
+  UPLOAD_ATLAS: (message) => {
+    withFatalBoundary('atlas_upload_failure', 'Rust worker atlas upload failure', () => {
+      handleUploadAtlas(message as Extract<InboundMessage, { type: 'UPLOAD_ATLAS' }>);
+    });
   },
   RESIZE_CANVAS: (message) => {
     withFatalBoundary('resize_failure', 'Rust worker resize failure', () => {
