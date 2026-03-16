@@ -1,43 +1,46 @@
 Evaluator Note
 
-active_ticket: RECOVER-08
-evaluated_commit: f8e6605f2
-repo_base_for_next_run: c50dbec80 (HEAD after implementer note commit)
+active_ticket: RECOVER-09
+evaluated_commit: f9d7a5a83
+repo_base_for_next_run: HEAD (after this evaluator commit)
 verdict: accept-complete
 next_action: advance-to-next-ready-ticket
 
 do:
-- Pick up RECOVER-09 (unify arena header and per-frame state ownership)
-- Read `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/08-Arena-Header-And-Uniform-Ownership.md` and the cited WebGPU-Complete specs
-- Identify where frame input, time, and view state currently have multiple semantic owners
-- Establish one canonical header contract consumed by simulation, draw-prep, render, and observability
-- Any remaining uniform transport must be clearly derived backend plumbing, not a second semantic owner
+- Pick up RECOVER-10 (canonicalize worker-backed observability and readback)
+- Read `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/10-Observability-And-Readback.md` and cited WebGPU-Complete specs (P1-3, P4-1)
+- Identify where indirect-args readback is currently stubbed or console-only
+- Create one canonical GPU-to-host readback path for indirect args and targeted probe slices
+- Ensure debug consumers receive structured data rather than console-only previews
 
 avoid:
-- Do not stop at renaming uniforms to "header" — the ticket requires semantic unification
-- Do not leave both a header model and a semantic uniform model active in parallel
-- Do not broaden into unrelated render-feature work
-- Do not reopen install-path or draw-prep ownership — those are settled
+- Do not keep multiple competing readback paths alive as canonical
+- Do not leave the indirect-args path stubbed
+- Do not put observability on the render dependency path (keep it async)
+- Do not reopen frame-state ownership or install-path questions — those are settled
 
 gates_passed:
-- source/ticket alignment: changes match RECOVER-08 scope exactly (runtime-hotpath-install.ts + RuntimeService.ts)
-- design alignment: follows doc 03 proposal — install reduced to canonical asset publication
-- live-path alignment: modifies the actual install path, not helper-only code
-- verification quality: 170 test files, 1935 tests pass, 0 failures
+- source/ticket alignment: changes match RECOVER-09 scope (memory.rs, engine.rs, default_shaders.rs, fluid-gpu-bundle.ts, compute.rs)
+- semantic unification: `GlobalUniforms` fully eliminated — zero grep hits across entire codebase
+- single canonical home: `FrameHeader` struct is the single frame-state type; arena header zone (offset 0..64 floats) is the authoritative home
+- single write boundary: `publish_frame_header()` is the only method that writes per-frame state to GPU memory (arena read buffer + derived uniform transport)
+- consumer alignment: simulation (`frame_header_transport`), assembly (`frame_header_transport`), render/uber (`frame_header`), and fluid compute (`frame_header`) all consume the same FrameHeader contract
+- derived transport labeled: uniform buffer labels include "UniformTransport", LAW citations document it as derived
+- no dual authority: no remaining `GlobalUniforms`, `update_uniforms`, or parallel semantic uniform model
 - static verification: typecheck 0 errors
+- cargo check: 0 errors (5 dead-code warnings, pre-existing)
+- test suite: 170 test files, 1935 tests pass, 0 failures
 - build: Vite production build succeeds
-- ownership alignment: GPU is now the single execution authority for all frame computation
-- no dual authority: resolveTime import removed, no CPU schedule iteration at install
-- clean closeout: tree clean, ticket closed
+- doc alignment: RUST-RENDERER.md updated to match new naming
+- clean closeout: tree clean, ticket closed, milestone RECOVER-M3 closed (all children complete)
 
 gates_failed: (none)
 
 evidence:
-- `materializeProgramForGpuInstall` (full CPU schedule execution) deleted
-- `materializeCanonicalShapeAssets` replaces it — filters to `expr.kind === 'shapeRef'` only
-- `resolveTime` import removed from runtime-hotpath-install.ts — no time seeding
-- `buildRuntimeHotpathInstallPlanes` no longer takes `nowMs` parameter
-- `installRendererHotpathPlanes(nowMs)` renamed to `installRendererCanonicalAssets()` — no time arg
-- `timeMs: 0` passed to renderer at install (GPU pipeline owns real time resolution)
-- First frame and all frames now use the same GPU simulation/draw-prep pipeline
-- Sink table still published but contains compile-time descriptors, not CPU-materialized frame products
+- `GlobalUniforms` renamed to `FrameHeader` across Rust struct, WGSL struct, and TS WGSL templates
+- `update_uniforms()` replaced by `publish_frame_header()` which writes to both arena read buffer (canonical, offset 0) and uniform buffer (derived transport)
+- Arena header zone constants defined: `ARENA_HEADER_FLOATS = 64`, `ARENA_HEADER_BYTES = 256`
+- `self.arena.frame_header` replaces `self.arena.uniforms` in engine.rs
+- All WGSL references updated: `global_uniforms` → `frame_header_transport` (simulation/assembly), `global` → `frame_header` (uber shader/fluid)
+- `input_marshal_phase` populates a local `header` variable and publishes via single `publish_frame_header` call
+- LAW citations: `[LAW:one-source-of-truth]` on FrameHeader struct, publish method, uniform buffer creation, and all WGSL struct definitions; `[LAW:single-enforcer]` on publish method
