@@ -97,6 +97,13 @@ export interface RustRendererRebuildGpuPipelinesSuccess {
   readonly type: 'REBUILD_GPU_PIPELINES_SUCCESS';
 }
 
+export interface RustRendererRebuildGpuPipelinesFailure {
+  readonly type: 'REBUILD_GPU_PIPELINES_FAILURE';
+  readonly code: string;
+  readonly passId: string;
+  readonly message: string;
+}
+
 export interface RustRendererDeviceLost {
   readonly type: 'DEVICE_LOST';
   readonly code: string;
@@ -171,6 +178,7 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererEngineError
   | RustRendererFatalError
   | RustRendererRebuildGpuPipelinesSuccess
+  | RustRendererRebuildGpuPipelinesFailure
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent;

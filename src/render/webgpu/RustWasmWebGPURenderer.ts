@@ -398,6 +398,16 @@ function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage):
       message: payload.message,
     };
   }
+  if (payload.type === 'REBUILD_GPU_PIPELINES_FAILURE') {
+    return {
+      kind: 'fail',
+      error: new Error(`[${payload.code}] ${payload.message} @ ${payload.passId}`),
+      fatal: false,
+      code: payload.code,
+      stage: payload.passId,
+      message: payload.message,
+    };
+  }
   return null;
 }
 
@@ -930,7 +940,6 @@ export class WebGPURenderer {
     for (const pass of validatedPasses) {
       dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
     }
-    this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     if (this.shouldEmitRuntimeConsole()) {
       // TODO(#159): Replace this inline payload assembly with:
       // `buildGpuPipelineRebuildPayload(validatedPasses)` and emit through a
@@ -967,6 +976,7 @@ export class WebGPURenderer {
           this.worker.postMessage(message);
         },
       });
+      this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
     } finally {
       if (!this.fatalError) {
         this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);

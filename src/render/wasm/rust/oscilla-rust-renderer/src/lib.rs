@@ -10,14 +10,14 @@ mod telemetry;
 
 use std::cell::RefCell;
 
-use js_sys::{Array, Function};
+use js_sys::{Array, Function, Object, Reflect};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
 use crate::compute::CompilerComputePassSpec;
-use crate::engine::{Engine, EngineConfig};
+use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
 
 thread_local! {
@@ -34,6 +34,26 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     raw.as_string().ok_or_else(|| {
         JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str())
     })
+}
+
+fn pipeline_rebuild_failure_to_js_value(error: PipelineRebuildFailure) -> JsValue {
+    let object = Object::new();
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("code"),
+        &JsValue::from_str(error.code),
+    );
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("passId"),
+        &JsValue::from_str(error.pass_id.as_str()),
+    );
+    let _ = Reflect::set(
+        &object,
+        &JsValue::from_str("message"),
+        &JsValue::from_str(error.message.as_str()),
+    );
+    object.into()
 }
 
 fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>, JsValue> {
@@ -193,16 +213,18 @@ pub fn rebuild_pipeline(
 }
 
 #[wasm_bindgen]
-pub fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
+pub async fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
     let pass_specs = parse_gpu_pass_specs(passes)?;
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
+    let mut engine = ENGINE.with(|engine_cell| {
+        engine_cell.borrow_mut().take().ok_or_else(|| {
             JsValue::from_str("Rust engine must be initialized before rebuild_gpu_pipelines")
-        })?;
-        engine.rebuild_gpu_pipelines(pass_specs.as_slice());
-        Ok(())
-    })
+        })
+    })?;
+    let rebuild_result = engine.rebuild_gpu_pipelines(pass_specs.as_slice()).await;
+    ENGINE.with(|engine_cell| {
+        *engine_cell.borrow_mut() = Some(engine);
+    });
+    rebuild_result.map_err(pipeline_rebuild_failure_to_js_value)
 }
 
 #[wasm_bindgen]
@@ -258,10 +280,20 @@ fn start_worker_loop() -> Result<(), JsValue> {
 
         if let Ok(worker) = worker_scope() {
             LOOP_CALLBACK.with(|slot| {
-                if let Some(next_callback) = slot.borrow().as_ref() {
-                    // [LAW:single-enforcer] Scheduling is owned at this worker
-                    // boundary so tick cadence cannot diverge across callsites.
-                    let _ = worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
+                let should_schedule_next_frame = ENGINE.with(|engine_cell| {
+                    engine_cell
+                        .borrow()
+                        .as_ref()
+                        .map(Engine::should_schedule_next_frame)
+                        .unwrap_or(false)
+                });
+                if should_schedule_next_frame {
+                    if let Some(next_callback) = slot.borrow().as_ref() {
+                        // [LAW:single-enforcer] Scheduling is owned at this worker
+                        // boundary so tick cadence cannot diverge across callsites.
+                        let _ =
+                            worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
+                    }
                 }
             });
         }

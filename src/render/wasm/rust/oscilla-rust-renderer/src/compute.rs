@@ -103,38 +103,145 @@ pub struct CompilerComputePassSpec {
     pub wgsl: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WorkgroupSize {
+    x: u32,
+    y: u32,
+    z: u32,
+}
+
 struct CompiledComputePassPipeline {
     _pass_id: String,
     pipeline: wgpu::ComputePipeline,
     workgroup_count: u32,
 }
 
+pub struct StagedSimulationPipelines {
+    pipelines: Vec<CompiledComputePassPipeline>,
+}
+
+impl StagedSimulationPipelines {
+    pub fn encode_simulation_passes(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        arena: &GpuMemoryArena,
+        dispatch_override: Option<u32>,
+    ) {
+        let mut read_index = arena.ping_pong_index();
+        for compiled_pass in &self.pipelines {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Compute.PreflightSimulation.Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&compiled_pass.pipeline);
+            compute_pass.set_bind_group(
+                0,
+                arena.get_compiler_simulation_bind_group_for_index(read_index),
+                &[],
+            );
+            compute_pass.dispatch_workgroups(
+                dispatch_override
+                    .unwrap_or(compiled_pass.workgroup_count)
+                    .max(1),
+                1,
+                1,
+            );
+            read_index = (read_index + 1) & 1;
+        }
+    }
+}
+
 impl ComputeDispatcher {
-    fn parse_workgroup_size_x(simulation_wgsl: &str) -> u32 {
-        const DEFAULT_WORKGROUP_SIZE_X: u32 = 64;
+    fn parse_workgroup_size(simulation_wgsl: &str) -> Result<WorkgroupSize, String> {
         let start = match simulation_wgsl.find("@workgroup_size(") {
             Some(index) => index + "@workgroup_size(".len(),
-            None => return DEFAULT_WORKGROUP_SIZE_X,
+            None => return Err("missing required @workgroup_size(...) attribute".to_string()),
         };
         let end = match simulation_wgsl[start..].find(')') {
             Some(relative_end) => start + relative_end,
-            None => return DEFAULT_WORKGROUP_SIZE_X,
+            None => return Err("unterminated @workgroup_size(...) attribute".to_string()),
         };
-        let maybe_x = simulation_wgsl[start..end]
+        let raw = simulation_wgsl[start..end]
             .split(',')
-            .next()
             .map(str::trim)
-            .unwrap_or_default()
-            .parse::<u32>()
-            .ok();
-        maybe_x
-            .filter(|x| *x > 0)
-            .unwrap_or(DEFAULT_WORKGROUP_SIZE_X)
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>();
+        if raw.is_empty() || raw.len() > 3 {
+            return Err(format!(
+                "invalid @workgroup_size(...) arity: expected 1-3 integers, got {}",
+                raw.len()
+            ));
+        }
+
+        let parse_component = |index: usize| -> Result<u32, String> {
+            let value = raw
+                .get(index)
+                .copied()
+                .unwrap_or("1")
+                .parse::<u32>()
+                .map_err(|_| {
+                    format!(
+                        "workgroup size component {} must be a positive integer",
+                        index + 1
+                    )
+                })?;
+            if value == 0 {
+                return Err(format!(
+                    "workgroup size component {} must be greater than zero",
+                    index + 1
+                ));
+            }
+            Ok(value)
+        };
+
+        Ok(WorkgroupSize {
+            x: parse_component(0)?,
+            y: parse_component(1)?,
+            z: parse_component(2)?,
+        })
     }
 
-    fn simulation_dispatch_count_for_wgsl(particle_count: u32, simulation_wgsl: &str) -> u32 {
-        let workgroup_size_x = Self::parse_workgroup_size_x(simulation_wgsl);
-        ((particle_count.saturating_add(workgroup_size_x.saturating_sub(1))) / workgroup_size_x)
+    fn validate_workgroup_size(
+        limits: &wgpu::Limits,
+        pass_id: &str,
+        workgroup_size: WorkgroupSize,
+    ) -> Result<(), String> {
+        if workgroup_size.x > limits.max_compute_workgroup_size_x {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.x={} exceeds device limit {}",
+                pass_id, workgroup_size.x, limits.max_compute_workgroup_size_x
+            ));
+        }
+        if workgroup_size.y > limits.max_compute_workgroup_size_y {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.y={} exceeds device limit {}",
+                pass_id, workgroup_size.y, limits.max_compute_workgroup_size_y
+            ));
+        }
+        if workgroup_size.z > limits.max_compute_workgroup_size_z {
+            return Err(format!(
+                "pass \"{}\" workgroup_size.z={} exceeds device limit {}",
+                pass_id, workgroup_size.z, limits.max_compute_workgroup_size_z
+            ));
+        }
+        let total_invocations = workgroup_size
+            .x
+            .saturating_mul(workgroup_size.y)
+            .saturating_mul(workgroup_size.z);
+        if total_invocations > limits.max_compute_invocations_per_workgroup {
+            return Err(format!(
+                "pass \"{}\" total workgroup invocations={} exceeds device limit {}",
+                pass_id, total_invocations, limits.max_compute_invocations_per_workgroup
+            ));
+        }
+        Ok(())
+    }
+
+    fn simulation_dispatch_count_for_workgroup_size(
+        particle_count: u32,
+        workgroup_size: WorkgroupSize,
+    ) -> u32 {
+        ((particle_count.saturating_add(workgroup_size.x.saturating_sub(1))) / workgroup_size.x)
             .max(1)
     }
 
@@ -249,7 +356,8 @@ impl ComputeDispatcher {
                 entry_point: "compute_main".to_string(),
                 wgsl: simulation_wgsl.to_string(),
             }],
-        );
+        )
+        .expect("default simulation pipeline must satisfy canonical workgroup/device limits");
         let assembly_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.Assembly.Shader"),
             source: wgpu::ShaderSource::Wgsl(assembly_wgsl.into()),
@@ -333,30 +441,41 @@ impl ComputeDispatcher {
         compiler_simulation_layout: &wgpu::BindGroupLayout,
         particle_count: u32,
         pass_specs: &[CompilerComputePassSpec],
-    ) -> Vec<CompiledComputePassPipeline> {
+    ) -> Result<Vec<CompiledComputePassPipeline>, String> {
         if pass_specs.is_empty() {
-            panic!(
+            return Err(
                 "[LAW:no-silent-fallbacks] compile_simulation_passes requires at least one pass spec"
+                    .to_string(),
             );
         }
+        let limits = device.limits();
         let mut compiled = Vec::with_capacity(pass_specs.len().max(1));
         for spec in pass_specs {
+            let workgroup_size = Self::parse_workgroup_size(spec.wgsl.as_str())
+                .map_err(|message| format!("pass \"{}\" {}", spec.pass_id, message))?;
+            Self::validate_workgroup_size(&limits, spec.pass_id.as_str(), workgroup_size)?;
+            let workgroup_count =
+                Self::simulation_dispatch_count_for_workgroup_size(particle_count, workgroup_size)
+                    .max(1);
+            if workgroup_count > limits.max_compute_workgroups_per_dimension {
+                return Err(format!(
+                    "pass \"{}\" dispatch count {} exceeds device limit {}",
+                    spec.pass_id, workgroup_count, limits.max_compute_workgroups_per_dimension
+                ));
+            }
             let pipeline = Self::create_compiler_simulation_pipeline(
                 device,
                 spec.wgsl.as_str(),
                 spec.entry_point.as_str(),
                 compiler_simulation_layout,
             );
-            let workgroup_count =
-                Self::simulation_dispatch_count_for_wgsl(particle_count, spec.wgsl.as_str())
-                    .max(1);
             compiled.push(CompiledComputePassPipeline {
                 _pass_id: spec.pass_id.clone(),
                 pipeline,
                 workgroup_count,
             });
         }
-        compiled
+        Ok(compiled)
     }
 
     fn create_compiler_simulation_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -417,18 +536,23 @@ impl ComputeDispatcher {
         })
     }
 
-    pub fn rebuild_gpu_pipelines_with_compiler_wgsl(
-        &mut self,
+    pub fn stage_gpu_pipelines_with_compiler_wgsl(
+        &self,
         device: &wgpu::Device,
         pass_specs: &[CompilerComputePassSpec],
         particle_count: u32,
-    ) {
-        self.simulation_pipelines = Self::compile_simulation_passes(
+    ) -> Result<StagedSimulationPipelines, String> {
+        let pipelines = Self::compile_simulation_passes(
             device,
             &self.compiler_simulation_layout,
             particle_count,
             pass_specs,
-        );
+        )?;
+        Ok(StagedSimulationPipelines { pipelines })
+    }
+
+    pub fn activate_staged_gpu_pipelines(&mut self, staged: StagedSimulationPipelines) {
+        self.simulation_pipelines = staged.pipelines;
     }
 
     pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
@@ -477,7 +601,11 @@ impl ComputeDispatcher {
             compute_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
             // [LAW:one-source-of-truth] Instance assembly reads the final
             // simulation output bank resolved by deterministic pass chaining.
-            compute_pass.set_bind_group(1, arena.get_compiler_arena_bind_group_for_index(read_index), &[]);
+            compute_pass.set_bind_group(
+                1,
+                arena.get_compiler_arena_bind_group_for_index(read_index),
+                &[],
+            );
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
             // [LAW:single-enforcer] Runtime sink-table instance totals are the
             // canonical source for per-frame assembly dispatch size.
@@ -502,9 +630,52 @@ impl ComputeDispatcher {
         compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
         // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
         // canonical stage; record count data governs in-shader no-op behavior.
-        let draw_prep_workgroup_count =
-            ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
+        let draw_prep_workgroup_count = ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
         compute_pass.dispatch_workgroups(draw_prep_workgroup_count, 1, 1);
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::{ComputeDispatcher, WorkgroupSize};
+
+    #[test]
+    fn parse_workgroup_size_requires_attribute() {
+        let result = ComputeDispatcher::parse_workgroup_size("fn main() {}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_workgroup_size_parses_all_components() {
+        let result = ComputeDispatcher::parse_workgroup_size(
+            "@compute @workgroup_size(32, 4, 2)\nfn main() {}",
+        );
+        assert_eq!(result.ok(), Some(WorkgroupSize { x: 32, y: 4, z: 2 }));
+    }
+
+    #[test]
+    fn dispatch_count_uses_x_dimension_only() {
+        let count = ComputeDispatcher::simulation_dispatch_count_for_workgroup_size(
+            65_536,
+            WorkgroupSize { x: 64, y: 1, z: 1 },
+        );
+        assert_eq!(count, 1_024);
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_total_invocations_over_limit() {
+        let mut limits = wgpu::Limits::default();
+        limits.max_compute_workgroup_size_x = 256;
+        limits.max_compute_workgroup_size_y = 256;
+        limits.max_compute_workgroup_size_z = 64;
+        limits.max_compute_invocations_per_workgroup = 256;
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &limits,
+            "simulation",
+            WorkgroupSize { x: 32, y: 16, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("total workgroup invocations")));
+    }
 }
