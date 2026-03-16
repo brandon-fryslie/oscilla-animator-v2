@@ -58,11 +58,13 @@ export enum ShapeBankHeaderWord {
   // -- Canonical declarative fields (continued) --
   ParamBlockOffset = 9,
   ParamBlockWords = 10,
-  Reserved0 = 11,
+  // [RECOVER-07] Arena addressing for control-point vertex data.
+  // Vertex shader reads CPs from compiler_arena_buffer using these offsets.
+  CpArenaBaseOffset = 11,
   BoundsMinPacked = 12,
   BoundsMaxPacked = 13,
-  Reserved1 = 14,
-  Reserved2 = 15,
+  CpArenaLaneStride = 14,
+  CpArenaComponentStride = 15,
 }
 
 /**
@@ -89,11 +91,11 @@ export interface ShapeBankHeaderRecord {
   firstVertex: number;
   paramBlockOffset: number;
   paramBlockWords: number;
-  reserved0: number;
+  cpArenaBaseOffset: number;
   boundsMinPacked: number;
   boundsMaxPacked: number;
-  reserved1: number;
-  reserved2: number;
+  cpArenaLaneStride: number;
+  cpArenaComponentStride: number;
 }
 
 export function createShapeBankHeaderV1(
@@ -111,11 +113,11 @@ export function createShapeBankHeaderV1(
     firstVertex: 0,
     paramBlockOffset: 0,
     paramBlockWords: 0,
-    reserved0: 0,
+    cpArenaBaseOffset: 0,
     boundsMinPacked: 0,
     boundsMaxPacked: 0,
-    reserved1: 0,
-    reserved2: 0,
+    cpArenaLaneStride: 0,
+    cpArenaComponentStride: 0,
     ...overrides,
   };
 }
@@ -237,11 +239,11 @@ export function readShapeBankHeader(
     firstVertex: bank[handle + ShapeBankHeaderWord.FirstVertex] >>> 0,
     paramBlockOffset: bank[handle + ShapeBankHeaderWord.ParamBlockOffset] >>> 0,
     paramBlockWords: bank[handle + ShapeBankHeaderWord.ParamBlockWords] >>> 0,
-    reserved0: bank[handle + ShapeBankHeaderWord.Reserved0] >>> 0,
+    cpArenaBaseOffset: bank[handle + ShapeBankHeaderWord.CpArenaBaseOffset] >>> 0,
     boundsMinPacked: bank[handle + ShapeBankHeaderWord.BoundsMinPacked] >>> 0,
     boundsMaxPacked: bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] >>> 0,
-    reserved1: bank[handle + ShapeBankHeaderWord.Reserved1] >>> 0,
-    reserved2: bank[handle + ShapeBankHeaderWord.Reserved2] >>> 0,
+    cpArenaLaneStride: bank[handle + ShapeBankHeaderWord.CpArenaLaneStride] >>> 0,
+    cpArenaComponentStride: bank[handle + ShapeBankHeaderWord.CpArenaComponentStride] >>> 0,
   };
 }
 
@@ -264,11 +266,11 @@ export function writeShapeBankHeader(
   bank[handle + ShapeBankHeaderWord.FirstVertex] = header.firstVertex >>> 0;
   bank[handle + ShapeBankHeaderWord.ParamBlockOffset] = header.paramBlockOffset >>> 0;
   bank[handle + ShapeBankHeaderWord.ParamBlockWords] = header.paramBlockWords >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved0] = header.reserved0 >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaBaseOffset] = header.cpArenaBaseOffset >>> 0;
   bank[handle + ShapeBankHeaderWord.BoundsMinPacked] = header.boundsMinPacked >>> 0;
   bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
-  bank[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaLaneStride] = header.cpArenaLaneStride >>> 0;
+  bank[handle + ShapeBankHeaderWord.CpArenaComponentStride] = header.cpArenaComponentStride >>> 0;
 }
 
 /**

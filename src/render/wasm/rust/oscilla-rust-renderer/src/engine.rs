@@ -159,7 +159,11 @@ fn create_msaa_color_target(
     None
 }
 
-const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 2;
+// [RECOVER-07] Descriptor word offsets for total_instance_count derivation.
+// RECOVER-05 zeroed all record fields; instance counts live in descriptors.
+const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
+const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
+const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 
 impl Engine {
     pub async fn new(canvas: OffscreenCanvas, config: EngineConfig) -> Result<Self, JsValue> {
@@ -284,6 +288,7 @@ impl Engine {
             &compute.draw_prep_layout,
             &render.instance_layout,
             &render.topology_layout,
+            &render.arena_render_layout,
             config.max_particles,
             config.max_shapes,
         );
@@ -416,6 +421,7 @@ impl Engine {
             &self.compute.draw_prep_layout,
             &self.render.instance_layout,
             &self.render.topology_layout,
+            &self.render.arena_render_layout,
             particle_count as usize,
             shape_count as usize,
         );
@@ -761,15 +767,25 @@ impl Engine {
         let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
+        // [RECOVER-07] Sum instance counts from descriptors, not zeroed record fields.
+        // RECOVER-05 zeroed all record fields; StaticInstanceCount in descriptors
+        // is the canonical source for assembly dispatch sizing.
+        let total_record_count_usize = total_record_count as usize;
+        let descriptor_region_base =
+            SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;
-        for record in 0..(total_record_count as usize) {
-            let record_base =
-                SINK_TABLE_HEADER_WORDS + record.saturating_mul(SINK_TABLE_RECORD_WORDS);
-            if record_base + SINK_RECORD_WORD_INSTANCE_COUNT >= plane_words.len() {
+        for record in 0..total_record_count_usize {
+            let descriptor_base =
+                descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
                 break;
             }
-            total_instance_count = total_instance_count
-                .saturating_add(plane_words[record_base + SINK_RECORD_WORD_INSTANCE_COUNT]);
+            let mode = plane_words[descriptor_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
+            if mode == INSTANCE_COUNT_MODE_STATIC {
+                total_instance_count = total_instance_count.saturating_add(
+                    plane_words[descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT],
+                );
+            }
         }
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.

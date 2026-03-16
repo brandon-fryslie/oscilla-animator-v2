@@ -69,15 +69,13 @@ describe('ShapeHeaderV1 canonical header contract', () => {
   });
 
   it('ValueExprMaterializer-style write produces zero realized-offset words', () => {
-    // Simulates the write pattern used by evaluateShapeRefHandle() in
-    // ValueExprMaterializer.ts — the canonical materialization path.
+    // [RECOVER-07] Simulates the write pattern used by evaluateShapeRefHandle().
+    // Header-only allocation — no paramBlock payload in ShapeBank.
     const state = createRuntimeState(0, 0, 0, 0, 128, 0);
-    const paramBlockWords = 12; // 6 vertices * 2 words each
     const handle = allocShapeBankWords(
       state.shapeBank!,
-      SHAPE_BANK_HEADER_WORDS + paramBlockWords,
+      SHAPE_BANK_HEADER_WORDS,
     );
-    const paramBlockOffset = handle + SHAPE_BANK_HEADER_WORDS;
 
     writeShapeBankHeader(
       state.shapeBank!.data,
@@ -88,8 +86,11 @@ describe('ShapeHeaderV1 canonical header contract', () => {
         flags: 1,
         indexCount: 12, // pre-computed: (6-2)*3
         vertexCount: 6,
-        paramBlockOffset,
-        paramBlockWords,
+        paramBlockOffset: 0,
+        paramBlockWords: 0,
+        cpArenaBaseOffset: 100,
+        cpArenaLaneStride: 1,
+        cpArenaComponentStride: 6,
       }),
     );
 
@@ -149,6 +150,9 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     expect(ShapeBankHeaderWord.FirstVertex).toBe(8);
     expect(ShapeBankHeaderWord.ParamBlockOffset).toBe(9);
     expect(ShapeBankHeaderWord.ParamBlockWords).toBe(10);
+    expect(ShapeBankHeaderWord.CpArenaBaseOffset).toBe(11);
+    expect(ShapeBankHeaderWord.CpArenaLaneStride).toBe(14);
+    expect(ShapeBankHeaderWord.CpArenaComponentStride).toBe(15);
     expect(SHAPE_BANK_HEADER_WORDS).toBe(16);
   });
 });

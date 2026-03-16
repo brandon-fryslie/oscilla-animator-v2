@@ -88,6 +88,8 @@ pub struct GpuMemoryArena {
     state_bind_groups: [wgpu::BindGroup; 2],
     compiler_arena_bind_groups: [wgpu::BindGroup; 2],
     compiler_simulation_bind_groups: [wgpu::BindGroup; 2],
+    // [RECOVER-07] Bind groups for vertex-stage arena reads (one per ping-pong buffer).
+    arena_render_bind_groups: [wgpu::BindGroup; 2],
     staging_buffers: [wgpu::Buffer; 2],
     ping_pong_index: usize,
 }
@@ -122,6 +124,7 @@ impl GpuMemoryArena {
         draw_prep_layout: &wgpu::BindGroupLayout,
         instance_layout: &wgpu::BindGroupLayout,
         topology_layout: &wgpu::BindGroupLayout,
+        arena_render_layout: &wgpu::BindGroupLayout,
         max_particles: usize,
         max_shapes: usize,
     ) -> Self {
@@ -359,6 +362,27 @@ impl GpuMemoryArena {
             }),
         ];
 
+        // [RECOVER-07] Bind groups for vertex-stage arena reads (one per
+        // ping-pong buffer). The render pass binds the final simulation output.
+        let arena_render_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.A"),
+                layout: arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.B"),
+                layout: arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
+
         Self {
             uniforms: GlobalUniforms::default(),
             slot_descriptors: Vec::with_capacity(64),
@@ -385,6 +409,7 @@ impl GpuMemoryArena {
             state_bind_groups,
             compiler_arena_bind_groups,
             compiler_simulation_bind_groups,
+            arena_render_bind_groups,
             staging_buffers,
             ping_pong_index: 0,
         }
@@ -426,6 +451,13 @@ impl GpuMemoryArena {
         // [LAW:dataflow-not-control-flow] Multi-pass simulation chaining is
         // expressed by deterministic ping/pong index progression per pass.
         &self.compiler_simulation_bind_groups[read_index & 1]
+    }
+
+    // [RECOVER-07] Returns the arena bind group for the current ping-pong read
+    // buffer. After simulation completes, ping_pong_index points to the buffer
+    // containing the final computed arena data.
+    pub fn get_arena_render_bind_group(&self) -> &wgpu::BindGroup {
+        &self.arena_render_bind_groups[self.ping_pong_index]
     }
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {

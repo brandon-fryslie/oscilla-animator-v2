@@ -290,10 +290,15 @@ struct InstanceData {
 @group(0) @binding(0) var<uniform> global: GlobalUniforms;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
+// [RECOVER-07] Compiler arena buffer for vertex-stage control-point reads.
+@group(3) @binding(0) var<storage, read> arenaWords: array<u32>;
 
 // ShapeBankHeaderWord offsets (must match TypeScript ShapeBankHeaderWord enum)
 const SHAPE_WORD_FLAGS: u32 = 2u;
-const SHAPE_WORD_PARAM_BLOCK_OFFSET: u32 = 9u;
+// [RECOVER-07] CP arena addressing stored in header words 11, 14, 15.
+const SHAPE_WORD_CP_ARENA_BASE_OFFSET: u32 = 11u;
+const SHAPE_WORD_CP_ARENA_LANE_STRIDE: u32 = 14u;
+const SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE: u32 = 15u;
 const SHAPE_FLAG_CLOSED: u32 = 1u;
 
 struct VertexOutput {
@@ -325,9 +330,9 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   );
 }
 
-// [RECOVER-04] Vertex pulling: positions are read from topologyBank at
-// the shape's paramBlockOffset. Triangle fan is generated from vertex_index.
-// No vertex buffer is bound.
+// [RECOVER-07] Vertex pulling: control-point positions are read from the
+// compiler arena buffer (GPU-computed). Arena addressing is stored in the
+// topology header (words 11, 14, 15). Triangle fan generated from vertex_index.
 @vertex fn vs_main(
   @builtin(instance_index) instanceIndex: u32,
   @builtin(vertex_index) vertexIndex: u32,
@@ -336,7 +341,11 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
   let flags = topologyBank[topologyWordOffset + SHAPE_WORD_FLAGS];
   let isClosed = (flags & SHAPE_FLAG_CLOSED) != 0u;
-  let paramBlockOffset = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_OFFSET];
+
+  // [RECOVER-07] CP arena addressing from topology header reserved words.
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
 
   // [LAW:dataflow-not-control-flow] Both fan and sequential control-point
   // indices are computed; the flags data selects which one is used.
@@ -345,10 +354,11 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   let fanCpIndex = select(tri + loc, 0u, loc == 0u);
   let cpIndex = select(vertexIndex, fanCpIndex, isClosed);
 
-  let xBits = topologyBank[paramBlockOffset + cpIndex * 2u];
-  let yBits = topologyBank[paramBlockOffset + cpIndex * 2u + 1u];
-  let pulledX = bitcast<f32>(xBits);
-  let pulledY = bitcast<f32>(yBits);
+  // [RECOVER-07] Read CP positions from compiler arena (GPU-computed data).
+  let xAddr = cpArenaBase + cpIndex * cpArenaLaneStride;
+  let yAddr = cpArenaBase + cpIndex * cpArenaLaneStride + cpArenaComponentStride;
+  let pulledX = bitcast<f32>(arenaWords[xAddr]);
+  let pulledY = bitcast<f32>(arenaWords[yAddr]);
 
   let rawCenterX = inst.transform0.x;
   let rawCenterY = inst.transform0.y;

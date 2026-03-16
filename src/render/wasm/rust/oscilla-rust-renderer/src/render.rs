@@ -152,6 +152,9 @@ pub struct RenderDispatcher {
     render_pipeline: wgpu::RenderPipeline,
     pub instance_layout: wgpu::BindGroupLayout,
     pub topology_layout: wgpu::BindGroupLayout,
+    // [RECOVER-07] Layout for compiler arena buffer bound to vertex shader.
+    // Vertex shader reads control-point positions from GPU-computed arena data.
+    pub arena_render_layout: wgpu::BindGroupLayout,
 }
 
 impl RenderDispatcher {
@@ -190,13 +193,34 @@ impl RenderDispatcher {
             }],
         });
 
+        // [RECOVER-07] Arena buffer for vertex-stage control-point reads.
+        let arena_render_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Render.Arena.Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Render.UberShader"),
             source: wgpu::ShaderSource::Wgsl(uber_shader_wgsl.into()),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render.PipelineLayout"),
-            bind_group_layouts: &[uniform_layout, &instance_layout, &topology_layout],
+            bind_group_layouts: &[
+                uniform_layout,
+                &instance_layout,
+                &topology_layout,
+                &arena_render_layout,
+            ],
             push_constant_ranges: &[],
         });
 
@@ -244,6 +268,7 @@ impl RenderDispatcher {
             render_pipeline,
             instance_layout,
             topology_layout,
+            arena_render_layout,
         }
     }
 
@@ -293,6 +318,8 @@ impl RenderDispatcher {
         render_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
         render_pass.set_bind_group(1, &arena.instance_bind_group, &[]);
         render_pass.set_bind_group(2, &arena.topology_bind_group, &[]);
+        // [RECOVER-07] Bind compiler arena buffer for vertex-stage CP reads.
+        render_pass.set_bind_group(3, arena.get_arena_render_bind_group(), &[]);
 
         let indexed_stride_words = plan.indexed_stride_words.max(5);
         let non_indexed_stride_words = plan.non_indexed_stride_words.max(4);
