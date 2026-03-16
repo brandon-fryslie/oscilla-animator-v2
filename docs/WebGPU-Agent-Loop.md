@@ -44,7 +44,8 @@ The implementer:
 3. Works only inside the active ticket's accepted boundary.
 4. May try bounded alternative implementations inside the same ticket.
 5. Must verify the ticket's acceptance criteria locally.
-6. Must leave a clean tree and a commit when repo state changed.
+6. Must never close the active `RECOVER-*` ticket.
+7. Must leave a clean tree and a commit when repo state changed.
 
 ## Evaluator Contract
 
@@ -52,10 +53,12 @@ The evaluator:
 
 1. Identifies the ticket that owns current repo state.
 2. Re-runs enough verification to judge the latest implementation independently.
-3. Chooses one bounded verdict.
-4. Prepares the next run by leaving a structured evaluator note.
-5. May safely revert isolated bad implementation commits with `git revert`.
-6. Must leave a clean tree and a commit when repo state changed.
+3. Audits whether the tests and checks actually verify the intended behavior rather than only the current implementation shape.
+4. Chooses one bounded verdict.
+5. Prepares the next run by leaving a structured evaluator note.
+6. Owns `RECOVER-*` ticket closure when the verdict is `accept-complete`.
+7. May safely revert isolated bad implementation commits with `git revert`.
+8. Must leave a clean tree and a commit when repo state changed.
 
 ## Evaluator Note
 
@@ -96,10 +99,11 @@ Every run should be explainable as gates:
 
 1. source/ticket alignment
 2. design or verdict alignment
-3. static verification
-4. runtime/readback verification when relevant
-5. ownership/spec alignment
-6. clean closeout
+3. verification quality: checks and tests prove the intended behavior
+4. static verification
+5. runtime/readback verification when relevant
+6. ownership/spec alignment
+7. clean closeout
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 

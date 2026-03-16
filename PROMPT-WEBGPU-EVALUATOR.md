@@ -51,7 +51,8 @@ Check:
 1. the current repo state belongs to this ticket and not a later one
 2. the implemented owner/boundary matches the ticket/spec
 3. verification can be replayed locally
-4. the change did not introduce dual authority, fallback ownership, or unrelated churn
+4. the tests and checks actually verify the intended behavior instead of implementation shape only
+5. the change did not introduce dual authority, fallback ownership, or unrelated churn
 
 Re-run the needed proof:
 
@@ -62,6 +63,7 @@ Re-run the needed proof:
 - any ticket-specific gates
 
 Do not trust the implementer's report without replaying evidence.
+`// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
 
 ## Verdict
 
@@ -105,9 +107,10 @@ Steer tactically, not architecturally.
 ## Closeout
 
 1. Leave the evaluator note.
-2. Reopen or close the ticket if the verdict requires it and tracker writes work.
-3. If you changed repo state, commit it.
-4. Normalize the tree again until `git status --short` is clean.
+2. Close the ticket if and only if the verdict is `accept-complete` and tracker writes work.
+3. Reopen or leave the ticket open for every other verdict.
+4. If you changed repo state, commit it.
+5. Normalize the tree again until `git status --short` is clean.
 
 ## Final Report
 
