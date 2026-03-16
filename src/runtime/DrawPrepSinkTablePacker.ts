@@ -1,8 +1,6 @@
 import type { CompiledProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
-import type { RuntimeState } from './RuntimeState';
-import { readShapeBankHeader, SHAPE_BANK_HEADER_WORDS } from './RuntimeState';
 import { resolveArenaAddress } from './ArenaValueStore';
 import {
   DRAW_PREP_SINK_DESCRIPTOR_WORDS,
@@ -16,6 +14,11 @@ import {
   writeDrawPrepSinkTableHeader,
   type DrawPrepSinkTableHeaderV1,
 } from './DrawPrepSinkTable';
+
+// [RECOVER-05] This packer emits static metadata only. Per-frame dynamic
+// command fields (count, instanceCount, first, baseVertex, firstInstance,
+// shapeWordOffset, materialId) are NOT computed by the CPU. GPU draw-prep
+// compute (RECOVER-06) will derive them from canonical GPU-resident state.
 
 export interface PackedDrawPrepSinkTableV1 {
   readonly words: Uint32Array;
@@ -44,18 +47,6 @@ function assertFiniteUint32(value: number, context: string): number {
   return value;
 }
 
-function ensureTableBuffer(state: RuntimeState, requiredWords: number): Uint32Array {
-  const existing = state.cache.drawPrepSinkTableWords;
-  if (existing && existing.length >= requiredWords) {
-    return existing;
-  }
-  // [LAW:no-shared-mutable-globals] Sink-table scratch capacity is owned by
-  // RuntimeState frame cache; no module-global shared staging is allowed.
-  const next = new Uint32Array(requiredWords);
-  state.cache.drawPrepSinkTableWords = next;
-  return next;
-}
-
 function requireRenderStep(program: CompiledProgramIR, renderStepIndex: number): StepRender {
   const step = (program.schedule.steps as readonly Step[])[renderStepIndex];
   if (!step || step.kind !== 'render') {
@@ -76,6 +67,9 @@ interface PackedArenaAddress {
 const OPTIONAL_MODE_CONSTANT = 0;
 const OPTIONAL_MODE_SLOT = 1;
 
+const INSTANCE_COUNT_MODE_STATIC = 0;
+const INSTANCE_COUNT_MODE_DYNAMIC = 1;
+
 function resolveSlotArenaAddress(
   program: CompiledProgramIR,
   slot: ValueSlot,
@@ -95,103 +89,6 @@ function resolveSlotArenaAddress(
   };
 }
 
-function readArenaNumber(address: PackedArenaAddress, state: RuntimeState, lane: number, component: number): number {
-  const index =
-    address.baseOffset
-    + assertFiniteUint32(lane, 'arenaRead.lane') * address.laneStride
-    + assertFiniteUint32(component, 'arenaRead.component') * address.componentStride;
-  if (index >= state.arena.length) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: arena read out of bounds ' +
-        `(index=${index}, arenaLength=${state.arena.length})`,
-    );
-  }
-  return state.arena[index] as number;
-}
-
-function resolveSlotShapeHandle(
-  program: CompiledProgramIR,
-  state: RuntimeState,
-  step: StepRender,
-  instanceCount: number,
-): number {
-  if (instanceCount <= 0) {
-    return 0;
-  }
-  const shapeAddress = resolveSlotArenaAddress(
-    program,
-    step.shape.slot,
-    `shapeSlot sink(instance=${String(step.instanceId)})`,
-  );
-  const firstHandle = readArenaNumber(shapeAddress, state, 0, 0);
-  if (!Number.isFinite(firstHandle) || !Number.isInteger(firstHandle)) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: shape slot lane 0 handle must be a finite integer, got ' + String(firstHandle),
-    );
-  }
-  const representative = assertFiniteUint32(Math.trunc(firstHandle), 'shapeHandleWordOffset');
-  for (let lane = 1; lane < instanceCount; lane++) {
-    const laneHandle = readArenaNumber(shapeAddress, state, lane, 0);
-    if (!Number.isFinite(laneHandle) || !Number.isInteger(laneHandle)) {
-      throw new Error(
-        'DrawPrepSinkTablePacker: shape slot lane handle must be a finite integer, got ' + String(laneHandle),
-      );
-    }
-    const handle = assertFiniteUint32(Math.trunc(laneHandle), `shapeSlotHandle lane=${lane}`);
-    if (handle !== representative) {
-      // [LAW:no-mode-explosion] Heterogeneous per-instance shape handles inside one
-      // sink would require dynamic sink fan-out; one sink maps to one command.
-      throw new Error(
-        'DrawPrepSinkTablePacker: heterogeneous per-instance shape handles in one sink are unsupported ' +
-          `(sinkInstanceId=${String(step.instanceId)}, lane0=${representative}, lane=${lane}, handle=${handle})`,
-      );
-    }
-  }
-  return representative;
-}
-
-function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffset: number, instanceCount: number): void {
-  if (instanceCount <= 0) {
-    return;
-  }
-  if (shapeHandleWordOffset + SHAPE_BANK_HEADER_WORDS > state.shapeBank.volatilePtr) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: sink shape handle points outside live shape bank window ' +
-        `(handle=${shapeHandleWordOffset}, volatilePtr=${state.shapeBank.volatilePtr})`,
-    );
-  }
-}
-
-function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
-  const drawPrepProgram = program.drawPrepProgram;
-  const sink = drawPrepProgram.sinks[sinkIndex];
-  if (!sink) {
-    throw new Error(`DrawPrepSinkTablePacker: sink ${sinkIndex} missing`);
-  }
-
-  if (sink.instanceCountMode === 'static') {
-    return assertFiniteUint32(
-      sink.staticInstanceCount ?? Number.NaN,
-      `staticInstanceCount sinkIndex=${sink.sinkIndex}`,
-    );
-  }
-
-  if (state.cache.instanceLaneCountFrameId !== state.cache.frameId) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: dynamic instance counts are stale for current frame ' +
-        `(frameId=${state.cache.frameId}, cachedFrame=${state.cache.instanceLaneCountFrameId ?? -1})`,
-    );
-  }
-  const dynamicCount = state.cache.instanceLaneCounts?.get(String(sink.instanceId));
-  if (dynamicCount === undefined) {
-    throw new Error(
-      'DrawPrepSinkTablePacker: missing dynamic instance count for sink ' +
-        `(sinkIndex=${sink.sinkIndex}, instanceId=${String(sink.instanceId)})`,
-    );
-  }
-  return assertFiniteUint32(dynamicCount, `dynamicInstanceCount sinkIndex=${sink.sinkIndex}`);
-}
-
 function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[] {
   const indexed: number[] = [];
   const nonIndexed: number[] = [];
@@ -206,81 +103,34 @@ function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[
   return [...indexed, ...nonIndexed];
 }
 
-interface DrawCommandFields {
-  readonly count: number;
-  readonly first: number;
-  readonly baseVertex: number;
-  readonly materialId: number;
-}
-
 /**
- * Resolve draw command fields from canonical ShapeBank header.
+ * Pack the draw-prep sink table with static metadata only.
  *
- * // [LAW:one-source-of-truth] Draw command count is derived from canonical
- * // header fields only. For non-indexed vertex-pulled closed shapes, the
- * // count is the triangle fan vertex count (indexCount = (vertexCount-2)*3).
- * // For open shapes, it is raw vertexCount.
+ * // [RECOVER-05] CPU no longer computes per-frame dynamic draw command fields.
+ * // Record fields count/instanceCount/first/baseVertex/firstInstance/
+ * // shapeWordOffset/materialId are left as zero. GPU draw-prep compute
+ * // (RECOVER-06) derives these from canonical GPU-resident state.
+ *
+ * // [LAW:one-source-of-truth] The sink table now contains only compile-time
+ * // metadata: header, per-record drawMode, and descriptor arena addresses.
  */
-function resolveDrawCommandFields(
-  state: RuntimeState,
-  sink: DrawPrepSinkIR,
-  shapeHandleWordOffset: number,
-): DrawCommandFields {
-  const shapeHeader = readShapeBankHeader(state.shapeBank.data, shapeHandleWordOffset);
-  if (sink.drawMode === 'indexed') {
-    return {
-      count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
-      first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
-      baseVertex: shapeHeader.baseVertex | 0,
-      materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
-    };
-  }
-  // [RECOVER-04] Non-indexed vertex pulling: closed shapes use triangle fan
-  // vertex count (indexCount = (vertexCount-2)*3), open shapes use raw vertexCount.
-  // The GPU vertex shader generates triangle fan geometry from vertex_index.
-  const isClosed = (shapeHeader.flags & 1) !== 0;
-  const count = isClosed && shapeHeader.indexCount > 0
-    ? shapeHeader.indexCount
-    : shapeHeader.vertexCount;
-  return {
-    count: assertFiniteUint32(count, `nonIndexed.count sinkIndex=${sink.sinkIndex}`),
-    first: 0,
-    baseVertex: 0,
-    materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
-  };
-}
-
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
-  state: RuntimeState,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
   // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
-  // boundary even when there are no sinks to emit for the frame.
+  // boundary even when there are no sinks to emit.
   const header = buildDrawPrepSinkTableHeader(drawPrepProgram);
   if (drawPrepProgram.sinks.length === 0) {
-    state.cache.drawPrepSinkTableWords = undefined;
-    state.cache.drawPrepSinkTableWordCount = 0;
-    state.cache.drawPrepSinkTableFrameId = state.cache.frameId;
     return null;
   }
 
-  // [LAW:one-source-of-truth] Compiler owns sink ordering + indirect metadata.
-  // Runtime packs canonical command records + static source descriptors only.
-  const sinkInstanceCounts: number[] = [];
-  for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
-    const instanceCount = resolveSinkInstanceCount(program, state, sinkIndex);
-    sinkInstanceCounts.push(instanceCount);
-  }
-
   const wordCount = computeDrawPrepSinkTableWordCapacity(header.totalRecordCount);
-  const words = ensureTableBuffer(state, wordCount);
-  words.fill(0, 0, wordCount);
+  const words = new Uint32Array(wordCount);
   writeDrawPrepSinkTableHeader(words, header);
   const descriptorBaseWord = DRAW_PREP_SINK_TABLE_HEADER_WORDS
     + header.totalRecordCount * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
 
-  let firstInstance = 0;
   let recordWriteIndex = 0;
   for (const sinkIndex of orderedSinkIndicesByDrawMode(drawPrepProgram.sinks)) {
     const sink = drawPrepProgram.sinks[sinkIndex];
@@ -288,12 +138,23 @@ export function packDrawPrepSinkTableV1(
       throw new Error(`DrawPrepSinkTablePacker: missing sink at index ${sinkIndex}`);
     }
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
-    const instanceCount = sinkInstanceCounts[sinkIndex] ?? 0;
-    const shapeHandleWordOffset = resolveSlotShapeHandle(program, state, renderStep, instanceCount);
-    assertShapeHandleInBankWindow(state, shapeHandleWordOffset, instanceCount);
-    const command = resolveDrawCommandFields(state, sink, shapeHandleWordOffset);
 
-    const packedFirstInstance = assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`);
+    // [RECOVER-05] Only drawMode is written to the record. All dynamic fields
+    // (count, instanceCount, first, baseVertex, firstInstance, shapeWordOffset,
+    // materialId) are zero — GPU draw-prep compute owns their derivation.
+    writeDrawPrepSinkRecord(words, recordWriteIndex, {
+      drawMode: drawModeToCode(sink.drawMode),
+      count: 0,
+      instanceCount: 0,
+      first: 0,
+      baseVertex: 0,
+      firstInstance: 0,
+      shapeWordOffset: 0,
+      materialId: 0,
+    });
+
+    // --- Static descriptor: arena addresses for render inputs ---
+    const descriptorBase = descriptorBaseWord + recordWriteIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
     const positionAddress = resolveSlotArenaAddress(
       program,
       renderStep.controlPointsSlot,
@@ -326,17 +187,6 @@ export function packDrawPrepSinkTableV1(
         )
         : null;
 
-    writeDrawPrepSinkRecord(words, recordWriteIndex, {
-      drawMode: drawModeToCode(sink.drawMode),
-      count: command.count,
-      instanceCount,
-      first: command.first,
-      baseVertex: command.baseVertex,
-      firstInstance: packedFirstInstance,
-      shapeWordOffset: shapeHandleWordOffset,
-      materialId: command.materialId,
-    });
-    const descriptorBase = descriptorBaseWord + recordWriteIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
     words[descriptorBase + DrawPrepSinkDescriptorWord.PositionBaseOffset] = positionAddress.baseOffset;
     words[descriptorBase + DrawPrepSinkDescriptorWord.PositionLaneStride] = positionAddress.laneStride;
     words[descriptorBase + DrawPrepSinkDescriptorWord.PositionComponentStride] = positionAddress.componentStride;
@@ -362,14 +212,25 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 
-    const nextFirstInstance = packedFirstInstance + instanceCount;
-    firstInstance = assertFiniteUint32(nextFirstInstance, 'firstInstancePrefixSum');
+    // --- [RECOVER-05] New static metadata for GPU draw-prep derivation ---
+    const shapeSlotAddress = resolveSlotArenaAddress(
+      program,
+      renderStep.shape.slot,
+      `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
+    );
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset] = shapeSlotAddress.baseOffset;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride] = shapeSlotAddress.laneStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride] = shapeSlotAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.InstanceCountMode] =
+      sink.instanceCountMode === 'static' ? INSTANCE_COUNT_MODE_STATIC : INSTANCE_COUNT_MODE_DYNAMIC;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.StaticInstanceCount] =
+      sink.instanceCountMode === 'static'
+        ? assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`)
+        : 0;
+
     recordWriteIndex += 1;
   }
 
-  state.cache.drawPrepSinkTableWords = words;
-  state.cache.drawPrepSinkTableWordCount = wordCount;
-  state.cache.drawPrepSinkTableFrameId = state.cache.frameId;
   return {
     words,
     wordCount,

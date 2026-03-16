@@ -26,12 +26,11 @@ import { createArena } from './ArenaValueStore';
  * `ValueExprMaterializer` and are immutable after materialization.
  * They describe declarative topology metadata and parameter payload offsets.
  *
- * Realized geometry-offset fields (words 4-6, 8) — `indexCount`, `firstIndex`,
- * `baseVertex`, `firstVertex` — are NOT part of the canonical header contract.
- * They exist in the ABI layout for GPU-side consumption only. The Rust worker
- * derives them during `realize_shape_bank_geometry()` and writes them into its
- * own separate `RealizedShapeGeometry` tracking structure. JS-side code MUST NOT
- * read or depend on these fields from `ShapeBankState.data`.
+ * Geometry-offset fields (words 4-6, 8) — `indexCount`, `firstIndex`,
+ * `baseVertex`, `firstVertex` — are part of the canonical header layout for
+ * GPU-side consumption. GPU draw-prep compute reads these fields to derive
+ * indirect command arguments. JS-side code MUST NOT read or depend on these
+ * fields from `ShapeBankState.data`.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
@@ -534,11 +533,6 @@ export interface FrameCache {
   /** Frame stamp for `instanceLaneCounts` validity. */
   instanceLaneCountFrameId?: number;
 
-  /** Optional draw-prep sink-table scratch words for renderer handoff. */
-  drawPrepSinkTableWords?: Uint32Array;
-  drawPrepSinkTableWordCount?: number;
-  drawPrepSinkTableFrameId?: number;
-
 }
 
 /**
@@ -556,9 +550,6 @@ export function createFrameCache(
     scalarExprToArenaAddress: null,
     instanceLaneCounts: new Map<string, number>(),
     instanceLaneCountFrameId: 0,
-    drawPrepSinkTableWords: undefined,
-    drawPrepSinkTableWordCount: 0,
-    drawPrepSinkTableFrameId: 0,
   };
 }
 
