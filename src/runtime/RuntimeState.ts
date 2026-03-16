@@ -19,19 +19,44 @@ import { createArena } from './ArenaValueStore';
  *
  * // [LAW:one-source-of-truth] Runtime and renderer consume one canonical
  * // shape-header ABI that matches WS-01/P1-2 contracts.
+ *
+ * ## Canonical vs. Realized Fields
+ *
+ * Canonical fields (words 0-3, 7, 9-15) are written once by
+ * `ValueExprMaterializer` and are immutable after materialization.
+ * They describe declarative topology metadata and parameter payload offsets.
+ *
+ * Realized geometry-offset fields (words 4-6, 8) — `indexCount`, `firstIndex`,
+ * `baseVertex`, `firstVertex` — are NOT part of the canonical header contract.
+ * They exist in the ABI layout for GPU-side consumption only. The Rust worker
+ * derives them during `realize_shape_bank_geometry()` and writes them into its
+ * own separate `RealizedShapeGeometry` tracking structure. JS-side code MUST NOT
+ * read or depend on these fields from `ShapeBankState.data`.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
 export enum ShapeBankHeaderWord {
+  // -- Canonical declarative fields (immutable after materialization) --
   Kind = 0,
   TopologyMode = 1,
   Flags = 2,
   MaterialClass = 3,
+
+  // -- Realized geometry-offset fields (worker-derived, NOT canonical) --
+  // These words are reserved in the ABI for GPU-side geometry offsets.
+  // JS-side ShapeBankState.data leaves them as 0. The Rust worker fills
+  // them in its own local copy before GPU upload.
   IndexCount = 4,
   FirstIndex = 5,
   BaseVertex = 6,
+
+  // -- Canonical declarative fields (continued) --
   VertexCount = 7,
+
+  // -- Realized geometry-offset field (worker-derived, NOT canonical) --
   FirstVertex = 8,
+
+  // -- Canonical declarative fields (continued) --
   ParamBlockOffset = 9,
   ParamBlockWords = 10,
   Reserved0 = 11,
@@ -40,6 +65,18 @@ export enum ShapeBankHeaderWord {
   Reserved1 = 14,
   Reserved2 = 15,
 }
+
+/**
+ * Word offsets of realized geometry-offset fields in ShapeHeaderV1.
+ * These are NOT canonical — they are derived by the Rust worker and
+ * must not be read from JS-side ShapeBankState.data.
+ */
+export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
+  ShapeBankHeaderWord.IndexCount,
+  ShapeBankHeaderWord.FirstIndex,
+  ShapeBankHeaderWord.BaseVertex,
+  ShapeBankHeaderWord.FirstVertex,
+] as const;
 
 export interface ShapeBankHeaderRecord {
   kind: number;

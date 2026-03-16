@@ -172,9 +172,30 @@ const SHAPE_FLAG_CLOSED: u32 = 1;
 
 const SINK_RECORD_WORD_INSTANCE_COUNT: usize = 2;
 
-fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u32>) {
+/// Realized geometry offsets derived from canonical ShapeBank control-point data.
+/// These are worker-local artifacts — they do NOT belong in the canonical ShapeBank.
+#[derive(Clone, Debug)]
+struct RealizedShapeGeometry {
+    /// Word offset of the shape header this geometry was derived from.
+    handle: usize,
+    first_vertex: u32,
+    base_vertex: u32,
+    first_index: u32,
+    index_count: u32,
+}
+
+/// Realize vertex/index geometry from canonical ShapeBank control-point params.
+///
+/// // [LAW:one-source-of-truth] This function reads canonical ShapeBank header
+/// // fields (kind, vertexCount, flags, paramBlockOffset, paramBlockWords) and
+/// // derives geometry payloads + offsets WITHOUT mutating the canonical words.
+/// // Realized offsets are returned as separate `RealizedShapeGeometry` records.
+fn realize_shape_bank_geometry(
+    shape_bank_words: &[u32],
+) -> (Vec<f32>, Vec<u32>, Vec<RealizedShapeGeometry>) {
     let mut vertex_floats: Vec<f32> = Vec::new();
     let mut index_words: Vec<u32> = Vec::new();
+    let mut realized: Vec<RealizedShapeGeometry> = Vec::new();
     let mut cursor: usize = 0;
     while cursor < shape_bank_words.len() {
         if cursor + SHAPE_BANK_HEADER_WORDS > shape_bank_words.len() {
@@ -197,14 +218,13 @@ fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u
         let flags = shape_bank_words[base + SHAPE_WORD_FLAGS];
         let param_block_offset = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_OFFSET] as usize;
         let param_block_words = shape_bank_words[base + SHAPE_WORD_PARAM_BLOCK_WORDS] as usize;
-        let first_vertex = (vertex_floats.len() / 2) as u32;
-        shape_bank_words[base + SHAPE_WORD_FIRST_VERTEX] = first_vertex;
-        shape_bank_words[base + SHAPE_WORD_BASE_VERTEX] = 0;
-        let first_index = index_words.len() as u32;
-        shape_bank_words[base + SHAPE_WORD_FIRST_INDEX] = first_index;
 
-        if vertex_count == 0 {
-            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = 0;
+        // Derive realized geometry offsets without mutating canonical words.
+        let first_vertex = (vertex_floats.len() / 2) as u32;
+        let first_index = index_words.len() as u32;
+
+        let index_count = if vertex_count == 0 {
+            0
         } else {
             let expected_param_words = (vertex_count as usize).saturating_mul(2);
             if param_block_words < expected_param_words {
@@ -244,9 +264,17 @@ fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u
                 }
             }
 
-            let generated_index_count = (index_words.len() as u32).saturating_sub(first_index);
-            shape_bank_words[base + SHAPE_WORD_INDEX_COUNT] = generated_index_count;
-        }
+            (index_words.len() as u32).saturating_sub(first_index)
+        };
+
+        realized.push(RealizedShapeGeometry {
+            handle: base,
+            first_vertex,
+            base_vertex: 0,
+            first_index,
+            index_count,
+        });
+
         let next_cursor = if param_block_words == 0 {
             base + SHAPE_BANK_HEADER_WORDS
         } else {
@@ -269,7 +297,7 @@ fn realize_shape_bank_geometry(shape_bank_words: &mut [u32]) -> (Vec<f32>, Vec<u
             shape_bank_words.len()
         );
     }
-    (vertex_floats, index_words)
+    (vertex_floats, index_words, realized)
 }
 
 impl Engine {
@@ -807,16 +835,32 @@ impl Engine {
                 shape_bank_words, available_words
             );
         }
-        let mut plane_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
-        let (vertex_payload, index_payload) = realize_shape_bank_geometry(&mut plane_words);
+        // [LAW:one-source-of-truth] Read canonical ShapeBank words without mutation.
+        // Realized geometry offsets are derived separately and applied to a GPU-upload
+        // copy only — the canonical word layout is never overwritten.
+        let canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        let (vertex_payload, index_payload, realized) =
+            realize_shape_bank_geometry(&canonical_words);
         self.arena.write_geometry_payload(
             &self.device,
             &self.queue,
             vertex_payload.as_slice(),
             index_payload.as_slice(),
         );
+        // Apply realized geometry offsets to a GPU-upload copy. These derived values
+        // are needed by the GPU vertex/index pipeline but are NOT canonical metadata.
+        let mut gpu_words = canonical_words;
+        for record in &realized {
+            let base = record.handle;
+            if base + SHAPE_BANK_HEADER_WORDS <= gpu_words.len() {
+                gpu_words[base + SHAPE_WORD_FIRST_VERTEX] = record.first_vertex;
+                gpu_words[base + SHAPE_WORD_BASE_VERTEX] = record.base_vertex;
+                gpu_words[base + SHAPE_WORD_FIRST_INDEX] = record.first_index;
+                gpu_words[base + SHAPE_WORD_INDEX_COUNT] = record.index_count;
+            }
+        }
         self.arena
-            .write_shape_bank_words(&self.device, &self.queue, &plane_words);
+            .write_shape_bank_words(&self.device, &self.queue, &gpu_words);
     }
 
     fn sync_sink_table_plane_and_parse_regions(
