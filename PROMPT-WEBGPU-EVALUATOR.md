@@ -59,6 +59,7 @@ Check:
 7. any previously accepted visible runtime baseline still works unless the active ticket explicitly allowed a temporary regression
 8. no earlier prerequisite leaf ticket has become invalid again in current repo state
 9. any explicit validation or approval gate named by the ticket/docs was actually satisfied before implementation started
+10. a broken visible runtime baseline is being actively repaired by the correct ticket rather than explained away as pre-existing
 
 Re-run the needed proof:
 
@@ -72,6 +73,7 @@ Re-run the needed proof:
 Do not trust the implementer's report without replaying evidence.
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in deprecated structure or fail to prove the ticket's required behavior.`
 `// [LAW:one-way-deps] If a later ticket exposes that an earlier prerequisite boundary is still wrong, reopen the earliest violated prerequisite and steer the loop back to it before allowing more downstream work.`
+`// [LAW:verifiable-goals] "It was broken when I got here" is not evidence. A broken accepted baseline must be assigned to the earliest owning ticket and must block downstream advancement until restored or explicitly allowed by that ticket.`
 
 ## Verdict
 
@@ -86,6 +88,7 @@ Use exactly one:
 If the implementation is wrong enough that it should not remain as the next base, and the bad work is isolated, you may `git revert` it. Never use destructive history edits.
 Do not use `accept-complete` or `advance-to-next-ready-ticket` if the active ticket's local goals are met but a previously accepted visible runtime baseline no longer works.
 Do not accept or advance a ticket that required an explicit validation gate if that gate was skipped or only assumed.
+Do not accept or advance when the visible runtime baseline is broken unless the active ticket explicitly owns that regression and the verdict records whether the baseline was restored.
 
 ## Evaluator Note
 
@@ -129,6 +132,7 @@ If tracker writes work, you may also mirror a brief summary to the ticket, but t
 
 If the ticket is not closed, the note must not authorize advancement.
 If current repo state violates an earlier prerequisite leaf ticket, reopen that prerequisite ticket before closeout and lock the note to it.
+If the visible runtime baseline is broken and the active ticket does not explicitly own that breakage, lock the note to the earliest ticket that should restore it and do not authorize advancement.
 
 ## Final Report
 
