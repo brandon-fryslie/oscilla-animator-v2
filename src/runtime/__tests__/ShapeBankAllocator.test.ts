@@ -63,9 +63,9 @@ describe('ShapeBank allocator', () => {
       paramBlockWords: 6,
       boundsMinPacked: 123,
       boundsMaxPacked: 456,
-      reserved0: 1,
-      reserved1: 2,
-      reserved2: 3,
+      cpArenaBaseOffset: 1,
+      cpArenaLaneStride: 2,
+      cpArenaComponentStride: 3,
     }));
 
     expect(readShapeBankHeader(state.shapeBank!.data, handle)).toEqual({
@@ -80,11 +80,11 @@ describe('ShapeBank allocator', () => {
       firstVertex: 11,
       paramBlockOffset: 2048,
       paramBlockWords: 6,
-      reserved0: 1,
+      cpArenaBaseOffset: 1,
       boundsMinPacked: 123,
       boundsMaxPacked: 456,
-      reserved1: 2,
-      reserved2: 3,
+      cpArenaLaneStride: 2,
+      cpArenaComponentStride: 3,
     });
   });
 });
