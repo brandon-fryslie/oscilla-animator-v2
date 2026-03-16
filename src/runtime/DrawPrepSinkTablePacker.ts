@@ -215,6 +215,9 @@ function resolveDrawCommandFields(
   const shapeHeader = readShapeBankHeader(state.shapeBank.data, shapeHandleWordOffset);
   if (sink.drawMode === 'indexed') {
     return {
+      // [LAW:one-source-of-truth] exception: the active compatibility path
+      // still reads realized indexed draw fields from ShapeHeaderV1 until
+      // GPU draw-prep owns command derivation from canonical state.
       count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
       first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
       baseVertex: shapeHeader.baseVertex | 0,
