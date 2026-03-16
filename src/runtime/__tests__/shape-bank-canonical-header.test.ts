@@ -1,10 +1,9 @@
 /**
  * Guardrail tests for ShapeHeaderV1 canonical header contract.
  *
- * // [LAW:one-source-of-truth] ShapeHeaderV1 words 4-6 and 8 (indexCount,
- * // firstIndex, baseVertex, firstVertex) are NOT canonical metadata. They
- * // are realized geometry-offset fields that the Rust worker derives
- * // separately. The JS-side ShapeBank must leave them as zero.
+ * // [LAW:one-source-of-truth] ShapeHeaderV1 words 5, 6, and 8 (`firstIndex`,
+ * // `baseVertex`, `firstVertex`) are worker-derived realized geometry offsets.
+ * // `indexCount` remains canonical precomputed topology metadata.
  *
  * // [LAW:behavior-not-structure] These tests assert the canonical contract
  * // (realized-offset words are zero after materialization), not implementation
@@ -59,9 +58,8 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     expect(header.indexCount).toBe(0);
   });
 
-  it('SHAPE_BANK_REALIZED_GEOMETRY_WORDS lists exactly the non-canonical word offsets', () => {
+  it('SHAPE_BANK_REALIZED_GEOMETRY_WORDS lists exactly the worker-derived word offsets', () => {
     expect(SHAPE_BANK_REALIZED_GEOMETRY_WORDS).toEqual([
-      ShapeBankHeaderWord.IndexCount,   // word 4
       ShapeBankHeaderWord.FirstIndex,   // word 5
       ShapeBankHeaderWord.BaseVertex,   // word 6
       ShapeBankHeaderWord.FirstVertex,  // word 8
@@ -94,14 +92,9 @@ describe('ShapeHeaderV1 canonical header contract', () => {
       }),
     );
 
-    // Verify raw u32 words at realized-offset positions are zero.
+    // Verify raw u32 words at worker-derived realized-offset positions are zero.
     const data = state.shapeBank!.data;
     for (const wordOffset of SHAPE_BANK_REALIZED_GEOMETRY_WORDS) {
-      // indexCount is special: it can be pre-computed from topology and is
-      // written as a canonical value by the materializer.
-      if (wordOffset === ShapeBankHeaderWord.IndexCount) {
-        continue;
-      }
       expect(
         data[handle + wordOffset],
         `realized geometry word at offset ${wordOffset} should be zero in JS-side ShapeBank`,

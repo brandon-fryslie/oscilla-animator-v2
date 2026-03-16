@@ -400,6 +400,11 @@ export function installSerializableTopologies(topologies: readonly SerializableT
  * @returns Float32Array of t-values, bitcast-ready for u32 ShapeBank storage
  */
 export function generateParametricTemplate(resolution: number): Float32Array {
+  if (!Number.isInteger(resolution) || resolution < 1) {
+    // [LAW:single-enforcer] Parametric template generation owns the
+    // `resolution >= 1` invariant for the canonical template payload.
+    throw new Error(`generateParametricTemplate: resolution must be an integer >= 1 (received ${resolution})`);
+  }
   const count = resolution + 1;
   const template = new Float32Array(count);
   for (let i = 0; i < count; i++) {
