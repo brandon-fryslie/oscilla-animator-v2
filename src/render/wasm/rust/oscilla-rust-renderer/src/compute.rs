@@ -189,8 +189,11 @@ impl ComputeDispatcher {
         particle_count: u32,
         _shape_count: u32,
     ) -> Self {
+        // [LAW:one-source-of-truth] This layout defines the uniform transport
+        // binding for FrameHeader. The canonical source is the arena header
+        // zone; this uniform binding mirrors that data for GPU binding compat.
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Compute.Uniform.Layout"),
+            label: Some("FrameHeader.UniformTransport.Layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE

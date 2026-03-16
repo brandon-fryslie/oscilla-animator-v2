@@ -5,7 +5,7 @@ pub const DEFAULT_SIMULATION_WGSL: &str = r#"
 @group(0) @binding(1) var<storage, read_write> arena_write: array<u32>;
 @group(0) @binding(2) var<storage, read> state_read: array<u32>;
 @group(0) @binding(3) var<storage, read_write> state_write: array<u32>;
-@group(0) @binding(4) var<uniform> global_uniforms: array<vec4<f32>, 5>;
+@group(0) @binding(4) var<uniform> frame_header_transport: array<vec4<f32>, 5>;
 
 @compute @workgroup_size(64)
 fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -14,14 +14,14 @@ fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   let base = state_read[index] + arena_read[index];
-  let dt_bits = bitcast<u32>(global_uniforms[4].y);
+  let dt_bits = bitcast<u32>(frame_header_transport[4].y);
   state_write[index] = base + dt_bits + 1u;
   arena_write[index] = state_write[index];
 }
 "#;
 
 pub const DEFAULT_ASSEMBLY_WGSL: &str = r#"
-@group(0) @binding(0) var<uniform> global_uniforms: array<vec4<f32>, 5>;
+@group(0) @binding(0) var<uniform> frame_header_transport: array<vec4<f32>, 5>;
 @group(1) @binding(0) var<storage, read> arena_words: array<u32>;
 @group(2) @binding(0) var<storage, read_write> instance_words: array<f32>;
 @group(2) @binding(1) var<storage, read> sink_table_words: array<u32>;
@@ -274,7 +274,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 // CPU-realized vertex buffer. Triangle fan geometry is generated
 // algorithmically from @builtin(vertex_index).
 pub const DEFAULT_UBER_SHADER_WGSL: &str = r#"
-struct GlobalUniforms {
+// [LAW:one-source-of-truth] FrameHeader mirrors the Rust FrameHeader struct.
+// The uniform binding is derived transport; the canonical source is the arena
+// header zone (offset 0..ARENA_HEADER_FLOATS of the compiler arena buffer).
+struct FrameHeader {
   view_proj: mat4x4<f32>,
   resolution: vec2<f32>,
   time_seconds: f32,
@@ -287,7 +290,7 @@ struct InstanceData {
   color: vec4<f32>,
 };
 
-@group(0) @binding(0) var<uniform> global: GlobalUniforms;
+@group(0) @binding(0) var<uniform> frame_header: FrameHeader;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
 // [RECOVER-07] Compiler arena buffer for vertex-stage control-point reads.
@@ -383,7 +386,7 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   let worldPos = model * vec4<f32>(pulledX, pulledY, 0.0, 1.0);
 
   var out: VertexOutput;
-  out.position = global.view_proj * worldPos;
+  out.position = frame_header.view_proj * worldPos;
 
   let rawH = inst.color.x;
   let rawC = inst.color.y;

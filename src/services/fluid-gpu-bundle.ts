@@ -408,7 +408,10 @@ function composeFluidBindings(
 
 function commonFluidPreamble(bindings: FluidBindings, plan: FluidRenderPlan): string {
   return `
-struct GlobalUniforms {
+// [LAW:one-source-of-truth] FrameHeader mirrors the Rust FrameHeader struct.
+// The uniform binding is derived transport; the canonical source is the arena
+// header zone (offset 0 of the compiler arena buffer).
+struct FrameHeader {
   view_proj: mat4x4<f32>,
   resolution: vec2<f32>,
   time_seconds: f32,
@@ -419,7 +422,7 @@ struct GlobalUniforms {
 @group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;
 @group(0) @binding(2) var<storage, read> state_in: array<f32>;
 @group(0) @binding(3) var<storage, read_write> state_out: array<f32>;
-@group(0) @binding(4) var<uniform> global: GlobalUniforms;
+@group(0) @binding(4) var<uniform> frame_header: FrameHeader;
 
 const ACTIVE_LANES: u32 = ${asU32Literal(plan.activeLanes)};
 const NO_SLOT: u32 = ${asU32Literal(NO_SLOT_U32)};
@@ -513,24 +516,24 @@ fn compute_splat_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let center_x = clamp(read_scalar_param(PARAM_CENTER_X_OFFSET, PARAM_CENTER_X_LANE_STRIDE, PARAM_CENTER_X_COMPONENT_STRIDE, PARAM_CENTER_X_FALLBACK), 0.0, 1.0);
   let center_y = clamp(read_scalar_param(PARAM_CENTER_Y_OFFSET, PARAM_CENTER_Y_LANE_STRIDE, PARAM_CENTER_Y_COMPONENT_STRIDE, PARAM_CENTER_Y_FALLBACK), 0.0, 1.0);
 
-  let dt = clamp(global.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
+  let dt = clamp(frame_header.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
   let mouse = vec2<f32>(
-    clamp(global.view_proj[0][3], 0.0, 1.0),
-    clamp(global.view_proj[1][0], 0.0, 1.0),
+    clamp(frame_header.view_proj[0][3], 0.0, 1.0),
+    clamp(frame_header.view_proj[1][0], 0.0, 1.0),
   );
-  let mouse_buttons = global.view_proj[1][1];
+  let mouse_buttons = frame_header.view_proj[1][1];
   let user_strength = select(0.0, 1.0, mouse_buttons > 0.5);
 
   let center = vec2<f32>(
-    center_x + 0.22 * cos(global.time_seconds * 0.19),
-    center_y + 0.22 * sin(global.time_seconds * 0.17),
+    center_x + 0.22 * cos(frame_header.time_seconds * 0.19),
+    center_y + 0.22 * sin(frame_header.time_seconds * 0.17),
   );
   let to_center = uv - center;
   let center_falloff = exp(-dot(to_center, to_center) * 24.0);
   let to_mouse = (uv - mouse) * splat_radius;
   let mouse_impulse = exp(-dot(to_mouse, to_mouse));
   let impulse = (center_falloff * 0.55 + mouse_impulse * (0.2 + user_strength * 1.0)) * splat_strength;
-  let spin = global.time_seconds * 0.7 + f32(lane) * 0.031;
+  let spin = frame_header.time_seconds * 0.7 + f32(lane) * 0.031;
   let impulse_vec = vec2<f32>(cos(spin), sin(spin)) * impulse;
 
   let next_vel = vel + impulse_vec * dt;
@@ -601,7 +604,7 @@ fn compute_vorticity_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let grad_norm = grad / max(length(grad), 1e-5);
 
   let vorticity = clamp(read_scalar_param(PARAM_VORTICITY_STRENGTH_OFFSET, PARAM_VORTICITY_STRENGTH_LANE_STRIDE, PARAM_VORTICITY_STRENGTH_COMPONENT_STRIDE, PARAM_VORTICITY_STRENGTH_FALLBACK), 0.0, 96.0);
-  let dt = clamp(global.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
+  let dt = clamp(frame_header.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
   let vort_force = vec2<f32>(grad_norm.y, -grad_norm.x) * curl * vorticity;
   let next_vel = vel + vort_force * dt;
 
@@ -721,7 +724,7 @@ fn compute_advect_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let grid_height = resolve_grid_height(grid_width);
   let uv = lane_uv(lane, grid_width, grid_height);
   let vel = vec2<f32>(read_state_in(lane, 0u), read_state_in(lane, 1u));
-  let dt = clamp(global.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
+  let dt = clamp(frame_header.delta_time_seconds, 1.0 / 240.0, 1.0 / 20.0);
 
   let velocity_dissipation = clamp(read_scalar_param(PARAM_VELOCITY_DISSIPATION_OFFSET, PARAM_VELOCITY_DISSIPATION_LANE_STRIDE, PARAM_VELOCITY_DISSIPATION_COMPONENT_STRIDE, PARAM_VELOCITY_DISSIPATION_FALLBACK), 0.7, 0.9995);
   let dye_dissipation = clamp(read_scalar_param(PARAM_DYE_DISSIPATION_OFFSET, PARAM_DYE_DISSIPATION_LANE_STRIDE, PARAM_DYE_DISSIPATION_COMPONENT_STRIDE, PARAM_DYE_DISSIPATION_FALLBACK), 0.7, 0.9999);
@@ -733,7 +736,7 @@ fn compute_advect_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let source_dye = max(read_state_in(source_lane, 2u), 0.0);
 
   let next_vel = source_vel * velocity_dissipation;
-  let band = 0.5 + 0.5 * sin(uv.x * 14.0 + global.time_seconds * 0.9) * cos(uv.y * 18.0 - global.time_seconds * 0.8);
+  let band = 0.5 + 0.5 * sin(uv.x * 14.0 + frame_header.time_seconds * 0.9) * cos(uv.y * 18.0 - frame_header.time_seconds * 0.8);
   let next_dye = max(0.0, source_dye * dye_dissipation + band * 0.12);
 
   write_state_out(lane, 0u, next_vel.x);
@@ -797,15 +800,15 @@ fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
   ) - vec2<f32>(0.5, 0.5);
   let jitter_strength = 0.04 + dye * 0.18;
   let swirl = vec2<f32>(
-    sin(global.time_seconds * 0.9 + uv.y * 24.0 + lane_f * 0.013),
-    cos(global.time_seconds * 0.8 + uv.x * 21.0 - lane_f * 0.017),
+    sin(frame_header.time_seconds * 0.9 + uv.y * 24.0 + lane_f * 0.013),
+    cos(frame_header.time_seconds * 0.8 + uv.x * 21.0 - lane_f * 0.017),
   ) * (0.015 + 0.035 * dye);
   let flow = vel * (0.35 + dye * 0.65);
   let pos = fract(base_uv + flow + swirl + lane_jitter * jitter_strength);
   let wave = vec3<f32>(
-    abs(sin(6.28318 * (uv.x * 0.95 + global.time_seconds * 0.07 + dye * 0.09))),
-    abs(sin(6.28318 * (uv.y * 1.10 + global.time_seconds * 0.11 + aux * 0.07))),
-    abs(sin(6.28318 * ((uv.x + uv.y) * 0.6 + global.time_seconds * 0.09))),
+    abs(sin(6.28318 * (uv.x * 0.95 + frame_header.time_seconds * 0.07 + dye * 0.09))),
+    abs(sin(6.28318 * (uv.y * 1.10 + frame_header.time_seconds * 0.11 + aux * 0.07))),
+    abs(sin(6.28318 * ((uv.x + uv.y) * 0.6 + frame_header.time_seconds * 0.09))),
   );
   // [LAW:one-source-of-truth] Fluid present writes canonical OKLCH channels into
   // COLOR; renderer is the single OKLCH->RGB conversion boundary.
@@ -814,7 +817,7 @@ fn compute_present_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     uv.y * 0.85 +
     wave.x * 0.35 +
     wave.z * 0.25 +
-    global.time_seconds * 0.06 +
+    frame_header.time_seconds * 0.06 +
     dye * 0.12
   );
   let saturation = clamp(0.82 + 0.18 * wave.y, 0.75, 1.0);

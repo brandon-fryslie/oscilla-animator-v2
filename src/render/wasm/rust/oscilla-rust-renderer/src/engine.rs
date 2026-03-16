@@ -801,20 +801,20 @@ impl Engine {
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
-        let mut uniforms = self.arena.uniforms;
+        let mut header = self.arena.frame_header;
         if let Some(shared_input) = self.shared_input.as_ref() {
             if let Some(shared_input_signals) = self.shared_input_signals.as_ref() {
                 // [LAW:single-enforcer] Frame input publication uses one atomic
                 // signal word as the acquire fence before reading shared planes.
                 let _ = Atomics::load::<Int32Array>(shared_input_signals, 0);
             }
-            uniforms.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
-            uniforms.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
-            uniforms.time_seconds =
+            header.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
+            header.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
+            header.time_seconds =
                 (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
-            let viewport_width = uniforms.resolution[0].max(1.0);
-            let viewport_height = uniforms.resolution[1].max(1.0);
+            header.delta_time_seconds = (1.0 / 60.0) as f32;
+            let viewport_width = header.resolution[0].max(1.0);
+            let viewport_height = header.resolution[1].max(1.0);
             let raw_zoom = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
             let zoom = if raw_zoom.is_finite() && raw_zoom > 0.0 {
                 raw_zoom
@@ -829,13 +829,13 @@ impl Engine {
             let sy = -2.0 * zoom;
             let tx = -zoom + (2.0 * zoom * (safe_pan_x_px / viewport_width));
             let ty = zoom - (2.0 * zoom * (safe_pan_y_px / viewport_height));
-            uniforms.view_proj = [[0.0; 4]; 4];
-            uniforms.view_proj[0][0] = sx;
-            uniforms.view_proj[1][1] = sy;
-            uniforms.view_proj[2][2] = 1.0;
-            uniforms.view_proj[3][0] = tx;
-            uniforms.view_proj[3][1] = ty;
-            uniforms.view_proj[3][3] = 1.0;
+            header.view_proj = [[0.0; 4]; 4];
+            header.view_proj[0][0] = sx;
+            header.view_proj[1][1] = sy;
+            header.view_proj[2][2] = 1.0;
+            header.view_proj[3][0] = tx;
+            header.view_proj[3][1] = ty;
+            header.view_proj[3][3] = 1.0;
             let install_revision = parse_finite_u32(
                 shared_input
                     .get_index(INPUT_WORD_INSTALL_REVISION as u32)
@@ -897,21 +897,23 @@ impl Engine {
                 self.last_install_revision = install_revision;
             }
         } else {
-            uniforms.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
-            uniforms.delta_time_seconds = (1.0 / 60.0) as f32;
-            uniforms.view_proj = [[0.0; 4]; 4];
-            uniforms.view_proj[0][0] = 2.0;
-            uniforms.view_proj[1][1] = -2.0;
-            uniforms.view_proj[2][2] = 1.0;
-            uniforms.view_proj[3][0] = -1.0;
-            uniforms.view_proj[3][1] = 1.0;
-            uniforms.view_proj[3][3] = 1.0;
+            header.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
+            header.delta_time_seconds = (1.0 / 60.0) as f32;
+            header.view_proj = [[0.0; 4]; 4];
+            header.view_proj[0][0] = 2.0;
+            header.view_proj[1][1] = -2.0;
+            header.view_proj[2][2] = 1.0;
+            header.view_proj[3][0] = -1.0;
+            header.view_proj[3][1] = 1.0;
+            header.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
             self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
-        self.arena.update_uniforms(&self.queue, uniforms);
+        // [LAW:one-source-of-truth] publish_frame_header writes to the arena
+        // header zone (canonical) and the uniform buffer (derived transport).
+        self.arena.publish_frame_header(&self.queue, header);
     }
 
     fn trigger_debug_readback(&self) {
