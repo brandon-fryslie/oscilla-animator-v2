@@ -21,13 +21,13 @@ Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
 4. Inspect ready work:
    - `lit ready --json`
    - `lit ls --query "status:open RECOVER" --json`
-5. Ensure `.codex/webgpu-loop/` exists.
+5. Ensure `session-docs/` exists.
 
 ## Choose Work
 
 1. If the user named a `RECOVER-*` leaf ticket, use it.
-2. Otherwise, find the most likely active open/in-progress leaf ticket and read `.codex/webgpu-loop/<ticket-id>.md`, if it exists.
-3. If that note says `continue-active-ticket` or `revise-active-ticket`, use that ticket.
+2. Otherwise, read `session-docs/WEBGPU-LOOP.md`, if it exists.
+3. If that note names an `active_ticket:` and says `continue-active-ticket` or `revise-active-ticket`, use that ticket.
 4. If that note says `stop-blocked`, stop and report the blocker.
 5. Otherwise, use the highest-priority ready `RECOVER-*` leaf task.
 
@@ -38,7 +38,7 @@ Never select an epic or milestone container.
 Read in this order:
 
 1. active leaf ticket
-2. `.codex/webgpu-loop/<ticket-id>.md`, if it exists
+2. `session-docs/WEBGPU-LOOP.md`, if it exists
 3. parent/dependency tickets
 4. `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/ROADMAP.md`
 5. numbered docs listed in the ticket

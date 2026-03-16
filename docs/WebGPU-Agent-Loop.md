@@ -18,7 +18,7 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 
 1. Loop memory lives only in:
    - the active ticket body in `lit`
-   - evaluator note files in `.codex/webgpu-loop/`
+   - the shared evaluator note file `session-docs/WEBGPU-LOOP.md`
    - git history and the current worktree
 2. The active leaf ticket plus cited docs/specs outrank everything else.
 3. Evaluator guidance is steering only. It cannot widen scope or override the ticket/spec.
@@ -29,9 +29,9 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 
 `// [LAW:one-source-of-truth] Evaluator note files are the canonical loop-memory artifact for run-to-run steering.`
 
-Use one file per ticket:
+Use one shared file:
 
-- `.codex/webgpu-loop/<ticket-id>.md`
+- `session-docs/WEBGPU-LOOP.md`
 
 The evaluator owns writing that file. The implementer reads it when present.
 
@@ -51,7 +51,7 @@ Normalize first:
 The implementer:
 
 1. Chooses the active leaf ticket.
-2. Reads the latest valid evaluator note for that ticket, if one exists.
+2. Reads `session-docs/WEBGPU-LOOP.md` before choosing or continuing work.
 3. Works only inside the active ticket's accepted boundary.
 4. May try bounded alternative implementations inside the same ticket.
 5. Must verify the ticket's acceptance criteria locally.
@@ -73,12 +73,13 @@ The evaluator:
 
 ## Evaluator Note
 
-The evaluator writes `.codex/webgpu-loop/<ticket-id>.md` whose first line is exactly:
+The evaluator writes `session-docs/WEBGPU-LOOP.md` whose first line is exactly:
 
 `Evaluator Note`
 
 Required fields:
 
+- `active_ticket:`
 - `evaluated_commit:`
 - `repo_base_for_next_run:`
 - `verdict:`

@@ -43,4 +43,3 @@ reports/complexity/
 
 # Codex local worktree metadata
 .claude/worktrees/
-.codex/webgpu-loop/
