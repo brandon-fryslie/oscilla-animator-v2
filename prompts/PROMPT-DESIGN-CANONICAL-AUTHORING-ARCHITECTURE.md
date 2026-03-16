@@ -120,14 +120,14 @@ Resources, modulation, simulation, scene, and output should remain visibly disti
 
 Read these first:
 
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-RENDER-SINK-DESIGN.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-PATCH-STRUCTURE-DESIGN.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-AUTHORING-MODEL-DESIGN.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-AUTHORING-GUARDRAILS.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-AUTHORING-BLOCK-CATALOG.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-AUTHORING-UI-DESIGN.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-PHYSICS-AUTHORING-DESIGN.md`
-- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-IMPLEMENTATION-ROADMAP.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/1-CANONICAL-RENDER-SINK-DESIGN.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/3-CANONICAL-PATCH-STRUCTURE-DESIGN.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/4-CANONICAL-AUTHORING-MODEL-DESIGN.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/5-CANONICAL-AUTHORING-GUARDRAILS.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/6-CANONICAL-AUTHORING-BLOCK-CATALOG.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/7-CANONICAL-AUTHORING-UI-DESIGN.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/8-CANONICAL-PHYSICS-AUTHORING-DESIGN.md`
+- `/Users/bmf/.codex/worktrees/6510/oscilla-animator-v2/docs/WebGPU-Future/9-CANONICAL-IMPLEMENTATION-ROADMAP.md`
 
 When relevant, also read:
 
