@@ -1,46 +1,50 @@
 Evaluator Note
 
-active_ticket: RECOVER-09
-evaluated_commit: f9d7a5a83
+active_ticket: RECOVER-10
+evaluated_commit: 2298c874b
 repo_base_for_next_run: HEAD (after this evaluator commit)
 verdict: accept-complete
 next_action: advance-to-next-ready-ticket
 
 do:
-- Pick up RECOVER-10 (canonicalize worker-backed observability and readback)
-- Read `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/10-Observability-And-Readback.md` and cited WebGPU-Complete specs (P1-3, P4-1)
-- Identify where indirect-args readback is currently stubbed or console-only
-- Create one canonical GPU-to-host readback path for indirect args and targeted probe slices
-- Ensure debug consumers receive structured data rather than console-only previews
+- Pick up RECOVER-11 (Implement Type 5 text on the corrected ownership model)
+- Read `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/11-Type-5-Text-Pipeline.md` and cited WebGPU-Complete specs (S06, Shapes 5 text/glyph)
+- Build text as its own shape class with an explicit class contract on top of the corrected ShapeBank/draw-prep/render ownership model
+- Use the canonical readback system (RECOVER-10) for any text-specific debug observability
+- Ensure text does not piggyback on the generic realized-mesh compatibility route
 
 avoid:
-- Do not keep multiple competing readback paths alive as canonical
-- Do not leave the indirect-args path stubbed
-- Do not put observability on the render dependency path (keep it async)
-- Do not reopen frame-state ownership or install-path questions — those are settled
+- Do not route text through the generic realized-mesh compatibility path
+- Do not reopen base-path ownership problems solved by RECOVER-01 through RECOVER-10
+- Do not treat text as a shortcut justification for restoring legacy mesh assumptions
+- Do not create a second readback or observability system for text
 
 gates_passed:
-- source/ticket alignment: changes match RECOVER-09 scope (memory.rs, engine.rs, default_shaders.rs, fluid-gpu-bundle.ts, compute.rs)
-- semantic unification: `GlobalUniforms` fully eliminated — zero grep hits across entire codebase
-- single canonical home: `FrameHeader` struct is the single frame-state type; arena header zone (offset 0..64 floats) is the authoritative home
-- single write boundary: `publish_frame_header()` is the only method that writes per-frame state to GPU memory (arena read buffer + derived uniform transport)
-- consumer alignment: simulation (`frame_header_transport`), assembly (`frame_header_transport`), render/uber (`frame_header`), and fluid compute (`frame_header`) all consume the same FrameHeader contract
-- derived transport labeled: uniform buffer labels include "UniformTransport", LAW citations document it as derived
-- no dual authority: no remaining `GlobalUniforms`, `update_uniforms`, or parallel semantic uniform model
+- source/ticket alignment: changes touch engine.rs, memory.rs, telemetry.rs, lib.rs (Rust), worker-protocol.ts, engine.worker.ts, oscilla_rust_renderer.ts, RustWasmWebGPURenderer.ts (TS) — all observability/readback scope
+- single canonical readback type: `ReadbackSnapshot` struct is the one structured type for all GPU-to-host observability (indirect args + instance probe)
+- indirect args readback real: dedicated `indirect_staging_buffer` in GpuMemoryArena, async `map_async` copy, decode into `IndirectArgsRecord` structs, assembled into `ReadbackSnapshot`
+- worker-backed end-to-end: Rust `take_readback_snapshot()` → wasm_bindgen export → worker polling → `READBACK_SNAPSHOT` message → main thread `latestReadbackSnapshot` → `readIndirectArgsDebugView()` and `getLatestReadbackSnapshot()`
+- console preview eliminated: `console::info_1` with `[instancePreview]` completely removed — instance probe values now go through structured `ReadbackSnapshot`
+- stub replaced: `readIndirectArgsDebugView()` no longer returns empty records — returns real data from worker snapshot
+- no dual authority: one `ReadbackSnapshot` type, one `take_readback_snapshot` polling boundary, one `READBACK_SNAPSHOT` message type
+- async off render path: readback uses separate in-flight gates (`debug_readback_in_flight` for instance, `indirect_readback_in_flight` for indirect) with async `map_async` callbacks
+- staging buffer independence: instance staging and indirect staging have separate buffers and in-flight gates, can overlap async map operations
+- indirect staging resize: `ensure_indirect_capacity` recreates the indirect staging buffer to match new indirect buffer size
 - static verification: typecheck 0 errors
 - cargo check: 0 errors (5 dead-code warnings, pre-existing)
 - test suite: 170 test files, 1935 tests pass, 0 failures
 - build: Vite production build succeeds
-- doc alignment: RUST-RENDERER.md updated to match new naming
-- clean closeout: tree clean, ticket closed, milestone RECOVER-M3 closed (all children complete)
+- clean closeout: tree clean, RECOVER-10 closed, RECOVER-M4 closed (sole child complete)
 
 gates_failed: (none)
 
 evidence:
-- `GlobalUniforms` renamed to `FrameHeader` across Rust struct, WGSL struct, and TS WGSL templates
-- `update_uniforms()` replaced by `publish_frame_header()` which writes to both arena read buffer (canonical, offset 0) and uniform buffer (derived transport)
-- Arena header zone constants defined: `ARENA_HEADER_FLOATS = 64`, `ARENA_HEADER_BYTES = 256`
-- `self.arena.frame_header` replaces `self.arena.uniforms` in engine.rs
-- All WGSL references updated: `global_uniforms` → `frame_header_transport` (simulation/assembly), `global` → `frame_header` (uber shader/fluid)
-- `input_marshal_phase` populates a local `header` variable and publishes via single `publish_frame_header` call
-- LAW citations: `[LAW:one-source-of-truth]` on FrameHeader struct, publish method, uniform buffer creation, and all WGSL struct definitions; `[LAW:single-enforcer]` on publish method
+- `ReadbackSnapshot` struct in telemetry.rs: `frame_count`, `captured_at_ms`, `indirect_args: Vec<IndirectArgsRecord>`, `instance_probe_values: Vec<f32>`
+- `IndirectArgsRecord` matches P1-3 spec layout: `index_count`, `instance_count`, `first_index`, `base_vertex`, `first_instance`
+- `indirect_staging_buffer` in GpuMemoryArena (memory.rs): `MAP_READ | COPY_DST`, sized to match indirect buffer capacity
+- `trigger_debug_readback()` in engine.rs: copies both instance buffer and indirect buffer to their respective staging buffers, initiates async map on both, assembles structured `ReadbackSnapshot`
+- `take_readback_snapshot()` in lib.rs: wasm_bindgen export, mirrors `take_frame_pacing_packet` pattern
+- `parseReadbackSnapshot()` in engine.worker.ts: typed parser for raw JS snapshot from Rust
+- `RustRendererReadbackSnapshot` in worker-protocol.ts: added to `RustRendererWorkerOutboundMessage` union
+- `readIndirectArgsDebugView()` in RustWasmWebGPURenderer.ts: now returns real data from `latestReadbackSnapshot` instead of empty stub
+- Zero grep hits for `console::info_1.*instancePreview` — old console-only path fully removed
