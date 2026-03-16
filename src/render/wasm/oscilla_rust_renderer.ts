@@ -23,6 +23,8 @@ interface RendererWasmModule {
   readonly rebuild_gpu_pipelines?: (
     passes: readonly RustRendererGpuPass[],
   ) => Promise<void> | void;
+  // [RECOVER-11] Atlas upload for Type5 MSDF text rendering.
+  readonly upload_atlas_data?: (data: Uint32Array) => void;
 }
 
 let initialized = false;
@@ -38,6 +40,8 @@ let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = nu
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let takeReadbackSnapshotImpl: RendererWasmModule['take_readback_snapshot'] | null = null;
 let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null = null;
+// [RECOVER-11] Atlas upload binding.
+let uploadAtlasDataImpl: RendererWasmModule['upload_atlas_data'] | null = null;
 
 export async function initRustRendererWasm(): Promise<void> {
   if (initialized) {
@@ -100,6 +104,10 @@ export async function initRustRendererWasm(): Promise<void> {
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       takeReadbackSnapshotImpl = wasmModule.take_readback_snapshot.bind(wasmModule);
       rebuildGpuPipelinesImpl = wasmModule.rebuild_gpu_pipelines.bind(wasmModule);
+      // [RECOVER-11] Atlas upload is optional (only present in builds with Type5).
+      uploadAtlasDataImpl = wasmModule.upload_atlas_data
+        ? wasmModule.upload_atlas_data.bind(wasmModule)
+        : null;
       initialized = true;
     })().catch((error) => {
       initPromise = null;
@@ -198,4 +206,12 @@ export async function rebuildRustRendererGpuPipelines(
     throw new Error('Rust renderer wasm is not initialized');
   }
   await rebuildGpuPipelinesImpl(passes);
+}
+
+// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+export function uploadRustRendererAtlasData(data: Uint32Array): void {
+  if (!initialized || !uploadAtlasDataImpl) {
+    throw new Error('Rust renderer wasm is not initialized or missing upload_atlas_data export');
+  }
+  uploadAtlasDataImpl(data);
 }

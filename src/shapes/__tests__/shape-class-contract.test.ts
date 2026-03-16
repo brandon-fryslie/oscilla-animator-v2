@@ -15,11 +15,15 @@ describe('ShapeClass enum', () => {
     expect(ShapeClass.Type1Rigid).toBe(1);
   });
 
-  it('Type1Rigid is the only currently defined class', () => {
+  it('Type5TextHybrid has u32-compatible ABI value 5', () => {
+    expect(ShapeClass.Type5TextHybrid).toBe(5);
+  });
+
+  it('all currently defined classes are listed', () => {
     const defined = Object.values(ShapeClass).filter(
       (v): v is number => typeof v === 'number',
     );
-    expect(defined).toEqual([1]);
+    expect(defined.sort()).toEqual([1, 5]);
   });
 
   it('enum values are distinct positive integers', () => {

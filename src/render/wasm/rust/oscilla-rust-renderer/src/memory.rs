@@ -77,6 +77,8 @@ pub struct GpuMemoryArena {
     pub topology_buffer: wgpu::Buffer,
     pub sink_table_buffer: wgpu::Buffer,
     pub indirect_buffer: wgpu::Buffer,
+    // [RECOVER-11] Atlas data storage buffer for Type5 MSDF text rendering.
+    pub atlas_buffer: wgpu::Buffer,
     pub assembly_write_bind_group: wgpu::BindGroup,
     pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
@@ -251,6 +253,8 @@ impl GpuMemoryArena {
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);
         let sink_table_buffer = Self::create_sink_table_buffer(device, sink_table_capacity_words);
         let indirect_buffer = Self::create_indirect_buffer(device, indirect_capacity_words);
+        // [RECOVER-11] Placeholder atlas buffer (empty until text is rendered).
+        let atlas_buffer = Self::create_atlas_buffer(device, 4);
 
         let assembly_write_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ShapeBank.AssemblyWrite.BindGroup"),
@@ -292,13 +296,20 @@ impl GpuMemoryArena {
                 resource: instance_buffer.as_entire_binding(),
             }],
         });
+        // [RECOVER-11] Topology bind group includes atlas data buffer.
         let topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render.Topology.BindGroup"),
             layout: topology_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: topology_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: atlas_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let staging_size = state_buffer_bytes.max(16);
@@ -414,6 +425,7 @@ impl GpuMemoryArena {
             topology_buffer,
             sink_table_buffer,
             indirect_buffer,
+            atlas_buffer,
             assembly_write_bind_group,
             draw_prep_bind_group,
             instance_bind_group,
@@ -724,15 +736,51 @@ impl GpuMemoryArena {
         });
     }
 
+    // [RECOVER-11] Topology bind group includes atlas data buffer.
     fn rebuild_topology_bind_group(&mut self, device: &wgpu::Device) {
         self.topology_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Render.Topology.BindGroup"),
             layout: &self.topology_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: self.topology_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.topology_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.atlas_buffer.as_entire_binding(),
+                },
+            ],
         });
+    }
+
+    // [RECOVER-11] Create atlas storage buffer for Type5 MSDF text rendering.
+    fn create_atlas_buffer(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Render.AtlasBuffer"),
+            size: ((words.max(4) * std::mem::size_of::<u32>()) as u64).max(16),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    // [RECOVER-11] Upload MSDF atlas texture data to the atlas storage buffer.
+    // Layout: [0]=width (u32), [1]=height (u32), [2..]=packed RGBA pixels (u32 each).
+    pub fn write_atlas_data(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        words: &[u32],
+    ) {
+        let required_words = words.len();
+        let current_words = (self.atlas_buffer.size() as usize) / std::mem::size_of::<u32>();
+        if required_words > current_words {
+            self.atlas_buffer = Self::create_atlas_buffer(device, required_words);
+            self.rebuild_topology_bind_group(device);
+        }
+        if !words.is_empty() {
+            queue.write_buffer(&self.atlas_buffer, 0, cast_slice(words));
+        }
     }
 }
 

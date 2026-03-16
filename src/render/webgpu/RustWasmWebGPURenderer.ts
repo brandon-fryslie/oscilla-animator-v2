@@ -1137,6 +1137,15 @@ export class WebGPURenderer {
     return { type: 'SHUTDOWN' };
   }
 
+  // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
+  // Data layout: [0]=width, [1]=height, [2..]=packed RGBA pixels (1 u32 per pixel).
+  uploadAtlasData(data: Uint32Array): void {
+    this.tryPostWorkerMessage(
+      { type: 'UPLOAD_ATLAS', data } as RustRendererWorkerInboundMessage,
+      'Failed to upload atlas data to worker',
+    );
+  }
+
   private postWorkerMessage(message: RustRendererWorkerInboundMessage): void {
     this.worker.postMessage(message);
   }

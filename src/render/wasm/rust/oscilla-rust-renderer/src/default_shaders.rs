@@ -273,6 +273,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 // directly from topologyBank (canonical ShapeBank data) instead of a
 // CPU-realized vertex buffer. Triangle fan geometry is generated
 // algorithmically from @builtin(vertex_index).
+// [RECOVER-11] Extended with Type5 text/glyph dispatch: unit-quad vertices
+// with per-glyph UV from ShapeBank, MSDF fragment evaluation from atlas.
 pub const DEFAULT_UBER_SHADER_WGSL: &str = r#"
 // [LAW:one-source-of-truth] FrameHeader mirrors the Rust FrameHeader struct.
 // The uniform binding is derived transport; the canonical source is the arena
@@ -293,10 +295,13 @@ struct InstanceData {
 @group(0) @binding(0) var<uniform> frame_header: FrameHeader;
 @group(1) @binding(0) var<storage, read> instances: array<InstanceData>;
 @group(2) @binding(0) var<storage, read> topologyBank: array<u32>;
+// [RECOVER-11] Atlas data storage buffer for Type5 text MSDF evaluation.
+@group(2) @binding(1) var<storage, read> atlasData: array<u32>;
 // [RECOVER-07] Compiler arena buffer for vertex-stage control-point reads.
 @group(3) @binding(0) var<storage, read> arenaWords: array<u32>;
 
 // ShapeBankHeaderWord offsets (must match TypeScript ShapeBankHeaderWord enum)
+const SHAPE_WORD_KIND: u32 = 0u;
 const SHAPE_WORD_FLAGS: u32 = 2u;
 // [RECOVER-07] CP arena addressing stored in header words 11, 14, 15.
 const SHAPE_WORD_CP_ARENA_BASE_OFFSET: u32 = 11u;
@@ -304,9 +309,28 @@ const SHAPE_WORD_CP_ARENA_LANE_STRIDE: u32 = 14u;
 const SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE: u32 = 15u;
 const SHAPE_FLAG_CLOSED: u32 = 1u;
 
+// [RECOVER-11] Type5 ShapeBank header word offsets for glyph UV and atlas data.
+const TYPE5_WORD_UV_MIN_X: u32 = 4u;
+const TYPE5_WORD_UV_MIN_Y: u32 = 5u;
+const TYPE5_WORD_UV_MAX_X: u32 = 6u;
+const TYPE5_WORD_UV_MAX_Y: u32 = 7u;
+const TYPE5_WORD_QUAD_WIDTH: u32 = 8u;
+const TYPE5_WORD_QUAD_HEIGHT: u32 = 9u;
+const TYPE5_WORD_ATLAS_WIDTH: u32 = 10u;
+const TYPE5_WORD_ATLAS_HEIGHT: u32 = 11u;
+const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
+
+// [LAW:one-type-per-behavior] ShapeClass discriminant values.
+const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
+
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) color: vec4<f32>,
+  // [RECOVER-11] UV coordinates for Type5 MSDF glyph evaluation.
+  @location(1) uv: vec2<f32>,
+  // [RECOVER-11] Shape class discriminant for fragment shader dispatch.
+  @location(2) @interpolate(flat) shape_class: u32,
 };
 
 fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
@@ -333,6 +357,69 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
   );
 }
 
+fn safe_color_from_instance(inst: InstanceData) -> vec4<f32> {
+  let rawH = inst.color.x;
+  let rawC = inst.color.y;
+  let rawL = inst.color.z;
+  let rawA = inst.color.w;
+  let safeH = select(0.0, rawH, rawH == rawH);
+  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
+  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
+  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
+  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
+  return vec4<f32>(safeRgb, safeA);
+}
+
+// [RECOVER-11] Type5 text vertex shader: generates a unit quad (6 vertices)
+// and reads per-glyph UV rect and dimensions from the ShapeBank header.
+fn vs_type5(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+) -> VertexOutput {
+  // Unit quad vertices (two triangles: 0-1-2, 1-3-2)
+  let quadX = array<f32, 6>(0.0, 1.0, 0.0, 1.0, 1.0, 0.0);
+  let quadY = array<f32, 6>(0.0, 0.0, 1.0, 1.0, 0.0, 1.0);
+  let vi = vertexIndex % 6u;
+  let localX = quadX[vi];
+  let localY = quadY[vi];
+
+  // Read glyph quad dimensions from ShapeBank header
+  let quadWidth = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_QUAD_WIDTH]);
+  let quadHeight = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_QUAD_HEIGHT]);
+
+  // Read UV rect from ShapeBank header
+  let uvMinX = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MIN_X]);
+  let uvMinY = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MIN_Y]);
+  let uvMaxX = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MAX_X]);
+  let uvMaxY = bitcast<f32>(topologyBank[topologyWordOffset + TYPE5_WORD_UV_MAX_Y]);
+
+  // Interpolate UV across the quad
+  let uv = vec2<f32>(
+    mix(uvMinX, uvMaxX, localX),
+    mix(uvMinY, uvMaxY, localY),
+  );
+
+  // Position: instance center + scaled local quad position
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScale = inst.transform0.z;
+  let scale = clamp(abs(select(1.0, rawScale, rawScale == rawScale)), 0.001, 1024.0);
+
+  let worldX = centerX + localX * quadWidth * scale;
+  let worldY = centerY + localY * quadHeight * scale;
+  let worldPos = vec4<f32>(worldX, worldY, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = uv;
+  out.shape_class = SHAPE_CLASS_TYPE5_TEXT;
+  return out;
+}
+
 // [RECOVER-07] Vertex pulling: control-point positions are read from the
 // compiler arena buffer (GPU-computed). Arena addressing is stored in the
 // topology header (words 11, 14, 15). Triangle fan generated from vertex_index.
@@ -342,6 +429,14 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
   let topologyWordOffset = u32(max(inst.transform1.z, 0.0));
+
+  // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
+  let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
+  if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
+    return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+
+  // --- Type1Rigid path (existing behavior) ---
   let flags = topologyBank[topologyWordOffset + SHAPE_WORD_FLAGS];
   let isClosed = (flags & SHAPE_FLAG_CLOSED) != 0u;
 
@@ -387,22 +482,83 @@ fn oklch_to_linear_srgb(h: f32, c: f32, l: f32) -> vec3<f32> {
 
   var out: VertexOutput;
   out.position = frame_header.view_proj * worldPos;
-
-  let rawH = inst.color.x;
-  let rawC = inst.color.y;
-  let rawL = inst.color.z;
-  let rawA = inst.color.w;
-  let safeH = select(0.0, rawH, rawH == rawH);
-  let safeC = max(0.0, select(0.0, rawC, rawC == rawC));
-  let safeL = clamp(select(0.0, rawL, rawL == rawL), 0.0, 1.0);
-  let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
-  let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
-  out.color = vec4<f32>(safeRgb, safeA);
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(0.0, 0.0);
+  out.shape_class = SHAPE_CLASS_TYPE1_RIGID;
   return out;
+}
+
+// [RECOVER-11] MSDF median function: takes the median of three channels
+// to reconstruct the true distance from multi-channel signed distance data.
+fn msdf_median(r: f32, g: f32, b: f32) -> f32 {
+  return max(min(r, g), min(max(r, g), b));
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+  // [RECOVER-11] Dispatch on shape class for fragment evaluation.
+  if (input.shape_class == SHAPE_CLASS_TYPE5_TEXT) {
+    // MSDF text fragment evaluation.
+    // Sample atlas data at the interpolated UV coordinates.
+    let atlasLen = arrayLength(&atlasData);
+    if (atlasLen == 0u) {
+      discard;
+    }
+    // Read atlas dimensions from the first two words of atlasData.
+    // Layout: [0]=width, [1]=height, [2..]=RGBA pixel data packed as u32.
+    let atlasWidth = atlasData[0u];
+    let atlasHeight = atlasData[1u];
+    let atlasWidthF = f32(atlasWidth);
+    let atlasHeightF = f32(atlasHeight);
+
+    // Compute texel coordinates from UV
+    let texX = clamp(input.uv.x * atlasWidthF, 0.0, atlasWidthF - 1.0);
+    let texY = clamp(input.uv.y * atlasHeightF, 0.0, atlasHeightF - 1.0);
+
+    // Bilinear interpolation: sample 4 nearest texels
+    let x0 = u32(floor(texX));
+    let y0 = u32(floor(texY));
+    let x1 = min(x0 + 1u, atlasWidth - 1u);
+    let y1 = min(y0 + 1u, atlasHeight - 1u);
+    let fx = fract(texX);
+    let fy = fract(texY);
+
+    // Read RGBA from packed u32 (each pixel = 1 u32: R|G|B|A bytes)
+    let p00_raw = atlasData[2u + y0 * atlasWidth + x0];
+    let p10_raw = atlasData[2u + y0 * atlasWidth + x1];
+    let p01_raw = atlasData[2u + y1 * atlasWidth + x0];
+    let p11_raw = atlasData[2u + y1 * atlasWidth + x1];
+
+    let p00 = vec3<f32>(f32(p00_raw & 0xFFu), f32((p00_raw >> 8u) & 0xFFu), f32((p00_raw >> 16u) & 0xFFu)) / 255.0;
+    let p10 = vec3<f32>(f32(p10_raw & 0xFFu), f32((p10_raw >> 8u) & 0xFFu), f32((p10_raw >> 16u) & 0xFFu)) / 255.0;
+    let p01 = vec3<f32>(f32(p01_raw & 0xFFu), f32((p01_raw >> 8u) & 0xFFu), f32((p01_raw >> 16u) & 0xFFu)) / 255.0;
+    let p11 = vec3<f32>(f32(p11_raw & 0xFFu), f32((p11_raw >> 8u) & 0xFFu), f32((p11_raw >> 16u) & 0xFFu)) / 255.0;
+
+    // Bilinear blend
+    let top = mix(p00, p10, fx);
+    let bottom = mix(p01, p11, fx);
+    let sample_rgb = mix(top, bottom, fy);
+
+    // MSDF: take median of R, G, B channels
+    let dist = msdf_median(sample_rgb.x, sample_rgb.y, sample_rgb.z);
+
+    // Screen-space derivative for scale-independent threshold
+    let dx = dpdx(input.uv.x) * atlasWidthF;
+    let dy = dpdy(input.uv.y) * atlasHeightF;
+    let screenPxRange = max(length(vec2<f32>(dx, dy)), 0.5);
+
+    // Apply threshold: 0.5 is the edge, expand by screen pixel range
+    let alpha = clamp((dist - 0.5) * screenPxRange + 0.5, 0.0, 1.0);
+
+    if (alpha < 0.01) {
+      discard;
+    }
+
+    let textColor = input.color;
+    let finalAlpha = textColor.a * alpha;
+    return vec4<f32>(textColor.rgb * finalAlpha, finalAlpha);
+  }
+
   // [LAW:single-enforcer] Fragment stage outputs premultiplied alpha so browser
   // compositing and pipeline blending share one canonical alpha contract.
   return vec4<f32>(input.color.rgb * input.color.a, input.color.a);

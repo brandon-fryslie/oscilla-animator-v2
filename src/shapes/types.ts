@@ -37,7 +37,20 @@ export enum ShapeClass {
   // Type2Parametric = 2,
   // Type3Ribbon = 3,
   // Type4ProceduralSDF = 4,
-  // Type5TextHybrid = 5,
+
+  /**
+   * Type 5: Text/Glyph Hybrid
+   * - CPU/worker text shaping (glyph positioning + atlas lookup)
+   * - GPU instanced glyph-quad rendering with MSDF fragment evaluation
+   * - Shared unit-quad topology; per-glyph UV rects in ShapeBank entries
+   * - Draw-prep produces per-glyph non-indexed indirect draw commands
+   *
+   * // [LAW:one-type-per-behavior] Text has a fundamentally different ownership
+   * // split from rigid/path geometry: CPU owns shaping, GPU owns rendering.
+   *
+   * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
+   */
+  Type5TextHybrid = 5,
 }
 
 /**

@@ -23,6 +23,10 @@ export function resume_engine(): void;
 
 export function take_frame_pacing_packet(): any;
 
+export function take_readback_snapshot(): any;
+
+export function upload_atlas_data(data: Uint32Array): void;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -38,6 +42,8 @@ export interface InitOutput {
     readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
+    readonly take_readback_snapshot: () => [number, number, number];
+    readonly upload_atlas_data: (a: any) => [number, number];
     readonly wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
