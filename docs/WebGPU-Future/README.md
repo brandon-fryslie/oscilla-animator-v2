@@ -1,246 +1,153 @@
 # WebGPU Future
 
-This directory captures the **non-immediate** renderer architecture direction beyond `docs/WebGPU-Complete/`.
+This directory defines the canonical architecture and migration plan for the work that comes after the first visible WebGPU triangle.
 
-`docs/WebGPU-Complete/` remains the concrete near-term target for getting the current codebase back to a working WebGPU renderer. This directory exists to document the larger architectural direction so we do not accidentally treat the current WebGPU spec as the final renderer architecture.
+The first triangle in the app is an important proof point: the renderer can now put a minimal primitive on screen through the new path. What is still missing is compatibility for the rest of the application. The remaining job is to make authoring, patch structure, UI, and simulation feed the same canonical render boundary instead of growing new renderer-shaped seams.
 
-// [LAW:one-source-of-truth] `docs/WebGPU-Complete/` remains the canonical near-term WebGPU completion source; this directory extends the architectural horizon without redefining current delivery gates.
-// [LAW:verifiable-goals] Immediate success remains concrete and machine-checkable: the app boots, compiles, hot-swaps, and renders again through the WebGPU spec path.
+// [LAW:one-source-of-truth] This directory defines one canonical target stack for post-triangle application compatibility. The render boundary, authoring model, guardrails, and roadmap all converge on the same architecture.
+// [LAW:verifiable-goals] Progress is concrete: existing patches and new authoring flows must compile into `RenderPrimitive[] + RenderView`, pass through `SceneRenderSink`, and render through the canonical prepare/queue path.
 
-## Purpose
+## 1. Current Status
 
-- Preserve the distinction between:
-  - what must be finished now (`current code -> WebGPU-Complete`)
-  - what the renderer architecture should grow toward after that work is stable
-- Provide a semantic framing that is broader than the current WebGPU spec
-- Reduce scattershot rewrites by thinking in terms of graph transformation and stable stage boundaries
+What is proven now:
 
-## Scope Guard
+- one visible primitive can render in the app
+- the canonical path is real enough to support a first proof geometry/material/view slice
+- the repo has a concrete basis for building the rest of the application on top of the new renderer
 
-This directory is intentionally **not** a replacement for `docs/WebGPU-Complete/`.
+What is not proven yet:
 
-- Use `docs/WebGPU-Complete/` for immediate implementation and readiness criteria
-- Use `docs/WebGPU-Future/` for longer-horizon architectural thinking
-- Do not block near-term WebGPU completion on ideas documented here unless they are explicitly pulled into `docs/WebGPU-Complete/`
+- existing patches broadly rendering through the canonical path
+- animation/modulation compatibility
+- repeated-instance compatibility
+- canonical patch structure above the render boundary
+- canonical authoring UI above the same model
+- simulation/physics integration
 
-// [LAW:no-mode-explosion] Future architecture ideas must not become ad-hoc parallel execution criteria that stall the current migration.
+The work in this directory is therefore no longer just "future thinking." It is the design stack for making the rest of the app compatible with the new renderer.
 
-## Three-Graph Framing
+## 2. Canonical Target
 
-We should think in terms of three graphs, not one:
-
-1. `G0`: current implementation graph
-2. `G1`: current WebGPU spec graph (`docs/WebGPU-Complete/`)
-3. `G2`: longer-horizon renderer architecture graph
-
-`G1` is a deliberate stepping stone. It narrows scope so the renderer can become operational again. `G2` is the broader semantic architecture we want to eventually approach once the WebGPU path is stable.
-
-## Canonical Semantic Stage Graph
-
-The most useful future-facing abstraction is a semantic stage graph that is broader than the current WebGPU spec:
+The target architecture across these docs is:
 
 ```mermaid
 flowchart LR
-  A["Authoring Graph"] --> B["Compile"]
-  B --> C["Extract Frame Data"]
-  C --> D["Build Frame Inputs"]
-  D --> E["Simulate"]
-  E --> F["Visibility / Culling"]
-  F --> G["Instance Assembly"]
-  G --> H["Build Draw Commands"]
-  H --> I["Render Graph Compile"]
-  I --> J["Opaque Render"]
-  J --> K["Transparent Render"]
-  K --> L["Post / Composite / UI"]
-  L --> M["Observe / Readback"]
-  M --> N["Present"]
-  N --> O["Publish History"]
+  A["PatchProgram / Canonical Authoring"] --> B["RenderPrimitive[] + RenderView"]
+  B --> C["SceneRenderSink"]
+  C --> D["ExtractedScenePacket"]
+  D --> E["RenderPrepare"]
+  E --> F["DrawQueueBuilder"]
+  F --> G["Render Graph / Passes"]
 ```
 
-// [LAW:dataflow-not-control-flow] This graph describes stable dataflow stages; variability should live in contracts and payloads, not in ad-hoc stage skipping.
+This boundary is already the center of the design:
 
-This is not a promise that every one of these stages must exist today as separate modules. It is a semantic vocabulary for reasoning about where the renderer should eventually go.
+- authoring produces scene intent, not backend transport
+- `SceneRenderSink` is the canonical scene-to-render boundary
+- extraction, prepare, queue, and render stay below that boundary
+- geometry/material catalogs remain canonical static authority
 
-## How The Three Graphs Relate
+// [LAW:one-way-deps] Authoring flows downward into canonical scene submission, then into prepared renderer packets. Backend ABI details do not flow back upward into patch or UI design.
 
-### `G0`: Current Code
+## 3. Compatibility During Migration
 
-Today the code is closest to:
+The current patch/block system is still relevant, but only as a temporary upstream frontend:
 
-```text
-Compile
--> Install
--> InputMarshal
--> Simulate
--> RenderPrep
--> DrawPrep
--> Render
--> Observe
--> Swap
+```mermaid
+flowchart LR
+  A["Current Patch + Blocks"] --> B["Legacy Compatibility Adapter"]
+  B --> C["RenderPrimitive[] + RenderView"]
+  C --> D["SceneRenderSink"]
+  D --> E["Extract / Prepare / Queue / Render"]
 ```
 
-Important characteristics of the current implementation:
+That compatibility seam is intentionally bounded:
 
-- install-time CPU materialization and packing still carry runtime meaning
-- geometry is realized into vertex/index buffers during install
-- a concrete `RenderPrep` seam exists in code even though it is not fully surfaced in the WebGPU spec
-- worker hot path is already a useful deterministic stage pipeline
+- it is one adapter layer, not a second renderer architecture
+- it translates legacy patch semantics into canonical scene submission
+- it does not emit sink-table rows, slot layouts, or backend packets
+- it is deleted once the new patch structure and authoring model are proven
 
-### `G1`: WebGPU-Complete
+// [LAW:single-enforcer] Legacy-to-canonical translation belongs in one compatibility adapter boundary, not in sink code, packers, and render passes.
+// [LAW:no-mode-explosion] Compatibility is temporary and isolated to one layer with explicit removal criteria.
 
-The current WebGPU spec is intentionally narrower:
+## 4. What This Directory Now Covers
 
-```text
-Compile
--> Install
--> InputMarshal
--> Simulate
--> DrawPrep
--> Render
--> Observe
--> Swap
-```
+These files form one coherent stack:
 
-This is a strong intermediate because it gives us a working, canonical frame order and clear ABI ownership. It is not yet a full renderer architecture.
+| File | Purpose |
+|---|---|
+| [CANONICAL-RENDER-SINK-DESIGN.md](./CANONICAL-RENDER-SINK-DESIGN.md) | Defines the canonical scene-to-render contract: `RenderPrimitive`, `RenderView`, `SceneRenderSink`, extraction, prepare, and queue boundaries. |
+| [COMPATIBILITY-MIGRATION-PLAN.md](./COMPATIBILITY-MIGRATION-PLAN.md) | Defines how the current patch/block system temporarily feeds that canonical boundary without becoming permanent architecture. |
+| [CANONICAL-PATCH-STRUCTURE-DESIGN.md](./CANONICAL-PATCH-STRUCTURE-DESIGN.md) | Defines the new patch root and the four canonical authoring strata: resources, modulation, scene assembly, and outputs. |
+| [CANONICAL-AUTHORING-MODEL-DESIGN.md](./CANONICAL-AUTHORING-MODEL-DESIGN.md) | Defines the finite user-facing authoring vocabulary that sits on top of the patch structure. |
+| [CANONICAL-AUTHORING-GUARDRAILS.md](./CANONICAL-AUTHORING-GUARDRAILS.md) | Defines the invariants and enforcement rules that keep the new authoring model from regressing into render-shaped graph soup. |
+| [CANONICAL-AUTHORING-BLOCK-CATALOG.md](./CANONICAL-AUTHORING-BLOCK-CATALOG.md) | Defines the MVP block set needed to prove the render-only authoring slice, starting with triangle geometry and flat-color material. |
+| [CANONICAL-AUTHORING-UI-DESIGN.md](./CANONICAL-AUTHORING-UI-DESIGN.md) | Defines the editor structure that matches the canonical layers instead of collapsing everything into one graph canvas. |
+| [CANONICAL-IMPLEMENTATION-ROADMAP.md](./CANONICAL-IMPLEMENTATION-ROADMAP.md) | Defines dependency order, implementation order, and shipping phases across the full stack. |
+| [CANONICAL-PHYSICS-AUTHORING-DESIGN.md](./CANONICAL-PHYSICS-AUTHORING-DESIGN.md) | Extends the same authoring model to simulation-driven animation without introducing a second top-level architecture. |
 
-### `G2`: Future Architecture
+## 5. Execution Order After The First Triangle
 
-The longer-horizon architecture should move upward from execution-order docs toward:
+The first triangle is the earliest render proof, not the end state.
 
-- semantic extraction boundaries
-- explicit resource classes
-- pass/resource graph compilation
-- feature composition
-- backend implementation details pushed lower in the stack
+The remaining directory-defined order is:
 
-## Where WebGPU-Complete Stops Short
+1. finish freezing the canonical render boundary around `SceneRenderSink`
+2. build one legacy compatibility adapter from current patches into `RenderPrimitive[] + RenderView`
+3. prove real existing patches through the canonical path: one visible primitive, one animated primitive, and one repeated-instance patch
+4. introduce the canonical patch root above that same boundary
+5. freeze the canonical authoring model and guardrails
+6. prove the MVP authoring surface and block catalog
+7. build the MVP authoring UI
+8. extend into simulation/physics on the same architecture
 
-The current WebGPU spec is directionally correct, but it intentionally stops short of a more mature renderer architecture in several ways:
+// [LAW:dataflow-not-control-flow] The implementation order follows stable stage ownership: render boundary first, then translation, then authoring structure above it. New behavior should enter by changing data contracts, not by adding more special-case execution paths.
 
-1. It is primarily a **frame-stage execution spec**, not yet a full render-graph architecture.
-2. Backend ABI details still sit close to the top-level architecture surface.
-3. Extraction and packetization boundaries are only partially explicit.
-4. Resource classes are narrower than in mature frame-graph systems.
-5. One backend realization risks being mistaken for the architecture itself.
-6. Feature composition is under-modeled compared to engines that routinely integrate shadows, post, UI, temporal history, and debug visualization through one graph.
+## 6. Immediate Design Rules
 
-## Comparison With More Mature Designs
+When using these docs to guide work, the practical rules are:
 
-Relative to experienced production designs such as Filament FrameGraph, Unreal RDG, and AMD RPS, the future direction should eventually shift toward:
+- all roads lead to `RenderPrimitive[] + RenderView -> SceneRenderSink`
+- authoring may define resources, modulators, bindings, scenes, and outputs
+- authoring may not define sink-table rows, slot IDs, indirect packets, or backend bindings
+- UI must reflect the actual authoring seams: resources, modulation, simulation, scene, output
+- physics extends the same architecture; it is not a parallel top-level system
 
-### 1. Declarative pass/resource graphs
+Avoid:
 
-Mature renderers define passes and resources, then derive:
+- creating a second render boundary
+- extending legacy hidden sink semantics as if they are canonical
+- adding renderer transport concepts to authoring blocks
+- letting compatibility code become the place where new features land first
 
-- execution order
-- resource lifetime
-- aliasing opportunities
-- synchronization/barriers
-- debug graph introspection
+## 7. Recommended First Shipping Milestone
 
-`docs/WebGPU-Complete/` mostly hardcodes canonical order because that is the right simplification for the current migration.
+The current design stack points to one focused first shipping milestone:
 
-### 2. First-class resource taxonomy
+- canonical render boundary
+- canonical patch structure
+- canonical authoring model
+- canonical guardrails
+- MVP block catalog
+- MVP authoring UI
 
-Future architecture should distinguish:
+That milestone should prove:
 
-- persistent scene resources
-- transient frame resources
-- history resources
-- imported external resources
-- presentation resources
+- one canonical render boundary
+- one temporary compatibility seam for legacy patches
+- one render-only MVP authoring slice built on triangle geometry, flat color, and an orthographic view
 
-The current WebGPU spec strongly defines Arena, ShapeBank, and Indirect Buffer, but not yet as a generalized resource system.
+Simulation, richer shape families, advanced materials, and deeper render-graph composition should come after that slice is stable.
 
-### 3. Explicit extraction boundary
+## 8. Bottom Line
 
-Mature engines typically separate:
+This directory now defines how Oscilla moves from "a first triangle renders" to "the rest of the application is compatible with the canonical renderer."
 
-- authoring or simulation graph
-- extracted frame packets
-- renderer execution graph
+The core idea is simple:
 
-Our current code already contains proto-extraction at install time. Future architecture should make that boundary explicit rather than hiding it inside packing/materialization helpers.
-
-### 4. Backend details below semantic stages
-
-Indirect stride, sink-table packing, header layout, and similar ABI rules are important, but future architecture should treat them as implementation of a lower layer rather than the highest-level architectural story.
-
-### 5. Feature composition as graph contribution
-
-Longer-term architecture should be able to add or remove:
-
-- transparency
-- text
-- debug overlays
-- post-processing
-- temporal history
-- picking
-- readback
-
-by contributing nodes/resources to the same graph, not by growing a monolithic linear loop.
-
-## Architectural Posture
-
-The practical rule is:
-
-- use `WebGPU-Complete` to get rendering working again
-- keep the future architecture in mind so we do not fossilize temporary seams into permanent design
-
-That means we should prefer refactors that make the current system **more graph-like and more legible**, even when the immediate goal is still just to finish the WebGPU migration.
-
-## Migration Strategy: Graph Transformation, Not Wholesale Replacement
-
-The most promising migration pattern is to treat the path from `G0` to `G1` and eventually `G2` as graph transformation:
-
-- `normalize`: rename and expose the stage boundaries that already exist
-- `split`: separate mixed responsibilities into explicit seams
-- `merge`: combine duplicate ownership into one authoritative node
-- `move-edge`: reassign data ownership to the correct stage
-- `replace`: keep a node contract stable and swap its internals
-- `delete`: remove compatibility nodes only after their edges are gone
-
-// [LAW:single-enforcer] Cross-cutting ownership should migrate by moving an enforcement boundary, not by layering duplicate checks and duplicate representations across old and new paths.
-// [LAW:locality-or-seam] Each rewrite should operate at one seam so unrelated modules do not need to change in lockstep.
-
-This is preferable to a scattershot "replace the core" approach because it keeps the unit of change small and verifiable.
-
-## Immediate Focus Policy
-
-The current priority remains:
-
-```text
-current implementation -> WebGPU-Complete
-```
-
-Specifically:
-
-- recover a working render path
-- keep compile/hot-swap/runtime invariants intact
-- finish the canonical WebGPU path before broadening architecture scope
-
-Future architecture notes should inform naming, boundaries, and sequencing, but they should not broaden the active delivery target right now.
-
-## Practical Rule For Future Work
-
-When working on the current WebGPU migration, prefer changes that do at least one of these:
-
-- make an existing stage boundary explicit
-- remove duplicate ownership of a concept
-- rename a module so it matches the semantic graph
-- convert hidden data transformations into named contracts
-- preserve a replaceable node seam for later work
-
-Avoid changes that do this:
-
-- introduce a second competing architecture source for current delivery
-- expand the active migration target to include speculative future features
-- fuse temporary implementation shortcuts into permanent top-level abstractions
-
-## Related Documents
-
-- `docs/WebGPU-Complete/README.md`
-- `docs/WebGPU-Complete/IMPLEMENTATION-INDEX.md`
-- `docs/WebGPU-Complete/workstreams/WS-03-frame-execution.index.md`
-- `docs/WebGPU-Complete/P0-0__Overview_-_GPU-Native_Visual_Instrument_Architecture.md`
-
+- freeze one render boundary
+- translate legacy patches into it temporarily
+- build the new patch and authoring model above it
+- keep UI and physics aligned to the same architecture
+- delete compatibility once the new path is proven
