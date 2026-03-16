@@ -1,38 +1,48 @@
 Evaluator Note
 
 active_ticket: RECOVER-07
-evaluated_commit: 443ff238
-repo_base_for_next_run: 443ff238
-verdict: implementation-complete
-next_action: evaluate
+evaluated_commit: 68bb02c19
+repo_base_for_next_run: 68bb02c19
+verdict: accept-complete
+next_action: advance-to-next-ready-ticket
 
 do:
-- Evaluate RECOVER-07 implementation at 443ff238.
-- Verify: evaluateShapeRefHandle() writes header-only ShapeBank allocations with CP arena addressing.
-- Verify: CPU control-point payload materialization is removed from ShapeBank writes.
-- Verify: Rust render pass binds compiler_arena_buffer as group 3 for vertex-stage CP reads.
-- Verify: Uber vertex shader reads CPs from arenaWords[] using topology header addressing.
-- Verify: total_instance_count reads from descriptor StaticInstanceCount, not zeroed record fields.
-- Verify: TypeScript typecheck passes, Rust renderer builds, all 1935 tests pass.
+- Advance to RECOVER-08: Remove install-time CPU runtime execution.
+- RECOVER-08 prerequisite (RECOVER-07) is now satisfied.
+- Read `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/03-Install-Time-CPU-Runtime-Execution.md`.
+- Focus on reducing install-time work to canonical assets/compiled artifacts/initial input publication only.
+- Remove the separate CPU execution path that precomputes runtime-owned frame products for the first frame.
+- Ensure first frame and later frames use the same runtime stage model.
 
 avoid:
-- Do not accept if the visible render baseline regresses.
-- Do not accept if CPU materialization of CP payload to ShapeBank persists.
+- Do not treat RECOVER-08 as a pure naming cleanup — the goal is removing the separate first-frame CPU precompute path.
+- Do not preserve a hidden first-frame CPU precompute path for the canonical pipeline.
+- Do not reopen draw-prep ownership (settled in RECOVER-05/06).
+- Do not reopen shape materialization ownership (settled in RECOVER-07).
+- Do not regress the visible render baseline.
 
 gates_passed:
-- source/ticket alignment: RECOVER-07 is the active ticket
-- typecheck: passes (0 errors)
-- rust build: passes (0 errors, pre-existing dead code warnings only)
+- source/ticket alignment: changes map to RECOVER-07 scope only
+- typecheck: 0 errors
+- rust build: 0 errors (3 pre-existing dead code warnings)
 - tests: 170 files, 1935 passed, 0 failed
+- full build: Vite build succeeds
+- live-path alignment: vertex shader reads CPs from GPU arena, not CPU ShapeBank
+- no dual authority: CPU CP materialization deleted, GPU arena is sole CP owner
+- baseline liveness: all shader contract tests pass, no regressions
 - clean closeout: tree clean after commit
 
 gates_failed: none
 
 evidence:
-- commit: 443ff238 — "Vertex shader reads control points from GPU arena, not CPU ShapeBank (RECOVER-07)"
-- 9 files changed, 172 insertions, 128 deletions
-- JS: evaluateShapeRefHandle simplified from 115 lines to 56 lines (CPU CP payload computation removed)
-- Rust: render.rs adds arena_render_layout (group 3), memory.rs creates arena_render_bind_groups per ping-pong buffer
-- WGSL: uber shader reads arenaWords[cpArenaBase + cpIndex * cpArenaLaneStride] instead of topologyBank[paramBlockOffset + cpIndex * 2u]
-- Bug fix: total_instance_count reads descriptor word 24 (StaticInstanceCount) instead of zeroed record word 2
-- ShapeBank header reserved words renamed: Reserved0→CpArenaBaseOffset(11), Reserved1→CpArenaLaneStride(14), Reserved2→CpArenaComponentStride(15)
+- commit: 68bb02c19 — "Implementer: implementation-complete RECOVER-07 — CP arena reads + total_instance_count fix"
+- prior commit: 443ff238 — "Vertex shader reads control points from GPU arena, not CPU ShapeBank (RECOVER-07)"
+- 10 files changed (excluding docs/session-docs), 210 insertions, 175 deletions
+- JS: evaluateShapeRefHandle reduced from ~115 to ~56 lines; CPU CP payload computation + float32ToUint32Bits helper deleted
+- JS: ShapeBankHeaderWord enum: Reserved0→CpArenaBaseOffset(11), Reserved1→CpArenaLaneStride(14), Reserved2→CpArenaComponentStride(15)
+- JS: resolveArenaAddress() used to derive CP addressing from runtimeAddressTable.slotToArena
+- JS: ShapeBank allocation is now header-only (SHAPE_BANK_HEADER_WORDS), no paramBlock payload
+- Rust: render.rs adds arena_render_layout (group 3) + arena_render_bind_groups per ping-pong buffer
+- Rust: engine.rs total_instance_count reads descriptor word 24 (StaticInstanceCount) instead of zeroed record word 2
+- WGSL: uber vertex shader binds @group(3) arenaWords[], reads CPs at cpArenaBase + cpIndex * cpArenaLaneStride
+- Ping-pong correctness verified: after simulation, ping_pong_index points to final output buffer; render reads same index
