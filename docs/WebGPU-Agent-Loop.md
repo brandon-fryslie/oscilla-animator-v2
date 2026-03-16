@@ -24,6 +24,7 @@ The loop does not replace the repo-wide workflow in `AGENTS.md`. It is a task-sp
 3. Evaluator guidance is steering only. It cannot widen scope or override the ticket/spec.
 4. Work on exactly one `RECOVER-*` leaf ticket per run.
 5. The worktree must be clean at the end of every run.
+6. `session-docs/WEBGPU-LOOP.md` is also the run-to-run ticket lock. The implementer must not advance to a different leaf ticket unless that note explicitly authorizes advancement and the previously active ticket is already evaluator-closed.
 
 ## Filesystem Notes
 
@@ -34,6 +35,7 @@ Use one shared file:
 - `session-docs/WEBGPU-LOOP.md`
 
 The evaluator owns writing that file. The implementer reads it when present.
+The evaluator note is a hard handoff artifact, not advisory queue metadata.
 
 ## Dirty Tree Normalization
 
@@ -57,6 +59,8 @@ The implementer:
 5. Must verify the ticket's acceptance criteria locally.
 6. Must never close the active `RECOVER-*` ticket.
 7. Must leave a clean tree and a commit when repo state changed.
+8. Must treat the evaluator note as an exclusive lock on the named `active_ticket:` until the evaluator both closes that ticket and writes `next_action: advance-to-next-ready-ticket`.
+9. Must not treat `lit ready` as authority to advance when an active ticket remains open.
 
 ## Evaluator Contract
 
@@ -70,6 +74,7 @@ The evaluator:
 6. Owns `RECOVER-*` ticket closure when the verdict is `accept-complete`.
 7. May safely revert isolated bad implementation commits with `git revert`.
 8. Must leave a clean tree and a commit when repo state changed.
+9. Must never authorize advancement while the active ticket remains open.
 
 ## Evaluator Note
 
@@ -104,6 +109,8 @@ Allowed `next_action:` values:
 - `continue-active-ticket`
 - `revise-active-ticket`
 - `stop-blocked`
+
+`advance-to-next-ready-ticket` is valid only when the evaluator has just accepted and closed the `active_ticket:`. Otherwise the active ticket remains locked for the implementer.
 
 If tracker writes work, the evaluator may also mirror a summary to the ticket, but the filesystem note is the canonical steering artifact.
 
