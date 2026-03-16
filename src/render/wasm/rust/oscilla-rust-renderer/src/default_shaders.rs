@@ -28,10 +28,7 @@ pub const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
-const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 25u;
-const RECORD_WORD_INSTANCE_COUNT: u32 = 2u;
-const RECORD_WORD_FIRST_INSTANCE: u32 = 5u;
-const RECORD_WORD_SHAPE_WORD_OFFSET: u32 = 6u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
 
 const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
 const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
@@ -53,6 +50,11 @@ const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
 const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
+// [RECOVER-06] Instance-count and shape-word-offset metadata
+const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
+const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
+const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
 
 const OPTIONAL_MODE_CONSTANT: u32 = 0u;
 const OPTIONAL_MODE_SLOT: u32 = 1u;
@@ -114,28 +116,28 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let sink_count = read_sink_word(1u);
     let records_base = SINK_TABLE_HEADER_WORDS;
     let descriptors_base = records_base + sink_count * SINK_TABLE_RECORD_WORDS;
+    // [RECOVER-06] Derive instanceCount and firstInstance from descriptors
+    // instead of reading zeroed record fields. Running prefix sum of
+    // instance counts determines the instance-to-sink mapping.
     var sink_index = 0u;
     var sink_found = false;
-    var sink_base = 0u;
     var sink_lane = 0u;
+    var running_first_instance = 0u;
 
     loop {
       if (sink_index >= sink_count) {
         break;
       }
-      let candidate_sink_base = records_base + sink_index * SINK_TABLE_RECORD_WORDS;
-      if (candidate_sink_base + RECORD_WORD_SHAPE_WORD_OFFSET >= sink_table_word_count) {
-        break;
-      }
-      let first_instance = read_sink_word(candidate_sink_base + RECORD_WORD_FIRST_INSTANCE);
-      let instance_count = read_sink_word(candidate_sink_base + RECORD_WORD_INSTANCE_COUNT);
-      let instance_end = first_instance + instance_count;
-      if (gid.x >= first_instance && gid.x < instance_end) {
-        sink_base = candidate_sink_base;
-        sink_lane = gid.x - first_instance;
+      let desc_base = descriptors_base + sink_index * SINK_TABLE_DESCRIPTOR_WORDS;
+      let ic_mode = read_sink_word(desc_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE);
+      let instance_count = select(0u, read_sink_word(desc_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT), ic_mode == INSTANCE_COUNT_MODE_STATIC);
+      let instance_end = running_first_instance + instance_count;
+      if (gid.x >= running_first_instance && gid.x < instance_end) {
+        sink_lane = gid.x - running_first_instance;
         sink_found = true;
         break;
       }
+      running_first_instance = instance_end;
       sink_index = sink_index + 1u;
     }
 
@@ -247,7 +249,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       );
       scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
       scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
-      shape_word_offset = read_sink_word(sink_base + RECORD_WORD_SHAPE_WORD_OFFSET);
+      // [RECOVER-06] Shape word offset from descriptor (resolved at pack time)
+      shape_word_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET);
     }
   }
 

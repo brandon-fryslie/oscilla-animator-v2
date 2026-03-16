@@ -6,7 +6,7 @@ pub const SHAPE_BANK_HEADER_WORDS: usize = 16;
 pub const SINK_TABLE_HEADER_WORDS: usize = 8;
 pub const SINK_TABLE_RECORD_WORDS: usize = 8;
 // [LAW:one-source-of-truth] Must match DrawPrepSinkTable.ts DRAW_PREP_SINK_DESCRIPTOR_WORDS.
-pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 25;
+pub const SINK_TABLE_DESCRIPTOR_WORDS: usize = 26;
 pub const INDIRECT_INDEXED_STRIDE_WORDS: usize = 5;
 pub const INDIRECT_NON_INDEXED_STRIDE_WORDS: usize = 4;
 const CLEAR_BUFFER_CHUNK_BYTES: usize = 16 * 1024;
