@@ -1,6 +1,7 @@
 import { WEBGPU_RENDER_CONTRACT } from './shaders';
 import { SHAPE_BANK_HEADER_WORDS } from '../../runtime/RuntimeState';
 import type { GpuBindGroup, GpuBuffer, GpuDevice, GpuRenderPipeline } from './gpu-api';
+import { type GeometryRoute, classifyAllGeometryRoutes } from './ShapeBankGeometrySeam';
 
 const GPU_BUFFER_USAGE = {
   COPY_DST: 0x0008,
@@ -25,6 +26,7 @@ export class WebGPUShapeBankManager {
   private shapeBankBindGroup: GpuBindGroup;
   private shapeBankCapacityWords = 1;
   private topologyWordOffsetById = new Map<number, number>();
+  private geometryRoutes = new Map<number, GeometryRoute>();
 
   constructor(private readonly device: GpuDevice, private readonly pathPipeline: GpuRenderPipeline) {
     this.shapeBankBuffer = this.device.createBuffer({
@@ -52,10 +54,30 @@ export class WebGPUShapeBankManager {
     this.ensureShapeBankCapacity(Math.max(1, source.volatilePtr));
     this.uploadShapeBankData(source);
     this.topologyWordOffsetById = this.buildTopologyWordOffsetMap(source);
+    // [LAW:one-source-of-truth] Geometry routes are derived from canonical
+    // ShapeBank header data at sync time — same source as topology offsets.
+    this.geometryRoutes = classifyAllGeometryRoutes(source);
   }
 
   resolveTopologyWordOffset(topologyId: number): number | undefined {
     return this.topologyWordOffsetById.get(topologyId);
+  }
+
+  /**
+   * Resolve the geometry route for a shape at the given word offset.
+   *
+   * Returns the classified route (shapeBankDirect or legacy) or undefined
+   * if no shape exists at that offset.
+   */
+  resolveGeometryRoute(shapeWordOffset: number): GeometryRoute | undefined {
+    return this.geometryRoutes.get(shapeWordOffset);
+  }
+
+  /**
+   * Get all classified geometry routes from the latest sync.
+   */
+  getGeometryRoutes(): ReadonlyMap<number, GeometryRoute> {
+    return this.geometryRoutes;
   }
 
   dispose(): void {
