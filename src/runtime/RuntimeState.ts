@@ -22,15 +22,15 @@ import { createArena } from './ArenaValueStore';
  *
  * ## Canonical vs. Realized Fields
  *
- * Canonical fields (words 0-3, 7, 9-15) are written once by
+ * Canonical fields (words 0-4, 7, 9-15) are written once by
  * `ValueExprMaterializer` and are immutable after materialization.
  * They describe declarative topology metadata and parameter payload offsets.
  *
- * Geometry-offset fields (words 4-6, 8) — `indexCount`, `firstIndex`,
- * `baseVertex`, `firstVertex` — are part of the canonical header layout for
- * GPU-side consumption. GPU draw-prep compute reads these fields to derive
- * indirect command arguments. JS-side code MUST NOT read or depend on these
- * fields from `ShapeBankState.data`.
+ * `indexCount` (word 4) is canonical topology metadata derived directly from
+ * the declarative shape definition. The remaining geometry-offset fields
+ * (words 5-6, 8) — `firstIndex`, `baseVertex`, `firstVertex` — are realized
+ * fields reserved in the ABI for later worker/GPU ownership. JS-side code
+ * MUST NOT read or depend on those realized fields from `ShapeBankState.data`.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
@@ -41,11 +41,12 @@ export enum ShapeBankHeaderWord {
   Flags = 2,
   MaterialClass = 3,
 
-  // -- Realized geometry-offset fields (worker-derived, NOT canonical) --
-  // These words are reserved in the ABI for GPU-side geometry offsets.
-  // JS-side ShapeBankState.data leaves them as 0. The Rust worker fills
-  // them in its own local copy before GPU upload.
+  // -- Canonical topology-derived field --
   IndexCount = 4,
+
+  // -- Realized geometry-offset fields (worker/GPU-derived, NOT canonical) --
+  // These words are reserved in the ABI for later geometry realization.
+  // JS-side ShapeBankState.data leaves them as 0 until that boundary owns them.
   FirstIndex = 5,
   BaseVertex = 6,
 
@@ -67,11 +68,10 @@ export enum ShapeBankHeaderWord {
 
 /**
  * Word offsets of realized geometry-offset fields in ShapeHeaderV1.
- * These are NOT canonical — they are derived by the Rust worker and
- * must not be read from JS-side ShapeBankState.data.
+ * These are NOT canonical — they are reserved for later geometry realization
+ * and must not be read from JS-side ShapeBankState.data.
  */
 export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
-  ShapeBankHeaderWord.IndexCount,
   ShapeBankHeaderWord.FirstIndex,
   ShapeBankHeaderWord.BaseVertex,
   ShapeBankHeaderWord.FirstVertex,
@@ -269,6 +269,43 @@ export function writeShapeBankHeader(
   bank[handle + ShapeBankHeaderWord.BoundsMaxPacked] = header.boundsMaxPacked >>> 0;
   bank[handle + ShapeBankHeaderWord.Reserved1] = header.reserved1 >>> 0;
   bank[handle + ShapeBankHeaderWord.Reserved2] = header.reserved2 >>> 0;
+}
+
+function hasShapeBankHeaderPayload(bank: Uint32Array, handle: number): boolean {
+  for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
+    if (bank[handle + word] !== 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Iterate the live ShapeBank record starts in cursor order.
+ *
+ * // [LAW:one-source-of-truth] ShapeBank record walking is centralized here so
+ * // callers cannot drift on how param-block-backed records advance.
+ */
+export function forEachShapeBankRecord(
+  bank: Uint32Array,
+  volatilePtr: number,
+  visitor: (handle: number) => void,
+): void {
+  let handle = 0;
+  while (handle + SHAPE_BANK_HEADER_WORDS <= volatilePtr) {
+    const headerHasPayload = hasShapeBankHeaderPayload(bank, handle);
+    if (headerHasPayload) {
+      visitor(handle);
+    }
+    const headerEnd = handle + SHAPE_BANK_HEADER_WORDS;
+    const paramBlockOffset = bank[handle + ShapeBankHeaderWord.ParamBlockOffset] >>> 0;
+    const paramBlockWords = bank[handle + ShapeBankHeaderWord.ParamBlockWords] >>> 0;
+    const payloadEnd = paramBlockOffset + paramBlockWords;
+    const nextHandle = headerHasPayload
+      ? Math.max(headerEnd, payloadEnd)
+      : headerEnd;
+    handle = nextHandle > handle ? nextHandle : headerEnd;
+  }
 }
 
 /**

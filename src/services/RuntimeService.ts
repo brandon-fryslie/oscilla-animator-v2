@@ -98,6 +98,13 @@ function isCompileWorkerUnavailableError(err: unknown): boolean {
     lowered.includes('securityerror');
 }
 
+function describeFatalGpuStopMessage(fault: GpuFault): string {
+  if (fault.source === 'CIRCUIT_BREAKER') {
+    return 'Rendering stopped by the WebGPU circuit breaker to protect the system.';
+  }
+  return `Fatal GPU fault [${fault.code}] from ${fault.source} stopped rendering. Patch and editor state were preserved.`;
+}
+
 export class RuntimeService {
   private readonly domainChangeDetector: DomainChangeDetector = createDomainChangeDetector();
 
@@ -495,9 +502,7 @@ export class RuntimeService {
     this.renderer = null;
     store.diagnostics.log({
       level: 'error',
-      message: fault.source === 'CIRCUIT_BREAKER'
-        ? 'Rendering stopped by the WebGPU circuit breaker to protect the system.'
-        : 'GPU device lost — rendering stopped. Patch and editor state were preserved.',
+      message: describeFatalGpuStopMessage(fault),
     });
   };
 

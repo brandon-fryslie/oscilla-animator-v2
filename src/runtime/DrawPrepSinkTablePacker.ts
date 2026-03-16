@@ -1,6 +1,8 @@
 import type { CompiledProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
+import type { RuntimeState } from './RuntimeState';
+import { readShapeBankHeader, SHAPE_BANK_HEADER_WORDS } from './RuntimeState';
 import { resolveArenaAddress } from './ArenaValueStore';
 import {
   DRAW_PREP_SINK_DESCRIPTOR_WORDS,
@@ -15,10 +17,10 @@ import {
   type DrawPrepSinkTableHeaderV1,
 } from './DrawPrepSinkTable';
 
-// [RECOVER-05] This packer emits static metadata only. Per-frame dynamic
-// command fields (count, instanceCount, first, baseVertex, firstInstance,
-// shapeWordOffset, materialId) are NOT computed by the CPU. GPU draw-prep
-// compute (RECOVER-06) will derive them from canonical GPU-resident state.
+// [RECOVER-05] The sink descriptor now carries the static source metadata for
+// future GPU-owned draw-prep derivation. The active assembly path still reads
+// record-level instance and shape-routing fields, so those remain populated
+// until the GPU path owns them end-to-end. // [LAW:one-source-of-truth]
 
 export interface PackedDrawPrepSinkTableV1 {
   readonly words: Uint32Array;
@@ -89,6 +91,101 @@ function resolveSlotArenaAddress(
   };
 }
 
+function readArenaNumber(address: PackedArenaAddress, state: RuntimeState, lane: number, component: number): number {
+  const index =
+    address.baseOffset
+    + assertFiniteUint32(lane, 'arenaRead.lane') * address.laneStride
+    + assertFiniteUint32(component, 'arenaRead.component') * address.componentStride;
+  if (index >= state.arena.length) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: arena read out of bounds ' +
+        `(index=${index}, arenaLength=${state.arena.length})`,
+    );
+  }
+  return state.arena[index] as number;
+}
+
+function resolveSlotShapeHandle(
+  program: CompiledProgramIR,
+  state: RuntimeState,
+  step: StepRender,
+  instanceCount: number,
+): number {
+  if (instanceCount <= 0) {
+    return 0;
+  }
+  const shapeAddress = resolveSlotArenaAddress(
+    program,
+    step.shape.slot,
+    `shapeSlot sink(instance=${String(step.instanceId)})`,
+  );
+  const firstHandle = readArenaNumber(shapeAddress, state, 0, 0);
+  if (!Number.isFinite(firstHandle) || !Number.isInteger(firstHandle)) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: shape slot lane 0 handle must be a finite integer, got ' + String(firstHandle),
+    );
+  }
+  const representative = assertFiniteUint32(Math.trunc(firstHandle), 'shapeHandleWordOffset');
+  for (let lane = 1; lane < instanceCount; lane++) {
+    const laneHandle = readArenaNumber(shapeAddress, state, lane, 0);
+    if (!Number.isFinite(laneHandle) || !Number.isInteger(laneHandle)) {
+      throw new Error(
+        'DrawPrepSinkTablePacker: shape slot lane handle must be a finite integer, got ' + String(laneHandle),
+      );
+    }
+    const handle = assertFiniteUint32(Math.trunc(laneHandle), `shapeSlotHandle lane=${lane}`);
+    if (handle !== representative) {
+      throw new Error(
+        'DrawPrepSinkTablePacker: heterogeneous per-instance shape handles in one sink are unsupported ' +
+          `(sinkInstanceId=${String(step.instanceId)}, lane0=${representative}, lane=${lane}, handle=${handle})`,
+      );
+    }
+  }
+  return representative;
+}
+
+function assertShapeHandleInBankWindow(state: RuntimeState, shapeHandleWordOffset: number, instanceCount: number): void {
+  if (instanceCount <= 0) {
+    return;
+  }
+  if (shapeHandleWordOffset + SHAPE_BANK_HEADER_WORDS > state.shapeBank.volatilePtr) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: sink shape handle points outside live shape bank window ' +
+        `(handle=${shapeHandleWordOffset}, volatilePtr=${state.shapeBank.volatilePtr})`,
+    );
+  }
+}
+
+function resolveSinkInstanceCount(program: CompiledProgramIR, state: RuntimeState, sinkIndex: number): number {
+  const drawPrepProgram = program.drawPrepProgram;
+  const sink = drawPrepProgram.sinks[sinkIndex];
+  if (!sink) {
+    throw new Error(`DrawPrepSinkTablePacker: sink ${sinkIndex} missing`);
+  }
+
+  if (sink.instanceCountMode === 'static') {
+    return assertFiniteUint32(
+      sink.staticInstanceCount ?? Number.NaN,
+      `staticInstanceCount sinkIndex=${sink.sinkIndex}`,
+    );
+  }
+
+  if (state.cache.instanceLaneCountFrameId !== state.cache.frameId) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: dynamic instance counts are stale for current frame ' +
+        `(frameId=${state.cache.frameId}, cachedFrame=${state.cache.instanceLaneCountFrameId ?? -1})`,
+    );
+  }
+  const dynamicCount = state.cache.instanceLaneCounts?.get(String(sink.instanceId));
+  if (dynamicCount === undefined) {
+    throw new Error(
+      'DrawPrepSinkTablePacker: missing dynamic instance count for sink ' +
+        `(sinkIndex=${sink.sinkIndex}, instanceId=${String(sink.instanceId)})`,
+    );
+  }
+  return assertFiniteUint32(dynamicCount, `dynamicInstanceCount sinkIndex=${sink.sinkIndex}`);
+}
+
 function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[] {
   const indexed: number[] = [];
   const nonIndexed: number[] = [];
@@ -103,19 +200,45 @@ function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[
   return [...indexed, ...nonIndexed];
 }
 
+interface DrawCommandFields {
+  readonly count: number;
+  readonly first: number;
+  readonly baseVertex: number;
+  readonly materialId: number;
+}
+
+function resolveDrawCommandFields(
+  state: RuntimeState,
+  sink: DrawPrepSinkIR,
+  shapeHandleWordOffset: number,
+): DrawCommandFields {
+  const shapeHeader = readShapeBankHeader(state.shapeBank.data, shapeHandleWordOffset);
+  if (sink.drawMode === 'indexed') {
+    return {
+      count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
+      first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
+      baseVertex: shapeHeader.baseVertex | 0,
+      materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
+    };
+  }
+  return {
+    count: assertFiniteUint32(shapeHeader.vertexCount, `nonIndexed.count sinkIndex=${sink.sinkIndex}`),
+    first: assertFiniteUint32(shapeHeader.firstVertex, `nonIndexed.first sinkIndex=${sink.sinkIndex}`),
+    baseVertex: 0,
+    materialId: assertFiniteUint32(shapeHeader.materialClass, `materialId sinkIndex=${sink.sinkIndex}`),
+  };
+}
+
 /**
- * Pack the draw-prep sink table with static metadata only.
+ * Pack the draw-prep sink table with static descriptors plus the record fields
+ * the active assembly shader still consumes.
  *
- * // [RECOVER-05] CPU no longer computes per-frame dynamic draw command fields.
- * // Record fields count/instanceCount/first/baseVertex/firstInstance/
- * // shapeWordOffset/materialId are left as zero. GPU draw-prep compute
- * // (RECOVER-06) derives these from canonical GPU-resident state.
- *
- * // [LAW:one-source-of-truth] The sink table now contains only compile-time
- * // metadata: header, per-record drawMode, and descriptor arena addresses.
+ * // [LAW:single-enforcer] The packer is the one boundary that reconciles the
+ * // current draw-prep consumer contract with the compiler/runtime inputs.
  */
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
+  state: RuntimeState,
 ): PackedDrawPrepSinkTableV1 | null {
   const drawPrepProgram = program.drawPrepProgram;
   // [LAW:single-enforcer] Draw-prep ABI invariants are validated at this
@@ -131,6 +254,12 @@ export function packDrawPrepSinkTableV1(
   const descriptorBaseWord = DRAW_PREP_SINK_TABLE_HEADER_WORDS
     + header.totalRecordCount * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
 
+  const sinkInstanceCounts: number[] = [];
+  for (let sinkIndex = 0; sinkIndex < drawPrepProgram.sinks.length; sinkIndex++) {
+    sinkInstanceCounts.push(resolveSinkInstanceCount(program, state, sinkIndex));
+  }
+
+  let firstInstance = 0;
   let recordWriteIndex = 0;
   for (const sinkIndex of orderedSinkIndicesByDrawMode(drawPrepProgram.sinks)) {
     const sink = drawPrepProgram.sinks[sinkIndex];
@@ -138,19 +267,21 @@ export function packDrawPrepSinkTableV1(
       throw new Error(`DrawPrepSinkTablePacker: missing sink at index ${sinkIndex}`);
     }
     const renderStep = requireRenderStep(program, sink.renderStepIndex);
+    const instanceCount = sinkInstanceCounts[sinkIndex] ?? 0;
+    const shapeHandleWordOffset = resolveSlotShapeHandle(program, state, renderStep, instanceCount);
+    assertShapeHandleInBankWindow(state, shapeHandleWordOffset, instanceCount);
+    const command = resolveDrawCommandFields(state, sink, shapeHandleWordOffset);
+    const packedFirstInstance = assertFiniteUint32(firstInstance, `firstInstance sinkIndex=${sink.sinkIndex}`);
 
-    // [RECOVER-05] Only drawMode is written to the record. All dynamic fields
-    // (count, instanceCount, first, baseVertex, firstInstance, shapeWordOffset,
-    // materialId) are zero — GPU draw-prep compute owns their derivation.
     writeDrawPrepSinkRecord(words, recordWriteIndex, {
       drawMode: drawModeToCode(sink.drawMode),
-      count: 0,
-      instanceCount: 0,
-      first: 0,
-      baseVertex: 0,
-      firstInstance: 0,
-      shapeWordOffset: 0,
-      materialId: 0,
+      count: command.count,
+      instanceCount,
+      first: command.first,
+      baseVertex: command.baseVertex,
+      firstInstance: packedFirstInstance,
+      shapeWordOffset: shapeHandleWordOffset,
+      materialId: command.materialId,
     });
 
     // --- Static descriptor: arena addresses for render inputs ---
@@ -228,6 +359,10 @@ export function packDrawPrepSinkTableV1(
         ? assertFiniteUint32(sink.staticInstanceCount ?? 0, `staticInstanceCount sinkIndex=${sink.sinkIndex}`)
         : 0;
 
+    firstInstance = assertFiniteUint32(
+      packedFirstInstance + instanceCount,
+      'firstInstancePrefixSum',
+    );
     recordWriteIndex += 1;
   }
 
