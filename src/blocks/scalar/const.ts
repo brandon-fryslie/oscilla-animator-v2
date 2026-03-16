@@ -39,6 +39,7 @@ export function register(): void {
     description: 'Outputs a constant value (type inferred from target)',
     form: 'primitive',
     capability: 'pure',
+    gpuVerified: true,
     payload: {
       allowedPayloads: {
         out: ALL_CONCRETE_PAYLOADS,
