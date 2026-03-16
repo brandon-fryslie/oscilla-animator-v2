@@ -43,7 +43,7 @@ let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null 
 // [RECOVER-11] Atlas upload binding.
 let uploadAtlasDataImpl: RendererWasmModule['upload_atlas_data'] | null = null;
 
-export async function initRustRendererWasm(): Promise<void> {
+export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Promise<void> {
   if (initialized) {
     return;
   }
@@ -57,8 +57,9 @@ export async function initRustRendererWasm(): Promise<void> {
       const rawModule = await import('./pkg/oscilla_rust_renderer.js');
       const wasmModule = rawModule as RendererWasmModule;
       if (typeof wasmModule.default === 'function') {
-        const wasmUrl = new URL('./pkg/oscilla_rust_renderer_bg.wasm', import.meta.url);
-        await wasmModule.default({ module_or_path: wasmUrl });
+        // [LAW:one-source-of-truth] The page owns renderer wasm byte loading;
+        // worker bootstrap consumes only the transferred canonical bytes.
+        await wasmModule.default({ module_or_path: rendererWasmBytes });
       }
       if (typeof wasmModule.init_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing init_engine export');
