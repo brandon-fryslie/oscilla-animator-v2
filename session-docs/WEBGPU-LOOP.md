@@ -1,45 +1,34 @@
 Evaluator Note
 
-active_ticket: RECOVER-08
-evaluated_commit: d089721e0
+active_ticket: RECOVER-04
+evaluated_commit: 7dba3d8f2
 repo_base_for_next_run: HEAD
-verdict: accept-complete
-next_action: advance-to-next-ready-ticket
+verdict: revise
+next_action: revise-active-ticket
 
 do:
-- RECOVER-08 is the next ready leaf ticket: remove install-time CPU runtime execution.
-- Read the RECOVER-08 ticket body and `docs/WebGPU-Top-Priority-Next-Work-No-Exceptions/03-Install-Time-CPU-Runtime-Execution.md` before starting.
-- The install path (`runtime-hotpath-install.ts`) has already been cleaned of CPU materialization by RECOVER-07. RECOVER-08 asks whether the install path still evaluates any runtime expressions or dynamic counts for the canonical pipeline — inspect and verify.
-- Keep the accepted visible render baseline working.
-- Read this note before choosing or continuing any work.
+- Return to RECOVER-04. The visible Type 1 baseline is broken in current repo state, and RECOVER-04 is the earliest ticket that explicitly owns restoring visible rendering.
+- Use the existing canonical geometry/ownership work as the base; diagnose why the selected Type 1 slice no longer renders visibly on canvas.
+- Produce real runtime evidence of restored visible output before treating later tickets as complete again.
+- Keep the canonical path constraints from RECOVER-07 and RECOVER-08 intact while restoring visuals.
 
 avoid:
-- Do NOT advance to RECOVER-11 or any later ticket while RECOVER-08 is open.
-- Do NOT reintroduce `materializeValueExpr`, `allocShapeBankWords`, `writeShapeBankHeader`, or `resolveInstanceLaneCount` into the canonical install path.
-- Do NOT treat RECOVER-08 as a naming cleanup — the ticket requires removing actual runtime evaluation from install.
+- Do NOT treat RECOVER-07, RECOVER-08, RECOVER-09, or RECOVER-10 being closed as authority to move on while visuals are broken.
+- Do NOT advance to RECOVER-11 or any post-core work.
+- Do NOT accept structural/ownership-only proofs without visible runtime evidence.
+- Do NOT reintroduce worker CPU mesh realization as the active source for the selected slice.
 
 gates_passed:
-- typecheck: clean (0 errors)
-- build: clean (vite 6.4.1, built in 18.34s)
-- runtime tests: 474/474 passed (35 files)
-- DrawPrepSinkTablePacker tests: 5/5 passed (updated for compile-time shape word offset API)
-- shape-bank-canonical-header tests: 5/5 passed
-- shape-handle-control-point-slot tests: 3/3 passed
-- RECOVER-07 violation 1 (materializeValueExpr in install): FIXED — `runtime-hotpath-install.ts` no longer imports or calls `materializeValueExpr`
-- RECOVER-07 violation 2 (allocShapeBankWords/writeShapeBankHeader in install): FIXED — headers written directly into `Uint32Array` output buffer; no ShapeBankState mutation
-- RECOVER-07 violation 3 (resolveInstanceLaneCount in install): FIXED — `buildRuntimeHotpathInstallPlanes` takes only `CompiledProgramIR`, no `RuntimeState` dependency
-- ownership boundary: `buildCanonicalTopologyHeaders` is the single GPU-visible runtime stage for canonical shape-handle production (LAW:single-enforcer cited)
-- DrawPrepSinkTablePacker: updated to accept `ReadonlyMap<ValueSlot, number>` instead of arena `Float32Array` — no arena round-trip
-- RuntimeService.installRendererCanonicalAssets: no longer passes `RuntimeState` to install planes builder
-- no unrelated churn: doc changes are editorial corrections matching earlier RECOVER-11 reframe decision
+- backlog ownership restored: RECOVER-04 reopened as the earliest leaf ticket that owns the visible Type 1 baseline
+- milestone ownership restored: RECOVER-M1 reopened because its visible-render exit criteria no longer hold in current repo state
+- loop rule hardening already present: broken baseline may not be explained away as pre-existing
 
 gates_failed:
-- (none)
+- visible baseline: accepted Type 1 slice is not currently rendering visibly on canvas
+- tracker continuity: all RECOVER-01 through RECOVER-10 leaves were closed, leaving no active owner for restoring broken visuals until RECOVER-04 was reopened
+- advancement safety: post-core work must not proceed while the base visible slice is broken
 
 evidence:
-- `src/services/runtime-hotpath-install.ts`: complete rewrite — imports only `CompiledProgramIR`, `getProgramTopology`, `resolveArenaAddress`, `packDrawPrepSinkTableV1`, `ShapeBankHeaderWord` enums, and shape types. No imports from `ValueExprMaterializer`, `InstanceCountResolver`, `MaterializeScratch`, or `RuntimeState`.
-- `buildRuntimeHotpathInstallPlanes(program: CompiledProgramIR)`: signature takes only compiled program, no runtime state.
-- `buildCanonicalTopologyHeaders(program)`: derives topology from `getProgramTopology` + `runtimeAddressTable` — both compile-time artifacts. Writes headers directly into `Uint32Array` at deterministic offsets.
-- `packDrawPrepSinkTableV1(program, topology.shapeWordOffsetBySlot)`: receives compile-time shape word offsets directly, no arena read.
-- `evaluateShapeRefHandle` in `ValueExprMaterializer.ts` still exists but is NOT reachable from the canonical install/render path — only callable through `materializeValueExpr` which is used only by `ValueExprEventEvaluator` (secondary path) and tests.
-- `RuntimeService.installRendererCanonicalAssets`: calls `buildRuntimeHotpathInstallPlanes(program)` without `state` parameter; `staticBoundary: 0` (all headers from compile-time install stage).
+- open owner restored in tracker: `lit-b90e7a20-c67c0fdf` (RECOVER-04) and `lit-b90e7a20-62263ac6` (RECOVER-M1)
+- prior note pointed to RECOVER-08 advance even though broken visuals remained unresolved
+- current backlog otherwise exposed only post-core RECOVER-11 as open leaf work, which is incorrect while the visible baseline is broken
