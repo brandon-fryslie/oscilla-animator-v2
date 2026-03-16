@@ -59,6 +59,7 @@ If these disagree on scope, owner, boundary, or verification target, block inste
    - touched files
    - invariant/ownership boundary
    - validation plan
+   - exact explanation of how the touched files create or modify the live path required by the ticket
 3. Move the ticket to `in_progress` if tracker writes work.
 
 ## Implementation
@@ -72,6 +73,7 @@ If these disagree on scope, owner, boundary, or verification target, block inste
    - failed approach
    - failure evidence
    - next hypothesis
+7. For seam or cutover tickets, helper-only or classifier-only code is insufficient unless the ticket explicitly says that helper is the deliverable.
 
 ## Verification
 
