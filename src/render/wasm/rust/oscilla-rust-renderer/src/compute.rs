@@ -1,6 +1,6 @@
 use crate::memory::GpuMemoryArena;
 use naga::valid::{Capabilities, ValidationFlags, Validator};
-use naga::{AddressSpace, Block, Module, Statement, TypeInner};
+use naga::Module;
 
 // [RECOVER-06] Draw-prep compute derives indirect args from canonical GPU state.
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
@@ -219,102 +219,6 @@ impl ComputeDispatcher {
             .max(1)
     }
 
-    fn validate_supported_type_subset(
-        module: &Module,
-        pass_id: &str,
-        ty: naga::Handle<naga::Type>,
-    ) -> Result<(), String> {
-        match &module.types[ty].inner {
-            TypeInner::Scalar(_)
-            | TypeInner::Vector { .. }
-            | TypeInner::Matrix { .. }
-            | TypeInner::Atomic(_) => Ok(()),
-            TypeInner::Array { base, .. } => {
-                Self::validate_supported_type_subset(module, pass_id, *base)
-            }
-            TypeInner::Struct { members, .. } => {
-                for member in members {
-                    Self::validate_supported_type_subset(module, pass_id, member.ty)?;
-                }
-                Ok(())
-            }
-            TypeInner::Pointer { .. }
-            | TypeInner::ValuePointer { .. }
-            | TypeInner::Image { .. }
-            | TypeInner::Sampler { .. }
-            | TypeInner::BindingArray { .. }
-            | TypeInner::AccelerationStructure
-            | TypeInner::RayQuery => Err(format!(
-                "pass \"{}\" uses unsupported resource type {:?}",
-                pass_id, module.types[ty].inner
-            )),
-        }
-    }
-
-    fn validate_supported_program_interface(pass_id: &str, module: &Module) -> Result<(), String> {
-        for (_, global) in module.global_variables.iter() {
-            if global.space == AddressSpace::WorkGroup {
-                return Err(format!(
-                    "pass \"{}\" uses unsupported workgroup memory",
-                    pass_id
-                ));
-            }
-            if global.binding.is_none() {
-                continue;
-            }
-            match global.space {
-                AddressSpace::Uniform | AddressSpace::Storage { .. } => {
-                    Self::validate_supported_type_subset(module, pass_id, global.ty)?;
-                }
-                _ => {
-                    return Err(format!(
-                        "pass \"{}\" uses unsupported bound resource address space {:?}",
-                        pass_id, global.space
-                    ));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_supported_statement_subset(pass_id: &str, block: &Block) -> Result<(), String> {
-        for statement in block {
-            match statement {
-                Statement::Block(inner) => {
-                    Self::validate_supported_statement_subset(pass_id, inner)?
-                }
-                Statement::If { accept, reject, .. } => {
-                    Self::validate_supported_statement_subset(pass_id, accept)?;
-                    Self::validate_supported_statement_subset(pass_id, reject)?;
-                }
-                Statement::Switch { cases, .. } => {
-                    for case in cases {
-                        Self::validate_supported_statement_subset(pass_id, &case.body)?;
-                    }
-                }
-                Statement::Loop { .. } => {
-                    return Err(format!(
-                        "pass \"{}\" uses unsupported loop control flow",
-                        pass_id
-                    ));
-                }
-                Statement::Barrier(_)
-                | Statement::Atomic { .. }
-                | Statement::ImageStore { .. }
-                | Statement::ImageAtomic { .. }
-                | Statement::WorkGroupUniformLoad { .. }
-                | Statement::RayQuery { .. } => {
-                    return Err(format!(
-                        "pass \"{}\" uses unsupported compute-side synchronization or image operations",
-                        pass_id
-                    ));
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
     fn find_compute_entry_point(
         pass_id: &str,
         module: &Module,
@@ -377,13 +281,6 @@ impl ComputeDispatcher {
             spec.entry_point.as_str(),
         )?;
         Self::validate_workgroup_size(limits, spec.pass_id.as_str(), workgroup_size)?;
-        Self::validate_supported_program_interface(spec.pass_id.as_str(), &module)?;
-        for entry in &module.entry_points {
-            Self::validate_supported_statement_subset(spec.pass_id.as_str(), &entry.function.body)?;
-        }
-        for (_, function) in module.functions.iter() {
-            Self::validate_supported_statement_subset(spec.pass_id.as_str(), &function.body)?;
-        }
         let workgroup_count =
             Self::simulation_dispatch_count_for_workgroup_size(particle_count, workgroup_size)
                 .max(1);
@@ -853,22 +750,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_compute_program_contract_rejects_workgroup_memory() {
-        let result = ComputeDispatcher::validate_compute_program_contract(
-            &wgpu::Limits::default(),
-            1_024,
-            &CompilerComputePassSpec {
-                pass_id: "simulation".to_string(),
-                entry_point: "compute_main".to_string(),
-                wgsl: "@group(0) @binding(0) var<storage, read> input_words: array<u32>;\nvar<workgroup> scratch: array<u32, 64>;\n@compute @workgroup_size(64) fn compute_main() { let _value = input_words[0]; scratch[0] = 1u; }".to_string(),
-            },
-        );
-        assert!(result
-            .err()
-            .is_some_and(|message| message.contains("unsupported workgroup memory")));
-    }
-
-    #[test]
     fn dispatch_count_uses_x_dimension_only() {
         let count = ComputeDispatcher::simulation_dispatch_count_for_workgroup_size(
             65_536,
@@ -892,21 +773,5 @@ mod tests {
         assert!(result
             .err()
             .is_some_and(|message| message.contains("total workgroup invocations")));
-    }
-
-    #[test]
-    fn validate_compute_program_contract_rejects_loop_control_flow() {
-        let result = ComputeDispatcher::validate_compute_program_contract(
-            &wgpu::Limits::default(),
-            1_024,
-            &CompilerComputePassSpec {
-                pass_id: "simulation".to_string(),
-                entry_point: "compute_main".to_string(),
-                wgsl: "@group(0) @binding(0) var<storage, read_write> words: array<u32>;\n@compute @workgroup_size(64) fn compute_main() { loop { words[0] = 1u; break; } }".to_string(),
-            },
-        );
-        assert!(result
-            .err()
-            .is_some_and(|message| message.contains("unsupported loop control flow")));
     }
 }
