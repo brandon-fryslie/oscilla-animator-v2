@@ -1,40 +1,42 @@
 Evaluator Note
 
 active_ticket: RECOVER-03 (lit-b90e7a20-2f15cb35)
-evaluated_commit: 81487586e
-repo_base_for_next_run: 81487586e (keep as base — classification seam is good)
-verdict: revise
-next_action: revise-active-ticket
+evaluated_commit: f3e58bcc0
+repo_base_for_next_run: f3e58bcc0
+verdict: accept-good-base
+next_action: advance-to-next-ready-ticket
 
 do:
-- Wire the geometry route classification into the ACTIVE render path in `RustWasmWebGPURenderer.ts` or the Rust worker dispatch
-- The active renderer copies ShapeBank data to SharedArrayBuffer for the Rust worker; the seam must be reachable from that path
-- Add at least one integration point where the live render dispatch queries the geometry route for Type 1 Rigid and can branch between `shapeBankDirect` and `legacy`
-- Keep the existing `ShapeBankGeometrySeam.ts` classifier; it is good support code
-- The new branch point does not need to change behavior yet; both sides may still delegate to the old path, but it must be a REAL code path in the live renderer
+- Begin RECOVER-04: cut Type 1 Rigid over to direct ShapeBank topology consumption
+- Implement `handleDirectGeometryRoute` in `RustWasmWebGPURenderer.ts` with real vertex pulling from the topology storage buffer
+- Add a filtering mechanism so Type 1 Rigid shapes dispatched through the direct path are NOT also processed through the old SharedArrayBuffer → worker CPU mesh path (the current dispatch is additive — both paths run for direct shapes)
+- Produce visible rendering evidence: one shape class must render on canvas through the new path
+- Delete or dead-end worker CPU mesh realization for Type 1 Rigid
 
 avoid:
-- Do not delete the old CPU mesh path; that is RECOVER-04
-- Do not add a second standalone manager or classifier that is also disconnected from the active renderer
-- Do not confuse `WebGPUShapeBankManager` with the active render path; the live path is `RustWasmWebGPURenderer` plus the Rust worker
-- Do not broaden into draw-prep ownership or GPU indirect-arg derivation
-- Do not stop at classifier-only helpers, TS-only route metadata, test-only changes, or any design that leaves the active renderer integration boundary untouched
+- Do not restructure the seam or classifier — `dispatchGeometryRoutes` and the callback pattern are correct
+- Do not broaden to all shape classes; Type 1 Rigid only
+- Do not rewrite draw-prep ownership (RECOVER-05/06)
+- Do not remove install-time CPU execution (RECOVER-07/08)
+- Do not keep both paths producing visible output for the same shape (no dual rendering)
 
 gates_passed:
-- `pnpm typecheck` clean
-- `ShapeBankGeometrySeam.test.ts` 13/13 pass
-- source/ticket alignment: commit references RECOVER-03 and uses Type 1 Rigid from RECOVER-02
-- classification design: `GeometryRoute` is a correct discriminated union and reads only canonical header fields
+- source/ticket alignment: commit references RECOVER-03, uses Type 1 Rigid from RECOVER-02
+- design/verdict alignment: follows previous evaluator guidance to wire dispatch into active render path
+- live-path alignment: `classifyAndDispatchGeometryRoutes()` runs in `render()` every frame at line 846, between ShapeBank sync and sink table sync
+- verification quality: 17/17 tests pass, covering classification, dispatch, mixed banks, empty sources
+- static verification: `pnpm typecheck` clean, `pnpm build` clean
+- ownership/spec alignment: classification reads only canonical ShapeBank header fields, no dual authority
+- no unrelated churn: changes confined to ShapeBankGeometrySeam.ts, RustWasmWebGPURenderer.ts, and test file
 
 gates_failed:
-- live-path alignment: the proposed seam was only a TypeScript-side classifier and did not create a real render-time routing boundary in the active renderer integration
-- active renderer integration: `WebGPUShapeBankManager` is never instantiated; `RustWasmWebGPURenderer` does not consume geometry routes; no dispatch path branches on the route
-- stop condition violated: RECOVER-03 is not complete if the change only adds classification, metadata, helpers, or tests without altering the active renderer integration boundary
-- verification quality: tests prove classifier behavior in isolation but do not prove the seam is reachable from the active render path
+- (none)
 
 evidence:
-- `new WebGPUShapeBankManager` has zero call sites in `src/`
-- `resolveGeometryRoute` and `getGeometryRoutes` have no consumers outside the newly added classifier files
-- `RustWasmWebGPURenderer.ts` imports only the `RenderShapeBankSource` type from `WebGPUShapeBankManager.ts`; it does not use a manager instance or route APIs
-- The active render path copies raw ShapeBank data to SharedArrayBuffer for the Rust worker with no route classification in that path
-- RECOVER-03 now explicitly requires a seam in the live renderer integration and says helper-only or classifier-only changes are insufficient
+- `render()` at line 836-855 calls `classifyAndDispatchGeometryRoutes(input.shapeBank)` every frame
+- `handleDirectGeometryRoute` is a private method on `WebGPURenderer` called per-shape for Type 1 Rigid
+- `dispatchGeometryRoutes` in ShapeBankGeometrySeam.ts couples classification and dispatch in one function
+- `getLatestGeometryRoutes()` and `getDirectRouteDispatchCount()` provide runtime observability
+- dispatch is additive (both direct handler AND old path run for Type 1 Rigid) — RECOVER-04 must add filtering
+- no consumers of observability methods yet (expected — they're for RECOVER-04 and debug)
+- per-frame Map allocation in classify is acceptable for current shape counts; optimize in RECOVER-04 if needed
