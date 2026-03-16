@@ -10,6 +10,7 @@ import {
   classifyAllGeometryRoutes,
   countDirectRoutes,
   hasDirectRoutes,
+  dispatchGeometryRoutes,
   type GeometryRoute,
   type ShapeBankDirectGeometry,
 } from '../ShapeBankGeometrySeam';
@@ -265,5 +266,125 @@ describe('route utility functions', () => {
 
   it('hasDirectRoutes returns false for empty map', () => {
     expect(hasDirectRoutes(new Map())).toBe(false);
+  });
+});
+
+describe('dispatchGeometryRoutes', () => {
+  it('dispatches shapeBankDirect routes via callback', () => {
+    const { source } = createTestShapeBankSource(2, [
+      {
+        handle: 0,
+        header: createShapeBankHeaderV1({
+          kind: ShapeClass.Type1Rigid,
+          topologyMode: TopologyMode.Path,
+          vertexCount: 3,
+          paramBlockOffset: 48,
+          paramBlockWords: 6,
+        }),
+      },
+      {
+        handle: SHAPE_BANK_HEADER_WORDS,
+        header: createShapeBankHeaderV1({
+          kind: ShapeClass.Type1Rigid,
+          topologyMode: TopologyMode.NonPath,
+          vertexCount: 5,
+          paramBlockOffset: 80,
+          paramBlockWords: 10,
+        }),
+      },
+    ]);
+
+    const dispatched: ShapeBankDirectGeometry[] = [];
+    const result = dispatchGeometryRoutes(source, (geo) => dispatched.push(geo));
+
+    expect(dispatched.length).toBe(2);
+    expect(result.directDispatchCount).toBe(2);
+    expect(result.routes.size).toBe(2);
+    expect(dispatched[0]!.vertexCount).toBe(3);
+    expect(dispatched[1]!.vertexCount).toBe(5);
+  });
+
+  it('does not dispatch legacy routes via callback', () => {
+    const { source } = createTestShapeBankSource(2, [
+      {
+        handle: 0,
+        header: createShapeBankHeaderV1({
+          kind: 99 as ShapeClass,
+          topologyMode: TopologyMode.Path,
+          vertexCount: 3,
+        }),
+      },
+      {
+        handle: SHAPE_BANK_HEADER_WORDS,
+        header: createShapeBankHeaderV1({
+          kind: 99 as ShapeClass,
+          topologyMode: TopologyMode.NonPath,
+          vertexCount: 5,
+        }),
+      },
+    ]);
+
+    const dispatched: ShapeBankDirectGeometry[] = [];
+    const result = dispatchGeometryRoutes(source, (geo) => dispatched.push(geo));
+
+    expect(dispatched.length).toBe(0);
+    expect(result.directDispatchCount).toBe(0);
+    expect(result.routes.size).toBe(2);
+  });
+
+  it('dispatches only Type1Rigid in mixed bank', () => {
+    const { source } = createTestShapeBankSource(3, [
+      {
+        handle: 0,
+        header: createShapeBankHeaderV1({
+          kind: ShapeClass.Type1Rigid,
+          topologyMode: TopologyMode.Path,
+          vertexCount: 3,
+        }),
+      },
+      {
+        handle: SHAPE_BANK_HEADER_WORDS,
+        header: createShapeBankHeaderV1({
+          kind: 99 as ShapeClass,
+          topologyMode: TopologyMode.NonPath,
+          vertexCount: 5,
+        }),
+      },
+      {
+        handle: SHAPE_BANK_HEADER_WORDS * 2,
+        header: createShapeBankHeaderV1({
+          kind: ShapeClass.Type1Rigid,
+          topologyMode: TopologyMode.Path,
+          vertexCount: 6,
+        }),
+      },
+    ]);
+
+    const dispatched: ShapeBankDirectGeometry[] = [];
+    const result = dispatchGeometryRoutes(source, (geo) => dispatched.push(geo));
+
+    expect(dispatched.length).toBe(2);
+    expect(result.directDispatchCount).toBe(2);
+    expect(result.routes.size).toBe(3);
+    // All dispatched shapes are Type1Rigid
+    for (const geo of dispatched) {
+      expect(geo.shapeClass).toBe(ShapeClass.Type1Rigid);
+    }
+  });
+
+  it('returns empty result for empty source', () => {
+    const source: RenderShapeBankSource = {
+      data: new Uint32Array(0),
+      volatilePtr: 0,
+      staticBoundary: 0,
+      topologyIdByHandle: new Uint32Array(0),
+    };
+
+    const dispatched: ShapeBankDirectGeometry[] = [];
+    const result = dispatchGeometryRoutes(source, (geo) => dispatched.push(geo));
+
+    expect(dispatched.length).toBe(0);
+    expect(result.directDispatchCount).toBe(0);
+    expect(result.routes.size).toBe(0);
   });
 });
