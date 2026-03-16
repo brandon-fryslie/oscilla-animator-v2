@@ -12,10 +12,13 @@ import {
   resumeRustRendererEngine,
   resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
+  takeRustRendererReadbackSnapshot,
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
 import type {
   RustRendererEngineError,
+  RustRendererIndirectArgsRecord,
+  RustRendererReadbackSnapshot,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
 } from './worker-protocol';
@@ -170,6 +173,19 @@ function startRuntimePolling(): void {
         `Rust worker runtime poll failure: ${toErrorMessage(error)}`,
       );
     }
+    // [RECOVER-10] [LAW:single-enforcer] Readback snapshot polling shares the
+    // same cadence as telemetry; structured data replaces console-only previews.
+    try {
+      const rawSnapshot = takeRustRendererReadbackSnapshot();
+      if (rawSnapshot != null) {
+        const snapshot = parseReadbackSnapshot(rawSnapshot);
+        if (snapshot !== null) {
+          postWorkerMessage(snapshot);
+        }
+      }
+    } catch {
+      // Readback failures are non-fatal; the next poll will retry.
+    }
   }, POLL_INTERVAL_MS);
 }
 
@@ -201,6 +217,43 @@ function publishRuntimeSchedulerPacket(
       postDeviceLost(event.code, event.message);
     }
   }
+}
+
+// [RECOVER-10] Parse raw JS readback snapshot from Rust into typed message.
+function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const candidate = raw as Record<string, unknown>;
+  if (typeof candidate.frameCount !== 'number' || typeof candidate.capturedAtMs !== 'number') {
+    return null;
+  }
+  const rawArgs = candidate.indirectArgs;
+  const indirectArgs: RustRendererIndirectArgsRecord[] = [];
+  if (Array.isArray(rawArgs)) {
+    for (const entry of rawArgs) {
+      if (entry && typeof entry === 'object') {
+        const r = entry as Record<string, unknown>;
+        indirectArgs.push({
+          indexCount: typeof r.indexCount === 'number' ? r.indexCount : 0,
+          instanceCount: typeof r.instanceCount === 'number' ? r.instanceCount : 0,
+          firstIndex: typeof r.firstIndex === 'number' ? r.firstIndex : 0,
+          baseVertex: typeof r.baseVertex === 'number' ? r.baseVertex : 0,
+          firstInstance: typeof r.firstInstance === 'number' ? r.firstInstance : 0,
+        });
+      }
+    }
+  }
+  const instanceProbeValues = candidate.instanceProbeValues instanceof Float32Array
+    ? candidate.instanceProbeValues
+    : new Float32Array(0);
+  return {
+    type: 'READBACK_SNAPSHOT',
+    frameCount: candidate.frameCount as number,
+    capturedAtMs: candidate.capturedAtMs as number,
+    indirectArgs,
+    instanceProbeValues,
+  };
 }
 
 function withFatalBoundary(code: string, prefix: string, operation: () => void): void {

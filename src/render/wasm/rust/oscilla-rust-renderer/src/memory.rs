@@ -97,6 +97,9 @@ pub struct GpuMemoryArena {
     // [RECOVER-07] Bind groups for vertex-stage arena reads (one per ping-pong buffer).
     arena_render_bind_groups: [wgpu::BindGroup; 2],
     staging_buffers: [wgpu::Buffer; 2],
+    // [RECOVER-10] Dedicated staging buffer for indirect-args readback so
+    // instance staging and indirect-args staging can be in-flight independently.
+    indirect_staging_buffer: wgpu::Buffer,
     ping_pong_index: usize,
 }
 
@@ -313,6 +316,17 @@ impl GpuMemoryArena {
                 mapped_at_creation: false,
             }),
         ];
+        // [RECOVER-10] [LAW:single-enforcer] Dedicated indirect-args readback
+        // staging buffer so instance and indirect readback are independent.
+        let indirect_staging_bytes =
+            (indirect_capacity_words.max(INDIRECT_WORDS_PER_RECORD) * std::mem::size_of::<u32>())
+                as u64;
+        let indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Debug.IndirectStaging"),
+            size: indirect_staging_bytes.max(16),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         // [LAW:single-enforcer] Compiler simulation bind groups are constructed
         // once at arena creation from the canonical compiler layout.
         let compiler_simulation_bind_groups = [
@@ -419,6 +433,7 @@ impl GpuMemoryArena {
             compiler_simulation_bind_groups,
             arena_render_bind_groups,
             staging_buffers,
+            indirect_staging_buffer,
             ping_pong_index: 0,
         }
     }
@@ -489,6 +504,12 @@ impl GpuMemoryArena {
 
     pub fn debug_staging_buffer(&self) -> &wgpu::Buffer {
         &self.staging_buffers[self.ping_pong_index & 1]
+    }
+
+    // [RECOVER-10] [LAW:single-enforcer] One canonical staging buffer for
+    // indirect-args readback, independent of instance-payload staging.
+    pub fn indirect_staging_buffer(&self) -> &wgpu::Buffer {
+        &self.indirect_staging_buffer
     }
 
     pub fn swap_ping_pong(&mut self) {
@@ -641,6 +662,15 @@ impl GpuMemoryArena {
             next_capacity = next_capacity.saturating_mul(2);
         }
         self.indirect_buffer = Self::create_indirect_buffer(device, next_capacity);
+        // [RECOVER-10] Resize indirect staging buffer to match new capacity.
+        let staging_bytes =
+            (next_capacity * std::mem::size_of::<u32>()) as u64;
+        self.indirect_staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Debug.IndirectStaging"),
+            size: staging_bytes.max(16),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         self.indirect_capacity_words = next_capacity;
         true
     }

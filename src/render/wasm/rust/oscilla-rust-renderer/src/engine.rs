@@ -23,8 +23,9 @@ use crate::render::{
 };
 use crate::scheduler::WorkerScheduler;
 use crate::telemetry::{
-    build_scheduler_telemetry as build_scheduler_telemetry_packet, SchedulerState,
-    SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs, WorkerObservabilityPacket,
+    build_scheduler_telemetry as build_scheduler_telemetry_packet, IndirectArgsRecord,
+    ReadbackSnapshot, SchedulerState, SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs,
+    WorkerObservabilityPacket,
 };
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -65,6 +66,12 @@ pub struct Engine {
     frame_count: u64,
     debug_readback_interval_frames: u64,
     debug_readback_in_flight: Arc<AtomicBool>,
+    // [RECOVER-10] Separate in-flight gate for indirect-args readback so both
+    // staging buffers can overlap async map operations independently.
+    indirect_readback_in_flight: Arc<AtomicBool>,
+    // [RECOVER-10] [LAW:single-enforcer] Accumulated readback snapshot polled
+    // by the worker via take_readback_snapshot, mirroring scheduler telemetry.
+    pending_readback: Arc<std::sync::Mutex<Option<ReadbackSnapshot>>>,
     max_particles: u32,
     max_shapes: u32,
     draw_regions: IndirectRegionPlan,
@@ -326,6 +333,8 @@ impl Engine {
             frame_count: 0,
             debug_readback_interval_frames,
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
+            indirect_readback_in_flight: Arc::new(AtomicBool::new(false)),
+            pending_readback: Arc::new(std::sync::Mutex::new(None)),
             max_particles: config.max_particles as u32,
             max_shapes: config.max_shapes as u32,
             draw_regions: IndirectRegionPlan::default(),
@@ -541,7 +550,8 @@ impl Engine {
                 let is_debug_tick = self.debug_readback_interval_frames > 0
                     && self.frame_count % self.debug_readback_interval_frames == 0;
                 if is_debug_tick {
-                    let copy_bytes = self
+                    // [RECOVER-10] Copy instance buffer to instance staging.
+                    let instance_copy_bytes = self
                         .arena
                         .debug_staging_buffer()
                         .size()
@@ -551,7 +561,20 @@ impl Engine {
                         0,
                         self.arena.debug_staging_buffer(),
                         0,
-                        copy_bytes,
+                        instance_copy_bytes,
+                    );
+                    // [RECOVER-10] Copy indirect args buffer to indirect staging.
+                    let indirect_copy_bytes = self
+                        .arena
+                        .indirect_staging_buffer()
+                        .size()
+                        .min(self.arena.indirect_buffer.size());
+                    encoder.copy_buffer_to_buffer(
+                        &self.arena.indirect_buffer,
+                        0,
+                        self.arena.indirect_staging_buffer(),
+                        0,
+                        indirect_copy_bytes,
                     );
                 }
 
@@ -916,49 +939,151 @@ impl Engine {
         self.arena.publish_frame_header(&self.queue, header);
     }
 
+    // [RECOVER-10] [LAW:single-enforcer] Canonical structured readback replaces
+    // the ad hoc console-only instance preview. Both instance probe and indirect
+    // args are read back through this one boundary.
     fn trigger_debug_readback(&self) {
-        if self
+        let frame_count = self.frame_count;
+        let captured_at_ms = worker_monotonic_now_ms();
+        let indexed_record_count = self.draw_regions.indexed_record_count as usize;
+        let non_indexed_record_count = self.draw_regions.non_indexed_record_count as usize;
+        let pending_readback = self.pending_readback.clone();
+
+        // --- Instance probe readback ---
+        let instance_gate_acquired = self
             .debug_readback_in_flight
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return;
-        }
+            .is_ok();
 
-        let readback_gate = self.debug_readback_in_flight.clone();
-        let slice = self.arena.debug_staging_buffer().slice(..);
-        let staging_buffer_for_callback = self.arena.debug_staging_buffer().clone();
-        let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
-            if result.is_ok() {
-                let mapped = staging_buffer_for_callback.slice(..).get_mapped_range();
-                let preview_f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
-                if preview_f32_count > 0 {
-                    let mut preview = String::new();
-                    for index in 0..preview_f32_count {
-                        if index > 0 {
-                            preview.push_str(", ");
-                        }
+        // [LAW:dataflow-not-control-flow] Both readbacks are initiated unconditionally;
+        // variability is in whether the in-flight gate was acquired.
+        let instance_values: Arc<std::sync::Mutex<Vec<f32>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        if instance_gate_acquired {
+            let readback_gate = self.debug_readback_in_flight.clone();
+            let instance_values_for_callback = instance_values.clone();
+            let instance_staging_for_callback = self.arena.debug_staging_buffer().clone();
+            let slice = self.arena.debug_staging_buffer().slice(..);
+            let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
+                if result.is_ok() {
+                    let mapped = instance_staging_for_callback.slice(..).get_mapped_range();
+                    let f32_count = (mapped.len() / std::mem::size_of::<f32>()).min(24);
+                    let mut values = Vec::with_capacity(f32_count);
+                    for index in 0..f32_count {
                         let byte_index = index * std::mem::size_of::<f32>();
-                        let value = f32::from_le_bytes([
+                        values.push(f32::from_le_bytes([
                             mapped[byte_index],
                             mapped[byte_index + 1],
                             mapped[byte_index + 2],
                             mapped[byte_index + 3],
-                        ]);
-                        preview.push_str(&format!("{value:.3}"));
+                        ]));
                     }
-                    // [LAW:single-enforcer] exception: temporary observability log
-                    // for instance payload verification during migration.
-                    console::info_1(&JsValue::from_str(&format!(
-                        "[instancePreview] {}",
-                        preview
-                    )));
+                    if let Ok(mut slot) = instance_values_for_callback.lock() {
+                        *slot = values;
+                    }
+                    drop(mapped);
                 }
-                drop(mapped);
-            }
-            staging_buffer_for_callback.unmap();
-            readback_gate.store(false, Ordering::SeqCst);
-        });
+                instance_staging_for_callback.unmap();
+                readback_gate.store(false, Ordering::SeqCst);
+            });
+        }
+
+        // --- Indirect args readback ---
+        let indirect_gate_acquired = self
+            .indirect_readback_in_flight
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok();
+
+        if indirect_gate_acquired {
+            let indirect_gate = self.indirect_readback_in_flight.clone();
+            let indirect_staging_for_callback = self.arena.indirect_staging_buffer().clone();
+            let slice = self.arena.indirect_staging_buffer().slice(..);
+            let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
+                let mut records = Vec::new();
+                if result.is_ok() {
+                    let mapped = indirect_staging_for_callback.slice(..).get_mapped_range();
+                    let u32_count = mapped.len() / std::mem::size_of::<u32>();
+                    // Decode indexed records (5 words each)
+                    for i in 0..indexed_record_count {
+                        let base = i * INDIRECT_INDEXED_STRIDE_WORDS;
+                        if base + 4 >= u32_count {
+                            break;
+                        }
+                        let word = |offset: usize| -> u32 {
+                            let byte_idx = (base + offset) * std::mem::size_of::<u32>();
+                            u32::from_le_bytes([
+                                mapped[byte_idx],
+                                mapped[byte_idx + 1],
+                                mapped[byte_idx + 2],
+                                mapped[byte_idx + 3],
+                            ])
+                        };
+                        records.push(IndirectArgsRecord {
+                            index_count: word(0),
+                            instance_count: word(1),
+                            first_index: word(2),
+                            base_vertex: word(3) as i32,
+                            first_instance: word(4),
+                        });
+                    }
+                    // Decode non-indexed records (4 words each) — they start
+                    // after the indexed region in the indirect buffer.
+                    let non_indexed_base_words =
+                        indexed_record_count * INDIRECT_INDEXED_STRIDE_WORDS;
+                    for i in 0..non_indexed_record_count {
+                        let base = non_indexed_base_words + i * INDIRECT_NON_INDEXED_STRIDE_WORDS;
+                        if base + 3 >= u32_count {
+                            break;
+                        }
+                        let word = |offset: usize| -> u32 {
+                            let byte_idx = (base + offset) * std::mem::size_of::<u32>();
+                            u32::from_le_bytes([
+                                mapped[byte_idx],
+                                mapped[byte_idx + 1],
+                                mapped[byte_idx + 2],
+                                mapped[byte_idx + 3],
+                            ])
+                        };
+                        records.push(IndirectArgsRecord {
+                            index_count: 0,
+                            instance_count: word(1),
+                            first_index: 0,
+                            base_vertex: 0,
+                            first_instance: word(3),
+                        });
+                    }
+                    drop(mapped);
+                }
+                indirect_staging_for_callback.unmap();
+                indirect_gate.store(false, Ordering::SeqCst);
+
+                // Assemble snapshot and store for polling.
+                let instance_probe_values = instance_values
+                    .lock()
+                    .ok()
+                    .map(|v| v.clone())
+                    .unwrap_or_default();
+                let snapshot = ReadbackSnapshot {
+                    frame_count,
+                    captured_at_ms,
+                    indirect_args: records,
+                    instance_probe_values,
+                };
+                if let Ok(mut slot) = pending_readback.lock() {
+                    *slot = Some(snapshot);
+                }
+            });
+        }
+    }
+
+    // [RECOVER-10] [LAW:single-enforcer] One polling boundary for readback
+    // snapshots, mirroring the take_frame_pacing_packet pattern.
+    pub fn take_readback_snapshot(&self) -> Option<ReadbackSnapshot> {
+        self.pending_readback
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take())
     }
 
     pub fn take_frame_pacing_packet(&mut self) -> Option<WorkerObservabilityPacket> {
