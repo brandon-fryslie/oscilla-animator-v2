@@ -186,6 +186,9 @@ function evaluateShapeRefHandle(
       // [LAW:one-source-of-truth] exception: the legacy indexed draw path
       // still consumes compatibility indexCount from ShapeHeaderV1 until
       // GPU draw-prep/topology lookup owns rendered-element derivation.
+      // Review note: this does NOT make indexCount canonical. It is an
+      // explicitly temporary compatibility write that exists only because the
+      // current draw path has not been fully cut over to spec ownership yet.
       indexCount,
       vertexCount,
       paramBlockOffset,

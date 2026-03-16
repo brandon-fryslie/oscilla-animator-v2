@@ -4,6 +4,8 @@
  * // [LAW:one-source-of-truth] ShapeHeaderV1 words 4-6 and 8 (`indexCount`,
  * // `firstIndex`, `baseVertex`, `firstVertex`) are realized geometry-output
  * // fields, not canonical declarative topology metadata.
+ * // The current JS-side `indexCount` write is a compatibility exception and
+ * // must not be mistaken for canonical ownership.
  *
  * // [LAW:behavior-not-structure] These tests assert the canonical contract
  * // (realized-offset words are zero after materialization), not implementation
