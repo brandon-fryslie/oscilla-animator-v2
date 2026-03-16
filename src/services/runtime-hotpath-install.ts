@@ -105,9 +105,10 @@ export function buildRuntimeHotpathInstallPlanes(
   nowMs: number,
 ): RuntimeHotpathInstallPlanes {
   materializeProgramForGpuInstall(program, state, nowMs);
-  // [RECOVER-05] Sink table is static metadata only — no runtime state reads.
-  // GPU draw-prep compute (RECOVER-06) derives per-frame command fields.
-  const packed = packDrawPrepSinkTableV1(program);
+  // [RECOVER-05] Descriptor expansion prepares GPU-owned draw-prep, but the
+  // active assembly path still consumes the packed record fields. The packer
+  // remains the single contract boundary for that hybrid state. // [LAW:single-enforcer]
+  const packed = packDrawPrepSinkTableV1(program, state);
   const sinkTableWords = packed
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))
     : null;

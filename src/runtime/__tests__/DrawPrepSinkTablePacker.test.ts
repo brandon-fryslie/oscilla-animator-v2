@@ -7,6 +7,12 @@ import { instanceId } from '../../core/ids';
 import { ShapeClass } from '../../shapes/types';
 import type { ArenaSlotDescriptor } from '../ArenaValueStore';
 import {
+  SHAPE_BANK_HEADER_WORDS,
+  createRuntimeState,
+  createShapeBankHeaderV1,
+  writeShapeBankHeader,
+} from '../RuntimeState';
+import {
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
   DRAW_PREP_SINK_TABLE_RECORD_WORDS,
   DRAW_PREP_SINK_DESCRIPTOR_WORDS,
@@ -140,11 +146,48 @@ function descriptorBaseWord(totalRecordCount: number, recordIndex: number): numb
     + recordIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
 }
 
-// [RECOVER-05] Tests verify static-only packer: no RuntimeState, no dynamic
-// command field computation. Record fields except drawMode are zero.
+function createPackerRuntimeState(
+  slotToArena: ReadonlyMap<ValueSlot, ArenaSlotDescriptor>,
+  shapes: ReadonlyArray<{
+    readonly slot: ValueSlot;
+    readonly handle: number;
+    readonly indexCount: number;
+    readonly materialClass: number;
+  }>,
+) {
+  const state = createRuntimeState(0, 0, 0, 256, 256, 0);
+  let liveShapeBankEnd = 0;
 
-describe('packDrawPrepSinkTableV1 static metadata only', () => {
-  it('writes drawMode per record and zeros dynamic fields', () => {
+  for (const shape of shapes) {
+    writeShapeBankHeader(
+      state.shapeBank.data,
+      shape.handle,
+      createShapeBankHeaderV1({
+        kind: ShapeClass.Type1Rigid,
+        indexCount: shape.indexCount,
+        materialClass: shape.materialClass,
+        vertexCount: shape.indexCount,
+      }),
+    );
+    const slotDescriptor = slotToArena.get(shape.slot);
+    if (!slotDescriptor) {
+      throw new Error(`missing slot descriptor for ${String(shape.slot)}`);
+    }
+    for (let lane = 0; lane < slotDescriptor.laneCount; lane++) {
+      state.arena[slotDescriptor.offset + lane] = shape.handle;
+    }
+    liveShapeBankEnd = Math.max(liveShapeBankEnd, shape.handle + SHAPE_BANK_HEADER_WORDS);
+  }
+
+  state.shapeBank.volatilePtr = liveShapeBankEnd;
+  return state;
+}
+
+// [LAW:behavior-not-structure] Tests verify the record fields and descriptor
+// metadata that the active assembly path actually consumes.
+
+describe('packDrawPrepSinkTableV1', () => {
+  it('writes the record fields the active assembly shader consumes', () => {
     const slotsA: TestSinkSlotSet = {
       shape: valueSlot(1),
       controlPoints: valueSlot(2),
@@ -172,9 +215,12 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
+    const state = createPackerRuntimeState(slotToArena, [
+      { slot: slotsA.shape, handle: 0, indexCount: 9, materialClass: 7 },
+      { slot: slotsB.shape, handle: SHAPE_BANK_HEADER_WORDS, indexCount: 12, materialClass: 11 },
+    ]);
 
-    // [RECOVER-05] No RuntimeState needed — packer reads only CompiledProgramIR
-    const packed = packDrawPrepSinkTableV1(program);
+    const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).not.toBeNull();
     const words = packed!.words;
 
@@ -182,16 +228,17 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.DrawMode)).toBe(0); // indexed
     expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.DrawMode)).toBe(0); // indexed
 
-    // Dynamic fields are zero — GPU draw-prep compute (RECOVER-06) will derive them
-    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.Count)).toBe(0);
-    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.InstanceCount)).toBe(0);
+    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.Count)).toBe(9);
+    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.InstanceCount)).toBe(2);
     expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.First)).toBe(0);
     expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.FirstInstance)).toBe(0);
     expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.ShapeWordOffset)).toBe(0);
-    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.MaterialId)).toBe(0);
-    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.Count)).toBe(0);
-    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.InstanceCount)).toBe(0);
-    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.FirstInstance)).toBe(0);
+    expect(readRecordU32(words, 0, DrawPrepSinkTableRecordWord.MaterialId)).toBe(7);
+    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.Count)).toBe(12);
+    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.InstanceCount)).toBe(3);
+    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.FirstInstance)).toBe(2);
+    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.ShapeWordOffset)).toBe(SHAPE_BANK_HEADER_WORDS);
+    expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.MaterialId)).toBe(11);
   });
 
   it('writes static descriptor arena addresses', () => {
@@ -222,8 +269,12 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
+    const state = createPackerRuntimeState(slotToArena, [
+      { slot: slotsA.shape, handle: 0, indexCount: 9, materialClass: 7 },
+      { slot: slotsB.shape, handle: SHAPE_BANK_HEADER_WORDS, indexCount: 12, materialClass: 11 },
+    ]);
 
-    const packed = packDrawPrepSinkTableV1(program);
+    const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).not.toBeNull();
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
@@ -279,8 +330,12 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
+    const state = createPackerRuntimeState(slotToArena, [
+      { slot: slotsA.shape, handle: 0, indexCount: 9, materialClass: 7 },
+      { slot: slotsB.shape, handle: SHAPE_BANK_HEADER_WORDS, indexCount: 12, materialClass: 11 },
+    ]);
 
-    const packed = packDrawPrepSinkTableV1(program);
+    const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).not.toBeNull();
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
@@ -317,8 +372,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
         sinks: [],
       },
     } as unknown as CompiledProgramIR;
+    const state = createRuntimeState();
 
-    const packed = packDrawPrepSinkTableV1(program);
+    const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).toBeNull();
   });
 
@@ -338,6 +394,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       [slotsA.scale, { offset: 30, stride: 1, laneCount: 1, length: 1 }],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
+    const state = createPackerRuntimeState(slotToArena, [
+      { slot: slotsA.shape, handle: 0, indexCount: 9, materialClass: 7 },
+    ]);
     // Override to single sink
     (program as any).drawPrepProgram = {
       ...program.drawPrepProgram,
@@ -346,7 +405,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
       sinks: [program.drawPrepProgram.sinks[0]],
     };
 
-    const packed = packDrawPrepSinkTableV1(program);
+    const packed = packDrawPrepSinkTableV1(program, state);
     expect(packed).not.toBeNull();
     // header(8) + records(1*8) + descriptors(1*25) = 41
     expect(packed!.wordCount).toBe(DRAW_PREP_SINK_TABLE_HEADER_WORDS + 1 * DRAW_PREP_SINK_TABLE_RECORD_WORDS + 1 * DRAW_PREP_SINK_DESCRIPTOR_WORDS);

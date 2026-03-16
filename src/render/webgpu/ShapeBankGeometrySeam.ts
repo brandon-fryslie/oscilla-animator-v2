@@ -3,8 +3,8 @@
  *
  * // [LAW:one-source-of-truth] Geometry route classification is derived from
  * // canonical ShapeBank header fields only (Kind, TopologyMode, Flags,
- * // VertexCount, ParamBlockOffset, ParamBlockWords). Worker-derived fields
- * // (IndexCount, FirstIndex, BaseVertex, FirstVertex) are never read.
+ * // VertexCount, ParamBlockOffset, ParamBlockWords). Geometry-realization
+ * // fields that this seam does not need are never read.
  *
  * This module introduces the seam that enables RECOVER-04 to cut Type 1 Rigid
  * shapes over from CPU-realized vertex/index buffers to direct ShapeBank
@@ -12,8 +12,8 @@
  */
 
 import {
-  SHAPE_BANK_HEADER_WORDS,
   ShapeBankHeaderWord,
+  forEachShapeBankRecord,
 } from '../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../shapes/types';
 import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
@@ -27,7 +27,8 @@ import type { RenderShapeBankSource } from './WebGPUShapeBankManager';
  * consumption. Only canonical (immutable-after-materialization) fields appear.
  *
  * // [LAW:one-source-of-truth] These fields are read from ShapeBankState.data
- * // at word offsets defined by ShapeBankHeaderWord. No worker-derived fields.
+ * // at word offsets defined by ShapeBankHeaderWord. No realized geometry
+ * // fields are consulted here.
  */
 export interface ShapeBankDirectGeometry {
   /** Word offset of this shape's header in the ShapeBank buffer. */
@@ -119,26 +120,9 @@ export function classifyAllGeometryRoutes(
   source: RenderShapeBankSource,
 ): Map<number, GeometryRoute> {
   const routes = new Map<number, GeometryRoute>();
-
-  for (
-    let handle = 0;
-    handle + SHAPE_BANK_HEADER_WORDS <= source.volatilePtr;
-    handle += SHAPE_BANK_HEADER_WORDS
-  ) {
-    // Skip empty headers (all zeros)
-    let hasPayload = false;
-    for (let word = 0; word < SHAPE_BANK_HEADER_WORDS; word++) {
-      if (source.data[handle + word] !== 0) {
-        hasPayload = true;
-        break;
-      }
-    }
-    if (!hasPayload) {
-      continue;
-    }
-
+  forEachShapeBankRecord(source.data, source.volatilePtr, (handle) => {
     routes.set(handle, classifyGeometryRoute(source.data, handle));
-  }
+  });
 
   return routes;
 }

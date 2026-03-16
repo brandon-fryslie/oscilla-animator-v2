@@ -48,6 +48,13 @@ interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, Ru
 
 type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
 
+const EMPTY_RENDER_SHAPE_BANK_SOURCE: RenderShapeBankSource = {
+  data: new Uint32Array(0),
+  volatilePtr: 0,
+  staticBoundary: 0,
+  topologyIdByHandle: new Uint32Array(0),
+};
+
 /**
  * GPU fault descriptor emitted to the main thread when a GPU error or device
  * loss is detected in the Rust renderer worker.
@@ -850,10 +857,13 @@ export class WebGPURenderer {
     }
     this.writeViewportFrame(input);
     const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
-    // [LAW:one-source-of-truth] Geometry route classification runs in the
-    // active render path after ShapeBank data is synced to shared memory.
-    // RECOVER-03 establishes this seam; RECOVER-04 implements the direct path.
-    this.classifyAndDispatchGeometryRoutes(input.shapeBank);
+    const geometryRouteSource = this.shouldEmitRuntimeConsole()
+      ? input.shapeBank
+      : EMPTY_RENDER_SHAPE_BANK_SOURCE;
+    // [LAW:dataflow-not-control-flow] Route classification still executes in
+    // the canonical render order, but empty data disables the observability
+    // scan when it is not needed on the hot path.
+    this.classifyAndDispatchGeometryRoutes(geometryRouteSource);
     const sinkTableWords = this.syncSinkTablePlane(
       input.drawPrepSinkTableV1,
       input.drawPrepSinkTableWordCount,
@@ -1005,7 +1015,8 @@ export class WebGPURenderer {
   }
 
   /**
-   * Geometry routes classified during the most recent render() call.
+   * Geometry routes classified during the most recent render() call when
+   * observability is enabled.
    *
    * Returns the route map (shape word offset → GeometryRoute) from the latest
    * frame. Empty map before the first render().
@@ -1015,7 +1026,8 @@ export class WebGPURenderer {
   }
 
   /**
-   * Cumulative count of shapeBankDirect geometry dispatches across all frames.
+   * Cumulative count of shapeBankDirect geometry dispatches across classified
+   * frames.
    *
    * This counter proves the dispatch seam is reachable from the active render
    * path. It increments once per shapeBankDirect shape per render() call.
