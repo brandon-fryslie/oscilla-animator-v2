@@ -134,6 +134,7 @@ Every run should be explainable as gates:
 8. ownership/spec alignment
 9. clean closeout
 10. prerequisite integrity: no earlier leaf ticket has become false again in current repo state
+11. explicit validation gates: any ticket/doc-required pause or validation checkpoint happened before implementation continued
 
 If a gate fails because of implementation choice, the implementer may try another bounded approach inside the same ticket.
 
