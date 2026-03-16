@@ -180,6 +180,18 @@ impl ComputeDispatcher {
         pass_id: &str,
         workgroup_size: WorkgroupSize,
     ) -> Result<(), String> {
+        if workgroup_size.x == 0 || workgroup_size.y == 0 || workgroup_size.z == 0 {
+            return Err(format!(
+                "pass \"{}\" workgroup_size dimensions must all be at least 1",
+                pass_id
+            ));
+        }
+        if workgroup_size.y != 1 || workgroup_size.z != 1 {
+            return Err(format!(
+                "pass \"{}\" workgroup_size must be 1D because runtime dispatch indexes only global_invocation_id.x",
+                pass_id
+            ));
+        }
         if workgroup_size.x > limits.max_compute_workgroup_size_x {
             return Err(format!(
                 "pass \"{}\" workgroup_size.x={} exceeds device limit {}",
@@ -761,17 +773,41 @@ mod tests {
     #[test]
     fn validate_workgroup_size_rejects_total_invocations_over_limit() {
         let mut limits = wgpu::Limits::default();
-        limits.max_compute_workgroup_size_x = 256;
+        limits.max_compute_workgroup_size_x = 512;
         limits.max_compute_workgroup_size_y = 256;
         limits.max_compute_workgroup_size_z = 64;
         limits.max_compute_invocations_per_workgroup = 256;
         let result = ComputeDispatcher::validate_workgroup_size(
             &limits,
             "simulation",
-            WorkgroupSize { x: 32, y: 16, z: 1 },
+            WorkgroupSize { x: 300, y: 1, z: 1 },
         );
         assert!(result
             .err()
             .is_some_and(|message| message.contains("total workgroup invocations")));
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_zero_dimension() {
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &wgpu::Limits::default(),
+            "simulation",
+            WorkgroupSize { x: 0, y: 1, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("at least 1")));
+    }
+
+    #[test]
+    fn validate_workgroup_size_rejects_non_1d_shapes() {
+        let result = ComputeDispatcher::validate_workgroup_size(
+            &wgpu::Limits::default(),
+            "simulation",
+            WorkgroupSize { x: 64, y: 2, z: 1 },
+        );
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("must be 1D")));
     }
 }

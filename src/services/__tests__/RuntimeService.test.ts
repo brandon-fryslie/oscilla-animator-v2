@@ -107,5 +107,8 @@ describe('RuntimeService', () => {
     expect(hoisted.createWebGPURendererMock).not.toHaveBeenCalled();
     expect(serviceAccess.renderer).toBeNull();
     expect(serviceAccess.rendererExecutionState).toBe('fatal');
+    expect(store.diagnostics.logs.at(-1)?.message).toBe(
+      'Fatal GPU fault [GPU_DRIVER/WEBGPU_VALIDATION] stopped rendering. Patch and editor state were preserved.',
+    );
   });
 });

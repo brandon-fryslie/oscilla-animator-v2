@@ -8,7 +8,7 @@ mod render;
 mod scheduler;
 mod telemetry;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use js_sys::{Array, Function, Object, Reflect};
 use wasm_bindgen::closure::Closure;
@@ -23,6 +23,7 @@ use crate::error_boundary::install_panic_hook;
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
     static LOOP_CALLBACK: RefCell<Option<Closure<dyn FnMut(f64)>>> = RefCell::new(None);
+    static LOOP_ARMED: Cell<bool> = const { Cell::new(false) };
 }
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
@@ -100,6 +101,54 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
         ));
     }
     Ok(specs)
+}
+
+fn should_schedule_next_frame() -> bool {
+    ENGINE.with(|engine_cell| {
+        engine_cell
+            .borrow()
+            .as_ref()
+            .map(Engine::should_schedule_next_frame)
+            .unwrap_or(false)
+    })
+}
+
+fn arm_worker_loop_if_needed() -> Result<(), JsValue> {
+    if !should_schedule_next_frame() {
+        return Ok(());
+    }
+    let was_armed = LOOP_ARMED.with(|armed| {
+        let already_armed = armed.get();
+        armed.set(true);
+        already_armed
+    });
+    if was_armed {
+        return Ok(());
+    }
+    let callback = LOOP_CALLBACK.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|installed| installed.as_ref().unchecked_ref::<Function>().clone())
+    });
+    let worker = worker_scope();
+    match (callback, worker) {
+        (Some(callback), Ok(worker)) => {
+            // [LAW:single-enforcer] requestAnimationFrame arming is centralized
+            // at one worker boundary so rebuild and tick reuse one cadence gate.
+            worker.request_animation_frame(callback.unchecked_ref())?;
+            Ok(())
+        }
+        (Some(_), Err(error)) => {
+            LOOP_ARMED.with(|armed| armed.set(false));
+            Err(error)
+        }
+        (None, _) => {
+            LOOP_ARMED.with(|armed| armed.set(false));
+            Err(JsValue::from_str(
+                "Rust engine failed to install worker loop callback",
+            ))
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -224,6 +273,7 @@ pub async fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         *engine_cell.borrow_mut() = Some(engine);
     });
+    arm_worker_loop_if_needed()?;
     rebuild_result.map_err(pipeline_rebuild_failure_to_js_value)
 }
 
@@ -299,8 +349,8 @@ pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
 }
 
 fn start_worker_loop() -> Result<(), JsValue> {
-    let global = worker_scope()?;
     let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
+        LOOP_ARMED.with(|armed| armed.set(false));
         ENGINE.with(|engine_cell| {
             if let Some(engine) = engine_cell.borrow_mut().as_mut() {
                 if let Err(error) = engine.tick(timestamp_ms) {
@@ -308,41 +358,12 @@ fn start_worker_loop() -> Result<(), JsValue> {
                 }
             }
         });
-
-        if let Ok(worker) = worker_scope() {
-            LOOP_CALLBACK.with(|slot| {
-                let should_schedule_next_frame = ENGINE.with(|engine_cell| {
-                    engine_cell
-                        .borrow()
-                        .as_ref()
-                        .map(Engine::should_schedule_next_frame)
-                        .unwrap_or(false)
-                });
-                if should_schedule_next_frame {
-                    if let Some(next_callback) = slot.borrow().as_ref() {
-                        // [LAW:single-enforcer] Scheduling is owned at this worker
-                        // boundary so tick cadence cannot diverge across callsites.
-                        let _ =
-                            worker.request_animation_frame(next_callback.as_ref().unchecked_ref());
-                    }
-                }
-            });
-        }
+        let _ = arm_worker_loop_if_needed();
     }) as Box<dyn FnMut(f64)>);
 
-    let first_callback = LOOP_CALLBACK.with(|slot| {
+    LOOP_CALLBACK.with(|slot| {
         let mut slot_mut = slot.borrow_mut();
         *slot_mut = Some(closure);
-        slot_mut
-            .as_ref()
-            .map(|callback| callback.as_ref().unchecked_ref::<Function>().clone())
     });
-    if let Some(callback) = first_callback {
-        global.request_animation_frame(callback.unchecked_ref())?;
-        Ok(())
-    } else {
-        Err(JsValue::from_str(
-            "Rust engine failed to install worker loop callback",
-        ))
-    }
+    arm_worker_loop_if_needed()
 }
