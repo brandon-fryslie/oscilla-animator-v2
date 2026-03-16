@@ -46,6 +46,12 @@ pub struct EngineConfig {
     pub debug_readback_hz: u32,
 }
 
+pub struct PipelineRebuildFailure {
+    pub code: &'static str,
+    pub pass_id: String,
+    pub message: String,
+}
+
 pub struct Engine {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -78,6 +84,7 @@ pub struct Engine {
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
     last_install_revision: u32,
+    pending_fatal_gpu_error: Arc<AtomicBool>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -128,6 +135,17 @@ fn parse_finite_u32(value: f64, context: &str) -> u32 {
         panic!("{context} exceeds u32 max (value={value})");
     }
     floored as u32
+}
+
+fn extract_pass_id_from_message(message: &str) -> String {
+    let Some(start) = message.find("pass \"") else {
+        return "<bundle>".to_string();
+    };
+    let quoted = &message[(start + "pass \"".len())..];
+    let Some(end) = quoted.find('"') else {
+        return "<bundle>".to_string();
+    };
+    quoted[..end].to_string()
 }
 
 fn supports_msaa_x4(adapter: &wgpu::Adapter, format: wgpu::TextureFormat) -> bool {
@@ -211,15 +229,17 @@ impl Engine {
             )
             .await
             .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
+        let pending_fatal_gpu_error = Arc::new(AtomicBool::new(false));
+        let pending_fatal_gpu_error_for_callback = pending_fatal_gpu_error.clone();
 
         // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
         // faults are classified and emitted through one runtime error boundary.
-        device.on_uncaptured_error(Box::new(|error| {
+        device.on_uncaptured_error(Box::new(move |error| {
             let payload = match error {
                 wgpu::Error::Validation {
                     source: _,
                     description,
-                } => EngineErrorPayload::new("WEBGPU_VALIDATION", description, "GPU_DRIVER", false),
+                } => EngineErrorPayload::new("WEBGPU_VALIDATION", description, "GPU_DRIVER", true),
                 wgpu::Error::OutOfMemory { source: _ } => {
                     EngineErrorPayload::new("WEBGPU_OOM", "GPU out of memory", "GPU_DRIVER", true)
                 }
@@ -228,6 +248,9 @@ impl Engine {
                     description,
                 } => EngineErrorPayload::new("WEBGPU_INTERNAL", description, "GPU_DRIVER", true),
             };
+            if payload.fatal {
+                pending_fatal_gpu_error_for_callback.store(true, Ordering::SeqCst);
+            }
             send_engine_error(&payload);
         }));
 
@@ -341,6 +364,7 @@ impl Engine {
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
             last_install_revision: 0,
+            pending_fatal_gpu_error,
         })
     }
 
@@ -448,15 +472,44 @@ impl Engine {
         self.arena.write_atlas_data(&self.device, &self.queue, data);
     }
 
-    pub fn rebuild_gpu_pipelines(&mut self, pass_specs: &[CompilerComputePassSpec]) {
+    pub async fn rebuild_gpu_pipelines(
+        &mut self,
+        pass_specs: &[CompilerComputePassSpec],
+    ) -> Result<(), PipelineRebuildFailure> {
         // [LAW:single-enforcer] Compiler-owned GPU pass artifacts are published
         // at one engine boundary so runtime hot path never recompiles ad hoc.
-        self.compute.rebuild_gpu_pipelines_with_compiler_wgsl(
-            &self.device,
-            pass_specs,
-            self.max_particles,
-        );
+        let staged = self
+            .compute
+            .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs, self.max_particles)
+            .await
+            .map_err(|message| {
+                self.build_pipeline_rebuild_failure("pipeline_contract_rejected", &message)
+            })?;
+        self.compute
+            .activate_staged_gpu_pipelines(&self.device, staged)
+            .await
+            .map_err(|message| {
+                self.build_pipeline_rebuild_failure("pipeline_activation_rejected", &message)
+            })?;
         self.arena.clear_simulation_planes(&self.queue);
+        Ok(())
+    }
+
+    pub fn should_schedule_next_frame(&self) -> bool {
+        self.scheduler.state() != SchedulerState::Lost
+            && !self.pending_fatal_gpu_error.load(Ordering::SeqCst)
+    }
+
+    fn build_pipeline_rebuild_failure(
+        &self,
+        code: &'static str,
+        message: &str,
+    ) -> PipelineRebuildFailure {
+        PipelineRebuildFailure {
+            code,
+            pass_id: extract_pass_id_from_message(message),
+            message: message.to_string(),
+        }
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
@@ -475,6 +528,15 @@ impl Engine {
             input_marshal_ms: (input_stage_end_ms - input_stage_start_ms).max(0.0),
             ..StageTimingsMs::default()
         };
+        if self.pending_fatal_gpu_error.swap(false, Ordering::SeqCst) {
+            return self.finish_fatal(
+                tick_start_ms,
+                "uncaptured_gpu_error",
+                "Fatal GPU error detected after queue submission",
+                "GPU_DRIVER",
+                self.build_scheduler_telemetry(stage_timings),
+            );
+        }
         if self.scheduler.state() == SchedulerState::Paused {
             let now_ms = worker_monotonic_now_ms();
             let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
@@ -804,8 +866,7 @@ impl Engine {
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;
         for record in 0..total_record_count_usize {
-            let descriptor_base =
-                descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
             if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
                 break;
             }

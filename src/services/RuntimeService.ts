@@ -76,6 +76,12 @@ const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
 const EMPTY_U32_WORDS = new Uint32Array(0);
 const STARTUP_STORAGE_RESET_ARM_MS = 10_000;
 
+function describeFatalGpuFault(fault: GpuFault): string {
+  return fault.source === 'CIRCUIT_BREAKER'
+    ? 'Rendering stopped by the WebGPU circuit breaker to protect the system.'
+    : `Fatal GPU fault [${fault.source}/${fault.code}] stopped rendering. Patch and editor state were preserved.`;
+}
+
 export interface RuntimeSpyReadbackEntry {
   readonly slotId: ValueSlot;
   readonly value: number;
@@ -494,15 +500,17 @@ export class RuntimeService {
     if (fault.severity !== 'fatal') {
       return;
     }
+    if (store.playback.isPlaying) {
+      store.playback.pause();
+    }
     this.animationLoop?.stop();
     this.animationLoop = null;
+    this.renderer?.setGpuFaultCallback(null);
     this.renderer?.dispose();
     this.renderer = null;
     store.diagnostics.log({
       level: 'error',
-      message: fault.source === 'CIRCUIT_BREAKER'
-        ? 'Rendering stopped by the WebGPU circuit breaker to protect the system.'
-        : 'GPU device lost — rendering stopped. Reload the page to recover.',
+      message: describeFatalGpuFault(fault),
     });
   };
 
