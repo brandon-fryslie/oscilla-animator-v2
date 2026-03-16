@@ -105,6 +105,7 @@ Allowed `next_action:` values:
 - `revise-active-ticket`
 - `stop-blocked`
 
+Only emit `advance-to-next-ready-ticket` after you have accepted the active ticket as complete and closed that same ticket in the tracker. Otherwise the active ticket remains locked.
 Steer tactically, not architecturally.
 
 If tracker writes work, you may also mirror a brief summary to the ticket, but the filesystem note is canonical.
@@ -116,6 +117,8 @@ If tracker writes work, you may also mirror a brief summary to the ticket, but t
 3. Reopen or leave the ticket open for every other verdict.
 4. If you changed repo state, commit it.
 5. Normalize the tree again until `git status --short` is clean.
+
+If the ticket is not closed, the note must not authorize advancement.
 
 ## Final Report
 

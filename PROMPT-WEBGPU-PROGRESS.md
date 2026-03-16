@@ -21,17 +21,23 @@ Your job is to make bounded progress on exactly one `RECOVER-*` leaf ticket.
 4. Inspect ready work:
    - `lit ready --json`
    - `lit ls --query "status:open RECOVER" --json`
+   - `lit ls --query "status:in_progress RECOVER" --json`
+   - `lit ls --query "status:closed RECOVER" --json`
 5. Ensure `session-docs/` exists.
 
 ## Choose Work
 
 1. If the user named a `RECOVER-*` leaf ticket, use it.
 2. Otherwise, read `session-docs/WEBGPU-LOOP.md`, if it exists.
-3. If that note names an `active_ticket:` and says `continue-active-ticket` or `revise-active-ticket`, use that ticket.
-4. If that note says `stop-blocked`, stop and report the blocker.
-5. Otherwise, use the highest-priority ready `RECOVER-*` leaf task.
+3. Treat the evaluator note as an exclusive ticket lock when it names an `active_ticket:`.
+4. If that note says `continue-active-ticket` or `revise-active-ticket`, use the named ticket and do not consider any other ready ticket.
+5. If that note says `advance-to-next-ready-ticket`, advance only if the named `active_ticket:` is already closed by the evaluator. If it is not closed, stay on that ticket and report the mismatch instead of advancing.
+6. If that note says `stop-blocked`, stop and report the blocker.
+7. If the evaluator note is missing, malformed, or does not authorize advance, do not move to a different ticket just because another ticket is ready.
+8. Only if there is no evaluator note lock and no plausible open or in-progress active leaf ticket may you use the highest-priority ready `RECOVER-*` leaf task.
 
 Never select an epic or milestone container.
+Never advance to a different leaf ticket until the evaluator has both authorized advancement in `session-docs/WEBGPU-LOOP.md` and closed the prior active ticket.
 
 ## Sources
 
@@ -45,6 +51,7 @@ Read in this order:
 6. `docs/WebGPU-Complete/` specs listed in the ticket
 
 If these disagree on scope, owner, boundary, or verification target, block instead of coding.
+If the evaluator note, tracker state, and chosen ticket disagree about whether advancement is unlocked, treat the current or last active ticket as authoritative and do not advance.
 
 ## Before Coding
 
