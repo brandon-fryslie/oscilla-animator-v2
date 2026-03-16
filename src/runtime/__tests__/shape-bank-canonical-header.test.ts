@@ -1,10 +1,9 @@
 /**
  * Guardrail tests for ShapeHeaderV1 canonical header contract.
  *
- * // [LAW:one-source-of-truth] ShapeHeaderV1 word 4 (`indexCount`) is
- * // canonical topology metadata. Words 5-6 and 8 (`firstIndex`, `baseVertex`,
- * // `firstVertex`) remain realized geometry-offset fields that JS leaves as
- * // zero until a later realization boundary owns them.
+ * // [LAW:one-source-of-truth] ShapeHeaderV1 words 4-6 and 8 (`indexCount`,
+ * // `firstIndex`, `baseVertex`, `firstVertex`) are realized geometry-output
+ * // fields, not canonical declarative topology metadata.
  *
  * // [LAW:behavior-not-structure] These tests assert the canonical contract
  * // (realized-offset words are zero after materialization), not implementation
@@ -61,6 +60,7 @@ describe('ShapeHeaderV1 canonical header contract', () => {
 
   it('SHAPE_BANK_REALIZED_GEOMETRY_WORDS lists exactly the non-canonical word offsets', () => {
     expect(SHAPE_BANK_REALIZED_GEOMETRY_WORDS).toEqual([
+      ShapeBankHeaderWord.IndexCount,   // word 4
       ShapeBankHeaderWord.FirstIndex,   // word 5
       ShapeBankHeaderWord.BaseVertex,   // word 6
       ShapeBankHeaderWord.FirstVertex,  // word 8
@@ -95,6 +95,9 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     // Verify raw u32 words at realized-offset positions are zero.
     const data = state.shapeBank!.data;
     for (const wordOffset of SHAPE_BANK_REALIZED_GEOMETRY_WORDS) {
+      if (wordOffset === ShapeBankHeaderWord.IndexCount) {
+        continue;
+      }
       expect(
         data[handle + wordOffset],
         `realized geometry word at offset ${wordOffset} should be zero in JS-side ShapeBank`,
@@ -106,7 +109,7 @@ describe('ShapeHeaderV1 canonical header contract', () => {
     expect(header.firstIndex).toBe(0);
     expect(header.firstVertex).toBe(0);
     expect(header.baseVertex).toBe(0);
-    // indexCount IS set (it's a canonical pre-computed topology value).
+    // indexCount is still precomputed by the compatibility path today.
     expect(header.indexCount).toBe(12);
   });
 

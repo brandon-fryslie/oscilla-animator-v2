@@ -22,15 +22,14 @@ import { createArena } from './ArenaValueStore';
  *
  * ## Canonical vs. Realized Fields
  *
- * Canonical fields (words 0-4, 7, 9-15) are written once by
+ * Canonical fields (words 0-3, 7, 9-15) are written once by
  * `ValueExprMaterializer` and are immutable after materialization.
  * They describe declarative topology metadata and parameter payload offsets.
  *
- * `indexCount` (word 4) is canonical topology metadata derived directly from
- * the declarative shape definition. The remaining geometry-offset fields
- * (words 5-6, 8) — `firstIndex`, `baseVertex`, `firstVertex` — are realized
- * fields reserved in the ABI for later worker/GPU ownership. JS-side code
- * MUST NOT read or depend on those realized fields from `ShapeBankState.data`.
+ * Geometry-output fields (words 4-6, 8) — `indexCount`, `firstIndex`,
+ * `baseVertex`, `firstVertex` — are realized draw fields, not canonical
+ * declarative topology metadata. JS-side code MUST NOT read or depend on
+ * those realized fields from `ShapeBankState.data`.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
@@ -41,12 +40,12 @@ export enum ShapeBankHeaderWord {
   Flags = 2,
   MaterialClass = 3,
 
-  // -- Canonical topology-derived field --
+  // -- Realized geometry-output field (compatibility path, NOT canonical) --
   IndexCount = 4,
 
-  // -- Realized geometry-offset fields (worker/GPU-derived, NOT canonical) --
+  // -- Realized geometry-output fields (worker/GPU-derived, NOT canonical) --
   // These words are reserved in the ABI for later geometry realization.
-  // JS-side ShapeBankState.data leaves them as 0 until that boundary owns them.
+  // JS-side ShapeBankState.data must not be treated as the canonical owner.
   FirstIndex = 5,
   BaseVertex = 6,
 
@@ -72,6 +71,7 @@ export enum ShapeBankHeaderWord {
  * and must not be read from JS-side ShapeBankState.data.
  */
 export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
+  ShapeBankHeaderWord.IndexCount,
   ShapeBankHeaderWord.FirstIndex,
   ShapeBankHeaderWord.BaseVertex,
   ShapeBankHeaderWord.FirstVertex,

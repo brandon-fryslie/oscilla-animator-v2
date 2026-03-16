@@ -183,6 +183,9 @@ function evaluateShapeRefHandle(
       kind: ShapeClass.Type1Rigid,
       topologyMode: isPath ? TopologyMode.Path : TopologyMode.NonPath,
       flags,
+      // [LAW:one-source-of-truth] exception: the legacy indexed draw path
+      // still consumes compatibility indexCount from ShapeHeaderV1 until
+      // GPU draw-prep/topology lookup owns rendered-element derivation.
       indexCount,
       vertexCount,
       paramBlockOffset,
