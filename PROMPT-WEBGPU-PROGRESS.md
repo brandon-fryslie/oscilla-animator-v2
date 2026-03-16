@@ -56,6 +56,7 @@ If these disagree on scope, owner, boundary, or verification target, block inste
 If the evaluator note, tracker state, and chosen ticket disagree about whether advancement is unlocked, treat the current or last active ticket as authoritative and do not advance.
 If prior accepted work already restored a visible runtime baseline, treat that baseline as a required invariant for later tickets unless the active ticket explicitly says a temporary regression is allowed.
 If a prerequisite leaf ticket has been reopened, treat that reopened prerequisite as the authoritative active boundary even if later tickets remain open or closed.
+The visible runtime baseline is a repository invariant, not a per-run courtesy. If it is broken when you start and the active ticket does not explicitly allow that regression, do not treat "it was already broken" as permission to continue downstream work.
 
 ## Before Coding
 
@@ -67,6 +68,7 @@ If a prerequisite leaf ticket has been reopened, treat that reopened prerequisit
    - any explicit validation or approval gate named by the ticket/docs is already satisfied
    - no later ticket is required first
    - the current accepted runtime baseline can still be re-verified after your change if this ticket touches render, draw-prep, materialization, install, or another live-path boundary
+   - if that baseline is already broken, the active ticket explicitly owns restoring it or the evaluator note explicitly routes the run to the ticket that does
 2. Add a design comment on the ticket with:
    - scope
    - touched files
@@ -102,6 +104,7 @@ Run the smallest sufficient set of:
 
 If runtime behavior changed, inspect real runtime evidence. Passing tests alone is not enough when ownership/render behavior is the point.
 If the repository already has an accepted visible render baseline, re-run that baseline proof after your change when you touch a live-path boundary. Do not report `completed` if the active ticket passes locally but the accepted baseline regresses.
+If the repository baseline is already broken on arrival and the active ticket does not explicitly own that breakage, do not continue to later work. Block or route back to the earliest ticket that owns restoring the baseline.
 If the active ticket says to pause for explicit validation or approval before starting, do not implement the ticket until that gate is recorded in the ticket or evaluator note. Block instead of assuming it happened.
 
 ## Closeout
