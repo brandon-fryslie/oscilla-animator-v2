@@ -218,6 +218,9 @@ function resolveDrawCommandFields(
       // [LAW:one-source-of-truth] exception: the active compatibility path
       // still reads realized indexed draw fields from ShapeHeaderV1 until
       // GPU draw-prep owns command derivation from canonical state.
+      // Review note: this is compatibility behavior only. Do not interpret
+      // this read as evidence that indexCount/firstIndex/baseVertex are
+      // canonical ShapeBank metadata.
       count: assertFiniteUint32(shapeHeader.indexCount, `indexed.count sinkIndex=${sink.sinkIndex}`),
       first: assertFiniteUint32(shapeHeader.firstIndex, `indexed.first sinkIndex=${sink.sinkIndex}`),
       baseVertex: shapeHeader.baseVertex | 0,

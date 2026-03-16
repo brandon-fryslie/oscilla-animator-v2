@@ -30,6 +30,11 @@ import { createArena } from './ArenaValueStore';
  * `baseVertex`, `firstVertex` — are realized draw fields, not canonical
  * declarative topology metadata. JS-side code MUST NOT read or depend on
  * those realized fields from `ShapeBankState.data`.
+ *
+ * // [LAW:one-source-of-truth] Review note: do not "upgrade" `indexCount`
+ * // back into the canonical contract. The spec explicitly treats rendered-
+ * // element counts/offsets as derived draw data owned by the draw-prep /
+ * // topology-realization boundary, not by declarative ShapeBank materialization.
  */
 export const SHAPE_BANK_HEADER_WORDS = 16;
 
@@ -41,6 +46,8 @@ export enum ShapeBankHeaderWord {
   MaterialClass = 3,
 
   // -- Realized geometry-output field (compatibility path, NOT canonical) --
+  // Review note: this remains here only because the current compatibility
+  // path still consumes it. The spec does NOT make this field canonical.
   IndexCount = 4,
 
   // -- Realized geometry-output fields (worker/GPU-derived, NOT canonical) --
@@ -69,6 +76,9 @@ export enum ShapeBankHeaderWord {
  * Word offsets of realized geometry-offset fields in ShapeHeaderV1.
  * These are NOT canonical — they are reserved for later geometry realization
  * and must not be read from JS-side ShapeBankState.data.
+ *
+ * // [LAW:one-source-of-truth] If a caller needs these values, that caller is
+ * // operating in the compatibility path and should be marked as such.
  */
 export const SHAPE_BANK_REALIZED_GEOMETRY_WORDS: readonly number[] = [
   ShapeBankHeaderWord.IndexCount,
