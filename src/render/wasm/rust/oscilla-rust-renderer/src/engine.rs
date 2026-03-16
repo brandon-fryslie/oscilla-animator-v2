@@ -8,7 +8,7 @@ use web_sys::console;
 use web_sys::OffscreenCanvas;
 
 use crate::allocator::StrictAllocator;
-use crate::compute::{CompilerComputePassSpec, ComputeDispatcher, StagedSimulationPipelines};
+use crate::compute::{CompilerComputePassSpec, ComputeDispatcher};
 use crate::default_shaders::{
     DEFAULT_ASSEMBLY_WGSL, DEFAULT_SIMULATION_WGSL, DEFAULT_UBER_SHADER_WGSL,
 };
@@ -460,11 +460,16 @@ impl Engine {
         let staged = self
             .compute
             .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs, self.max_particles)
+            .await
             .map_err(|message| {
                 self.build_pipeline_rebuild_failure("pipeline_contract_rejected", &message)
             })?;
-        self.preflight_staged_gpu_pipelines(&staged).await?;
-        self.compute.activate_staged_gpu_pipelines(staged);
+        self.compute
+            .activate_staged_gpu_pipelines(&self.device, staged)
+            .await
+            .map_err(|message| {
+                self.build_pipeline_rebuild_failure("pipeline_activation_rejected", &message)
+            })?;
         self.arena.clear_simulation_planes(&self.queue);
         Ok(())
     }
@@ -484,50 +489,6 @@ impl Engine {
             pass_id: extract_pass_id_from_message(message),
             message: message.to_string(),
         }
-    }
-
-    fn create_preflight_arena(&self) -> GpuMemoryArena {
-        let arena = GpuMemoryArena::new(
-            &self.device,
-            &self.compute.uniform_layout,
-            &self.compute.state_layout,
-            self.compute.compiler_simulation_layout(),
-            &self.compute.assembly_layout,
-            &self.compute.draw_prep_layout,
-            &self.render.instance_layout,
-            &self.render.topology_layout,
-            self.max_particles as usize,
-            self.max_shapes as usize,
-        );
-        arena.clear_simulation_planes(&self.queue);
-        arena
-    }
-
-    async fn preflight_staged_gpu_pipelines(
-        &self,
-        staged: &StagedSimulationPipelines,
-    ) -> Result<(), PipelineRebuildFailure> {
-        let scratch_arena = self.create_preflight_arena();
-        self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("PipelineRebuild.PreflightEncoder"),
-            });
-        staged.encode_simulation_passes(&mut encoder, &scratch_arena, Some(1));
-        self.queue.submit(std::iter::once(encoder.finish()));
-        let validation_error = self
-            .device
-            .pop_error_scope()
-            .await
-            .map(|error| error.to_string());
-        if let Some(message) = validation_error {
-            return Err(self.build_pipeline_rebuild_failure(
-                "pipeline_preflight_validation_failed",
-                message.as_str(),
-            ));
-        }
-        Ok(())
     }
 
     pub fn tick(&mut self, timestamp_ms: f64) -> Result<(), JsValue> {
