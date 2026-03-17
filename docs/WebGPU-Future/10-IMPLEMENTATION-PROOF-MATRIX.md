@@ -1,17 +1,25 @@
-# WebGPU-Future Implementation Proof Matrix
+# WebGPU-Future Capability Proof Matrix
 
-This document defines the canonical proof commands for the unattended `FUTURE-*` loop.
+This document defines the canonical capability claims and mechanical proof requirements for the unattended `FUTURE-*` loop.
 
 It is the single source of truth for:
 
-- exact commands
-- exact fixtures
-- exact artifact paths
-- acceptance-proof versus supporting-signal classification
-- which later `FUTURE-*` tickets must replay an accepted proof
+- proof IDs
+- owning tickets
+- capability claims
+- required observable evidence
+- machine-readable artifact expectations
+- replay obligations
 
-`// [LAW:one-source-of-truth] Exact acceptance commands live here once. Tickets, prompts, and loop docs reference proof IDs from this document instead of drifting into duplicate command lists.`
-`// [LAW:verifiable-goals] A proof is incomplete until it names an exact command, fixture, artifact path, and pass condition.`
+It is not the source of truth for:
+
+- exact shell commands
+- exact verifier file paths
+- exact harness implementations
+- exact fixture filenames, unless a named fixture is itself part of accepted product behavior
+
+`// [LAW:one-source-of-truth] Proof identity and acceptance semantics live here once. Loop docs, prompts, and tickets should reference proof IDs and capability claims from this document instead of duplicating verifier mechanics.`
+`// [LAW:verifiable-goals] Every proof below names observable consequences that a local deterministic verifier must record as pass or fail.`
 
 ## 1. Shared Rules
 
@@ -21,56 +29,87 @@ All proof artifacts for this loop live under:
 
 - `artifacts/webgpu-future/`
 
-### Command Discipline
+### Proof Record Requirements
 
-Use the exact command text in this document.
+Every acceptance proof must emit machine-readable evidence.
 
-If a proof command references a test or spec file that does not exist yet, creating that file is part of the owning `FUTURE-*` ticket. The ticket is not complete until the exact command succeeds.
+The preferred form is a JSON file. If a proof needs multiple files, it must also emit an index JSON that records:
 
-### Browser Automation Fallback
+- `proof_id`
+- `capability`
+- `owner`
+- `verifier_kind`
+- `inputs`
+- `passed`
+- `observed`
+- `failures`
 
-Browser/UI proof is mandatory for `P-01`, `P-09`, and `P-11`.
+Artifact filenames should be stable and include the proof ID, but the exact filename is not the acceptance boundary.
 
-If a Playwright-backed command fails because Chromium is not installed, run exactly once:
+Representative inputs may change as the codebase evolves. The exact cases used for a run must be named in the artifact so the evaluator can replay the same coverage.
+
+### Acceptance Discipline
+
+A verifier is acceptable only when it would fail if the old wrong behavior were still active.
+
+Allowed verifier kinds include:
+
+- static contract tests
+- compiler/diagnostic tests
+- dependency or boundary audits
+- runtime/browser automation
+- render/readback probes
+
+If no trustworthy verifier exists yet, creating the smallest verifier that produces the required observables is part of the owning ticket.
+
+Supporting signals such as `pnpm build`, `pnpm typecheck`, screenshots, or manual clicking are useful but never sufficient on their own when a proof ID exists.
+
+`// [LAW:behavior-not-structure] A proof must establish the required behavior or boundary, not merely preserve a convenient implementation shape.`
+
+### Browser Proof Rules
+
+Automated browser proof is mandatory for `P-01`, `P-09`, and `P-11`.
+
+Manual clicking, screenshots alone, or “works on my machine” reports are never acceptance proof for those capabilities.
+
+The repository’s standard browser harness is Playwright. If the chosen Playwright-backed verifier fails only because Chromium is missing, install it once:
 
 ```bash
 pnpm exec playwright install chromium chromium-headless-shell
 ```
 
-Then rerun the original proof command.
+Then rerun the same browser verifier. If the rerun still fails, the ticket is blocked.
 
-If the rerun still fails, the ticket is blocked. Do not downgrade browser proof to optional or replace it with manual inspection.
+`// [LAW:single-enforcer] Browser-proof enforcement is standardized here so acceptance does not drift into local exceptions or manual waivers.`
 
-`// [LAW:single-enforcer] Browser-proof remediation is standardized here so every run uses the same fallback instead of inventing local exceptions.`
-
-## 2. Common Proof Gate
+## 2. Common Baselines
 
 ### `P-00` Bootstrap Static Contract
 
-Purpose:
+Owner:
 
-- preserve the existing bootstrap demo compile contract and GPU compatibility boundary
+- shared baseline
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/demo/__tests__/gpu-bootstrap-demo.test.ts \
-  src/services/__tests__/GpuPatchCompatibility.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-00-bootstrap-static.vitest.json
-```
+- the bootstrap demo path and GPU compatibility boundary still compile and validate statically
 
-Fixtures:
+Representative coverage:
 
-- `src/demo/hcl/gpu-bootstrap-triangle.hcl`
-- `src/demo/hcl/simple.hcl`
+- the bootstrap triangle path
+- at least one additional minimal compatibility case
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-00-bootstrap-static.vitest.json`
-- zero exit code
-- JSON report shows success for both suites
+- every named case passes the static contract verifier
+- compatibility checks report no regression
+- the artifact records the exact cases covered
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- zero named cases fail
+- the verifier would fail if bootstrap compilation or GPU compatibility regressed
 
 Evidence class:
 
@@ -91,33 +130,31 @@ Replay required:
 
 ### `P-01` Bootstrap Runtime Liveness
 
-Purpose:
+Owner:
 
-- preserve the existing first-visible-triangle runtime baseline in a replayable browser harness
+- shared baseline
 
-Command:
+Capability claim:
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=gpu-bootstrap-triangle.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-01-bootstrap-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+- the bootstrap demo reaches a live runtime state in automated browser execution
 
-Fixtures:
+Representative coverage:
 
-- `src/demo/hcl/gpu-bootstrap-triangle.hcl`
+- one canonical bootstrap URL or equivalent runtime entry that loads the bootstrap triangle path
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-01-bootstrap-runtime.json`
-- zero exit code
-- report `passed` is `true`
-- Chromium lane result status is `passed`
-- `runtimeProbe.bootstrapState` is `succeeded`
-- `frameAdvanceDetected` is `true`
-- no console or page errors
+- bootstrap state reaches `succeeded`
+- frame advance is detected after bootstrap
+- console error count is zero
+- page error count is zero
+- the artifact records the exact URL or input used
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- runtime bootstrap does not stall or fail before first frame advance
+- the verifier would fail if the runtime/frame-contract seam were still broken
 
 Evidence class:
 
@@ -136,7 +173,7 @@ Replay required:
 - `FUTURE-09`
 - `FUTURE-10`
 
-## 3. Ticket-Owned Proofs
+## 3. Ticket-Owned Capabilities
 
 ### `P-02` Canonical Scene Boundary Contract
 
@@ -144,24 +181,21 @@ Owner:
 
 - `FUTURE-01`
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/render/__tests__/scene-render-sink-contract.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-02-scene-render-sink-contract.vitest.json
-```
+- one canonical scene submission boundary exists in code, centered on `RenderPrimitive`, `RenderView`, and `SceneRenderSink`, and renderer stages below extraction/prepare consume that boundary instead of legacy authoring semantics
 
-Fixtures:
+Required observables:
 
-- boundary contract types centered on `RenderPrimitive`, `RenderView`, and `SceneRenderSink`
+- a contract-level verifier exercises the canonical scene submission types
+- a boundary verifier proves renderer stages below extraction/prepare do not depend on legacy render-block or authoring-block semantics
+- the artifact records which modules or boundaries were checked
 
-Expected artifact:
+Pass conditions:
 
-- `artifacts/webgpu-future/p-02-scene-render-sink-contract.vitest.json`
-- zero exit code
-- JSON report shows the new boundary contract suite passing
+- the artifact reports `passed: true`
+- no forbidden dependency or interpretation path is observed below the canonical boundary
+- the verifier would fail if renderer code below the boundary still required legacy block semantics
 
 Evidence class:
 
@@ -181,26 +215,26 @@ Owner:
 
 - `FUTURE-02`
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/services/__tests__/legacy-scene-submission-adapter.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-03-legacy-adapter-contract.vitest.json
-```
+- exactly one legacy compatibility adapter family translates current patch/block semantics into canonical scene submission
 
-Fixtures:
+Representative coverage:
 
-- `src/demo/hcl/simple.hcl`
-- `src/demo/hcl/breathing-ring.hcl`
-- `src/demo/hcl/tile-grid.hcl`
+- representative legacy patch classes that exercise geometry, material, transform, visibility, and view translation
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-03-legacy-adapter-contract.vitest.json`
-- zero exit code
-- JSON report shows canonical `RenderPrimitive[] + RenderView` adapter tests passing
+- representative legacy inputs lower into canonical `RenderPrimitive[] + RenderView`
+- the translation boundary is singular and explicit
+- code below `SceneRenderSink` does not interpret legacy patch/block semantics
+- the artifact records the exact representative inputs and adapter boundary examined
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- translation ownership is centralized in one adapter boundary
+- the verifier would fail if compatibility logic leaked below the canonical boundary or split across multiple authorities
 
 Evidence class:
 
@@ -219,46 +253,29 @@ Owner:
 
 - `FUTURE-03`
 
-Commands:
+Capability claim:
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=simple.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-04-simple-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+- representative legacy patches render through the canonical runtime path
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=breathing-ring.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-04-breathing-ring-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+Representative coverage:
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=tile-grid.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-04-tile-grid-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+- one single-instance visible primitive case
+- one animated primitive case
+- one repeated-instance case
 
-Fixtures:
+Required observables for every named case:
 
-- `src/demo/hcl/simple.hcl`
-- `src/demo/hcl/breathing-ring.hcl`
-- `src/demo/hcl/tile-grid.hcl`
+- bootstrap state reaches `succeeded`
+- frame advance is detected
+- console error count is zero
+- page error count is zero
+- the artifact records the exact cases used
 
-Expected artifacts:
+Pass conditions:
 
-- `artifacts/webgpu-future/p-04-simple-runtime.json`
-- `artifacts/webgpu-future/p-04-breathing-ring-runtime.json`
-- `artifacts/webgpu-future/p-04-tile-grid-runtime.json`
-- each command exits zero
-- each report has `passed: true`
-- each report shows bootstrap succeeded, frame advance detected, and zero console/page errors
+- the artifact reports `passed: true`
+- every representative case passes the same runtime-capability bar
+- the verifier would fail if any class still depended on a legacy renderer path
 
 Evidence class:
 
@@ -278,25 +295,27 @@ Owner:
 
 - `FUTURE-04`
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/patch-dsl/__tests__/future-canonical-patch-root.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-05-canonical-patch-root.vitest.json
-```
+- the canonical patch root and lowering path round-trip canonical patch data into canonical scene submission
 
-Fixtures:
+Representative coverage:
 
-- `src/demo/hcl/future-canonical-single-triangle.hcl`
-- `src/demo/hcl/future-canonical-repeat-grid.hcl`
+- one canonical single-primitive patch
+- one canonical repeated-instance patch
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-05-canonical-patch-root.vitest.json`
-- zero exit code
-- JSON report shows canonical patch-root roundtrip and lowering proofs passing
+- canonical patch-root data parses or loads successfully
+- roundtrip or equivalent persistence checks preserve canonical strata
+- lowering emits canonical scene submission rather than legacy render-block semantics
+- the artifact records the exact canonical inputs used
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- no tested path requires the legacy compatibility adapter for canonical patch data
+- the verifier would fail if canonical patch strata collapsed back into one flat render-boundary graph
 
 Evidence class:
 
@@ -317,24 +336,28 @@ Owner:
 
 - `FUTURE-05`
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/compiler/frontend/__tests__/future-authoring-model-diagnostics.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-06-authoring-model-diagnostics.vitest.json
-```
+- the compiler/editor boundary accepts legal canonical authoring families and rejects illegal layer crossings or renderer-leaking concepts with deterministic diagnostics
 
-Fixtures:
+Representative coverage:
 
-- canonical authoring-model positive and negative fixtures owned by the compiler/editor boundary
+- positive cases for the accepted canonical authoring families
+- negative cases for illegal layer crossings
+- negative cases for renderer transport leakage into authoring
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-06-authoring-model-diagnostics.vitest.json`
-- zero exit code
-- JSON report shows deterministic diagnostics for illegal layer crossings and renderer-leaking authoring concepts
+- legal cases are accepted
+- illegal cases are rejected at the compiler/editor boundary
+- deterministic diagnostic identifiers or equivalent stable failure markers are recorded
+- the artifact records the exact case set used
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- every negative case fails for the intended reason
+- the verifier would fail if illegal authoring concepts still crossed the boundary undetected
 
 Evidence class:
 
@@ -354,26 +377,27 @@ Owner:
 
 - `FUTURE-06`
 
-Command:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/diagnostics/validators/__tests__/future-authoring-guardrails.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-07-guardrails.vitest.json
-```
+- forbidden sink-like blocks, hidden transport outputs, and renderer-leaking authoring types are mechanically blocked
 
-Fixtures:
+Representative coverage:
 
-- forbidden sink-like authoring block attempts
-- forbidden hidden transport output attempts
-- forbidden renderer-leaking type attempts
+- sink-like authoring attempts
+- hidden transport output attempts
+- renderer-leaking authoring type attempts
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-07-guardrails.vitest.json`
-- zero exit code
-- JSON report shows forbidden-pattern regression suite passing
+- each forbidden pattern is rejected by the accepted enforcement boundary
+- if both compiler and UI surfaces exist, they agree on the same forbidden outcomes
+- the artifact records the exact forbidden pattern cases used
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- every forbidden pattern fails mechanically
+- the verifier would fail if a sink-like or transport-leaking authoring form could still enter the system
 
 Evidence class:
 
@@ -392,43 +416,27 @@ Owner:
 
 - `FUTURE-07`
 
-Commands:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/demo/__tests__/future-canonical-authoring-mvp.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-08-canonical-mvp.vitest.json
-```
+- the minimal canonical authoring slice reaches visible runtime output through the canonical scene submission path
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=future-canonical-single-triangle.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-08-single-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+Representative coverage:
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=future-canonical-repeat-grid.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-08-repeat-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+- one canonical single-primitive authoring case
+- one canonical repeated-instance authoring case
 
-Fixtures:
+Required observables:
 
-- `src/demo/hcl/future-canonical-single-triangle.hcl`
-- `src/demo/hcl/future-canonical-repeat-grid.hcl`
+- both named canonical authoring cases lower into canonical scene submission
+- both cases reach automated runtime success
+- for each runtime case: bootstrap state reaches `succeeded`, frame advance is detected, console error count is zero, and page error count is zero
+- the artifact records the exact cases used
 
-Expected artifacts:
+Pass conditions:
 
-- `artifacts/webgpu-future/p-08-canonical-mvp.vitest.json`
-- `artifacts/webgpu-future/p-08-single-runtime.json`
-- `artifacts/webgpu-future/p-08-repeat-runtime.json`
-- all commands exit zero
-- both runtime reports have `passed: true`
+- the artifact reports `passed: true`
+- both representative authoring cases satisfy the static and runtime consequences of the canonical path
+- the verifier would fail if canonical authoring still depended on legacy render-block semantics
 
 Evidence class:
 
@@ -446,28 +454,30 @@ Owner:
 
 - `FUTURE-08`
 
-Command:
+Capability claim:
 
-```bash
-pnpm exec playwright test \
-  tests/e2e/webgpu-future/mvp-authoring-ui.spec.ts \
-  --reporter=json \
-  > artifacts/webgpu-future/p-09-mvp-ui.playwright.json
-```
+- the MVP authoring UI exposes the canonical workspaces and supports end-to-end construction or editing of the render-only canonical authoring slice
 
-Browser workflow the spec must execute:
+Required automated workflow coverage:
 
-1. open `/?showPreview=true`
-2. construct or edit `future-canonical-single-triangle.hcl` through the `Resources`, `Modulation`, `Scene`, and `Output` workspaces
-3. construct or edit `future-canonical-repeat-grid.hcl` through the same workspaces
-4. prove the flow without touching `RenderInstances2D`, `WebGPUType1Sink`, or hidden transport-oriented UI controls
-5. save or reload and confirm preview/runtime still renders
+- use dedicated `Resources`, `Modulation`, `Scene`, and `Output` surfaces
+- create or edit one canonical single-primitive case
+- create or edit one canonical repeated-instance case
+- avoid legacy render-boundary or transport-oriented controls
+- reload, reopen, or otherwise re-enter the resulting state and confirm preview/runtime still renders
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-09-mvp-ui.playwright.json`
-- zero exit code
-- JSON report shows the single targeted spec passed with no skipped tests
+- the artifact records step-level outcomes for each required workflow segment
+- no required step is skipped
+- the resulting preview/runtime remains live after the persisted-state check
+- the artifact records which canonical cases were exercised
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- the full required workflow completes through canonical UI seams only
+- the verifier would fail if the UI still depended on hidden legacy renderer controls or could not recreate the accepted canonical cases
 
 Evidence class:
 
@@ -483,33 +493,26 @@ Owner:
 
 - `FUTURE-09`
 
-Commands:
+Capability claim:
 
-```bash
-pnpm -s vitest run \
-  src/compiler/frontend/__tests__/future-simulation-scene-bridge.test.ts \
-  --reporter=json \
-  --outputFile artifacts/webgpu-future/p-10-simulation-bridge.vitest.json
-```
+- simulation-owned authoring data bridges into canonical scene assembly and drives visible runtime output without leaking transport concepts upward
 
-```bash
-WEBGPU_MATRIX_START_SERVER=1 \
-WEBGPU_MATRIX_BUILD_FIRST=1 \
-WEBGPU_MATRIX_URL='http://127.0.0.1:4173/?loadDemoPatch=future-simulation-particles.hcl' \
-WEBGPU_MATRIX_REPORT=artifacts/webgpu-future/p-10-simulation-runtime.json \
-pnpm -s test:webgpu-matrix
-```
+Representative coverage:
 
-Fixtures:
+- at least one accepted simulation authoring case that exercises simulation-owned domains feeding scene assembly
 
-- `src/demo/hcl/future-simulation-particles.hcl`
+Required observables:
 
-Expected artifacts:
+- a bridge-level verifier proves simulation-owned data lowers into canonical scene assembly
+- the representative simulation case reaches automated runtime success
+- runtime evidence records bootstrap state `succeeded`, frame advance detected, console error count zero, and page error count zero
+- the artifact records the exact simulation case exercised
 
-- `artifacts/webgpu-future/p-10-simulation-bridge.vitest.json`
-- `artifacts/webgpu-future/p-10-simulation-runtime.json`
-- both commands exit zero
-- runtime report has `passed: true`
+Pass conditions:
+
+- the artifact reports `passed: true`
+- simulation authoring reaches visible output through canonical scene assembly
+- the verifier would fail if low-level transport concepts still leaked into simulation authoring APIs
 
 Evidence class:
 
@@ -525,28 +528,30 @@ Owner:
 
 - `FUTURE-10`
 
-Command:
+Capability claim:
 
-```bash
-pnpm exec playwright test \
-  tests/e2e/webgpu-future/simulation-authoring-ui.spec.ts \
-  --reporter=json \
-  > artifacts/webgpu-future/p-11-simulation-ui.playwright.json
-```
+- the UI supports dedicated end-to-end simulation authoring without falling back to raw renderer/runtime transport controls
 
-Browser workflow the spec must execute:
+Required automated workflow coverage:
 
-1. open `/?showPreview=true`
-2. construct or edit `future-simulation-particles.hcl` through `Simulation`, `Scene`, and `Output`
-3. make simulation-to-scene wiring visible and intentional in the UI
-4. confirm preview/runtime renders without exposing low-level runtime transport controls
-5. reload and confirm the same simulation proof patch still executes
+- use dedicated `Simulation`, `Scene`, and `Output` surfaces
+- create or edit one accepted simulation authoring case
+- make simulation-to-scene wiring visible in the UI
+- confirm preview/runtime renders without exposing low-level transport controls as required user steps
+- reload, reopen, or otherwise re-enter the resulting state and confirm the same simulation case still executes
 
-Expected artifact:
+Required observables:
 
-- `artifacts/webgpu-future/p-11-simulation-ui.playwright.json`
-- zero exit code
-- JSON report shows the targeted simulation UI spec passed with no skipped tests
+- the artifact records step-level outcomes for each required workflow segment
+- no required step is skipped
+- preview/runtime remains live after the persisted-state check
+- the artifact records the exact simulation case exercised
+
+Pass conditions:
+
+- the artifact reports `passed: true`
+- the full required workflow completes through simulation-aware UI seams
+- the verifier would fail if simulation authoring still required low-level transport controls or hidden graph-spaghetti fallbacks
 
 Evidence class:
 

@@ -35,7 +35,7 @@ This loop does not target:
 5. The worktree must be clean at the end of every run.
 6. The loop must preserve all previously accepted proof baselines unless the active ticket explicitly owns a temporary regression.
 7. The loop must not treat unimplemented proof seams as permission to guess. If proof is missing, building the smallest proof seam is part of the ticket.
-8. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`. Tickets and prompts may reference proof IDs, but they must not invent substitute commands.
+8. Acceptance proof requirements come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`. Tickets and prompts may reference proof IDs, but they must not narrow acceptance to one exact verifier command or weaker local substitute.
 9. `lnks ready` is informative, not authoritative. The active `FUTURE-*` leaf ticket plus the evaluator note own selection.
 10. Non-`FUTURE-*` issues may coexist in the tracker, but they do not own numbered WebGPU-Future roadmap seams unless the evaluator explicitly routes work to them because they own a broken accepted baseline.
 
@@ -53,7 +53,7 @@ The implementer reads it before choosing or continuing work.
 
 ## Proof Authority
 
-The canonical proof command source is:
+The canonical capability-proof source is:
 
 - `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
 
@@ -68,7 +68,7 @@ The evaluator note should record:
 
 - which proof IDs were replayed
 - which proof IDs were newly created or promoted to baseline
-- which matrix command blocked the run when verification fails
+- which capability claim or verifier boundary blocked the run when verification fails
 
 ## Proof Ladders By Ticket Family
 
@@ -135,8 +135,8 @@ The implementer:
 8. must not advance past the evaluator note lock
 9. must not work a later leaf ticket while an earlier prerequisite ticket is open
 10. must re-prove accepted baselines after touching a live-path boundary
-11. must use the exact proof-matrix commands for acceptance and baseline replay
-12. must treat a missing matrix-owned test/spec file as ticket work to add, not as permission to substitute a different verifier
+11. must satisfy the proof-matrix capability requirements for acceptance and baseline replay
+12. must treat a missing or weak verifier as ticket work to add or strengthen, not as permission to accept weaker evidence
 
 ## Evaluator Contract
 
@@ -152,7 +152,7 @@ The evaluator:
 8. must leave a clean tree and a commit when repo state changed
 9. must never authorize advancement while the active ticket remains open
 10. must route back to the earliest violated prerequisite ticket when repo state invalidates it
-11. must reject ad hoc proof substitutions when a matrix command exists
+11. must reject weaker proof substitutions when a matrix capability exists, while allowing a stronger or newly added verifier that satisfies the same required observables
 12. must block rather than waive browser proof when `P-01`, `P-09`, or `P-11` cannot be replayed after the standardized Playwright install fallback
 
 `// [LAW:single-enforcer] The evaluator is the single acceptance boundary. The implementer never self-accepts.`
