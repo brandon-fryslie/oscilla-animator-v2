@@ -58,13 +58,13 @@ If these disagree on scope, owner, boundary, or verification target, block inste
 
 ## Proof Authority
 
-1. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
-2. Use the proof IDs named by the active ticket and loop note. Do not substitute different commands because they are easier to run.
-3. If the matrix points at a test/spec file that does not exist yet, adding that verifier is part of the ticket.
+1. Acceptance proof requirements come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
+2. Use the proof IDs named by the active ticket and loop note. Do not substitute weaker evidence because it is easier to run.
+3. Reuse an existing verifier when it already satisfies the matrix observables. If it does not, adding or strengthening the smallest trustworthy verifier is part of the ticket.
 4. Browser proof is mandatory for matrix proofs `P-01`, `P-09`, and `P-11`.
-5. If a Playwright-backed proof fails because Chromium is missing, run:
+5. If a Playwright-backed browser verifier fails because Chromium is missing, run:
    - `pnpm exec playwright install chromium chromium-headless-shell`
-6. Rerun the original proof command after install. If it still fails, block instead of downgrading to manual inspection.
+6. Rerun the same browser verifier after install. If it still fails, block instead of downgrading to manual inspection.
 
 ## Before Coding
 
@@ -89,7 +89,7 @@ If these disagree on scope, owner, boundary, or verification target, block inste
    - invariant/ownership boundary
    - validation plan
    - proof target and why the chosen verifier would fail if the old wrong behavior were still active
-7. Name the exact proof IDs from the proof matrix that will be used for this run.
+7. Name the exact proof IDs from the proof matrix that will be used for this run and what evidence artifacts they are expected to produce.
 8. Move the ticket to `in_progress` if tracker writes work.
 
 ## Implementation
@@ -119,7 +119,7 @@ Run the smallest sufficient set of:
 - any ticket-specific gates
 
 If runtime or editor behavior changed, inspect real local evidence. Passing tests alone is not enough when ownership, render behavior, or UI workflow is the point.
-If a matrix proof exists for the ticket, that matrix proof is the minimum sufficient verifier.
+If a matrix proof exists for the ticket, satisfying that proof's required observables is the minimum sufficient acceptance boundary.
 
 Classify your evidence before using it:
 

@@ -51,13 +51,13 @@ If these disagree on scope, owner, boundary, or acceptance target, block.
 
 ## Proof Authority
 
-1. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
-2. Reject ad hoc substitutes when a matrix proof exists for the ticket or baseline.
-3. If a matrix-owned test/spec file does not exist yet, the ticket is incomplete unless creating that verifier was part of the implementation.
+1. Acceptance proof requirements come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
+2. Reject weaker substitutes when a matrix proof exists for the ticket or baseline. A stronger or newly added verifier is acceptable only when it satisfies the same required observables.
+3. If no verifier currently satisfies a matrix proof, the ticket is incomplete unless creating or strengthening that verifier was part of the implementation.
 4. Browser proof is mandatory for `P-01`, `P-09`, and `P-11`.
-5. If a Playwright-backed proof fails because Chromium is missing, run:
+5. If a Playwright-backed browser verifier fails because Chromium is missing, run:
    - `pnpm exec playwright install chromium chromium-headless-shell`
-6. Rerun the original proof command once after install.
+6. Rerun the same browser verifier once after install.
 7. If the rerun still fails, block. Do not accept on manual clicking, screenshots alone, or “works on my machine” assertions.
 
 ## Evaluate
@@ -87,7 +87,7 @@ Re-run the needed proof:
 - the last accepted baselines when later tickets touch a live-path boundary
 
 Do not trust the implementer’s report without replaying evidence.
-If the proof matrix defines an exact command for the ticket or baseline, replay that exact command.
+If the proof matrix defines a capability proof for the ticket or baseline, replay or rebuild evidence that satisfies that proof's required observables.
 
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in structure or fail to prove the ticket's required behavior.`
 `// [LAW:one-way-deps] If a later ticket reveals that an earlier prerequisite boundary is still wrong, reopen the earliest violated prerequisite and steer the loop back to it before allowing more downstream work.`

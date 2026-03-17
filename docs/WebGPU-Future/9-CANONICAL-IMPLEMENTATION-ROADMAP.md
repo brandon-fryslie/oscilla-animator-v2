@@ -16,11 +16,11 @@ It is the execution-order view over these docs:
 // [LAW:one-source-of-truth] This roadmap is the canonical implementation-order view for the new design stack. The individual docs define the architecture; this document defines the sequence.
 // [LAW:verifiable-goals] Each phase below has a concrete exit condition so implementation can be judged complete or incomplete without guesswork.
 
-Acceptance-proof commands for these phases are centralized in:
+Acceptance-proof capability requirements for these phases are centralized in:
 
 - [10-IMPLEMENTATION-PROOF-MATRIX.md](./10-IMPLEMENTATION-PROOF-MATRIX.md)
 
-// [LAW:single-enforcer] Phase sequencing lives here, while exact verification commands live once in the proof matrix.
+// [LAW:single-enforcer] Phase sequencing lives here, while proof requirements live once in the proof matrix.
 
 ## 1. Dependency Order
 
