@@ -1,0 +1,69 @@
+{
+  "generatedAt": "2026-03-17T03:57:19.785Z",
+  "sampleFrames": 180,
+  "url": "http://127.0.0.1:4173/?loadDemoPatch=gpu-bootstrap-triangle.hcl&showPreview=true",
+  "server": {
+    "startServer": true,
+    "buildFirst": true,
+    "mode": "preview",
+    "allowReuse": true
+  },
+  "skipPolicy": {
+    "failOnSkip": false
+  },
+  "results": [
+    {
+      "browser": "chromium",
+      "blocking": true,
+      "status": "failed",
+      "browserVersion": "145.0.7632.6",
+      "url": "http://127.0.0.1:4173/?loadDemoPatch=gpu-bootstrap-triangle.hcl&showPreview=true",
+      "startedAt": "2026-03-17T03:57:17.244Z",
+      "durationMs": 2485,
+      "readiness": {
+        "hasNavigatorGpu": true,
+        "hasAdapter": true,
+        "hasCanvas": true,
+        "hasWebGPUContext": true,
+        "webgpuContextProbe": "offscreen_transferred",
+        "runtimeProbePresent": true,
+        "bootstrapSucceeded": false,
+        "frameAdvanceDetected": false,
+        "runtimeProbe": {
+          "present": true,
+          "bootstrapState": "failed",
+          "bootstrapFailureMessage": "RuntimeService: initial async compile failed: [runtime_poll_failure] Rust worker runtime poll failure: Rust engine must be initialized before take_frame_pacing_packet",
+          "bootstrapReadyBeforeSample": false,
+          "renderedFramesBeforeSample": 0,
+          "renderedFramesAfterSample": 0,
+          "frameAdvanceCount": 0
+        },
+        "consoleErrorCount": 1,
+        "pageErrorCount": 0
+      },
+      "timing": {
+        "sampleCount": 0,
+        "avgFrameDeltaMs": 0,
+        "p95FrameDeltaMs": 0,
+        "avgFps": 0
+      },
+      "errors": {
+        "console": [
+          "Failed to initialize runtime: Error: RuntimeService: initial async compile failed: [runtime_poll_failure] Rust worker runtime poll failure: Rust engine must be initialized before take_frame_pacing_packet\n    at oIr.runInitialCompileViaWorker (http://127.0.0.1:4173/assets/index-WIDJnZKO.js:5784:105358)\n    at async oIr.init (http://127.0.0.1:4173/assets/index-WIDJnZKO.js:5784:108338)"
+        ],
+        "page": [],
+        "setup": []
+      },
+      "failureReason": "runtime_bootstrap_not_succeeded",
+      "passed": false,
+      "skipped": false
+    }
+  ],
+  "skippedCount": 0,
+  "gatingBrowsers": [
+    "chromium"
+  ],
+  "nonBlockingBrowsers": [],
+  "passed": false,
+  "hardPassed": false
+}
