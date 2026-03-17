@@ -86,6 +86,7 @@ These files form one coherent stack:
 | [7-CANONICAL-AUTHORING-UI-DESIGN.md](./7-CANONICAL-AUTHORING-UI-DESIGN.md) | Defines the editor structure that matches the canonical layers instead of collapsing everything into one graph canvas. |
 | [8-CANONICAL-PHYSICS-AUTHORING-DESIGN.md](./8-CANONICAL-PHYSICS-AUTHORING-DESIGN.md) | Extends the same authoring model to simulation-driven animation without introducing a second top-level architecture. |
 | [9-CANONICAL-IMPLEMENTATION-ROADMAP.md](./9-CANONICAL-IMPLEMENTATION-ROADMAP.md) | Defines dependency order, implementation order, and shipping phases across the full stack. |
+| [10-IMPLEMENTATION-PROOF-MATRIX.md](./10-IMPLEMENTATION-PROOF-MATRIX.md) | Defines the exact acceptance commands, fixtures, artifacts, and replay obligations for the unattended `FUTURE-*` loop. |
 
 ## 5. Execution Order After The First Triangle
 
@@ -159,5 +160,8 @@ The implementation backlog for this roadmap now has a dedicated unattended two-a
 - [docs/WebGPU-Future-Agent-Loop.md](../WebGPU-Future-Agent-Loop.md)
 - [PROMPT-WEBGPU-FUTURE-PROGRESS.md](../../PROMPT-WEBGPU-FUTURE-PROGRESS.md)
 - [PROMPT-WEBGPU-FUTURE-EVALUATOR.md](../../PROMPT-WEBGPU-FUTURE-EVALUATOR.md)
+- [10-IMPLEMENTATION-PROOF-MATRIX.md](./10-IMPLEMENTATION-PROOF-MATRIX.md)
 
 That loop is intended to run against the `FUTURE-*` implementation tickets and uses `session-docs/WEBGPU-FUTURE-LOOP.md` as the run-to-run handoff artifact.
+
+`// [LAW:one-source-of-truth] The proof matrix is the single command authority for unattended verification; loop docs and ticket bodies should reference proof IDs from it rather than duplicate command text.`

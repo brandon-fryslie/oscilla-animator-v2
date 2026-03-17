@@ -4,6 +4,7 @@ Read these first:
 
 1. `AGENTS.md`
 2. `docs/WebGPU-Future-Agent-Loop.md`
+3. `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
 
 Your job is to judge the latest implementation state for exactly one `FUTURE-*` leaf ticket and prepare the next run.
 
@@ -13,15 +14,15 @@ Your job is to judge the latest implementation state for exactly one `FUTURE-*` 
 ## Startup
 
 1. Run:
-   - `lit quickstart --json`
-   - `lit workspace --json`
-   - `lit sync pull --json`
+   - `lnks quickstart --json`
+   - `lnks workspace --json`
+   - `lnks sync pull --json`
 2. If sync fails because the manifest is read-only, note it and continue with local tracker state only if the ticket is still identifiable.
 3. Normalize the worktree using `docs/WebGPU-Future-Agent-Loop.md` until `git status --short` is clean.
 4. Inspect repo/ticket state:
    - `git log --oneline -n 10`
-   - `lit ls --query "status:open FUTURE-" --json`
-   - `lit ls --query "status:closed FUTURE-" --json`
+   - `lnks ls --query "status:open FUTURE-" --json`
+   - `lnks ls --query "status:closed FUTURE-" --json`
 5. Ensure `session-docs/` exists.
 
 ## Choose Ticket
@@ -41,11 +42,23 @@ Read in this order:
 3. current repo state and recent git history
 4. `docs/WebGPU-Future/README.md`
 5. `docs/WebGPU-Future/9-CANONICAL-IMPLEMENTATION-ROADMAP.md`
-6. numbered docs listed in the ticket
-7. `docs/WebGPU-Complete/` specs listed in the ticket
-8. `session-docs/WEBGPU-FUTURE-LOOP.md`, if it exists, only as prior steering context
+6. `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
+7. numbered docs listed in the ticket
+8. `docs/WebGPU-Complete/` specs listed in the ticket
+9. `session-docs/WEBGPU-FUTURE-LOOP.md`, if it exists, only as prior steering context
 
 If these disagree on scope, owner, boundary, or acceptance target, block.
+
+## Proof Authority
+
+1. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
+2. Reject ad hoc substitutes when a matrix proof exists for the ticket or baseline.
+3. If a matrix-owned test/spec file does not exist yet, the ticket is incomplete unless creating that verifier was part of the implementation.
+4. Browser proof is mandatory for `P-01`, `P-09`, and `P-11`.
+5. If a Playwright-backed proof fails because Chromium is missing, run:
+   - `pnpm exec playwright install chromium chromium-headless-shell`
+6. Rerun the original proof command once after install.
+7. If the rerun still fails, block. Do not accept on manual clicking, screenshots alone, or “works on my machine” assertions.
 
 ## Evaluate
 
@@ -74,6 +87,7 @@ Re-run the needed proof:
 - the last accepted baselines when later tickets touch a live-path boundary
 
 Do not trust the implementer’s report without replaying evidence.
+If the proof matrix defines an exact command for the ticket or baseline, replay that exact command.
 
 `// [LAW:behavior-not-structure] Reject passing tests that only lock in structure or fail to prove the ticket's required behavior.`
 `// [LAW:one-way-deps] If a later ticket reveals that an earlier prerequisite boundary is still wrong, reopen the earliest violated prerequisite and steer the loop back to it before allowing more downstream work.`
