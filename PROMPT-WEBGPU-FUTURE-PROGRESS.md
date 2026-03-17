@@ -4,6 +4,7 @@ Read these first:
 
 1. `AGENTS.md`
 2. `docs/WebGPU-Future-Agent-Loop.md`
+3. `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
 
 Your job is to make bounded progress on exactly one `FUTURE-*` leaf ticket.
 
@@ -13,16 +14,16 @@ Your job is to make bounded progress on exactly one `FUTURE-*` leaf ticket.
 ## Startup
 
 1. Run:
-   - `lit quickstart --json`
-   - `lit workspace --json`
-   - `lit sync pull --json`
+   - `lnks quickstart --json`
+   - `lnks workspace --json`
+   - `lnks sync pull --json`
 2. If sync fails because the manifest is read-only, note it and continue with local tracker state.
 3. Normalize the worktree using `docs/WebGPU-Future-Agent-Loop.md` until `git status --short` is clean.
 4. Inspect ready work:
-   - `lit ready --json`
-   - `lit ls --query "status:open FUTURE-" --json`
-   - `lit ls --query "status:in_progress FUTURE-" --json`
-   - `lit ls --query "status:closed FUTURE-" --json`
+   - `lnks ready --json`
+   - `lnks ls --query "status:open FUTURE-" --json`
+   - `lnks ls --query "status:in_progress FUTURE-" --json`
+   - `lnks ls --query "status:closed FUTURE-" --json`
 5. Ensure `session-docs/` exists.
 
 ## Choose Work
@@ -49,10 +50,21 @@ Read in this order:
 3. parent/dependency tickets
 4. `docs/WebGPU-Future/README.md`
 5. `docs/WebGPU-Future/9-CANONICAL-IMPLEMENTATION-ROADMAP.md`
-6. numbered docs listed in the ticket
-7. `docs/WebGPU-Complete/` specs listed in the ticket
+6. `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
+7. numbered docs listed in the ticket
+8. `docs/WebGPU-Complete/` specs listed in the ticket
 
 If these disagree on scope, owner, boundary, or verification target, block instead of coding.
+
+## Proof Authority
+
+1. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`.
+2. Use the proof IDs named by the active ticket and loop note. Do not substitute different commands because they are easier to run.
+3. If the matrix points at a test/spec file that does not exist yet, adding that verifier is part of the ticket.
+4. Browser proof is mandatory for matrix proofs `P-01`, `P-09`, and `P-11`.
+5. If a Playwright-backed proof fails because Chromium is missing, run:
+   - `pnpm exec playwright install chromium chromium-headless-shell`
+6. Rerun the original proof command after install. If it still fails, block instead of downgrading to manual inspection.
 
 ## Before Coding
 
@@ -77,7 +89,8 @@ If these disagree on scope, owner, boundary, or verification target, block inste
    - invariant/ownership boundary
    - validation plan
    - proof target and why the chosen verifier would fail if the old wrong behavior were still active
-7. Move the ticket to `in_progress` if tracker writes work.
+7. Name the exact proof IDs from the proof matrix that will be used for this run.
+8. Move the ticket to `in_progress` if tracker writes work.
 
 ## Implementation
 
@@ -106,6 +119,7 @@ Run the smallest sufficient set of:
 - any ticket-specific gates
 
 If runtime or editor behavior changed, inspect real local evidence. Passing tests alone is not enough when ownership, render behavior, or UI workflow is the point.
+If a matrix proof exists for the ticket, that matrix proof is the minimum sufficient verifier.
 
 Classify your evidence before using it:
 

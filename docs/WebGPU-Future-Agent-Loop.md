@@ -8,6 +8,7 @@ This document defines the unattended two-agent loop for implementing the numbere
 For the generalized method behind this workflow, see:
 
 - `docs/Spec-Constrained-Agent-Loop.md`
+- `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
 
 `// [LAW:one-source-of-truth] The active `FUTURE-*` leaf ticket plus its cited roadmap docs/specs are the only implementation authority for a run.`
 `// [LAW:verifiable-goals] Every run must end with a verdict backed by local, replayable evidence.`
@@ -25,7 +26,7 @@ This loop does not target:
 ## Shared Rules
 
 1. Loop memory lives only in:
-   - the active `FUTURE-*` leaf ticket body in `lit`
+   - the active `FUTURE-*` leaf ticket body in `lnks`
    - the shared evaluator note file `session-docs/WEBGPU-FUTURE-LOOP.md`
    - git history and the current worktree
 2. Work on exactly one `FUTURE-*` leaf ticket per run.
@@ -34,6 +35,9 @@ This loop does not target:
 5. The worktree must be clean at the end of every run.
 6. The loop must preserve all previously accepted proof baselines unless the active ticket explicitly owns a temporary regression.
 7. The loop must not treat unimplemented proof seams as permission to guess. If proof is missing, building the smallest proof seam is part of the ticket.
+8. Exact acceptance commands come only from `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`. Tickets and prompts may reference proof IDs, but they must not invent substitute commands.
+9. `lnks ready` is informative, not authoritative. The active `FUTURE-*` leaf ticket plus the evaluator note own selection.
+10. Non-`FUTURE-*` issues may coexist in the tracker, but they do not own numbered WebGPU-Future roadmap seams unless the evaluator explicitly routes work to them because they own a broken accepted baseline.
 
 `// [LAW:dataflow-not-control-flow] Advancement through the roadmap happens by explicit ticket state and verifier state transitions, not by ad hoc “this seems next” control flow.`
 
@@ -47,29 +51,24 @@ The implementer reads it before choosing or continuing work.
 
 `// [LAW:one-source-of-truth] The evaluator note is the canonical run-to-run steering artifact.`
 
-## Baselines
+## Proof Authority
 
-This loop has a growing proof ladder.
+The canonical proof command source is:
 
-### Baseline 0: Render Liveness
+- `docs/WebGPU-Future/10-IMPLEMENTATION-PROOF-MATRIX.md`
 
-The existing first-triangle WebGPU path remains alive.
+Starting accepted baseline:
 
-### Baseline 1: Canonical Scene Submission
+- `P-00` bootstrap static contract
+- `P-01` bootstrap runtime liveness
 
-Once `FUTURE-01` and `FUTURE-03` land, the loop must preserve proof that a scene can reach:
+Each accepted `FUTURE-*` ticket adds one or more new proof IDs from that matrix. Once the evaluator accepts a ticket, those proof IDs become part of the replay set for the later tickets listed in the matrix.
 
-`RenderPrimitive[] + RenderView -> SceneRenderSink -> RenderPrepare -> DrawQueueBuilder -> render`
+The evaluator note should record:
 
-### Baseline 2: Legacy Compatibility
-
-Once the compatibility seam is accepted, the loop must preserve proof that selected legacy patches render through the canonical boundary rather than a legacy renderer path.
-
-### Baseline 3: Canonical Authoring MVP
-
-Once the MVP authoring surface is accepted, the loop must preserve proof that canonical authoring data lowers to canonical scene submission and reaches visible output.
-
-The evaluator note should record which of these baselines were replayed during a run.
+- which proof IDs were replayed
+- which proof IDs were newly created or promoted to baseline
+- which matrix command blocked the run when verification fails
 
 ## Proof Ladders By Ticket Family
 
@@ -77,39 +76,41 @@ The required proof depends on the active ticket.
 
 ### Render Boundary / Compatibility Tickets
 
-Minimum expected proof ladder:
+Minimum proof ladder:
 
-1. static checks (`typecheck`, targeted tests, build as needed)
-2. contract proof for canonical scene submission or adapter output
-3. runtime or readback proof that the canonical path is the live path
-4. replay of the last accepted visible render baseline
+1. replay `P-00`
+2. replay `P-01`
+3. run the owning ticket proof (`P-02`, `P-03`, or `P-04`)
+4. replay any previously accepted boundary proof IDs that the matrix marks as required for this ticket
 
 ### Patch / Authoring Model Tickets
 
-Minimum expected proof ladder:
+Minimum proof ladder:
 
-1. schema / compiler / lowering tests
-2. proof that canonical patch data lowers to `RenderPrimitive[] + RenderView`
-3. proof that no renderer transport concepts leak upward
-4. replay of the last accepted render baseline if the live path is touched
+1. replay `P-00`
+2. replay `P-01`
+3. run the owning ticket proof (`P-05`, `P-06`, or `P-07`)
+4. replay previously accepted proof IDs named by the matrix for that ticket
 
 ### UI Tickets
 
-Minimum expected proof ladder:
+Minimum proof ladder:
 
-1. static checks
-2. targeted UI/component/editor tests
-3. deterministic browser/UI smoke for the changed workflow when local automation exists
-4. replay of the last accepted compiler/render baseline that the UI depends on
+1. replay `P-00`
+2. replay `P-01`
+3. replay the canonical runtime proof that the UI is supposed to expose (`P-08` for `FUTURE-08`, `P-10` for `FUTURE-10`)
+4. run the owning browser proof (`P-09` or `P-11`)
+
+Browser proof is mandatory. Do not replace it with “when available” wording or manual clicks.
 
 ### Simulation Tickets
 
-Minimum expected proof ladder:
+Minimum proof ladder:
 
-1. simulation contract tests
-2. proof that simulation-owned domains feed scene assembly through the canonical bridge
-3. visible or readback proof for the new path when the render/runtime path changes
-4. replay of all earlier accepted baselines
+1. replay `P-00`
+2. replay `P-01`
+3. replay `P-08` when the simulation work depends on the canonical MVP authoring slice
+4. run the owning simulation proof (`P-10` or `P-11`)
 
 ## Dirty Tree Normalization
 
@@ -134,6 +135,8 @@ The implementer:
 8. must not advance past the evaluator note lock
 9. must not work a later leaf ticket while an earlier prerequisite ticket is open
 10. must re-prove accepted baselines after touching a live-path boundary
+11. must use the exact proof-matrix commands for acceptance and baseline replay
+12. must treat a missing matrix-owned test/spec file as ticket work to add, not as permission to substitute a different verifier
 
 ## Evaluator Contract
 
@@ -149,6 +152,8 @@ The evaluator:
 8. must leave a clean tree and a commit when repo state changed
 9. must never authorize advancement while the active ticket remains open
 10. must route back to the earliest violated prerequisite ticket when repo state invalidates it
+11. must reject ad hoc proof substitutions when a matrix command exists
+12. must block rather than waive browser proof when `P-01`, `P-09`, or `P-11` cannot be replayed after the standardized Playwright install fallback
 
 `// [LAW:single-enforcer] The evaluator is the single acceptance boundary. The implementer never self-accepts.`
 
@@ -205,6 +210,22 @@ Every run should be explainable as gates:
 If a gate fails because the implementation choice was bad, retry is allowed inside the same ticket.
 
 If a gate fails because the ticket boundary is wrong, proof is missing, or a prerequisite is incomplete, block instead of improvising.
+
+## Tracker Authority And Overlap
+
+The active implementation backlog for this loop is:
+
+- `FUTURE-EPIC`
+- `FUTURE-01` through `FUTURE-10`
+
+The earlier design-doc tickets are not implementation authority for this loop once they are closed or superseded.
+
+Cross-backlog rule:
+
+1. if an accepted `RECOVER-*` or other non-`FUTURE-*` issue is reopened because it owns a broken accepted baseline, that earlier owning issue preempts the `FUTURE-*` stream
+2. otherwise, overlapping non-`FUTURE-*` work does not take ownership of the numbered WebGPU-Future roadmap seam currently held by the active `FUTURE-*` ticket
+
+`// [LAW:one-way-deps] Ownership preemption must flow to the earliest ticket that owns the broken accepted boundary, not to whatever issue most recently touched the same files.`
 
 ## Ticket Taxonomy
 
