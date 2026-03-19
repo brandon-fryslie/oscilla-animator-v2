@@ -55,7 +55,7 @@ export function register(): void {
         type: canonicalType(INT),
         defaultSource: defaultSourceConst(500),
         exposedAsPort: true,
-        uiHint: { kind: 'slider', min: 1, max: 10000, step: 1 },
+        uiHint: { kind: 'slider', min: 64, max: 2048, step: 1 },
         semantic: 'instanceCount',
       },
     },

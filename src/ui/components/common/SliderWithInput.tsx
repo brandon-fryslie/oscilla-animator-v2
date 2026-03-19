@@ -30,10 +30,14 @@ export interface SliderWithInputProps {
   step?: number;
   /** Helper text below slider */
   helperText?: string;
+  /** Compactness for slider and input controls */
+  size?: 'xs' | 'sm' | 'md';
   /** Disable control */
   disabled?: boolean;
   /** Unit label (e.g., "ms") */
   unit?: string;
+  /** Explicit numeric input width in rems */
+  inputWidthRem?: number;
   /**
    * When true, slider drag updates are buffered locally and committed on release.
    * // [LAW:dataflow-not-control-flow] Same render path; only commit timing varies by data flag.
@@ -57,8 +61,10 @@ export function SliderWithInput({
   max,
   step = 0.1,
   helperText,
+  size = 'sm',
   disabled = false,
   unit,
+  inputWidthRem,
   commitOnRelease = false,
   editableBounds = false,
 }: SliderWithInputProps): React.ReactElement {
@@ -173,6 +179,8 @@ export function SliderWithInput({
     }
   };
 
+  const resolvedInputWidthRem = inputWidthRem ?? (unit ? 90 / 16 : 70 / 16);
+
   return (
     <Box mb="xs">
       <Text size="xs" fw={500} c="gray.4" mb={4}>
@@ -188,7 +196,7 @@ export function SliderWithInput({
             max={sliderMax}
             step={step}
             disabled={disabled}
-            size="sm"
+            size={size}
             color="violet"
             label={(val) => typeof val === 'number' ? val.toFixed(2) : String(val)}
             styles={{
@@ -243,7 +251,7 @@ export function SliderWithInput({
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          size="xs"
+          size={size}
           rightSection={
             unit ? (
               <Text size="xs" c="dimmed">
@@ -253,7 +261,7 @@ export function SliderWithInput({
           }
           styles={{
             root: {
-              width: unit ? rem(90) : rem(70),
+              width: rem(resolvedInputWidthRem * 16),
             },
             input: {
               background: 'rgba(0, 0, 0, 0.2)',
