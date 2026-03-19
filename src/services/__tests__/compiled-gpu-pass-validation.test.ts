@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { validateCompiledGpuPassBundle } from '../compiled-gpu-pass-validation';
-import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from '../compile-worker-protocol';
+import type { CompiledGpuPassArtifact, CompiledGpuPassBundle } from '../compile-worker-protocol';
 import type { GpuPassStage } from '../../types/gpu-pass-stage';
 
-function buildBundle(passes: readonly CompiledGpuPassArtifact[]): CompiledGpuArtifactBundle {
+function buildBundle(passes: readonly CompiledGpuPassArtifact[]): CompiledGpuPassBundle {
   return {
     schemaVersion: 1,
     passes,
@@ -176,7 +176,7 @@ describe('validateCompiledGpuPassBundle bundle policy validation', () => {
     const malformedBundle = {
       schemaVersion: 1,
       passes: null,
-    } as unknown as CompiledGpuArtifactBundle;
+    } as unknown as CompiledGpuPassBundle;
     const result = validateCompiledGpuPassBundle(malformedBundle);
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;

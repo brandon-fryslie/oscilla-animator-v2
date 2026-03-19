@@ -1,9 +1,15 @@
 import type { FrontendResult } from '../compiler/frontend';
+import type { CompiledRuntimeInstallContract } from '../compiler/backend/compiled-runtime-install-contract';
 import type { CompileError } from '../compiler/types';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { GpuPassStage } from '../types/gpu-pass-stage';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
+export type {
+  CompiledDrawPrepInstallArtifact,
+  CompiledShapeBankInstallArtifact,
+  CompiledRuntimeInstallContract,
+} from '../compiler/backend/compiled-runtime-install-contract';
 
 export interface CompiledGpuPassArtifact {
   readonly passId: string;
@@ -18,12 +24,18 @@ export interface CompiledGpuPassSignature {
   readonly entryPoint: string;
 }
 
-export interface CompiledGpuArtifactBundle {
+export interface CompiledGpuPassBundle {
   readonly schemaVersion: 1;
   readonly passes: readonly CompiledGpuPassArtifact[];
   // [LAW:single-enforcer] Pass signature semantics are enforced once at
   // compile boundary and transported as typed metadata once validated.
   readonly passSignatures?: readonly CompiledGpuPassSignature[];
+}
+
+export interface CompiledGpuArtifactBundle extends CompiledGpuPassBundle {
+  // [LAW:one-source-of-truth] Compile worker owns the canonical static install
+  // contract. Runtime consumes this payload directly instead of rebuilding it.
+  readonly runtimeInstall: CompiledRuntimeInstallContract;
 }
 
 export function toCompiledGpuPassSignature(
