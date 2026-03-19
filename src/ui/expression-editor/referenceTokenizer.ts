@@ -77,13 +77,13 @@ const TOKEN_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b|\b
  *
  * @param text - Expression text to tokenize
  * @param addressRegistry - Registry for resolving shorthands to canonical addresses
- * @param connectedShorthands - Set of shorthand strings that have collect edges
+ * @param connectedAddresses - Set of canonical output address strings that have collect edges
  * @returns Array of tokenized segments
  *
  * @example
  * ```typescript
  * const registry = AddressRegistry.buildFromPatch(patch);
- * const connected = new Set(['circle_1.radius']);
+ * const connected = new Set(['v1:blocks.circle_1.outputs.radius']);
  * const segments = tokenizeExpression(
  *   'sin(circle_1.radius * 2)',
  *   registry,

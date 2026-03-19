@@ -403,6 +403,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
     const [popoverData, setPopoverData] = useState<{
       shorthand: string;
       sourceAddress: string;
+      isConnected: boolean;
       position: { top: number; left: number };
     } | null>(null);
     const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -420,6 +421,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         setPopoverData({
           shorthand,
           sourceAddress,
+          isConnected: target.classList.contains('expr-ref-chip--valid'),
           position: { top: rect.bottom + 4, left: rect.left },
         });
       }
@@ -448,11 +450,16 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
           blockType: resolved.block.type,
           portName: String(resolved.port.id),
           typeDesc: `${kindStr}<${payloadStr}>`,
-          isConnected: true,
+          isConnected: popoverData.isConnected,
         };
       }
 
-      return { blockType: 'Unknown', portName: popoverData.shorthand, typeDesc: 'unknown', isConnected: false };
+      return {
+        blockType: 'Unknown',
+        portName: popoverData.shorthand,
+        typeDesc: 'unknown',
+        isConnected: popoverData.isConnected,
+      };
     }, [popoverData, addressRegistry]);
 
     const isEmpty = value.length === 0;
