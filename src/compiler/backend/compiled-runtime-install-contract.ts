@@ -1,34 +1,53 @@
 // [RECOVER-07] Canonical compile-time topology install.
 //
 // This module publishes canonical compile-time assets (ShapeBank topology
-// headers and sink table descriptors) to the renderer worker. It does NOT
+// headers and sink table descriptors) into compile-worker output. It does NOT
 // call the CPU runtime materializer, instance count resolver, or ShapeBank
 // allocator. The GPU pipeline handles all per-frame value computation for
 // both the first frame and every subsequent frame.
 //
-// [LAW:one-source-of-truth] The GPU pipeline is the single runtime
-// execution authority. Install publishes static compile-time assets only.
-// [LAW:single-enforcer] This module is the single GPU-visible runtime
-// stage that owns canonical shape-handle production from compile-time
-// topology metadata.
+// [LAW:one-source-of-truth] The compile worker is the single publisher of the
+// static install contract. Runtime services consume that payload directly.
+// [LAW:single-enforcer] This module is the one boundary that derives
+// compile-time install metadata from CompiledProgramIR for worker transport.
+// [LAW:one-way-deps] Compile-time install derivation lives in compiler/backend
+// so runtime services consume compile-owned artifacts instead of owning a
+// second compile boundary.
 
-import type { CompiledProgramIR } from '../compiler/ir/program';
-import type { ValueSlot } from '../compiler/ir/Indices';
-import type { Step } from '../compiler/ir/types';
-import type { ValueExpr, ValueExprShapeRef } from '../compiler/ir/value-expr';
-import { getProgramTopology } from '../compiler/ir/program-topology';
-import { resolveArenaAddress } from '../runtime/ArenaValueStore';
-import { packDrawPrepSinkTableV1 } from '../runtime/DrawPrepSinkTablePacker';
-import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
+import type { CompiledProgramIR } from '../ir/program';
+import type { ValueSlot } from '../ir/Indices';
+import type { Step } from '../ir/types';
+import type { ValueExpr, ValueExprShapeRef } from '../ir/value-expr';
+import { getProgramTopology } from '../ir/program-topology';
+import { resolveArenaAddress } from '../../runtime/ArenaValueStore';
+import { packDrawPrepSinkTableV1 } from '../../runtime/DrawPrepSinkTablePacker';
+import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 import {
   SHAPE_BANK_HEADER_WORDS,
-  SHAPE_BANK_NO_CONTROL_POINT_SLOT,
   ShapeBankHeaderWord,
-} from '../runtime/RuntimeState';
-import { ShapeClass, TopologyMode } from '../shapes/types';
-import type { PathTopologyDef, ParametricTopologyDef, TopologyDef } from '../shapes/types';
-import { isParametricTopology } from '../shapes/registry';
-import { generateParametricTemplate, parametricRibbonVertexCount } from '../shapes/registry';
+} from '../../runtime/RuntimeState';
+import { ShapeClass, TopologyMode } from '../../shapes/types';
+import type { PathTopologyDef, ParametricTopologyDef, TopologyDef } from '../../shapes/types';
+import { isParametricTopology } from '../../shapes/registry';
+import { generateParametricTemplate, parametricRibbonVertexCount } from '../../shapes/registry';
+
+export interface CompiledDrawPrepInstallArtifact {
+  readonly words: Uint32Array;
+  readonly wordCount: number;
+}
+
+export interface CompiledShapeBankInstallArtifact {
+  readonly words: Uint32Array;
+  readonly wordCount: number;
+  readonly topologyIdByHandle: Uint32Array;
+}
+
+export interface CompiledRuntimeInstallContract {
+  // [LAW:dataflow-not-control-flow] Compile output always publishes the same
+  // install contract shape; empty payloads use zero counts, not missing fields.
+  readonly drawPrep: CompiledDrawPrepInstallArtifact;
+  readonly shapeBank: CompiledShapeBankInstallArtifact;
+}
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 
@@ -85,7 +104,6 @@ interface CanonicalTopologyInstall {
   readonly shapeWordOffsetBySlot: ReadonlyMap<ValueSlot, number>;
   // Sidecar metadata for the renderer (same contract as ShapeBankState).
   readonly topologyIdByHandle: Uint32Array;
-  readonly controlPointSlotByHandle: Int32Array;
 }
 
 // [RECOVER-07] Build ShapeBank topology headers from compile-time data only.
@@ -131,9 +149,6 @@ function buildCanonicalTopologyHeaders(
 
   const shapeBankWords = new Uint32Array(totalWords);
   const topologyIdByHandle = new Uint32Array(totalWords);
-  const controlPointSlotByHandle = new Int32Array(totalWords).fill(
-    SHAPE_BANK_NO_CONTROL_POINT_SLOT,
-  );
 
   let wordOffset = 0;
   for (let stepIdx = 0; stepIdx < shapeRefSteps.length; stepIdx++) {
@@ -148,14 +163,11 @@ function buildCanonicalTopologyHeaders(
     let cpArenaBaseOffset = 0;
     let cpArenaLaneStride = 0;
     let cpArenaComponentStride = 0;
-    let controlPointSlot = SHAPE_BANK_NO_CONTROL_POINT_SLOT;
-
     if ((isPath || isParametric) && expr.controlPointField != null) {
       const slot = program.runtimeAddressTable.fieldExprToSlot.get(
         expr.controlPointField as number,
       );
       if (slot !== undefined) {
-        controlPointSlot = slot as number;
         const cpDescriptor = program.runtimeAddressTable.slotToArena.get(slot);
         if (cpDescriptor) {
           const cpAddress = resolveArenaAddress(cpDescriptor);
@@ -207,7 +219,6 @@ function buildCanonicalTopologyHeaders(
 
       shapeWordOffsetBySlot.set(target, wordOffset);
       topologyIdByHandle[wordOffset] = (expr.topologyId as number) >>> 0;
-      controlPointSlotByHandle[wordOffset] = controlPointSlot;
       wordOffset += SHAPE_BANK_HEADER_WORDS + paramBlockWords;
     } else {
       // --- Type 1 Rigid path (existing behavior) ---
@@ -251,7 +262,6 @@ function buildCanonicalTopologyHeaders(
 
       // Record sidecar metadata (same contract as ShapeBankState sidecar).
       topologyIdByHandle[wordOffset] = (expr.topologyId as number) >>> 0;
-      controlPointSlotByHandle[wordOffset] = controlPointSlot;
 
       wordOffset += SHAPE_BANK_HEADER_WORDS;
     }
@@ -262,7 +272,6 @@ function buildCanonicalTopologyHeaders(
     shapeBankWordCount: totalWords,
     shapeWordOffsetBySlot,
     topologyIdByHandle,
-    controlPointSlotByHandle,
   };
 }
 
@@ -270,18 +279,7 @@ function buildCanonicalTopologyHeaders(
 // Public install planes API
 // ---------------------------------------------------------------------------
 
-export interface RuntimeHotpathInstallPlanes {
-  readonly sinkTableWords: Uint32Array | null;
-  readonly sinkTableWordCount: number;
-  readonly shapeBankWords: Uint32Array;
-  readonly shapeBankWordCount: number;
-  // [RECOVER-07] Sidecar metadata for the renderer, produced by the
-  // compile-time topology install stage (not from ShapeBankState).
-  readonly topologyIdByHandle: Uint32Array;
-  readonly controlPointSlotByHandle: Int32Array;
-}
-
-// [RECOVER-07] Build install planes from compile-time topology data only.
+// [RECOVER-07] Build the worker-owned runtime install contract from compile-time data only.
 //
 // No materializeValueExpr. No allocShapeBankWords. No writeShapeBankHeader.
 // No resolveInstanceLaneCount. No RuntimeState mutation.
@@ -289,29 +287,32 @@ export interface RuntimeHotpathInstallPlanes {
 // The compile-time topology install stage (buildCanonicalTopologyHeaders)
 // is the single GPU-visible runtime stage that owns canonical shape-handle
 // production from topology metadata.
-export function buildRuntimeHotpathInstallPlanes(
+export function buildCompiledRuntimeInstallContract(
   program: CompiledProgramIR,
-): RuntimeHotpathInstallPlanes {
+): CompiledRuntimeInstallContract {
   const topology = buildCanonicalTopologyHeaders(program);
 
   // [RECOVER-07] Sink table packer receives compile-time shape word offsets
   // directly — no arena round-trip through CPU materialization.
   const packed = packDrawPrepSinkTableV1(program, topology.shapeWordOffsetBySlot);
-  const sinkTableWords = packed
+  const drawPrepWords = packed
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))
-    : null;
-  const sinkTableWordCount = packed?.wordCount ?? 0;
+    : new Uint32Array(0);
+  const drawPrepWordCount = packed?.wordCount ?? 0;
   const shapeBankWordCount = assertFiniteUint32(
     topology.shapeBankWordCount,
     'gpuDrivenShapeBank.wordCount',
   );
 
   return {
-    sinkTableWords,
-    sinkTableWordCount,
-    shapeBankWords: topology.shapeBankWords,
-    shapeBankWordCount,
-    topologyIdByHandle: topology.topologyIdByHandle,
-    controlPointSlotByHandle: topology.controlPointSlotByHandle,
+    drawPrep: {
+      words: drawPrepWords,
+      wordCount: drawPrepWordCount,
+    },
+    shapeBank: {
+      words: topology.shapeBankWords,
+      wordCount: shapeBankWordCount,
+      topologyIdByHandle: topology.topologyIdByHandle,
+    },
   };
 }

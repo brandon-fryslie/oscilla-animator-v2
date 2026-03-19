@@ -29,6 +29,17 @@ function makeBundle(passId: string): CompiledGpuArtifactBundle {
   return {
     schemaVersion: 1,
     passes: [makePass(passId)],
+    runtimeInstall: {
+      drawPrep: {
+        words: new Uint32Array([11, 22, 33]),
+        wordCount: 3,
+      },
+      shapeBank: {
+        words: new Uint32Array([44, 55, 66, 77]),
+        wordCount: 4,
+        topologyIdByHandle: new Uint32Array([99, 0, 0, 0]),
+      },
+    },
   };
 }
 
@@ -72,6 +83,35 @@ describe('RuntimeService', () => {
 
     expect(renderer.rebuildGpuPipelines).toHaveBeenCalledWith(candidateBundle.passes);
     expect(serviceAccess.renderer).toBe(renderer);
+  });
+
+  it('publishes worker-owned install metadata directly to renderer.render', () => {
+    const store = new RootStore();
+    const service = new RuntimeService(store);
+    const serviceAccess = service as unknown as {
+      renderer: ReturnType<typeof makeRendererStub>;
+      canvas: HTMLCanvasElement;
+      rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
+      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => void;
+    };
+    const renderer = makeRendererStub();
+    const bundle = makeBundle('worker-owned-install');
+    const canvas = { width: 640, height: 360 } as HTMLCanvasElement;
+    serviceAccess.renderer = renderer;
+    serviceAccess.canvas = canvas;
+    serviceAccess.rendererExecutionState = 'active';
+
+    serviceAccess.installRendererCanonicalAssets(bundle);
+
+    expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
+      shapeBank: expect.objectContaining({
+        data: bundle.runtimeInstall.shapeBank.words,
+        volatilePtr: bundle.runtimeInstall.shapeBank.wordCount,
+        topologyIdByHandle: bundle.runtimeInstall.shapeBank.topologyIdByHandle,
+      }),
+      drawPrepSinkTableV1: bundle.runtimeInstall.drawPrep.words,
+      drawPrepSinkTableWordCount: bundle.runtimeInstall.drawPrep.wordCount,
+    }));
   });
 
   it('disposes the renderer and preserves app state after a fatal GPU fault', async () => {
