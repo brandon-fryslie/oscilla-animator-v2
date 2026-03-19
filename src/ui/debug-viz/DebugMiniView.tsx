@@ -27,6 +27,7 @@ import { FieldBandChart } from './charts/FieldBandChart';
 import { RasterHeatmap } from './charts/RasterHeatmap';
 import { selectFieldCharts, type FieldChartId } from './vizSelector';
 import { ChartHelpButton } from './charts/ChartHelpButton';
+import { getDebugMiniViewDisplayMode } from './cardinalityDisplay';
 import type { HelpTopicId } from '../../help/types';
 import type { RendererSample, AggregateStats, HistoryView, BufferHistoryView, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
@@ -470,6 +471,7 @@ function renderFieldChart(
  */
 export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.ReactElement {
   const cardinality = readInst(data.meta.type.extent.cardinality)?.kind ?? null;
+  const displayMode = getDebugMiniViewDisplayMode(cardinality);
   return React.createElement('div', { style: debugMiniViewStyles.container },
     // Header
     React.createElement('div', { style: debugMiniViewStyles.header },
@@ -483,14 +485,14 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
       formatTypeLine(data.meta.type)),
 
     // Value section
-    cardinality === 'one'
+    displayMode === 'scalar'
       ? React.createElement(OneValueSection, {
           value: data.value,
           meta: data.meta,
           history: data.history,
           spyReadbackMeta: data.spyReadbackMeta,
         })
-      : cardinality === 'many'
+      : displayMode === 'field'
         ? React.createElement(FieldValueSection, {
           value: data.value,
           meta: data.meta,
