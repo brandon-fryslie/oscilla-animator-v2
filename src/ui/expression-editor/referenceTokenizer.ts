@@ -13,6 +13,7 @@
 
 import type { AddressRegistry } from '../../graph/address-registry';
 import { resolveExpressionConstant } from '../../expr/constants';
+import { addressToString } from '../../types/canonical-address';
 
 // =============================================================================
 // Types
@@ -99,7 +100,7 @@ const TOKEN_PATTERN = /\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b|\b
 export function tokenizeExpression(
   text: string,
   addressRegistry: AddressRegistry,
-  connectedShorthands: ReadonlySet<string>
+  connectedAddresses: ReadonlySet<string>
 ): TokenizedSegment[] {
   const segments: TokenizedSegment[] = [];
   let lastIndex = 0;
@@ -125,16 +126,17 @@ export function tokenizeExpression(
       const shorthand = `${blockName}.${portName}`;
       const canonicalAddress = addressRegistry.resolveShorthand(shorthand);
 
-      if (canonicalAddress) {
-        const isConnected = connectedShorthands.has(shorthand);
+      if (canonicalAddress?.kind === 'output') {
+        // [LAW:one-source-of-truth] Reference identity and connection state are
+        // derived from the canonical output address, never from aliases.
+        const sourceAddress = addressToString(canonicalAddress);
+        const isConnected = connectedAddresses.has(sourceAddress);
         segments.push({
           text: fullMatch,
           isReference: true,
           canonicalName: blockName,
           portId: portName,
-          sourceAddress: canonicalAddress.kind === 'output'
-            ? `v1:blocks.${canonicalAddress.blockId}.outputs.${canonicalAddress.portId}`
-            : undefined,
+          sourceAddress,
           isConnected,
         });
       } else {
