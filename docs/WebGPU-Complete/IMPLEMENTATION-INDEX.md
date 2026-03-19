@@ -45,6 +45,9 @@ This document is the implementation-oriented index for the WebGPU-Complete speci
    - Notes:
      - Draw-prep kernel is static/canonical.
      - Compiler emits metadata (`drawPrepProgram.sinks`), not draw-prep WGSL source.
+     - Compile worker output is also the owner of static install metadata
+       (ShapeBank headers + draw-prep descriptor words); swap publishes that
+       payload directly without runtime-side repacking.
 
 5. **Render pass camera/depth/blend contract**
    - Canonical doc:
@@ -69,6 +72,10 @@ This document is the implementation-oriented index for the WebGPU-Complete speci
 4. Render pass (indexed + non-indexed loops).
 5. Optional observability copy/readback.
 6. Arena role swap.
+
+// [LAW:one-source-of-truth] Swap publishes one canonical compile artifact set:
+// GPU passes plus worker-owned static install metadata. Runtime services must
+// not rebuild those payloads from live state during swap.
 
 Reference docs:
 - `docs/WebGPU-Complete/P3-1_CPU_to_GPU_Input_Marshalling.md`

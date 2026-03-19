@@ -168,7 +168,7 @@ The migration must preserve a working render path and must not rely on “replac
 
 Create a design document in the repo. Put it here:
 
-- `/Users/bmf/code/oscilla-animator-v2/docs/WebGPU-Future/CANONICAL-RENDER-SINK-DESIGN.md`
+- `/Users/bmf/code/oscilla-animator-v2/docs/WebGPU-Future/1-CANONICAL-RENDER-SINK-DESIGN.md`
 
 The document must contain these sections:
 
