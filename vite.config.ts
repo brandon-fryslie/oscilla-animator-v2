@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 function readRealpath(candidate: string): string {
   try {
@@ -13,12 +14,30 @@ function readRealpath(candidate: string): string {
   }
 }
 
+function readGitWorktreeRoots(repoRoot: string): string[] {
+  try {
+    const output = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return output
+      .split('\n')
+      .filter((line) => line.startsWith('worktree '))
+      .map((line) => line.slice('worktree '.length).trim())
+      .filter((value) => value.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 const workspaceRoot = path.resolve(__dirname);
 const cwdRoot = path.resolve(process.cwd());
 const pwdRoot = process.env.PWD ? path.resolve(process.env.PWD) : null;
+const gitWorktreeRoots = readGitWorktreeRoots(workspaceRoot);
 const allowedFsRoots = Array.from(
   new Set(
-    [workspaceRoot, cwdRoot, pwdRoot]
+    [workspaceRoot, cwdRoot, pwdRoot, ...gitWorktreeRoots]
       .filter((value): value is string => Boolean(value))
       .flatMap((candidate) => [candidate, readRealpath(candidate)])
   )
@@ -46,7 +65,8 @@ export default defineConfig({
     // HTTP boundary so worker ABI availability does not vary by caller.
     headers: crossOriginIsolationHeaders,
     // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
-    // here so every harness/browser lane resolves the same source roots.
+    // here so every harness/browser lane resolves the same source roots,
+    // including sibling git worktrees that source maps can legitimately target.
     fs: {
       allow: allowedFsRoots,
     },
