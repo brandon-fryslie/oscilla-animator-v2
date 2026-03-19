@@ -17,6 +17,8 @@ import { AddressRegistry } from '../../graph/address-registry';
 import { addressToString } from '../../types/canonical-address';
 import { getOutputAddress } from '../../graph/addressing';
 import { tokenizeExpression } from './referenceTokenizer';
+import type { ExpressionInlineDiagnostic } from './editorAnnotations';
+import type { ExpressionSyntaxSpan } from './syntaxHighlighting';
 import type { Patch } from '../../graph/Patch';
 import type { BlockId } from '../../types';
 import './TokenExpressionEditor.css';
@@ -53,6 +55,12 @@ export interface TokenExpressionEditorProps {
   /** Whether to show error styling */
   readonly hasError?: boolean;
 
+  /** Inline diagnostics anchored to source ranges */
+  readonly diagnostics?: readonly ExpressionInlineDiagnostic[];
+
+  /** Syntax highlighting spans for plain-text ranges */
+  readonly syntaxSpans?: readonly ExpressionSyntaxSpan[];
+
   /** Callback for keydown events (for autocomplete) */
   readonly onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
 }
@@ -79,6 +87,10 @@ function isChipElement(elem: HTMLElement): boolean {
   return elem.classList.contains('expr-ref-chip') || elem.classList.contains('expr-const-chip');
 }
 
+function isIgnoredDecorationElement(elem: HTMLElement): boolean {
+  return elem.classList.contains('expr-inline-diagnostic');
+}
+
 function getChipSourceText(elem: HTMLElement): string {
   return elem.getAttribute('data-token')
     ?? elem.getAttribute('data-ref')
@@ -97,6 +109,8 @@ function serializeToPlainText(element: HTMLDivElement): string {
       if (isChipElement(elem)) {
         const sourceText = getChipSourceText(elem);
         if (sourceText) parts.push(sourceText);
+      } else if (isIgnoredDecorationElement(elem)) {
+        return;
       } else if (elem.tagName === 'BR') {
         parts.push('\n');
       } else {
@@ -130,6 +144,8 @@ function getCursorOffsetInPlainText(element: HTMLDivElement): number {
       const elem = node as HTMLElement;
       if (isChipElement(elem)) {
         length += getChipSourceText(elem).length;
+      } else if (isIgnoredDecorationElement(elem)) {
+        return;
       } else if (elem.tagName === 'BR') {
         length += 1;
       } else {
@@ -178,6 +194,8 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
           }
         }
         currentOffset += sourceLength;
+      } else if (isIgnoredDecorationElement(elem)) {
+        return false;
       } else if (elem.tagName === 'BR') {
         if (currentOffset + 1 >= targetOffset) {
           const parent = elem.parentNode;
@@ -225,15 +243,27 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
 function buildInnerHTML(
   text: string,
   addressRegistry: AddressRegistry,
-  connectedAddresses: ReadonlySet<string>
+  connectedAddresses: ReadonlySet<string>,
+  diagnostics: readonly ExpressionInlineDiagnostic[],
+  syntaxSpans: readonly ExpressionSyntaxSpan[],
 ): string {
   const segments = tokenizeExpression(text, addressRegistry, connectedAddresses);
   return segments
     .map(segment => {
+      const segmentDiagnostics = diagnostics.filter(
+        (diagnostic) => diagnostic.start < segment.end && diagnostic.end > segment.start,
+      );
+      const diagnosticBubbleHtml = segmentDiagnostics
+        .filter((diagnostic) => diagnostic.end === segment.end)
+        .map(renderInlineDiagnostic)
+        .join('');
+
       if (segment.isReference) {
-        const chipClass = segment.isConnected
-          ? 'expr-ref-chip expr-ref-chip--valid'
-          : 'expr-ref-chip expr-ref-chip--error';
+        const chipClasses = [
+          'expr-ref-chip',
+          segment.isConnected ? 'expr-ref-chip--valid' : 'expr-ref-chip--error',
+          ...segmentDiagnostics.map(diagnosticClassName),
+        ].join(' ');
         const escapedRef = segment.text
           .replace(/&/g, '&amp;')
           .replace(/"/g, '&quot;');
@@ -244,8 +274,12 @@ function buildInnerHTML(
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
-        return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}" data-address="${escapedAddress}" data-token="${escapedRef}">${escapedText}</span>`;
+        return `<span class="${chipClasses}" contenteditable="false" data-ref="${escapedRef}" data-address="${escapedAddress}" data-token="${escapedRef}">${escapedText}</span>${diagnosticBubbleHtml}`;
       } else if (segment.isConstant) {
+        const constantClasses = [
+          'expr-const-chip',
+          ...segmentDiagnostics.map(diagnosticClassName),
+        ].join(' ');
         const sourceName = (segment.constantName ?? segment.text)
           .replace(/&/g, '&amp;')
           .replace(/"/g, '&quot;');
@@ -253,16 +287,91 @@ function buildInnerHTML(
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
-        return `<span class="expr-const-chip" contenteditable="false" data-const="${sourceName}" data-token="${sourceName}">${displayText}</span>`;
+        return `<span class="${constantClasses}" contenteditable="false" data-const="${sourceName}" data-token="${sourceName}">${displayText}</span>${diagnosticBubbleHtml}`;
       } else {
-        const escaped = segment.text
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        return escaped.replace(/\n/g, '<br>');
+        return renderPlainTextSegment(segment, syntaxSpans, segmentDiagnostics);
       }
     })
     .join('');
+}
+
+function renderPlainTextSegment(
+  segment: ReturnType<typeof tokenizeExpression>[number],
+  syntaxSpans: readonly ExpressionSyntaxSpan[],
+  diagnostics: readonly ExpressionInlineDiagnostic[],
+): string {
+  const boundaries = new Set<number>([segment.start, segment.end]);
+  for (const syntaxSpan of syntaxSpans) {
+    if (syntaxSpan.start < segment.end && syntaxSpan.end > segment.start) {
+      boundaries.add(Math.max(segment.start, syntaxSpan.start));
+      boundaries.add(Math.min(segment.end, syntaxSpan.end));
+    }
+  }
+  for (const diagnostic of diagnostics) {
+    boundaries.add(Math.max(segment.start, diagnostic.start));
+    boundaries.add(Math.min(segment.end, diagnostic.end));
+  }
+
+  const orderedBoundaries = Array.from(boundaries).sort((left, right) => left - right);
+  const parts: string[] = [];
+
+  for (let index = 0; index < orderedBoundaries.length - 1; index++) {
+    const partStart = orderedBoundaries[index];
+    const partEnd = orderedBoundaries[index + 1];
+    if (partStart === partEnd) continue;
+
+    const textSlice = segment.text.slice(partStart - segment.start, partEnd - segment.start);
+    const classes = [
+      syntaxSpans.find((span) => span.start <= partStart && span.end >= partEnd)?.className,
+      ...diagnostics
+        .filter((diagnostic) => diagnostic.start < partEnd && diagnostic.end > partStart)
+        .map(diagnosticClassName),
+    ].filter((value): value is string => Boolean(value));
+
+    parts.push(renderTextSlice(textSlice, classes));
+
+    parts.push(
+      ...diagnostics
+        .filter((diagnostic) => diagnostic.end === partEnd)
+        .map(renderInlineDiagnostic),
+    );
+  }
+
+  return parts.join('');
+}
+
+function renderTextSlice(text: string, classes: readonly string[]): string {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  if (classes.length === 0) {
+    return escaped.replace(/\n/g, '<br>');
+  }
+
+  const className = classes.join(' ');
+  return escaped
+    .split('\n')
+    .map((part) => (part.length > 0 ? `<span class="${className}">${part}</span>` : ''))
+    .join('<br>');
+}
+
+function renderInlineDiagnostic(diagnostic: ExpressionInlineDiagnostic): string {
+  const escapedMessage = diagnostic.message
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const severityClass = diagnostic.severity === 'warning'
+    ? 'expr-inline-diagnostic--warning'
+    : 'expr-inline-diagnostic--error';
+  return `<span class="expr-inline-diagnostic ${severityClass}" contenteditable="false">${escapedMessage}</span>`;
+}
+
+function diagnosticClassName(diagnostic: ExpressionInlineDiagnostic): string {
+  return diagnostic.severity === 'warning'
+    ? 'expr-diagnostic expr-diagnostic--warning'
+    : 'expr-diagnostic expr-diagnostic--error';
 }
 
 // =============================================================================
@@ -281,13 +390,15 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       maxLength = 500,
       placeholder = 'e.g., sin(circle_1.radius * 2)',
       hasError = false,
+      diagnostics = [],
+      syntaxSpans = [],
       onKeyDown: externalOnKeyDown,
     },
     ref
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
-    const isUserTyping = useRef(false);
     const lastRenderedValue = useRef(value);
+    const lastRenderSignature = useRef('');
 
     // [LAW:one-source-of-truth] Connected refs are derived from canonical
     // output addresses built from the actual edge source endpoints.
@@ -323,42 +434,37 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         if (!editorRef.current) return;
         const cursorOff = getCursorOffsetInPlainText(editorRef.current);
         const text = serializeToPlainText(editorRef.current);
-        editorRef.current.innerHTML = buildInnerHTML(text, addressRegistry, connectedAddresses);
+        editorRef.current.innerHTML = buildInnerHTML(text, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
         lastRenderedValue.current = text;
+        lastRenderSignature.current = JSON.stringify({ text, diagnostics, syntaxSpans });
         requestAnimationFrame(() => {
           if (editorRef.current) {
             setCursorByPlainTextOffset(editorRef.current, cursorOff);
           }
         });
       },
-    }), [addressRegistry, connectedAddresses]);
+    }), [addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);
 
-    // Prop-driven updates (external value changes)
+    const renderSignature = useMemo(
+      () => JSON.stringify({ text: value, diagnostics, syntaxSpans }),
+      [diagnostics, syntaxSpans, value],
+    );
+
+    // Prop-driven updates (external value or inline decoration changes)
     useEffect(() => {
       if (!editorRef.current) return;
-      if (isUserTyping.current) {
-        isUserTyping.current = false;
-        return;
-      }
-      if (value !== lastRenderedValue.current) {
+      if (renderSignature !== lastRenderSignature.current || value !== lastRenderedValue.current) {
         const cursorOff = getCursorOffsetInPlainText(editorRef.current);
-        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses);
+        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
         lastRenderedValue.current = value;
+        lastRenderSignature.current = renderSignature;
         requestAnimationFrame(() => {
           if (editorRef.current) {
             setCursorByPlainTextOffset(editorRef.current, cursorOff);
           }
         });
       }
-    }, [value, addressRegistry, connectedAddresses]);
-
-    // First mount: render initial content
-    useEffect(() => {
-      if (editorRef.current && editorRef.current.innerHTML === '') {
-        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses);
-        lastRenderedValue.current = value;
-      }
-    }, [value, addressRegistry, connectedAddresses]);
+    }, [value, addressRegistry, connectedAddresses, diagnostics, renderSignature, syntaxSpans]);
 
     // Handle input (user typing)
     const handleInput = useCallback(() => {
@@ -370,27 +476,29 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         editorRef.current.innerHTML = buildInnerHTML(
           lastRenderedValue.current,
           addressRegistry,
-          connectedAddresses
+          connectedAddresses,
+          diagnostics,
+          syntaxSpans,
         );
         return;
       }
 
-      isUserTyping.current = true;
       lastRenderedValue.current = plainText;
       const cursorOffset = getCursorOffsetInPlainText(editorRef.current);
       onChange(plainText, cursorOffset);
-    }, [maxLength, onChange, addressRegistry, connectedAddresses]);
+    }, [maxLength, onChange, addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);
 
     // Handle blur: re-render with chips
     const handleBlur = useCallback(() => {
       if (!editorRef.current) return;
 
       const plainText = serializeToPlainText(editorRef.current);
-      editorRef.current.innerHTML = buildInnerHTML(plainText, addressRegistry, connectedAddresses);
+      editorRef.current.innerHTML = buildInnerHTML(plainText, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
       lastRenderedValue.current = plainText;
+      lastRenderSignature.current = JSON.stringify({ text: plainText, diagnostics, syntaxSpans });
 
       onBlur();
-    }, [onBlur, addressRegistry, connectedAddresses]);
+    }, [onBlur, addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);
 
     // Handle keydown
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {

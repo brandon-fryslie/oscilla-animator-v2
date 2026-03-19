@@ -53,6 +53,7 @@ const ERROR_CODE_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   // Warning codes (compile lifecycle)
   W_BLOCK_UNREACHABLE_ERROR: 'W_BLOCK_UNREACHABLE_ERROR',
   W_FLAG_DOWNGRADED: 'W_FLAG_DOWNGRADED',
+  W_EXPR_VAR_REASSIGNED: 'W_EXPR_VAR_REASSIGNED',
   // Cardinality errors (Sprint 2A - Cardinality-Generic Blocks)
   CardinalityMismatch: 'E_CARDINALITY_MISMATCH',
   InstanceMismatch: 'E_INSTANCE_MISMATCH',
@@ -151,6 +152,7 @@ export function convertCompileErrorToDiagnostic(
       lastSeenAt: Date.now(),
       occurrenceCount: 1,
     },
+    sourceSpan: error.sourceSpan,
   };
 }
 

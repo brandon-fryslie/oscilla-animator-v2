@@ -41,6 +41,27 @@ describe('compileExpression Integration', () => {
     }
   });
 
+  it('maps multiline type errors back to the original assignment source span', () => {
+    const expression = [
+      'alias = missingName',
+      'alias',
+    ].join('\n');
+
+    const result = compileExpression(
+      expression,
+      new Map(),
+      builder,
+      new Map(),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('ExprTypeError');
+      expect(result.error.position).toBeDefined();
+      expect(result.error.position?.start).toBe(expression.indexOf('missingName'));
+    }
+  });
+
   it('returns error for type error', () => {
     // bool + bool is not allowed - arithmetic requires numeric types
     const result = compileExpression(

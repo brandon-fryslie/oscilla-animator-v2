@@ -11,6 +11,7 @@ import type { CanonicalType, PayloadType } from '../../core/canonical-types';
 import { payloadVar, unitVar, inferType, cardinalityVar } from '../../core/inference-types';
 import { compileExpression, type BlockRefsContext } from '../../expr';
 import type { ValueExprId } from '../../compiler/ir/Indices';
+import type { CompileError } from '../../compiler/types';
 
 import { cardinalityVarId } from '../../core/ids';
 
@@ -142,10 +143,29 @@ export function register(): void {
   
         const error = new Error(
           `Expression ${err.code}: ${err.message}${positionInfo}${suggestionInfo}`
-        ) as Error & { code?: string };
+        ) as Error & { code?: string; sourceSpan?: CompileError['sourceSpan'] };
         error.code = err.code;
+        error.sourceSpan = {
+          kind: 'blockParam',
+          blockId: ctx.instanceId,
+          paramId: 'expression',
+          range: err.position,
+          suggestion: err.suggestion,
+        };
         throw error;
       }
+
+      const warnings: CompileError[] = result.warnings?.map((warning) => ({
+        code: warning.code,
+        message: warning.message,
+        where: { blockId: ctx.instanceId },
+        sourceSpan: {
+          kind: 'blockParam',
+          blockId: ctx.instanceId,
+          paramId: 'expression',
+          range: warning.position,
+        },
+      })) ?? [];
   
       // Compilation succeeded - return output expression
       const outExprId = result.value;
@@ -173,6 +193,7 @@ export function register(): void {
             outputsById: {
               out: { id: outExprId, slot: undefined, type: outType, stride, components: [...components] },
             },
+            warnings,
             effects: {
               slotRequests: [{ portId: 'out', type: outType }],
             },
@@ -189,6 +210,7 @@ export function register(): void {
             outputsById: {
               out: { id: constructedExpr, slot: undefined, type: outType, stride, components },
             },
+            warnings,
             effects: {
               slotRequests: [{ portId: 'out', type: outType }],
             },
@@ -200,6 +222,7 @@ export function register(): void {
           outputsById: {
             out: { id: outExprId, slot: undefined, type: outType, stride },
           },
+          warnings,
           effects: {
             slotRequests: [{ portId: 'out', type: outType }],
           },
