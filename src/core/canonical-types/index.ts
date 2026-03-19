@@ -73,6 +73,7 @@ export {
   axisInst,
   isAxisVar,
   isAxisInst,
+  readInst,
   requireInst,
 } from './axis';
 
