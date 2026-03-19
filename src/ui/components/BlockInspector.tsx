@@ -1682,7 +1682,7 @@ interface ExpressionEditorProps {
   patch: Patch;
 }
 
-const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
+const ExpressionEditor = function ExpressionEditor({ blockId, value, patch }: ExpressionEditorProps) {
   return (
     <SharedExpressionEditor
       blockId={blockId}
@@ -1692,7 +1692,7 @@ const ExpressionEditor = observer(function ExpressionEditor({ blockId, value, pa
       maxLength={4000}
     />
   );
-});
+};
 
 
 // Individual Param Field

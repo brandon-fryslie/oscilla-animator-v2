@@ -1,9 +1,9 @@
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { observer } from 'mobx-react-lite';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import { Switch } from '@mantine/core';
+import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
-import { compilePartialPatch } from '../../compiler';
+import { compilePartialPatch, type PartialCompileResult } from '../../compiler';
 import { colors } from '../theme';
 import type { Patch } from '../../graph/Patch';
 import type { BlockId } from '../../types';
@@ -122,6 +122,9 @@ function computeSuggestionInsertion(
   };
 }
 
+const EMPTY_DIAGNOSTICS: readonly ExpressionInlineDiagnostic[] = [];
+const EMPTY_SUMMARY_DIAGNOSTICS: readonly { code: string; severity: 'error' | 'warning'; message: string }[] = [];
+
 export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   blockId,
   value,
@@ -132,15 +135,17 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   placeholder = 'e.g., sin(circle_1.radius * 2)',
   onValueChange,
 }: SharedExpressionEditorProps) {
-  const { patch: patchStore, diagnostics: diagnosticsStore, expressionEditor, frontend } = useStores();
+  const { patch: patchStore, diagnostics: diagnosticsStore, expressionEditor } = useStores();
   const dockview = React.useContext(DockviewContext);
   const api = dockview?.api ?? null;
-  const [localValue, setLocalValue] = useState(value);
   const [autoCompileOnKeypress, setAutoCompileOnKeypress] = useState(
     liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0,
   );
   const tokenEditorRef = useRef<TokenExpressionEditorHandle>(null);
-  const deferredLocalValue = useDeferredValue(localValue);
+  const draftValue = expressionEditor.getDraftValue(blockId, value);
+  const persistedValue = expressionEditor.getPersistedValue(blockId, value);
+  const isDirty = draftValue !== persistedValue;
+  const deferredDraftValue = useDeferredValue(draftValue);
 
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
@@ -149,6 +154,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   const [blockContext, setBlockContext] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
+  const [draftCompilation, setDraftCompilation] = useState<PartialCompileResult | null>(null);
   const lastRegistryFailureRef = useRef<string | null>(null);
 
   const addressRegistryState = useMemo(() => {
@@ -171,12 +177,12 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [addressRegistryState.registry, patch]);
 
   useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+    expressionEditor.syncPersistedValue(blockId, value);
+  }, [blockId, expressionEditor, value]);
 
   useEffect(() => {
-    onValueChange?.(localValue);
-  }, [localValue, onValueChange]);
+    onValueChange?.(draftValue);
+  }, [draftValue, onValueChange]);
 
   useEffect(() => {
     const failure = addressRegistryState.failure;
@@ -204,27 +210,48 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     });
   }, [addressRegistryState.failure, diagnosticsStore, patch.blocks]);
 
+  // [LAW:single-enforcer] Draft persistence flows through one callback so all
+  // editor instances apply the same patch-write + draft-sync sequence.
+  const commitDraft = useCallback((nextValue: string) => {
+    patchStore.updateBlockParams(blockId, { expression: nextValue });
+    expressionEditor.commitDraftValue(blockId, nextValue);
+  }, [blockId, expressionEditor, patchStore]);
+
   useEffect(() => {
     const commitOnKeypress = autoCompileOnKeypress || (liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0);
     if (!commitOnKeypress) return;
-    if (localValue === value) return;
+    if (!isDirty) return;
 
     const timer = window.setTimeout(() => {
-      patchStore.updateBlockParams(blockId, { expression: localValue });
+      commitDraft(draftValue);
     }, autoCompileOnKeypress ? 0 : liveCommitDebounceMs);
     return () => window.clearTimeout(timer);
-  }, [autoCompileOnKeypress, blockId, liveCommitDebounceMs, localValue, patchStore, value]);
+  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty, liveCommitDebounceMs]);
 
-  const draftCompilation = useMemo(() => {
-    return compilePartialPatch(patch, {
+  useEffect(() => {
+    let cancelled = false;
+    const nextCompilation = compilePartialPatch(patch, {
       rootBlockIds: [blockId],
-      blockParamOverrides: [{ blockId, params: { expression: deferredLocalValue } }],
+      blockParamOverrides: [{ blockId, params: { expression: deferredDraftValue } }],
       compileId: `expression-editor:${blockId}`,
-      patchRevision: frontend.snapshot.patchRevision,
     });
-  }, [blockId, deferredLocalValue, frontend.snapshot.patchRevision, patch]);
+    if (cancelled) {
+      return;
+    }
+    startTransition(() => {
+      if (!cancelled) {
+        setDraftCompilation(nextCompilation);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blockId, deferredDraftValue, patch]);
 
   const inlineDiagnostics = useMemo<readonly ExpressionInlineDiagnostic[]>(() => {
+    if (!draftCompilation) {
+      return EMPTY_DIAGNOSTICS;
+    }
     return draftCompilation.diagnostics.flatMap((diagnostic) => {
       const sourceSpan = diagnostic.sourceSpan;
       if (!sourceSpan || sourceSpan.kind !== 'blockParam') {
@@ -241,9 +268,12 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         end: sourceSpan.range.end,
       }];
     });
-  }, [blockId, draftCompilation.diagnostics]);
+  }, [blockId, draftCompilation]);
 
   const summaryDiagnostics = useMemo(() => {
+    if (!draftCompilation) {
+      return EMPTY_SUMMARY_DIAGNOSTICS;
+    }
     return draftCompilation.diagnostics
       .filter((diagnostic) => {
         if (diagnostic.primaryTarget.kind === 'block' && diagnostic.primaryTarget.blockId === blockId) {
@@ -257,13 +287,13 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         severity: diagnostic.severity === 'warn' ? 'warning' as const : 'error' as const,
         message: diagnostic.message,
       }));
-  }, [blockId, draftCompilation.diagnostics]);
+  }, [blockId, draftCompilation]);
 
   const hasInlineError = useMemo(() => {
     return inlineDiagnostics.some((diagnostic) => diagnostic.severity === 'error');
   }, [inlineDiagnostics]);
 
-  const syntaxSpans = useMemo(() => buildExpressionSyntaxSpans(localValue), [localValue]);
+  const syntaxSpans = useMemo(() => buildExpressionSyntaxSpans(draftValue), [draftValue]);
 
   useEffect(() => {
     if (!showAutocomplete || !suggestionProvider) {
@@ -305,7 +335,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, []);
 
   const handleEditorChange = useCallback((nextValue: string, cursor: number) => {
-    setLocalValue(nextValue);
+    expressionEditor.setDraftValue(blockId, nextValue);
     setCursorPosition(cursor);
 
     const blockCtx = detectBlockContext(nextValue, cursor);
@@ -324,25 +354,25 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       setShowAutocomplete(false);
       setFilterPrefix('');
     }
-  }, [suggestionProvider, updateDropdownPosition]);
+  }, [blockId, expressionEditor, suggestionProvider, updateDropdownPosition]);
 
   const handleBlur = useCallback(() => {
     const commitOnKeypress = autoCompileOnKeypress || (liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0);
     if (commitOnKeypress) return;
     setTimeout(() => {
-      if (localValue !== value) {
-        patchStore.updateBlockParams(blockId, { expression: localValue });
+      if (isDirty) {
+        commitDraft(draftValue);
       }
     }, 120);
-  }, [autoCompileOnKeypress, blockId, liveCommitDebounceMs, localValue, patchStore, value]);
+  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty, liveCommitDebounceMs]);
 
   const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
-    const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+    const identifierData = extractIdentifierPrefix(draftValue, cursorPosition);
     const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
     const { newValue, newCursorPos } = computeSuggestionInsertion(
-      localValue, cursorPosition, suggestion, prefixStartOffset
+      draftValue, cursorPosition, suggestion, prefixStartOffset
     );
-    setLocalValue(newValue);
+    expressionEditor.setDraftValue(blockId, newValue);
     setCursorPosition(newCursorPos);
 
     if (suggestion.type === 'output') {
@@ -363,7 +393,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       tokenEditorRef.current.refreshChips();
       tokenEditorRef.current.focus();
     });
-  }, [blockId, cursorPosition, localValue, patchStore]);
+  }, [blockId, cursorPosition, draftValue, expressionEditor, patchStore]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showAutocomplete && filteredSuggestions.length > 0) {
@@ -402,8 +432,8 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [cursorPosition, filteredSuggestions, handleSelectSuggestion, showAutocomplete, suggestionIndex, suggestionProvider, updateDropdownPosition]);
 
   const handlePopOut = useCallback(() => {
-    if (localValue !== value) {
-      patchStore.updateBlockParams(blockId, { expression: localValue });
+    if (isDirty) {
+      commitDraft(draftValue);
     }
     expressionEditor.openForBlock(blockId);
     if (!api) {
@@ -415,7 +445,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       return;
     }
     openExpressionEditorPanel(api, blockId);
-  }, [api, blockId, expressionEditor, localValue, patchStore, value, diagnosticsStore]);
+  }, [api, blockId, commitDraft, diagnosticsStore, draftValue, expressionEditor, isDirty]);
 
   const registryFailureMessage = useMemo(() => {
     const failure = addressRegistryState.failure;
@@ -484,7 +514,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         <TokenExpressionEditor
           ref={tokenEditorRef}
           blockId={blockId}
-          value={localValue}
+          value={draftValue}
           patch={patch}
           addressRegistry={addressRegistryState.registry}
           onChange={handleEditorChange}
@@ -498,8 +528,8 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         />
       ) : (
         <textarea
-          value={localValue}
-          onChange={(e) => setLocalValue(e.target.value)}
+          value={draftValue}
+          onChange={(e) => expressionEditor.setDraftValue(blockId, e.target.value)}
           onBlur={handleBlur}
           maxLength={maxLength}
           placeholder={placeholder}
@@ -522,7 +552,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       )}
 
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
-        {localValue.length} / {maxLength}
+        {draftValue.length} / {maxLength}
       </div>
 
       {registryFailureMessage && (

@@ -101,6 +101,7 @@ export function compilePartialPatch(
   const frontendResult = compileFrontend(fragment, options.frontendOptions);
   const backendOptions: CompileFromFrontendOptions = {
     allowMissingTimeRoot: true,
+    captureInspector: false,
     events: new EventHub(),
     patchId: compileId,
     patchRevision,
