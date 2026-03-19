@@ -66,7 +66,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private scalarSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
-  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number }>();
+  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number; label?: string }>();
   private schedule: TimeModelIR = { periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
@@ -535,7 +535,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     const stride = payloadStride(type.payload);
-    this.slotLayoutInputs.set(slot, { type, stride });
+    this.slotLayoutInputs.set(slot, { type, stride, label });
     return slot;
   }
 
@@ -748,7 +748,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.slotCounter;
   }
 
-  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }> {
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string }> {
     return this.slotLayoutInputs;
   }
 

@@ -63,6 +63,7 @@ const ERROR_CODE_TO_DIAGNOSTIC_CODE: Record<string, DiagnosticCode> = {
   PayloadCombinationNotAllowed: 'E_PAYLOAD_COMBINATION_NOT_ALLOWED',
   UnitMismatch: 'E_UNIT_MISMATCH',
   ImplicitCastDisallowed: 'E_IMPLICIT_CAST_DISALLOWED',
+  AxisInvalid: 'E_AXIS_INVALID',
 };
 
 // =============================================================================

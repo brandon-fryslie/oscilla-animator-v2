@@ -10,7 +10,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { debugService, type EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
-import { requireInst } from '../../core/canonical-types';
+import { readInst } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, BufferHistoryView, FieldHistoryView } from './types';
 import type { TrackedEntry } from './HistoryService';
 import type { SpyReadbackMeta } from './ValueRenderer';
@@ -86,7 +86,7 @@ function useDebugTargetMiniView(
 
   const meta = target ? getTargetMetadata(target) : undefined;
   const cardinality = meta
-    ? requireInst(meta.type.extent.cardinality, 'cardinality').kind
+    ? readInst(meta.type.extent.cardinality)?.kind ?? null
     : null;
   const key = useMemo(() => (
     edgeId
