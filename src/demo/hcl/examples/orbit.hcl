@@ -116,7 +116,7 @@ patch "Orbit" {
     }
   }
 
-  # --- Construct vec3 position and project to vec2 control points ---
+  # --- Construct vec3 position and project to centered UV control points ---
 
   block "Construct" "pos" {
     outputs {
@@ -125,7 +125,11 @@ patch "Orbit" {
   }
 
   block "Expression" "pos2" {
-    expression = "vec2(pos.out.x, pos.out.y)"
+    expression = <<-EXPR
+      // RenderInstances2D consumes UV-space control points.
+      // Visual: offset the polar orbit into the center of the canvas instead of the upper-left corner.
+      vec2(pos.out.x + 0.5, pos.out.y + 0.5)
+    EXPR
     outputs {
       out = render.controlPoints
     }

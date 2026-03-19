@@ -51,9 +51,9 @@ patch "Expression Vec3 Orbit" {
       x = radial * cos(angle)
       y = radial * sin(angle)
 
-      // Emit vec3 position in the render plane.
-      // Visual: keeps depth fixed so the motion reads as 2D orbiting dots.
-      vec3(x, y, 0.0)
+      // Emit centered UV-space vec3 position in the render plane.
+      // Visual: keeps the orbit framed around the middle of the viewport instead of the upper-left corner.
+      vec3(x + 0.5, y + 0.5, 0.0)
     EXPR
     outputs {
       out = render.controlPoints
