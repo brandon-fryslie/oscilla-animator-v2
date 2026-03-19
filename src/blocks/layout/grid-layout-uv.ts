@@ -46,8 +46,8 @@ export function register(): void {
     },
     inputs: {
       elements: { label: 'Elements', type: inferType(payloadVar('grid_elements_payload'), { kind: 'none' }, { cardinality: GRID_FIELD_CARD }) },
-      cols: { label: 'Columns', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
-      rows: { label: 'Rows', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 100, step: 1 } },
+      cols: { label: 'Columns', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 16, step: 1 } },
+      rows: { label: 'Rows', type: canonicalType(INT), defaultValue: 5, defaultSource: defaultSourceConst(5), exposedAsPort: true, uiHint: { kind: 'slider', min: 1, max: 16, step: 1 } },
     },
     outputs: {
       rotation: { label: 'Rotation', type: inferType(FLOAT, { kind: 'none' }, { cardinality: GRID_FIELD_CARD }) },

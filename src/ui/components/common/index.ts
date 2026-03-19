@@ -1,7 +1,7 @@
 /**
  * Common UI Components
  *
- * Reusable MUI-based form controls with consistent styling and behavior.
+ * Reusable Mantine-based form controls with consistent styling and behavior.
  */
 
 export { SliderWithInput, type SliderWithInputProps } from './SliderWithInput';
