@@ -111,6 +111,7 @@ describe('demo coordinate-space regressions', () => {
     'features/expression-vec3-orbit.hcl',
     'features/path-field-demo.hcl',
     'features/path-flow.hcl',
+    'stress/gpu-100k-swarm-stress.hcl',
   ])('%s stays centered in UV space', (relativePath) => {
     const { values, stride } = materializeRenderControlPoints(relativePath);
     const bounds = readBounds(values, stride);
