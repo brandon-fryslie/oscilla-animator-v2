@@ -172,6 +172,10 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
 
   useEffect(() => {
     const failure = addressRegistryState.failure;
+    if (!failure) {
+      lastRegistryFailureRef.current = null;
+      return;
+    }
     if (!failure || lastRegistryFailureRef.current === failure.message) return;
     lastRegistryFailureRef.current = failure.message;
     const offendingBlock = failure.offendingBlockId ? patch.blocks.get(failure.offendingBlockId) : null;
@@ -420,6 +424,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
           value={localValue}
           onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleBlur}
+          maxLength={maxLength}
           placeholder={placeholder}
           rows={12}
           style={{
