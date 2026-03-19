@@ -30,3 +30,7 @@ This demo set is curated around four purposes:
 - External gate / IO coverage beyond scalar mouse-driven motion.
 - Composite-authoring demos that exercise reusable graph composition.
 - Text/glyph showcase demos, if and when text becomes authorable through demo patches.
+
+## Notes
+
+- Visual motif analysis for standout diagnostics demos lives in `src/demo/DEMO-MOTIFS.md`.

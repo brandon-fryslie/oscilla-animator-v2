@@ -43,7 +43,7 @@ function expectedCompileErrorSubstring(hcl: string): string | null {
 describe('HCL demo patches', () => {
   it('catalog is the complete source of truth for demo files', () => {
     const diskFiles = listHclFiles(HCL_DIR);
-    const catalogFiles = hclDemos.map((entry) => entry.relativePath);
+    const catalogFiles = hclDemos.map((entry) => entry.relativePath).sort((a, b) => a.localeCompare(b));
     expect(catalogFiles).toEqual(diskFiles);
   });
 
