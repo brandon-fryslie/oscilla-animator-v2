@@ -1,28 +1,26 @@
 # Attractor Bloom
 #
-# A fuller AttractorLayout composition with:
-# - Smoothed mouse control for target position and strength
-# - Two independent geometry layers (grid dots + ring shards)
-# - Dual attractors (soft + hard) with different behavior
-# - Animated hue phase and per-layer scale shaping
+# Mouse-guided eclipse bloom with three readable layers:
+# - a dim lattice scaffold that stays visible as reference
+# - a cool mist of attracted dots that breathes around the cursor
+# - a hot petal crown whose target orbits the cursor for asymmetry
 #
 # How to play:
-# - Move mouse: drags the bloom center
-# - Move horizontally: increases/decreases attraction strength
-# - Watch soft (cyan) and hard (magenta) layers react differently
+# - Move mouse: steer the bloom center
+# - Move horizontally: push the attractor strength from gentle drag to snap
+# - Watch the cool mist and hot crown split around the orbiting satellite
 
 patch "Attractor Bloom" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 12000
-    periodBMs = 7000
+    periodBMs = 7500
     role = "timeRoot"
     outputs {
-      phaseA = [hard_target.refs, soft_hue.b]
-      phaseB = [circle_layout.phase, wobble.phase, hard_hue_phase.a]
+      phaseA = [hard_target.refs, mist_hue.b, crown_pulse.phase]
+      phaseB = [crown_ring.phase, shard_wobble.phase, crown_hue_shift.b]
     }
   }
 
-  # Mouse IO (one-cardinality controls)
   block "ExternalInput" "mouse_x" {
     channel = "mouse.x"
     outputs {
@@ -37,9 +35,8 @@ patch "Attractor Bloom" {
     }
   }
 
-  # Smooth controls for more musical motion
   block "Lag" "mouse_x_smooth" {
-    smoothing = 0.22
+    smoothing = 0.18
     initialValue = 0.5
     outputs {
       out = [soft_target.refs, hard_target.refs]
@@ -47,7 +44,7 @@ patch "Attractor Bloom" {
   }
 
   block "Lag" "mouse_y_smooth" {
-    smoothing = 0.22
+    smoothing = 0.18
     initialValue = 0.5
     outputs {
       out = [soft_target.refs, hard_target.refs]
@@ -55,159 +52,141 @@ patch "Attractor Bloom" {
   }
 
   block "Lag" "strength_smooth" {
-    smoothing = 0.28
+    smoothing = 0.24
     initialValue = 0.5
     outputs {
-      out = [soft_strength.in, hard_strength.in]
+      out = [mist_strength.in, crown_strength.in]
     }
   }
 
-  block "ScaleBias" "soft_strength" {
-    scale = 0.3
-    bias = 0.08
+  block "ScaleBias" "mist_strength" {
+    scale = 0.34
+    bias = 0.18
     outputs {
-      out = soft_attract.strength
+      out = mist_attract.strength
     }
   }
 
-  block "ScaleBias" "hard_strength" {
-    scale = 0.75
-    bias = 0.12
+  block "ScaleBias" "crown_strength" {
+    scale = 0.58
+    bias = 0.24
     outputs {
-      out = hard_attract.strength
+      out = crown_position.refs
     }
   }
 
-  # Targets:
-  # - soft target follows smoothed mouse directly
-  # - hard target orbits around mouse for richer motion
   block "Expression" "soft_target" {
     expression = <<-EXPR
-      // Smoothed horizontal control from user input.
-      // Visual: prevents jitter and makes center motion feel fluid.
-      target_x = mouse_x_smooth.out
-
-      // Smoothed vertical control from user input.
-      // Visual: keeps target travel stable and easy to steer.
-      target_y = mouse_y_smooth.out
-
-      // Emit direct mouse-follow target.
-      // Visual: soft attractor remains anchored to the cursor path.
-      vec2(target_x, target_y)
+      vec2(mouse_x_smooth.out, mouse_y_smooth.out)
     EXPR
     outputs {
-      out = soft_attract.target
+      out = mist_attract.target
     }
   }
 
   block "Expression" "hard_target" {
     expression = <<-EXPR
-      // Smoothed mouse position is the base center.
-      // Visual: hard attractor stays tied to user motion.
       base_x = mouse_x_smooth.out
       base_y = mouse_y_smooth.out
-
-      // Orbit radius around the mouse center.
-      // Visual: adds secondary motion and richer bloom dynamics.
-      orbit_radius = 0.08
-
-      // Time phase in radians.
-      // Visual: sets speed and continuity of circular orbit.
+      orbit_radius = 0.14
       orbit_angle = clock.phaseA * 6.2832
 
-      // Circular offset around base center.
-      // Visual: hard attractor continuously circles the soft target.
       target_x = base_x + orbit_radius * cos(orbit_angle)
       target_y = base_y + orbit_radius * sin(orbit_angle)
-
-      // Emit moving hard-attractor target.
-      // Visual: introduces evolving asymmetry between soft and hard layers.
       vec2(target_x, target_y)
     EXPR
     outputs {
-      out = hard_attract.target
+      out = crown_position.refs
     }
   }
 
-  # Layer A shape: dots
-  block "Ellipse" "dot" {
-    rx = 0.0048
-    ry = 0.0048
+  # --- Reference scaffold ---
+
+  block "Ellipse" "mist_dot" {
+    rx = 0.0054
+    ry = 0.0054
     outputs {
-      shape = grid_instances.element
+      shape = field_instances.element
     }
   }
 
-  block "Array" "grid_instances" {
-    count = 256
+  block "Array" "field_instances" {
+    count = 324
     outputs {
-      elements = [grid_layout.elements, base_color.elements]
-      t = [soft_hue.a, soft_scale.in]
+      elements = [field_layout.elements, scaffold_color.elements]
+      t = [mist_hue.a, mist_scale.in]
     }
   }
 
-  block "GridLayoutUV" "grid_layout" {
-    rows = 16
-    cols = 16
+  block "GridLayoutUV" "field_layout" {
+    rows = 18
+    cols = 18
     outputs {
-      controlPoints = base_render.controlPoints
-      controlPoints = soft_attract.points
+      controlPoints = [scaffold_render.controlPoints, mist_attract.points]
     }
   }
 
-  block "AttractorLayout" "soft_attract" {
+  block "FieldConstColor" "scaffold_color" {
+    r = 0.07
+    g = 0.18
+    b = 0.52
+    a = 0.18
     outputs {
-      controlPoints = soft_render.controlPoints
+      color = scaffold_render.color
     }
   }
 
-  block "ScaleBias" "soft_scale" {
-    scale = 0.35
-    bias = 0.35
+  block "Const" "scaffold_scale" {
+    value = 0.42
     outputs {
-      out = soft_render.scale
+      out = scaffold_render.scale
     }
   }
 
-  block "Add" "soft_hue" {
+  block "AttractorLayout" "mist_attract" {
     outputs {
-      out = soft_color.h
+      controlPoints = mist_render.controlPoints
     }
   }
 
-  block "MakeColorOKLCH" "soft_color" {
-    s = 0.88
-    l = 0.56
-    a = 0.62
+  block "ScaleBias" "mist_scale" {
+    scale = 0.62
+    bias = 0.52
     outputs {
-      color = soft_render.color
+      out = mist_render.scale
     }
   }
 
-  block "FieldConstColor" "base_color" {
-    r = 0.08
-    g = 0.24
-    b = 0.95
-    a = 0.2
+  block "Add" "mist_hue" {
     outputs {
-      color = base_render.color
+      out = mist_color.h
     }
   }
 
-  # Layer B shape: wobbled rect shards
+  block "MakeColorOKLCH" "mist_color" {
+    s = 0.98
+    l = 0.66
+    a = 0.34
+    outputs {
+      color = mist_render.color
+    }
+  }
+
+  # --- Crown petals ---
+
   block "Rect" "shard" {
-    width = 0.01
-    height = 0.003
-    cornerRadius = 0
+    width = 0.026
+    height = 0.007
+    cornerRadius = 0.002
     resolution = 24
     outputs {
-      controlPoints = wobble.controlPoints
+      controlPoints = shard_wobble.controlPoints
     }
   }
 
-  block "ShapeWobble2D" "wobble" {
-    amount = 0.0025
-    frequency = 7
+  block "ShapeWobble2D" "shard_wobble" {
+    amount = 0.0044
+    frequency = 8
     outputs {
       points = shard_shape.controlPoints
     }
@@ -216,68 +195,115 @@ patch "Attractor Bloom" {
   block "MakeShape2D" "shard_shape" {
     closed = true
     outputs {
-      shape = ring_instances.element
+      shape = crown_instances.element
     }
   }
 
-  block "Array" "ring_instances" {
-    count = 120
+  block "Array" "crown_instances" {
+    count = 112
     outputs {
-      elements = circle_layout.elements
-      t = [hard_hue.a, hard_scale.in]
+      elements = crown_ring.elements
+      t = [crown_hue_shift.a, crown_scale_base.in, crown_position.refs]
     }
   }
 
-  block "CircleLayoutUV" "circle_layout" {
-    radius = 0.35
+  block "CircleLayoutUV" "crown_ring" {
+    radius = 0.4
     outputs {
-      controlPoints = hard_attract.points
+      controlPoints = crown_position.refs
     }
   }
 
-  block "AttractorLayout" "hard_attract" {
+  block "Expression" "crown_position" {
+    expression = <<-EXPR
+      base_x = crown_ring.controlPoints.x
+      base_y = crown_ring.controlPoints.y
+      lane = crown_instances.t
+
+      target_x = mapField(hard_target.out.x, crown_instances.t)
+      target_y = mapField(hard_target.out.y, crown_instances.t)
+      pull = mapField(crown_strength.out, crown_instances.t)
+
+      sweep = lane * 18.0 + clock.phaseB * 6.2832
+      x = base_x + (target_x - base_x) * pull + 0.028 * sin(sweep + base_y * 10.0)
+      y = base_y + (target_y - base_y) * pull + 0.028 * cos(sweep - base_x * 10.0)
+      vec2(x, y)
+    EXPR
     outputs {
-      controlPoints = hard_render.controlPoints
+      out = crown_render.controlPoints
     }
   }
 
-  block "ScaleBias" "hard_scale" {
-    scale = 0.6
-    bias = 0.45
+  block "Oscillator" "crown_pulse" {
     outputs {
-      out = hard_render.scale
+      out = crown_pulse_shape.in
     }
   }
 
-  block "Const" "hard_hue_offset" {
-    value = 0.28
+  block "ScaleBias" "crown_scale_base" {
+    scale = 0.62
+    bias = 0.76
     outputs {
-      out = hard_hue_phase.b
+      out = crown_scale_noise.value
     }
   }
 
-  block "Add" "hard_hue_phase" {
+  block "Const" "crown_pulse_amount" {
+    value = 0.26
     outputs {
-      out = hard_hue.b
+      out = crown_pulse_shape.scale
     }
   }
 
-  block "Add" "hard_hue" {
+  block "Const" "crown_pulse_center" {
+    value = 0.16
     outputs {
-      out = hard_color.h
+      out = crown_pulse_shape.bias
     }
   }
 
-  block "MakeColorOKLCH" "hard_color" {
-    s = 0.82
-    l = 0.6
-    a = 0.78
+  block "ScaleBias" "crown_pulse_shape" {
     outputs {
-      color = hard_render.color
+      out = crown_scale_noise.amount
     }
   }
 
-  block "RenderInstances2D" "base_render" {}
-  block "RenderInstances2D" "soft_render" {}
-  block "RenderInstances2D" "hard_render" {}
+  block "Const" "crown_scale_seed" {
+    value = 19
+    outputs {
+      out = crown_scale_noise.seed
+    }
+  }
+
+  block "NoisyBroadcast" "crown_scale_noise" {
+    outputs {
+      out = crown_render.scale
+    }
+  }
+
+  block "Const" "crown_hue_offset" {
+    value = 0.08
+    outputs {
+      out = crown_hue_shift.b
+    }
+  }
+
+  block "Add" "crown_hue_shift" {
+    outputs {
+      out = crown_color.h
+    }
+  }
+
+  block "MakeColorOKLCH" "crown_color" {
+    s = 1.0
+    l = 0.78
+    a = 0.9
+    outputs {
+      color = crown_render.color
+    }
+  }
+
+  block "RenderInstances2D" "scaffold_render" {}
+  block "RenderInstances2D" "mist_render" {}
+  block "RenderInstances2D" "crown_render" {}
 }
