@@ -6,11 +6,10 @@ Spec target: `../WebGPU-Complete/P5-3__Phased_Rollout__Engine_Migration_Strategy
 
 ## Where We Are
 
-- `src/services/runtime-hotpath-install.ts:32-66` runs materialize steps on the CPU and writes the results into `state.arena`.
-- `src/services/runtime-hotpath-install.ts:68-93` resolves time, clears shape-bank frame state, seeds instance counts, and iterates schedule steps to materialize runtime values on the CPU.
-- `src/services/runtime-hotpath-install.ts:102-128` builds install planes by cloning the packed draw-prep sink table and copying live shape-bank words into fresh `Uint32Array` buffers.
-- `src/services/RuntimeService.ts:280-320` calls that install path after swap and immediately feeds the CPU-built planes into `renderer.render(...)`.
-- `src/render/webgpu/RustWasmWebGPURenderer.ts:705-719` and `src/render/webgpu/RustWasmWebGPURenderer.ts:1013-1041` copy the CPU-built ShapeBank and sink-table words into shared planes for the worker.
+- `src/compiler/backend/compiled-runtime-install-contract.ts` derives static ShapeBank topology headers and packed draw-prep sink metadata directly from compile-time IR.
+- `src/services/compile.worker.ts` threads that compile-owned install contract through the worker payload after pass validation.
+- `src/services/RuntimeService.ts:280-320` publishes the worker-owned install payload directly into `renderer.render(...)` during swap.
+- `src/render/webgpu/RustWasmWebGPURenderer.ts:705-719` and `src/render/webgpu/RustWasmWebGPURenderer.ts:1013-1041` copy the compile-owned ShapeBank and sink-table words into shared planes for the worker.
 
 ## First Draft Proposal
 
