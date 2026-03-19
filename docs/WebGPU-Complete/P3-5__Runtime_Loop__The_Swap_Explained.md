@@ -30,6 +30,12 @@ This document defines the critical "End of Frame" logic. It details how the engi
 - [LAW:single-enforcer] Resource visibility and usage transitions are enforced by render-graph ordering (compute before draw-prep before render) rather than scattered callsite guards.
 - [LAW:dataflow-not-control-flow] Swap logic remains deterministic; only buffer role data (read/write identities) changes per frame.
 
+## Compile Artifact Publication
+
+- [LAW:one-source-of-truth] Hot-swap publishes one canonical compile artifact set from the compile worker: GPU pass shaders plus static install metadata for ShapeBank topology headers and draw-prep descriptors.
+- [LAW:single-enforcer] Runtime services consume that compile-worker payload directly at swap time. They do not rebuild sink tables or ShapeBank install buffers from live runtime state.
+- [LAW:dataflow-not-control-flow] First-frame install and later frames follow the same stage contract: input/header values vary, but the frame order remains `input -> compute -> draw-prep -> render -> swap`.
+
 ## 1. The Physics of the Swap
 
 In a double-buffered system, data does not move. The *pointers* move.
