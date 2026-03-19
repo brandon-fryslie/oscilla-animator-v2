@@ -1,8 +1,8 @@
 # Aurora Petal Showcase
 #
-# A visual showcase with two readable layers:
-# - a drifting lattice field that folds toward the center
-# - a bright petal ring that keeps the composition framed
+# A single aurora canopy built from petal shards:
+# - a drifting field of elongated petals folding toward the center
+# - shared shape morphing that makes the canopy feel alive
 #
 # This patch is about selling the renderer, not exhausting the block catalog.
 
@@ -16,23 +16,36 @@ patch "Aurora Petal Showcase" {
         field_position.refs,
         field_scale.refs,
         field_hue_shift.b,
-        petal_ring.phase,
-        petal_pulse.phase,
-        petal_wobble.phase,
+        field_morph.phase,
       ]
       phaseB = [
         field_position.refs,
         field_scale.refs,
-        petal_hue_shift.b,
       ]
     }
   }
 
-  # --- Background branch: folded aurora lattice ---
+  # --- Aurora canopy ---
 
-  block "Ellipse" "field_dot" {
-    rx = 0.010
-    ry = 0.010
+  block "Rect" "field_petal" {
+    width = 0.030
+    height = 0.010
+    cornerRadius = 0.003
+    outputs {
+      controlPoints = field_morph.controlPoints
+    }
+  }
+
+  block "ShapeWobble2D" "field_morph" {
+    amount = 0.0032
+    frequency = 7
+    outputs {
+      points = field_shape.controlPoints
+    }
+  }
+
+  block "MakeShape2D" "field_shape" {
+    closed = true
     outputs {
       shape = field_points.element
     }
@@ -61,18 +74,20 @@ patch "Aurora Petal Showcase" {
       phase_a_field = mapField(phase_a, field_points.t)
       phase_b_field = mapField(phase_b, field_points.t)
 
-      x0 = lattice.controlPoints.x
-      y0 = lattice.controlPoints.y
+      x0 = lattice.controlPoints.x - 0.5
+      y0 = lattice.controlPoints.y - 0.5
       lane = field_points.t
       r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
-      swirl = lane * 40.0 + phase_a_field * 1.7
-      arc = r * 11.0 + phase_b_field * 1.2
-      envelope_x = 0.64 + 0.14 * cos(arc)
-      envelope_y = 0.64 + 0.14 * sin(arc)
+      swirl = lane * 31.0 + phase_a_field * 1.5
+      arc = r * 10.0 + phase_b_field * 1.1
+      fold = 0.70 + 0.20 * cos(arc)
+      lift = 0.62 + 0.24 * sin(arc + lane * 8.0)
+      drift_x = 0.070 * sin(swirl + y0 * 13.0)
+      drift_y = 0.085 * cos(swirl * 0.92 - x0 * 15.0)
 
-      x = x0 * envelope_x + 0.055 * sin(swirl + y0 * 14.0)
-      y = y0 * envelope_y + 0.055 * cos(swirl - x0 * 14.0)
+      x = 0.5 + x0 * fold + drift_x
+      y = 0.5 + y0 * lift + drift_y
 
       vec2(x, y)
     EXPR
@@ -89,13 +104,13 @@ patch "Aurora Petal Showcase" {
       phase_b_field = mapField(phase_b, field_points.t)
 
       lane = field_points.t
-      x0 = lattice.controlPoints.x
-      y0 = lattice.controlPoints.y
+      x0 = lattice.controlPoints.x - 0.5
+      y0 = lattice.controlPoints.y - 0.5
       radius = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
-      ripple = 0.5 + 0.5 * sin(lane * 120.0 + phase_a_field * 5.0)
-      radial = 0.55 + 0.45 * cos(radius * 18.0 - phase_b_field * 3.0)
-      0.22 + 0.58 * ripple * radial
+      ripple = 0.5 + 0.5 * sin(lane * 96.0 + phase_a_field * 4.2)
+      radial = 0.45 + 0.55 * cos(radius * 16.0 - phase_b_field * 2.8)
+      0.34 + 0.72 * ripple * radial
     EXPR
     outputs {
       out = field_render.scale
@@ -115,124 +130,13 @@ patch "Aurora Petal Showcase" {
   }
 
   block "MakeColorOKLCH" "field_color" {
-    s = 0.93
-    l = 0.66
-    a = 0.76
+    s = 0.98
+    l = 0.72
+    a = 0.88
     outputs {
       color = field_render.color
     }
   }
 
   block "RenderInstances2D" "field_render" {}
-
-  # --- Foreground branch: luminous petal frame ---
-
-  block "Rect" "petal" {
-    width = 0.034
-    height = 0.012
-    cornerRadius = 0.003
-    outputs {
-      controlPoints = petal_wobble.controlPoints
-    }
-  }
-
-  block "ShapeWobble2D" "petal_wobble" {
-    amount = 0.0024
-    frequency = 6
-    outputs {
-      points = petal_shape.controlPoints
-    }
-  }
-
-  block "MakeShape2D" "petal_shape" {
-    closed = true
-    outputs {
-      shape = petals.element
-    }
-  }
-
-  block "Array" "petals" {
-    count = 112
-    outputs {
-      elements = petal_ring.elements
-      t = [petal_hue_shift.a, petal_scale_base.in]
-    }
-  }
-
-  block "CircleLayoutUV" "petal_ring" {
-    radius = 0.38
-    outputs {
-      controlPoints = petal_render.controlPoints
-    }
-  }
-
-  block "Add" "petal_hue_shift" {
-    outputs {
-      out = petal_hue_wrap.in
-    }
-  }
-
-  block "Adapter_ScalarToPhase01" "petal_hue_wrap" {
-    outputs {
-      out = petal_color.h
-    }
-  }
-
-  block "MakeColorOKLCH" "petal_color" {
-    s = 1.0
-    l = 0.78
-    a = 0.98
-    outputs {
-      color = petal_render.color
-    }
-  }
-
-  block "ScaleBias" "petal_scale_base" {
-    scale = 0.72
-    bias = 0.78
-    outputs {
-      out = petal_scale_jitter.value
-    }
-  }
-
-  block "Oscillator" "petal_pulse" {
-    outputs {
-      out = petal_pulse_shape.in
-    }
-  }
-
-  block "Const" "petal_pulse_amt" {
-    value = 0.28
-    outputs {
-      out = petal_pulse_shape.scale
-    }
-  }
-
-  block "Const" "petal_pulse_center" {
-    value = 0.24
-    outputs {
-      out = petal_pulse_shape.bias
-    }
-  }
-
-  block "ScaleBias" "petal_pulse_shape" {
-    outputs {
-      out = petal_scale_jitter.amount
-    }
-  }
-
-  block "Const" "petal_jitter_seed" {
-    value = 53
-    outputs {
-      out = petal_scale_jitter.seed
-    }
-  }
-
-  block "NoisyBroadcast" "petal_scale_jitter" {
-    outputs {
-      out = petal_render.scale
-    }
-  }
-
-  block "RenderInstances2D" "petal_render" {}
 }
