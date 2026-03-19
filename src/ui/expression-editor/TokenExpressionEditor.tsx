@@ -30,8 +30,11 @@ export interface TokenExpressionEditorProps {
   /** Expression text (plain string) */
   readonly value: string;
 
-  /** Patch for building AddressRegistry */
+  /** Patch context used for suggestion/rendering lookups that must stay in sync with addressRegistry */
   readonly patch: Patch;
+
+  /** Canonical AddressRegistry for token rendering and block.port chip resolution */
+  readonly addressRegistry: AddressRegistry;
 
   /** Called when expression changes (on each keystroke) */
   readonly onChange: (newValue: string, cursorOffset: number) => void;
@@ -267,6 +270,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       blockId,
       value,
       patch,
+      addressRegistry,
       onChange,
       onBlur,
       maxLength = 500,
@@ -279,11 +283,6 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
     const editorRef = useRef<HTMLDivElement>(null);
     const isUserTyping = useRef(false);
     const lastRenderedValue = useRef(value);
-
-    // Build AddressRegistry from patch
-    const addressRegistry = useMemo(() => {
-      return AddressRegistry.buildFromPatch(patch);
-    }, [patch]);
 
     // Build set of connected shorthands from collect edges targeting refs port
     // [LAW:one-type-per-behavior] Read from edges.

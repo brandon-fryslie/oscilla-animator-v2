@@ -25,6 +25,20 @@ export interface SharedExpressionEditorProps {
   readonly onValueChange?: (value: string) => void;
 }
 
+interface AddressRegistryFailure {
+  readonly message: string;
+  readonly offendingBlockId: BlockId | null;
+}
+
+function parseAddressRegistryFailure(error: unknown): AddressRegistryFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  const blockMatch = message.match(/block "([^"]+)"/);
+  return {
+    message,
+    offendingBlockId: (blockMatch?.[1] ?? null) as BlockId | null,
+  };
+}
+
 function extractIdentifierPrefix(value: string, cursorPos: number): { prefix: string; startOffset: number } | null {
   if (cursorPos === 0) return null;
 
@@ -127,11 +141,26 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   const [blockContext, setBlockContext] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
+  const lastRegistryFailureRef = useRef<string | null>(null);
+
+  const addressRegistryState = useMemo(() => {
+    try {
+      return {
+        registry: AddressRegistry.buildFromPatch(patch),
+        failure: null,
+      };
+    } catch (error) {
+      return {
+        registry: null,
+        failure: parseAddressRegistryFailure(error),
+      };
+    }
+  }, [patch]);
 
   const suggestionProvider = useMemo(() => {
-    const registry = AddressRegistry.buildFromPatch(patch);
-    return new SuggestionProvider(patch, registry);
-  }, [patch]);
+    if (!addressRegistryState.registry) return null;
+    return new SuggestionProvider(patch, addressRegistryState.registry);
+  }, [addressRegistryState.registry, patch]);
 
   useEffect(() => {
     setLocalValue(value);
@@ -140,6 +169,32 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   useEffect(() => {
     onValueChange?.(localValue);
   }, [localValue, onValueChange]);
+
+  useEffect(() => {
+    const failure = addressRegistryState.failure;
+    if (!failure) {
+      lastRegistryFailureRef.current = null;
+      return;
+    }
+    if (lastRegistryFailureRef.current === failure.message) return;
+    lastRegistryFailureRef.current = failure.message;
+    const offendingBlock = failure.offendingBlockId ? patch.blocks.get(failure.offendingBlockId) : null;
+    // [LAW:single-enforcer] SharedExpressionEditor is the recovery boundary for
+    // editor-local registry failures; it converts render exceptions into user-visible diagnostics.
+    diagnosticsStore.log({
+      level: 'error',
+      message: `Expression editor fallback: ${failure.message}`,
+      details: [
+        {
+          message: offendingBlock
+            ? `Invalid block: ${offendingBlock.displayName}`
+            : `Invalid block: ${failure.offendingBlockId ?? 'unknown'}`,
+          blockId: failure.offendingBlockId ?? undefined,
+          blockType: offendingBlock?.type,
+        },
+      ],
+    });
+  }, [addressRegistryState.failure, diagnosticsStore, patch.blocks]);
 
   useEffect(() => {
     if (liveCommitDebounceMs === undefined || liveCommitDebounceMs < 0) return;
@@ -162,7 +217,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [blockId, diagnosticsStore.activeDiagnostics]);
 
   useEffect(() => {
-    if (!showAutocomplete) {
+    if (!showAutocomplete || !suggestionProvider) {
       setFilteredSuggestions([]);
       return;
     }
@@ -210,17 +265,17 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     const identifierData = extractIdentifierPrefix(nextValue, cursor);
     if (identifierData) {
       setFilterPrefix(identifierData.prefix);
-      setShowAutocomplete(true);
+      setShowAutocomplete(suggestionProvider !== null);
       updateDropdownPosition(cursor);
     } else if (blockCtx) {
       setFilterPrefix('');
-      setShowAutocomplete(true);
+      setShowAutocomplete(suggestionProvider !== null);
       updateDropdownPosition(cursor);
     } else {
       setShowAutocomplete(false);
       setFilterPrefix('');
     }
-  }, [updateDropdownPosition]);
+  }, [suggestionProvider, updateDropdownPosition]);
 
   const handleBlur = useCallback(() => {
     setTimeout(() => {
@@ -287,14 +342,14 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       }
     }
 
-    if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+    if ((e.ctrlKey || e.metaKey) && e.key === ' ' && suggestionProvider) {
       e.preventDefault();
       setShowAutocomplete(true);
       setFilterPrefix('');
       setBlockContext(null);
       updateDropdownPosition(cursorPosition);
     }
-  }, [cursorPosition, filteredSuggestions, handleSelectSuggestion, showAutocomplete, suggestionIndex, updateDropdownPosition]);
+  }, [cursorPosition, filteredSuggestions, handleSelectSuggestion, showAutocomplete, suggestionIndex, suggestionProvider, updateDropdownPosition]);
 
   const handlePopOut = useCallback(() => {
     if (localValue !== value) {
@@ -311,6 +366,14 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     }
     openExpressionEditorPanel(api, blockId);
   }, [api, blockId, expressionEditor, localValue, patchStore, value, diagnosticsStore]);
+
+  const registryFailureMessage = useMemo(() => {
+    const failure = addressRegistryState.failure;
+    if (!failure) return null;
+    const offendingBlock = failure.offendingBlockId ? patch.blocks.get(failure.offendingBlockId) : null;
+    const offendingLabel = offendingBlock?.displayName ?? failure.offendingBlockId ?? 'unknown block';
+    return `Invalid block data on "${offendingLabel}". Expression editor fallback mode is active until the patch shape is repaired.`;
+  }, [addressRegistryState.failure, patch.blocks]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -342,22 +405,62 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         )}
       </div>
 
-      <TokenExpressionEditor
-        ref={tokenEditorRef}
-        blockId={blockId}
-        value={localValue}
-        patch={patch}
-        onChange={handleEditorChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        hasError={expressionError !== null}
-      />
+      {addressRegistryState.registry ? (
+        <TokenExpressionEditor
+          ref={tokenEditorRef}
+          blockId={blockId}
+          value={localValue}
+          patch={patch}
+          addressRegistry={addressRegistryState.registry}
+          onChange={handleEditorChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          hasError={expressionError !== null}
+        />
+      ) : (
+        <textarea
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleBlur}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          rows={12}
+          style={{
+            width: '100%',
+            minHeight: '220px',
+            boxSizing: 'border-box',
+            resize: 'vertical',
+            borderRadius: '6px',
+            border: `1px solid ${colors.error}`,
+            background: '#0f1727',
+            color: colors.textPrimary,
+            padding: '10px 12px',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            lineHeight: 1.5,
+          }}
+        />
+      )}
 
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
         {localValue.length} / {maxLength}
       </div>
+
+      {registryFailureMessage && (
+        <div style={{
+          fontSize: '11px',
+          color: colors.error,
+          marginTop: '4px',
+          padding: '4px 8px',
+          backgroundColor: 'rgba(255, 0, 0, 0.1)',
+          borderRadius: '4px',
+          borderLeft: `3px solid ${colors.error}`,
+        }}>
+          {registryFailureMessage}
+        </div>
+      )}
 
       {expressionError && (
         <div style={{
@@ -377,7 +480,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         suggestions={filteredSuggestions}
         selectedIndex={suggestionIndex}
         onSelect={handleSelectSuggestion}
-        isVisible={showAutocomplete}
+        isVisible={showAutocomplete && suggestionProvider !== null}
         position={dropdownPosition}
         onClose={() => {
           setShowAutocomplete(false);

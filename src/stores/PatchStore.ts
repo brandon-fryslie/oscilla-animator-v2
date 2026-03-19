@@ -114,6 +114,84 @@ function isTimeSourceBlockType(blockType: string): boolean {
   return getBlockDefinition(blockType)?.capability === 'time';
 }
 
+function cloneLensAttachment(lens: LensAttachment): LensAttachment {
+  return Object.freeze({
+    ...lens,
+    ...(lens.params ? { params: Object.freeze({ ...lens.params }) } : {}),
+  });
+}
+
+function cloneDefaultSource(defaultSource: DefaultSource | undefined): DefaultSource | undefined {
+  if (!defaultSource) return undefined;
+  return Object.freeze({
+    ...defaultSource,
+    ...(defaultSource.params ? { params: Object.freeze({ ...defaultSource.params }) } : {}),
+  });
+}
+
+function cloneInputPort(inputPort: InputPort): InputPort {
+  return Object.freeze({
+    ...inputPort,
+    defaultSource: cloneDefaultSource(inputPort.defaultSource),
+    ...(inputPort.lenses ? { lenses: Object.freeze(inputPort.lenses.map(cloneLensAttachment)) } : {}),
+  });
+}
+
+function cloneOutputPort(outputPort: OutputPort): OutputPort {
+  return Object.freeze({
+    ...outputPort,
+    ...(outputPort.lenses ? { lenses: Object.freeze(outputPort.lenses.map(cloneLensAttachment)) } : {}),
+  });
+}
+
+function cloneBlockRole(role: BlockRole): BlockRole {
+  return Object.freeze({
+    ...role,
+    meta: Object.freeze({ ...role.meta }),
+  }) as BlockRole;
+}
+
+function cloneBlockSnapshot(block: Block): Block {
+  return Object.freeze({
+    ...block,
+    role: cloneBlockRole(block.role),
+    params: Object.freeze({ ...block.params }),
+    inputPorts: new Map(Array.from(block.inputPorts.entries(), ([portId, port]) => [portId, cloneInputPort(port)])),
+    outputPorts: new Map(Array.from(block.outputPorts.entries(), ([portId, port]) => [portId, cloneOutputPort(port)])),
+  });
+}
+
+function cloneEndpoint(endpoint: Endpoint): Endpoint {
+  return Object.freeze({
+    ...endpoint,
+  });
+}
+
+function cloneEdgeRole(role: EdgeRole): EdgeRole {
+  return Object.freeze({
+    ...role,
+    meta: Object.freeze({ ...role.meta }),
+  }) as EdgeRole;
+}
+
+function cloneEdgeSnapshot(edge: Edge): Edge {
+  return Object.freeze({
+    ...edge,
+    from: cloneEndpoint(edge.from),
+    to: cloneEndpoint(edge.to),
+    role: cloneEdgeRole(edge.role),
+  });
+}
+
+function clonePatchData(patch: Patch): PatchData {
+  return {
+    // [LAW:one-source-of-truth] PatchStore owns canonical block objects; load/read
+    // boundaries must clone external patch values instead of sharing mutable references.
+    blocks: new Map(Array.from(patch.blocks.entries(), ([blockId, block]) => [blockId, cloneBlockSnapshot(block)])),
+    edges: patch.edges.map(cloneEdgeSnapshot),
+  };
+}
+
 export class PatchStore {
   // Private mutable state - THE source of truth
   private _data: PatchData;
@@ -239,19 +317,17 @@ export class PatchStore {
     // Create new snapshot with defensive copies
     // We still create copies here, but only when data actually changes,
     // not on every access (which was the bug)
-    const snapshot = {
-      blocks: new Map(this._data.blocks),
-      edges: [...this._data.edges],
-    };
+    const snapshot = clonePatchData({
+      blocks: this._data.blocks,
+      edges: this._data.edges,
+    });
 
-    // Freeze the snapshot to prevent accidental mutations
-    // This provides runtime safety - any mutation attempt will fail
+    // Freeze the snapshot shell to prevent accidental top-level mutations.
+    // clonePatchData already clones/freeze block objects, params, and port entries;
+    // the Maps remain mutable containers, so snapshot consumers must still treat
+    // them as readonly by contract.
     Object.freeze(snapshot);
     Object.freeze(snapshot.edges);
-    // Note: We don't deep-freeze blocks Map values because:
-    // 1. Block objects are already typed as readonly
-    // 2. Deep freezing would be expensive
-    // 3. TypeScript enforcement is sufficient for our codebase
 
     this._snapshotCache = snapshot as unknown as ImmutablePatch;
     this._snapshotVersion = currentVersion;
@@ -1229,10 +1305,7 @@ export class PatchStore {
    */
   loadPatch(patch: Patch): void {
     this._hasStructuralChange = true;
-    this._data = {
-      blocks: new Map(patch.blocks),
-      edges: [...patch.edges],
-    };
+    this._data = clonePatchData(patch);
 
     // Update ID generators to avoid conflicts with loaded IDs
     // Find max block ID
