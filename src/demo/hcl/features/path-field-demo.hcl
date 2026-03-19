@@ -8,6 +8,7 @@
 # - PathField extraction from ProceduralStar control points
 # - PathLayout distribution along the animated shape path
 # - PathField.arcLength -> Reduce -> scale modulation
+# - Expression-based recentering from origin-authored path space into render UV space
 
 patch "Path Field Demo" {
   block "InfiniteTimeRoot" "clock" {
@@ -122,7 +123,20 @@ patch "Path Field Demo" {
   block "PathLayout" "path-layout" {
     spacing = 1.0
     outputs {
-      controlPoints = render.controlPoints
+      controlPoints = center-path.refs
+    }
+  }
+
+  block "Expression" "center-path" {
+    expression = <<-EXPR
+      // Path producers author around the origin.
+      // Visual: move the sampled star field into viewport UV space so the animated path is visible.
+      x = path_layout.controlPoints.x + 0.5
+      y = path_layout.controlPoints.y + 0.5
+      vec2(x, y)
+    EXPR
+    outputs {
+      out = render.controlPoints
     }
   }
 
