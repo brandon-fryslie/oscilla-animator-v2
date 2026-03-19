@@ -11,6 +11,7 @@ export interface DemoCatalogEntry {
   readonly group: DemoGroup;
   readonly availability?: DemoAvailability;
   readonly availabilityReason?: string;
+  readonly featuredRank?: number;
   readonly summary: string;
   readonly purposes: readonly DemoPurpose[];
   readonly highlights: readonly string[];
@@ -71,6 +72,7 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'expression-operator-showcase.hcl',
     relativePath: 'features/expression-operator-showcase.hcl',
     group: 'features',
+    featuredRank: 1,
     summary: 'Canonical Expression showcase for branching, swizzles, and field waves.',
     purposes: ['feature', 'integration', 'showcase'],
     highlights: ['expression', 'ternary', 'vec constructors'],
@@ -95,6 +97,7 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'feedback-rotation.hcl',
     relativePath: 'features/feedback-rotation.hcl',
     group: 'features',
+    featuredRank: 2,
     summary: 'Feedback-driven rotation whose scale responds to speed.',
     purposes: ['feature', 'integration', 'showcase'],
     highlights: ['feedback', 'unit delay', 'scale response'],
@@ -185,6 +188,7 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'debug-lens-coverage.hcl',
     relativePath: 'integration/debug-lens-coverage.hcl',
     group: 'integration',
+    featuredRank: 3,
     summary: 'Dense lens attachment patch covering payload variety and cardinality mixes.',
     purposes: ['integration'],
     highlights: ['debug lens', 'cardinality', 'payload coverage'],
@@ -233,14 +237,15 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'attractor-bloom.hcl',
     relativePath: 'showcase/attractor-bloom.hcl',
     group: 'showcase',
-    summary: 'Best attractor demo for immediate wow factor and interaction.',
+    summary: 'Mouse-guided eclipse bloom with a cool mist layer and a hot petal crown.',
     purposes: ['feature', 'showcase'],
-    highlights: ['attractor layout', 'mouse input', 'dual layers'],
+    highlights: ['attractor layout', 'mouse input', 'triple layer'],
   },
   {
     filename: 'aurora-petal-showcase.hcl',
     relativePath: 'showcase/aurora-petal-showcase.hcl',
     group: 'showcase',
+    featuredRank: 5,
     summary: 'Readable two-layer composition with a strong visual identity.',
     purposes: ['showcase', 'feature'],
     highlights: ['expression field', 'petal ring', 'color drift'],
@@ -257,6 +262,7 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'library-kitchen-sink.hcl',
     relativePath: 'showcase/library-kitchen-sink.hcl',
     group: 'showcase',
+    featuredRank: 4,
     summary: 'Flagship multi-branch composition for selling the overall renderer.',
     purposes: ['showcase', 'feature'],
     highlights: ['multi layer', 'path layout', 'spiral'],
@@ -265,9 +271,9 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'neon-grid.hcl',
     relativePath: 'showcase/neon-grid.hcl',
     group: 'showcase',
-    summary: 'High-contrast grid piece built around quantized pulsing.',
+    summary: 'Scaffold-plus-glow neon wall with stepped pulse changes and field warping.',
     purposes: ['showcase', 'feature'],
-    highlights: ['step quantize', 'grid layout', 'neon'],
+    highlights: ['step quantize', 'dual glow', 'grid warp'],
   },
   {
     filename: 'gpu-100k-swarm-stress.hcl',
