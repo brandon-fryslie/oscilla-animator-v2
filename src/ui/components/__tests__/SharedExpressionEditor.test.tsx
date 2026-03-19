@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { registerAllBlocks } from '../../../blocks/all';
@@ -12,6 +12,9 @@ registerAllBlocks();
 
 const diagnosticsLog = vi.fn();
 const updateBlockParams = vi.fn();
+const expressionDrafts = new Map<BlockId, string>();
+const expressionPersistedValues = new Map<BlockId, string>();
+const openForBlock = vi.fn();
 
 vi.mock('../../../compiler', () => ({
   compilePartialPatch: vi.fn(),
@@ -33,7 +36,24 @@ vi.mock('../../../stores', () => ({
       snapshot: { patchRevision: 0, resolvedPortTypes: new Map() },
     },
     expressionEditor: {
-      openForBlock: vi.fn(),
+      openForBlock,
+      getDraftValue: (blockId: BlockId, persistedValue: string) => expressionDrafts.get(blockId) ?? persistedValue,
+      getPersistedValue: (blockId: BlockId, persistedValue: string) => expressionPersistedValues.get(blockId) ?? persistedValue,
+      syncPersistedValue: (blockId: BlockId, persistedValue: string) => {
+        const draftValue = expressionDrafts.get(blockId);
+        const previousPersistedValue = expressionPersistedValues.get(blockId) ?? persistedValue;
+        expressionPersistedValues.set(blockId, persistedValue);
+        if (draftValue === undefined || draftValue === previousPersistedValue) {
+          expressionDrafts.set(blockId, persistedValue);
+        }
+      },
+      setDraftValue: (blockId: BlockId, draftValue: string) => {
+        expressionDrafts.set(blockId, draftValue);
+      },
+      commitDraftValue: (blockId: BlockId, persistedValue: string) => {
+        expressionDrafts.set(blockId, persistedValue);
+        expressionPersistedValues.set(blockId, persistedValue);
+      },
     },
   }),
 }));
@@ -94,10 +114,18 @@ function renderWithProviders(element: React.ReactElement) {
 }
 
 describe('SharedExpressionEditor', () => {
+  beforeEach(() => {
+    diagnosticsLog.mockClear();
+    updateBlockParams.mockClear();
+    openForBlock.mockClear();
+    expressionDrafts.clear();
+    expressionPersistedValues.clear();
+    compilePartialPatchMock.mockReset();
+  });
+
   it('shows local syntax diagnostics and can auto-compile on keypress', async () => {
     const blockId = 'expr' as BlockId;
     const patch = createValidPatch(blockId);
-    updateBlockParams.mockClear();
     compilePartialPatchMock.mockReturnValue({
       fragment: patch,
       frontendResult: { errors: [], backendReady: true } as never,
@@ -129,7 +157,9 @@ describe('SharedExpressionEditor', () => {
       />,
     );
 
-    expect(screen.getAllByText(/Expected expression/i).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getAllByText(/Expected expression/i).length).toBeGreaterThan(0);
+    });
     const autoCompileToggle = screen.getByRole('switch', { name: /Auto-compile on keypress/i });
     expect(autoCompileToggle).toBeInTheDocument();
 
@@ -151,8 +181,6 @@ describe('SharedExpressionEditor', () => {
 
   it('renders fallback UI and logs diagnostics when registry construction fails', async () => {
     const malformedPatch = createMalformedPatch('bad-expression' as BlockId);
-    diagnosticsLog.mockClear();
-    updateBlockParams.mockClear();
     compilePartialPatchMock.mockReturnValue({
       fragment: malformedPatch,
       frontendResult: { errors: [], backendReady: true } as never,
@@ -191,8 +219,6 @@ describe('SharedExpressionEditor', () => {
     const blockId = 'bad-expression' as BlockId;
     const malformedPatch = createMalformedPatch(blockId);
     const validPatch = createValidPatch(blockId);
-    diagnosticsLog.mockClear();
-    updateBlockParams.mockClear();
     compilePartialPatchMock.mockReturnValue({
       fragment: malformedPatch,
       frontendResult: { errors: [], backendReady: true } as never,

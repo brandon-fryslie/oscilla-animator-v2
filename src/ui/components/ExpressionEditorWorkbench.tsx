@@ -18,6 +18,11 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
 
   const block = blockId && patch ? patch.blocks.get(blockId) : null;
   const expressionValue = String(block?.params?.expression ?? '');
+  // [LAW:dataflow-not-control-flow] Keep hook order stable; render variants
+  // are driven by data state instead of early-returning before later hooks run.
+  const workbenchState = patch && blockId && block
+    ? { kind: 'ready' as const, patch, blockId, block, expressionValue }
+    : { kind: 'empty' as const };
 
   const expressionDiagnostics = useMemo(() => {
     if (!blockId) return [];
@@ -29,15 +34,26 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
     );
   }, [blockId, diagnostics.activeDiagnostics]);
 
-  if (!patch || !blockId || !block) {
-    return (
-      <div className="expression-workbench expression-workbench--empty">
-        Select an Expression block to edit.
-      </div>
-    );
-  }
-
   const paneComponents = useMemo<Record<string, React.FC<IPaneviewPanelProps>>>(() => ({
+    editor: () => {
+      if (workbenchState.kind === 'empty') {
+        return (
+          <div className="expression-workbench__pane expression-workbench__empty-pane">
+            Select an Expression block to edit.
+          </div>
+        );
+      }
+      return (
+        <div className="expression-workbench__pane expression-workbench__pane--editor">
+          <SharedExpressionEditor
+            blockId={workbenchState.blockId}
+            value={workbenchState.expressionValue}
+            patch={workbenchState.patch}
+            showPopOutButton={false}
+          />
+        </div>
+      );
+    },
     reference: () => (
       <div className="expression-workbench__pane">
         <div className="expression-workbench__docs-body">
@@ -71,13 +87,14 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
         </div>
       </div>
     ),
-  }), [expressionDiagnostics]);
+  }), [expressionDiagnostics, workbenchState]);
 
   const handlePaneReady = useCallback((event: PaneviewReadyEvent) => {
     [
-      { id: 'reference', title: 'Reference', size: 180 },
-      { id: 'diagnostics', title: 'Diagnostics', size: 220 },
-      { id: 'tips', title: 'Tips', size: 160 },
+      { id: 'editor', title: 'Editor', size: 520, isExpanded: true },
+      { id: 'reference', title: 'Reference', size: 140, isExpanded: false },
+      { id: 'diagnostics', title: 'Diagnostics', size: 140, isExpanded: false },
+      { id: 'tips', title: 'Tips', size: 120, isExpanded: false },
     ].forEach((panel) => {
       if (event.api.getPanel(panel.id)) {
         return;
@@ -87,36 +104,27 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
         component: panel.id,
         title: panel.title,
         size: panel.size,
-        isExpanded: panel.id !== 'tips',
+        isExpanded: panel.isExpanded,
       });
     });
-    event.api.getPanel('diagnostics')?.api.setActive();
+    event.api.getPanel('editor')?.api.setActive();
   }, []);
 
   return (
     <div className="expression-workbench">
       <div className="expression-workbench__header">
         <div className="expression-workbench__title">Expression Editor</div>
-        <div className="expression-workbench__subtitle">{block.displayName ?? block.type}</div>
+        <div className="expression-workbench__subtitle">
+          {workbenchState.kind === 'ready' ? (workbenchState.block.displayName ?? workbenchState.block.type) : 'No block selected'}
+        </div>
       </div>
 
       <div className="expression-workbench__body">
-        <section className="expression-workbench__editor">
-          <div className="expression-workbench__section-title">Editor</div>
-          <SharedExpressionEditor
-            blockId={blockId}
-            value={expressionValue}
-            patch={patch}
-            showPopOutButton={false}
-          />
-        </section>
-        <aside className="expression-workbench__sidebar">
-          <PaneviewReact
-            className="expression-workbench__paneview oscilla-sidebar-paneview"
-            components={paneComponents}
-            onReady={handlePaneReady}
-          />
-        </aside>
+        <PaneviewReact
+          className="expression-workbench__paneview oscilla-sidebar-paneview"
+          components={paneComponents}
+          onReady={handlePaneReady}
+        />
       </div>
     </div>
   );

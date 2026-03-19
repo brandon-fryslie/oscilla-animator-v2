@@ -24,7 +24,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm run dev -- --port 5784 --strictPort',
+    // [LAW:single-enforcer] The Playwright harness owns the dev-server launch
+    // contract, including the exact port it binds for browser tests.
+    command: 'pnpm exec vite --port 5784 --strictPort',
     port: 5784,
     reuseExistingServer: !process.env.CI,
   },

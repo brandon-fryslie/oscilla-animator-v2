@@ -96,6 +96,7 @@ export interface CompileOptions {
   readonly patchRevision?: number;
   readonly events?: EventHub;
   readonly allowMissingTimeRoot?: boolean;
+  readonly captureInspector?: boolean;
 }
 
 export type CompileFromFrontendOptions = CompileOptions;
@@ -128,14 +129,17 @@ export function compileFromFrontend(
   options?: CompileFromFrontendOptions,
 ): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
+  const captureInspector = options?.captureInspector ?? true;
 
   // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
   // [LAW:single-enforcer] Inspector is internally resilient — no try/catch needed.
-  compilationInspector.beginCompile(compileId);
+  if (captureInspector) {
+    compilationInspector.beginCompile(compileId);
+  }
 
   try {
     if (!frontend.backendReady) {
-      return makeFailure(frontend.errors.map(frontendErrorToCompileError));
+      return makeFailure(frontend.errors.map(frontendErrorToCompileError), captureInspector);
     }
 
     const normalized = frontend.normalizedPatch;
@@ -143,15 +147,17 @@ export function compileFromFrontend(
     const graph = normalized.graph;
 
     // Capture frontend passes (for inspection)
-    compilationInspector.capturePass('normalization', graph, normalized);
-    compilationInspector.capturePass('type-constraints', normalized, typedPatch);
-    compilationInspector.capturePass('type-graph', normalized, typedPatch);
-    compilationInspector.capturePass('axis-validation', typedPatch, {
-      errors: frontend.errors,
-    });
-    compilationInspector.capturePass('cycle-analysis', typedPatch,
-      frontend.cycleSummary,
-    );
+    if (captureInspector) {
+      compilationInspector.capturePass('normalization', graph, normalized);
+      compilationInspector.capturePass('type-constraints', normalized, typedPatch);
+      compilationInspector.capturePass('type-graph', normalized, typedPatch);
+      compilationInspector.capturePass('axis-validation', typedPatch, {
+        errors: frontend.errors,
+      });
+      compilationInspector.capturePass('cycle-analysis', typedPatch,
+        frontend.cycleSummary,
+      );
+    }
 
     // =========================================================================
     // Backend: Always runs (requires frontend output)
@@ -160,12 +166,16 @@ export function compileFromFrontend(
     // Pass 3: Dependency Graph
     const depGraphPatch = pass4DepGraph(typedPatch);
 
-    compilationInspector.capturePass('depgraph', typedPatch, depGraphPatch);
+    if (captureInspector) {
+      compilationInspector.capturePass('depgraph', typedPatch, depGraphPatch);
+    }
 
     // Pass 4: Cycle Validation (SCC)
     const acyclicPatch = pass5CycleValidation(depGraphPatch);
 
-    compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
+    if (captureInspector) {
+      compilationInspector.capturePass('scc', depGraphPatch, acyclicPatch);
+    }
 
     // Pass 6: Block Lowering
     const unlinkedIR = pass6BlockLowering(acyclicPatch, {
@@ -175,7 +185,9 @@ export function compileFromFrontend(
       allowMissingTimeRoot: options?.allowMissingTimeRoot,
     });
 
-    compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
+    if (captureInspector) {
+      compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
+    }
 
     // Check for errors from pass 6 - Filter by reachability
     // Collect warnings for unreachable blocks to surface on result
@@ -232,7 +244,7 @@ export function compileFromFrontend(
 
       // Only fail compilation if there are reachable errors
       if (reachableErrors.length > 0) {
-        return makeFailure(reachableErrors);
+        return makeFailure(reachableErrors, captureInspector);
       }
     }
 
@@ -244,7 +256,9 @@ export function compileFromFrontend(
     // Pass 7: Schedule Construction (pure ordering, no allocation)
     const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
 
-    compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
+    if (captureInspector) {
+      compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
+    }
 
     // Phase B: Kernel Resolution
     // Create default registry and resolve all kernel references to handles
@@ -257,7 +271,7 @@ export function compileFromFrontend(
       return makeFailure(kernelResolutionErrors.map((e) => ({
         code: e.kind,
         message: e.message,
-      })));
+      })), captureInspector);
     }
 
     // Convert to CompiledProgramIR (now with registry)
@@ -266,10 +280,12 @@ export function compileFromFrontend(
       compiledIR.nagaLoweringProgram.coverage,
     );
     if (nagaLoweringDiagnostics.errors.length > 0) {
-      return makeFailure([...nagaLoweringDiagnostics.errors]);
+      return makeFailure([...nagaLoweringDiagnostics.errors], captureInspector);
     }
 
-    compilationInspector.endCompile('success');
+    if (captureInspector) {
+      compilationInspector.endCompile('success');
+    }
     return {
       kind: 'ok',
       program: compiledIR,
@@ -281,11 +297,11 @@ export function compileFromFrontend(
     };
   } catch (e: unknown) {
     if (isCompileErrorLike(e)) {
-      return makeFailure([e]);
+      return makeFailure([e], captureInspector);
     }
     const error = e instanceof Error ? e : new Error(String(e));
     const errorCode = (e as { code?: string }).code || 'CompilationFailed';
-    return makeFailure([{ code: errorCode, message: error.message || 'Unknown compilation error' }]);
+    return makeFailure([{ code: errorCode, message: error.message || 'Unknown compilation error' }], captureInspector);
   }
 }
 
@@ -308,8 +324,10 @@ function isCompileErrorLike(value: unknown): value is CompileError {
 }
 
 // [LAW:single-enforcer] Events are emitted by CompileOrchestrator, not compile().
-function makeFailure(errors: CompileError[]): CompileFailure {
-  compilationInspector.endCompile('failure');
+function makeFailure(errors: CompileError[], captureInspector: boolean): CompileFailure {
+  if (captureInspector) {
+    compilationInspector.endCompile('failure');
+  }
   return { kind: 'error', errors };
 }
 
