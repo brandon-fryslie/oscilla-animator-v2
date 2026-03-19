@@ -30,10 +30,10 @@ export interface TokenExpressionEditorProps {
   /** Expression text (plain string) */
   readonly value: string;
 
-  /** Patch for building AddressRegistry */
+  /** Patch context used for suggestion/rendering lookups that must stay in sync with addressRegistry */
   readonly patch: Patch;
 
-  /** Prebuilt AddressRegistry for token rendering */
+  /** Canonical AddressRegistry for token rendering and block.port chip resolution */
   readonly addressRegistry: AddressRegistry;
 
   /** Called when expression changes (on each keystroke) */

@@ -298,14 +298,12 @@ export class PatchStore {
       edges: this._data.edges,
     });
 
-    // Freeze the snapshot to prevent accidental mutations
-    // This provides runtime safety - any mutation attempt will fail
+    // Freeze the snapshot shell to prevent accidental top-level mutations.
+    // clonePatchData already clones/freeze block objects, params, and port entries;
+    // the Maps remain mutable containers, so snapshot consumers must still treat
+    // them as readonly by contract.
     Object.freeze(snapshot);
     Object.freeze(snapshot.edges);
-    // Note: We don't deep-freeze blocks Map values because:
-    // 1. Block objects are already typed as readonly
-    // 2. Deep freezing would be expensive
-    // 3. TypeScript enforcement is sufficient for our codebase
 
     this._snapshotCache = snapshot as unknown as ImmutablePatch;
     this._snapshotVersion = currentVersion;

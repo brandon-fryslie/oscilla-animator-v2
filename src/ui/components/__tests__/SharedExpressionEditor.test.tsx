@@ -51,6 +51,28 @@ function createMalformedPatch(blockId: BlockId): Patch {
   };
 }
 
+function createValidPatch(blockId: BlockId): Patch {
+  return {
+    blocks: new Map([
+      [blockId, {
+        id: blockId,
+        type: 'Expression',
+        params: { expression: 'clock.phaseA' },
+        displayName: 'Recovered Expression',
+        domainId: null,
+        role: { kind: 'user', meta: {} },
+        inputPorts: new Map([
+          ['refs', { id: 'refs', combineMode: 'last' as const }],
+        ]),
+        outputPorts: new Map([
+          ['output', { id: 'output' }],
+        ]),
+      }],
+    ]),
+    edges: [],
+  };
+}
+
 describe('SharedExpressionEditor', () => {
   it('renders fallback UI and logs diagnostics when registry construction fails', async () => {
     const malformedPatch = createMalformedPatch('bad-expression' as BlockId);
@@ -78,6 +100,47 @@ describe('SharedExpressionEditor', () => {
           message: expect.stringContaining('Expression editor fallback'),
         }),
       );
+    });
+
+    expect(screen.getByDisplayValue('clock.phaseA')).toHaveAttribute('maxLength', '4000');
+  });
+
+  it('logs the same registry failure again after a successful recovery', async () => {
+    const blockId = 'bad-expression' as BlockId;
+    const malformedPatch = createMalformedPatch(blockId);
+    const validPatch = createValidPatch(blockId);
+    diagnosticsLog.mockClear();
+
+    const { rerender } = render(
+      <SharedExpressionEditor
+        blockId={blockId}
+        value="clock.phaseA"
+        patch={malformedPatch}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(diagnosticsLog).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <SharedExpressionEditor
+        blockId={blockId}
+        value="clock.phaseA"
+        patch={validPatch}
+      />,
+    );
+
+    rerender(
+      <SharedExpressionEditor
+        blockId={blockId}
+        value="clock.phaseA"
+        patch={malformedPatch}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(diagnosticsLog).toHaveBeenCalledTimes(2);
     });
   });
 });
