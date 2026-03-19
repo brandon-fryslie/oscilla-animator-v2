@@ -14,6 +14,8 @@
 
 import React, { useRef, useCallback, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import { AddressRegistry } from '../../graph/address-registry';
+import { addressToString } from '../../types/canonical-address';
+import { getOutputAddress } from '../../graph/addressing';
 import { tokenizeExpression } from './referenceTokenizer';
 import type { Patch } from '../../graph/Patch';
 import type { BlockId } from '../../types';
@@ -223,9 +225,9 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
 function buildInnerHTML(
   text: string,
   addressRegistry: AddressRegistry,
-  connectedShorthands: ReadonlySet<string>
+  connectedAddresses: ReadonlySet<string>
 ): string {
-  const segments = tokenizeExpression(text, addressRegistry, connectedShorthands);
+  const segments = tokenizeExpression(text, addressRegistry, connectedAddresses);
   return segments
     .map(segment => {
       if (segment.isReference) {
@@ -235,11 +237,14 @@ function buildInnerHTML(
         const escapedRef = segment.text
           .replace(/&/g, '&amp;')
           .replace(/"/g, '&quot;');
+        const escapedAddress = (segment.sourceAddress ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;');
         const escapedText = segment.text
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;');
-        return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}" data-token="${escapedRef}">${escapedText}</span>`;
+        return `<span class="${chipClass}" contenteditable="false" data-ref="${escapedRef}" data-address="${escapedAddress}" data-token="${escapedRef}">${escapedText}</span>`;
       } else if (segment.isConstant) {
         const sourceName = (segment.constantName ?? segment.text)
           .replace(/&/g, '&amp;')
@@ -284,9 +289,9 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
     const isUserTyping = useRef(false);
     const lastRenderedValue = useRef(value);
 
-    // Build set of connected shorthands from collect edges targeting refs port
-    // [LAW:one-type-per-behavior] Read from edges.
-    const connectedShorthands = useMemo(() => {
+    // [LAW:one-source-of-truth] Connected refs are derived from canonical
+    // output addresses built from the actual edge source endpoints.
+    const connectedAddresses = useMemo(() => {
       const set = new Set<string>();
 
       for (const edge of patch.edges) {
@@ -294,10 +299,9 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         if (edge.to.blockId !== blockId || edge.to.slotId !== 'refs') continue;
         if (edge.from.kind !== 'port') continue;
 
-        // Build shorthand from source block ID and port
         const sourceBlock = patch.blocks.get(edge.from.blockId as import('../../types').BlockId);
         if (sourceBlock) {
-          set.add(`${sourceBlock.id}.${edge.from.slotId}`);
+          set.add(addressToString(getOutputAddress(sourceBlock, edge.from.slotId as import('../../types').PortId)));
         }
       }
       return set;
@@ -319,7 +323,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         if (!editorRef.current) return;
         const cursorOff = getCursorOffsetInPlainText(editorRef.current);
         const text = serializeToPlainText(editorRef.current);
-        editorRef.current.innerHTML = buildInnerHTML(text, addressRegistry, connectedShorthands);
+        editorRef.current.innerHTML = buildInnerHTML(text, addressRegistry, connectedAddresses);
         lastRenderedValue.current = text;
         requestAnimationFrame(() => {
           if (editorRef.current) {
@@ -327,7 +331,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
           }
         });
       },
-    }), [addressRegistry, connectedShorthands]);
+    }), [addressRegistry, connectedAddresses]);
 
     // Prop-driven updates (external value changes)
     useEffect(() => {
@@ -338,7 +342,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       }
       if (value !== lastRenderedValue.current) {
         const cursorOff = getCursorOffsetInPlainText(editorRef.current);
-        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedShorthands);
+        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses);
         lastRenderedValue.current = value;
         requestAnimationFrame(() => {
           if (editorRef.current) {
@@ -346,15 +350,15 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
           }
         });
       }
-    }, [value, addressRegistry, connectedShorthands]);
+    }, [value, addressRegistry, connectedAddresses]);
 
     // First mount: render initial content
     useEffect(() => {
       if (editorRef.current && editorRef.current.innerHTML === '') {
-        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedShorthands);
+        editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses);
         lastRenderedValue.current = value;
       }
-    }, [value, addressRegistry, connectedShorthands]);
+    }, [value, addressRegistry, connectedAddresses]);
 
     // Handle input (user typing)
     const handleInput = useCallback(() => {
@@ -366,7 +370,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         editorRef.current.innerHTML = buildInnerHTML(
           lastRenderedValue.current,
           addressRegistry,
-          connectedShorthands
+          connectedAddresses
         );
         return;
       }
@@ -375,18 +379,18 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       lastRenderedValue.current = plainText;
       const cursorOffset = getCursorOffsetInPlainText(editorRef.current);
       onChange(plainText, cursorOffset);
-    }, [maxLength, onChange, addressRegistry, connectedShorthands]);
+    }, [maxLength, onChange, addressRegistry, connectedAddresses]);
 
     // Handle blur: re-render with chips
     const handleBlur = useCallback(() => {
       if (!editorRef.current) return;
 
       const plainText = serializeToPlainText(editorRef.current);
-      editorRef.current.innerHTML = buildInnerHTML(plainText, addressRegistry, connectedShorthands);
+      editorRef.current.innerHTML = buildInnerHTML(plainText, addressRegistry, connectedAddresses);
       lastRenderedValue.current = plainText;
 
       onBlur();
-    }, [onBlur, addressRegistry, connectedShorthands]);
+    }, [onBlur, addressRegistry, connectedAddresses]);
 
     // Handle keydown
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -398,7 +402,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
     // Popover state for reference chips
     const [popoverData, setPopoverData] = useState<{
       shorthand: string;
-      isConnected: boolean;
+      sourceAddress: string;
       position: { top: number; left: number };
     } | null>(null);
     const popoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -407,14 +411,15 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       const target = e.target as HTMLElement;
       if (target.classList.contains('expr-ref-chip')) {
         const shorthand = target.getAttribute('data-ref');
-        if (!shorthand) return;
+        const sourceAddress = target.getAttribute('data-address');
+        if (!shorthand || !sourceAddress) return;
 
         if (popoverTimeout.current) clearTimeout(popoverTimeout.current);
 
         const rect = target.getBoundingClientRect();
         setPopoverData({
           shorthand,
-          isConnected: target.classList.contains('expr-ref-chip--valid'),
+          sourceAddress,
           position: { top: rect.bottom + 4, left: rect.left },
         });
       }
@@ -430,13 +435,7 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
     // Resolve popover metadata
     const popoverContent = useMemo(() => {
       if (!popoverData) return null;
-      const canonicalAddr = addressRegistry.resolveShorthand(popoverData.shorthand);
-      if (!canonicalAddr || canonicalAddr.kind !== 'output') {
-        return { blockType: 'Unknown', portName: popoverData.shorthand, typeDesc: 'unknown', isConnected: popoverData.isConnected };
-      }
-
-      const addrStr = `v1:blocks.${canonicalAddr.canonicalName}.outputs.${canonicalAddr.portId}`;
-      const resolved = addressRegistry.resolve(addrStr);
+      const resolved = addressRegistry.resolve(popoverData.sourceAddress);
 
       if (resolved?.kind === 'output') {
         const payloadStr = resolved.type.payload.kind;
@@ -447,13 +446,13 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         }
         return {
           blockType: resolved.block.type,
-          portName: String(canonicalAddr.portId),
+          portName: String(resolved.port.id),
           typeDesc: `${kindStr}<${payloadStr}>`,
-          isConnected: popoverData.isConnected,
+          isConnected: true,
         };
       }
 
-      return { blockType: 'Unknown', portName: popoverData.shorthand, typeDesc: 'unknown', isConnected: popoverData.isConnected };
+      return { blockType: 'Unknown', portName: popoverData.shorthand, typeDesc: 'unknown', isConnected: false };
     }, [popoverData, addressRegistry]);
 
     const isEmpty = value.length === 0;
