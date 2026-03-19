@@ -60,42 +60,42 @@ export function register(): void {
         // description: "Number of fluid particles represented in presentation."
         defaultSource: defaultSourceConst(8192),
         semantic: 'instanceCount',
-        uiHint: { kind: 'slider', min: 256, max: 32768, step: 256 },
+        uiHint: { kind: 'slider', min: 1024, max: 16384, step: 256 },
       },
       simResolution: {
         label: 'Sim Resolution',
         type: canonicalType(INT),
         // description: "Square simulation-grid resolution used by the solver."
         defaultSource: defaultSourceConst(128),
-        uiHint: { kind: 'slider', min: 32, max: 512, step: 32 },
+        uiHint: { kind: 'slider', min: 64, max: 256, step: 32 },
       },
       velocityDissipation: {
         label: 'Velocity Dissipation',
         type: canonicalType(FLOAT),
         // description: "Per-step velocity damping factor."
         defaultSource: defaultSourceConst(0.992),
-        uiHint: { kind: 'slider', min: 0.85, max: 0.9995, step: 0.0005 },
+        uiHint: { kind: 'slider', min: 0.97, max: 0.9995, step: 0.0005 },
       },
       dyeDissipation: {
         label: 'Dye Dissipation',
         type: canonicalType(FLOAT),
         // description: "Per-step dye/color damping factor."
         defaultSource: defaultSourceConst(0.996),
-        uiHint: { kind: 'slider', min: 0.85, max: 0.9999, step: 0.0005 },
+        uiHint: { kind: 'slider', min: 0.98, max: 0.9999, step: 0.0005 },
       },
       vorticity: {
         label: 'Vorticity',
         type: canonicalType(FLOAT),
         // description: "Vorticity confinement gain applied during solve."
         defaultSource: defaultSourceConst(18.0),
-        uiHint: { kind: 'slider', min: 0, max: 96, step: 0.5 },
+        uiHint: { kind: 'slider', min: 0, max: 48, step: 0.5 },
       },
       splatRadius: {
         label: 'Splat Radius',
         type: canonicalType(FLOAT),
         // description: "Mouse/input injection radius in simulation space."
         defaultSource: defaultSourceConst(20.0),
-        uiHint: { kind: 'slider', min: 2, max: 128, step: 1 },
+        uiHint: { kind: 'slider', min: 4, max: 48, step: 1 },
       },
       advection: {
         label: 'Advection',
@@ -109,7 +109,7 @@ export function register(): void {
         type: canonicalType(FLOAT),
         // description: "Presentation particle size multiplier."
         defaultSource: defaultSourceConst(0.02),
-        uiHint: { kind: 'slider', min: 0.001, max: 0.08, step: 0.001 },
+        uiHint: { kind: 'slider', min: 0.005, max: 0.04, step: 0.001 },
       },
     },
     outputs: {
