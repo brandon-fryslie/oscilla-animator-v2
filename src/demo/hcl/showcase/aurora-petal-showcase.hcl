@@ -16,6 +16,7 @@ patch "Aurora Petal Showcase" {
         field_position.refs,
         field_scale.refs,
         field_hue_shift.b,
+        morph_lfo.phase,
         field_morph.phase,
       ]
       phaseB = [
@@ -27,17 +28,30 @@ patch "Aurora Petal Showcase" {
 
   # --- Aurora canopy ---
 
+  block "Oscillator" "morph_lfo" {
+    outputs {
+      out = morph_amount.in
+    }
+  }
+
   block "Rect" "field_petal" {
-    width = 0.030
-    height = 0.010
-    cornerRadius = 0.003
+    width = 0.050
+    height = 0.012
+    cornerRadius = 0.004
     outputs {
       controlPoints = field_morph.controlPoints
     }
   }
 
+  block "ScaleBias" "morph_amount" {
+    scale = 0.0036
+    bias = 0.0024
+    outputs {
+      out = field_morph.amount
+    }
+  }
+
   block "ShapeWobble2D" "field_morph" {
-    amount = 0.0032
     frequency = 7
     outputs {
       points = field_shape.controlPoints
@@ -85,9 +99,10 @@ patch "Aurora Petal Showcase" {
       lift = 0.62 + 0.24 * sin(arc + lane * 8.0)
       drift_x = 0.070 * sin(swirl + y0 * 13.0)
       drift_y = 0.085 * cos(swirl * 0.92 - x0 * 15.0)
+      fan = 0.040 * sin(lane * 14.0 - phase_b_field * 1.8)
 
-      x = 0.5 + x0 * fold + drift_x
-      y = 0.5 + y0 * lift + drift_y
+      x = 0.5 + x0 * fold + drift_x + fan
+      y = 0.5 + y0 * lift + drift_y - 0.030 * cos(lane * 10.0 + phase_a_field * 1.3)
 
       vec2(x, y)
     EXPR
