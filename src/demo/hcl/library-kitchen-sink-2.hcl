@@ -1,316 +1,237 @@
 # Library Kitchen Sink 2
 #
-# Second broad-coverage demo emphasizing newer primitives:
-# - event chain: EdgeTrigger -> PulseDivider -> ChanceGate -> EventToOneMask
-# - scalar shaping: DomainWarpNoise1D / TurbulenceNoise1D / FbmNoise1D / Remap / Compare / Select / Lerp
-# - vector math: Construct / Reflect / Dot / Cross / Distance / AngleBetween
-# - transform path: SpiralLayout -> Transform2D -> Rotate2D -> RenderInstances2D
-# - field variation: NoisyBroadcast + FloatRangeField
+# A visual showcase with two readable layers:
+# - a drifting lattice field that folds toward the center
+# - a bright petal ring that keeps the composition framed
+#
+# This patch is about selling the renderer, not exhausting the block catalog.
 
 patch "Library Kitchen Sink 2" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 18000
-    periodBMs = 6000
+    periodAMs = 11000
+    periodBMs = 7000
     role = "timeRoot"
     outputs {
-      phaseA = [spiral.phase]
-      phaseB = pulse-osc.phase
+      phaseA = [
+        field_position.refs,
+        field_scale.refs,
+        field_hue_shift.b,
+        petal_ring.phase,
+        petal_pulse.phase,
+        petal_wobble.phase,
+      ]
+      phaseB = [
+        field_position.refs,
+        field_scale.refs,
+        petal_hue_shift.b,
+      ]
     }
   }
 
-  block "Ellipse" "dot-shape" {
+  # --- Background branch: folded aurora lattice ---
+
+  block "Ellipse" "field_dot" {
     rx = 0.010
     ry = 0.010
     outputs {
-      shape = instances.element
+      shape = field_points.element
     }
   }
 
-  block "Array" "instances" {
-    count = 180
+  block "Array" "field_points" {
+    count = 320
     outputs {
-      elements = spiral.elements
+      elements = lattice.elements
+      t = [field_position.refs, field_scale.refs, field_hue_shift.a]
     }
   }
 
-  block "SpiralLayout" "spiral" {
-    turns = 5.5
-    spin = 1.05
-    expansion = 0.68
+  block "GridLayoutUV" "lattice" {
+    rows = 16
+    cols = 20
     outputs {
-      controlPoints = spiral-pos3.refs
+      controlPoints = [field_position.refs, field_scale.refs]
     }
   }
 
-  block "Expression" "spiral-pos3" {
-    expression = "vec3(spiral.controlPoints.x, spiral.controlPoints.y, 0.0)"
+  block "Expression" "field_position" {
+    expression = <<-EXPR
+      phase_a = clock.phaseA * 6.2832
+      phase_b = clock.phaseB * 6.2832
+      phase_a_field = mapField(phase_a, field_points.t)
+      phase_b_field = mapField(phase_b, field_points.t)
+
+      x0 = lattice.controlPoints.x
+      y0 = lattice.controlPoints.y
+      lane = field_points.t
+      r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
+
+      swirl = lane * 40.0 + phase_a_field * 1.7
+      arc = r * 11.0 + phase_b_field * 1.2
+      envelope_x = 0.64 + 0.14 * cos(arc)
+      envelope_y = 0.64 + 0.14 * sin(arc)
+
+      x = x0 * envelope_x + 0.055 * sin(swirl + y0 * 14.0)
+      y = y0 * envelope_y + 0.055 * cos(swirl - x0 * 14.0)
+
+      vec2(x, y)
+    EXPR
     outputs {
-      out = xform.position
+      out = field_render.controlPoints
     }
   }
 
-  block "Transform2D" "xform" {
-    scaleX = 0.9
-    scaleY = 0.9
+  block "Expression" "field_scale" {
+    expression = <<-EXPR
+      phase_a = clock.phaseA * 6.2832
+      phase_b = clock.phaseB * 6.2832
+      phase_a_field = mapField(phase_a, field_points.t)
+      phase_b_field = mapField(phase_b, field_points.t)
+
+      lane = field_points.t
+      x0 = lattice.controlPoints.x
+      y0 = lattice.controlPoints.y
+      radius = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
+
+      ripple = 0.5 + 0.5 * sin(lane * 120.0 + phase_a_field * 5.0)
+      radial = 0.55 + 0.45 * cos(radius * 18.0 - phase_b_field * 3.0)
+      0.22 + 0.58 * ripple * radial
+    EXPR
     outputs {
-      out = rot2d.position
+      out = field_render.scale
     }
   }
 
-  block "Rotate2D" "rot2d" {
+  block "Add" "field_hue_shift" {
     outputs {
-      out = rot2d-cp.refs
+      out = field_hue_wrap.in
     }
   }
 
-  block "Expression" "rot2d-cp" {
-    expression = "vec2(rot2d.out.x, rot2d.out.y)"
+  block "Adapter_ScalarToPhase01" "field_hue_wrap" {
     outputs {
-      out = render.controlPoints
+      out = field_color.h
     }
   }
 
-  block "RenderInstances2D" "render" {}
-
-  # --- Event chain for live gating ---
-
-  block "Oscillator" "pulse-osc" {
-    mode = 0
+  block "MakeColorOKLCH" "field_color" {
+    s = 0.86
+    l = 0.62
+    a = 0.82
     outputs {
-      out = edge.value
+      color = field_render.color
     }
   }
 
-  block "EdgeTrigger" "edge" {
-    threshold = 0.62
+  block "RenderInstances2D" "field_render" {}
+
+  # --- Foreground branch: luminous petal frame ---
+
+  block "Rect" "petal" {
+    width = 0.034
+    height = 0.012
+    cornerRadius = 0.003
     outputs {
-      both = gate-mask.event
+      controlPoints = petal_wobble.controlPoints
     }
   }
 
-  block "EventToOneMask" "gate-mask" {
-  }
-
-  # --- Scalar field synthesis ---
-
-  block "FloatRangeField" "range" {
-    min = 0
-    max = 1
-    step = 0.007
+  block "ShapeWobble2D" "petal_wobble" {
+    amount = 0.0024
+    frequency = 6
     outputs {
-      out = [warp.x, vec-b.x]
+      points = petal_shape.controlPoints
     }
   }
 
-  block "Const" "warp-seed" {
-    value = 41
+  block "MakeShape2D" "petal_shape" {
+    closed = true
     outputs {
-      out = warp.seed
+      shape = petals.element
     }
   }
 
-  block "DomainWarpNoise1D" "warp" {
-    amount = 0.25
+  block "Array" "petals" {
+    count = 96
     outputs {
-      out = [turb.x, fbm.x, vec-a.z]
+      elements = petal_ring.elements
+      t = [petal_hue_shift.a, petal_scale_base.in]
     }
   }
 
-  block "Const" "turb-seed" {
-    value = 9
+  block "CircleLayoutUV" "petal_ring" {
+    radius = 0.35
     outputs {
-      out = turb.seed
+      controlPoints = petal_render.controlPoints
     }
   }
 
-  block "TurbulenceNoise1D" "turb" {
+  block "Add" "petal_hue_shift" {
     outputs {
-      out = [vec-a.y, select.ifFalse, compare.b]
+      out = petal_hue_wrap.in
     }
   }
 
-  block "Const" "fbm-seed" {
-    value = 23
+  block "Adapter_ScalarToPhase01" "petal_hue_wrap" {
     outputs {
-      out = fbm.seed
+      out = petal_color.h
     }
   }
 
-  block "FbmNoise1D" "fbm" {
+  block "MakeColorOKLCH" "petal_color" {
+    s = 0.97
+    l = 0.72
     outputs {
-      out = [vec-a.x, select.ifTrue, compare.a]
+      color = petal_render.color
     }
   }
 
-  block "Compare" "compare" {
-    op = "gt"
+  block "ScaleBias" "petal_scale_base" {
+    scale = 0.6
+    bias = 0.7
     outputs {
-      out = [select.cond, vec-b.z]
+      out = petal_scale_jitter.value
     }
   }
 
-  block "Select" "select" {
+  block "Oscillator" "petal_pulse" {
     outputs {
-      out = vec-b.y
+      out = petal_pulse_shape.in
     }
   }
 
-  # --- Vector graph + derived control values ---
-
-  block "Construct" "vec-a" {
+  block "Const" "petal_pulse_amt" {
+    value = 0.22
     outputs {
-      out = [reflect.incident, dot.a]
+      out = petal_pulse_shape.scale
     }
   }
 
-  block "Construct" "vec-b" {
+  block "Const" "petal_pulse_center" {
+    value = 0.20
     outputs {
-      out = [reflect.normal, dot.b, cross.a, distance.b, angle.b]
+      out = petal_pulse_shape.bias
     }
   }
 
-  block "Reflect" "reflect" {
+  block "ScaleBias" "petal_pulse_shape" {
     outputs {
-      out = [distance.a, cross.b, angle.a]
+      out = petal_scale_jitter.amount
     }
   }
 
-  block "Dot" "dot" {
+  block "Const" "petal_jitter_seed" {
+    value = 53
     outputs {
-      out = dot-remap.in
+      out = petal_scale_jitter.seed
     }
   }
 
-  block "Cross" "cross" {
+  block "NoisyBroadcast" "petal_scale_jitter" {
     outputs {
-      out = [cross-x.in, cross-y.in, cross-z.in]
+      out = petal_render.scale
     }
   }
 
-  block "Extract" "cross-x" {
-    component = 0
-    outputs {
-      out = cross-len.x
-    }
-  }
-
-  block "Extract" "cross-y" {
-    component = 1
-    outputs {
-      out = cross-len.y
-    }
-  }
-
-  block "Extract" "cross-z" {
-    component = 2
-    outputs {
-      out = cross-len.z
-    }
-  }
-
-  block "Length" "cross-len" {
-    outputs {
-      out = amount-remap.in
-    }
-  }
-
-  block "Distance" "distance" {
-    outputs {
-      out = dist-remap.in
-    }
-  }
-
-  block "AngleBetween" "angle" {
-    outputs {
-      out = rad-to-deg.in
-    }
-  }
-
-  block "Adapter_RadiansToDegrees" "rad-to-deg" {
-    outputs {
-      out = xform.angleDeg
-    }
-  }
-
-  block "Remap" "dot-remap" {
-    inMin = -1
-    inMax = 1
-    outMin = 0
-    outMax = 1
-    mode = "clamp"
-    outputs {
-      out = [hue-phase.in, scalar-to-deg.in]
-    }
-  }
-
-  block "Remap" "dist-remap" {
-    inMin = 0
-    inMax = 2
-    outMin = 0
-    outMax = 1
-    mode = "clamp"
-    outputs {
-      out = xform.translateX
-    }
-  }
-
-  block "Remap" "amount-remap" {
-    inMin = 0
-    inMax = 2
-    outMin = 0.02
-    outMax = 0.30
-    mode = "clamp"
-    outputs {
-      out = xform.translateY
-    }
-  }
-
-  block "Adapter_ScalarToDeg" "scalar-to-deg" {
-    outputs {
-      out = rot2d.angleDeg
-    }
-  }
-
-  # --- Render styling ---
-
-  block "Const" "scale-base" {
-    value = 0.58
-    outputs {
-      out = scale-noise.value
-    }
-  }
-
-  block "Const" "scale-amount" {
-    value = 0.18
-    outputs {
-      out = scale-noise.amount
-    }
-  }
-
-  block "Const" "scale-seed" {
-    value = 33
-    outputs {
-      out = scale-noise.seed
-    }
-  }
-
-  block "NoisyBroadcast" "scale-noise" {
-    outputs {
-      out = render.scale
-    }
-  }
-
-  block "Adapter_ScalarToPhase01" "hue-phase" {
-    outputs {
-      out = color.h
-    }
-  }
-
-  block "MakeColorOKLCH" "color" {
-    s = 0.9
-    l = 0.56
-    outputs {
-      color = render.color
-    }
-  }
+  block "RenderInstances2D" "petal_render" {}
 }
