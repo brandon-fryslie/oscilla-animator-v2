@@ -7,10 +7,11 @@
  * Created for patch-editor-ui Sprint 2B Feature 4.
  */
 
-import React, { useCallback, useState, useEffect } from 'react';
-import { Slider, Checkbox, FormControlLabel, Select, MenuItem, Typography, Box, type SelectChangeEvent } from '@mui/material';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Checkbox, FormControlLabel, Select, MenuItem, Typography, Box, type SelectChangeEvent } from '@mui/material';
 import type { BlockId, UIControlHint } from '../../types';
 import { useStores } from '../../stores';
+import { SliderWithInput } from '../components/common';
 
 /**
  * Props for parameter control components.
@@ -38,60 +39,46 @@ export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId
 
   // Local state for immediate slider feedback
   const [localValue, setLocalValue] = useState(numValue);
-  const [updateTimer, setUpdateTimer] = useState<number | null>(null);
+  const updateTimerRef = useRef<number | null>(null);
 
   // Sync local value when prop changes
   useEffect(() => {
     setLocalValue(numValue);
   }, [numValue]);
 
-  const handleChange = useCallback((_event: Event, newValue: number | number[]) => {
-    const val = Array.isArray(newValue) ? newValue[0] : newValue;
+  useEffect(() => {
+    return () => {
+      if (updateTimerRef.current !== null) {
+        window.clearTimeout(updateTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleChange = useCallback((val: number) => {
     setLocalValue(val);
 
-    // Clear existing timer
-    if (updateTimer !== null) {
-      clearTimeout(updateTimer);
+    if (updateTimerRef.current !== null) {
+      window.clearTimeout(updateTimerRef.current);
     }
 
-    // Debounce: update PatchStore after ~16ms (one frame)
-    const timer = window.setTimeout(() => {
+    updateTimerRef.current = window.setTimeout(() => {
       patch.updateBlockParams(blockId, { [paramId]: val });
     }, 16);
-
-    setUpdateTimer(timer);
-  }, [blockId, paramId, patch, updateTimer]);
+  }, [blockId, paramId, patch]);
 
   return (
     <Box sx={{ mb: 0.5 }} onPointerDown={(e) => e.stopPropagation()} className="nodrag">
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
-        <Typography variant="caption" sx={{ color: '#aaa', minWidth: '60px', fontSize: '10px' }}>
-          {label}:
-        </Typography>
-        <Typography variant="caption" sx={{ color: '#fff', fontWeight: 'bold', fontSize: '10px' }}>
-          {localValue.toFixed(2)}
-        </Typography>
-      </Box>
-      <Slider
+      {/* [LAW:one-source-of-truth] All slider behavior and bounds editing flow through the shared Mantine slider component. */}
+      <SliderWithInput
+        label={label}
         value={localValue}
         onChange={handleChange}
         min={min}
         max={max}
         step={step}
-        size="small"
-        sx={{
-          py: 0.5,
-          '& .MuiSlider-thumb': {
-            width: 12,
-            height: 12,
-          },
-          '& .MuiSlider-rail': {
-            height: 3,
-          },
-          '& .MuiSlider-track': {
-            height: 3,
-          },
-        }}
+        size="xs"
+        inputWidthRem={3.5}
+        editableBounds
       />
     </Box>
   );

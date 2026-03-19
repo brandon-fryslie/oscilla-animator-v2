@@ -95,14 +95,14 @@ export function register(): void {
         type: canonicalType(FLOAT),
         defaultValue: 0.1,
         defaultSource: defaultSourceConst(0.1),
-        uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
+        uiHint: { kind: 'slider', min: 0.02, max: 0.2, step: 0.01 },
       },
       radiusY: {
         label: 'Radius Y',
         type: canonicalType(FLOAT),
         defaultValue: 0.1,
         defaultSource: defaultSourceConst(0.1),
-        uiHint: { kind: 'slider', min: 0.01, max: 0.5, step: 0.01 },
+        uiHint: { kind: 'slider', min: 0.02, max: 0.2, step: 0.01 },
       },
     },
     outputs: {
