@@ -40,7 +40,6 @@ import {
 import { CompileWorkerClient, type CompileWorkerRunRequest } from './CompileWorkerClient';
 import { createDomainChangeDetector, type DomainChangeDetector } from './DomainChangeDetector';
 import { createLiveRecompileController, type LiveRecompileController } from './LiveRecompile';
-import { patchProgramConstants } from './ConstantPatcher';
 import { debugService } from './DebugService';
 import { compilationInspector } from './CompilationInspectorService';
 import { AsyncCompilerService, type AsyncCompilerState } from './AsyncCompilerService';
@@ -656,17 +655,15 @@ export class RuntimeService {
       // Start auto-persistence (PatchStore watches itself)
       store.patch.startPersistence();
 
-      // Set up live recompile reaction with fast-path for constant value changes
+      // Set up live recompile reaction.
+      // [LAW:one-source-of-truth] The worker-owned compile/swap bundle is the
+      // only runtime artifact authority. Main-thread program-only patching does
+      // not update the installed renderer bundle, so value edits must flow
+      // through the canonical async compile path until a worker-owned patch
+      // protocol exists.
       this.liveRecompile.setup(store, async () => {
         this.asyncCompiler!.scheduleCompile(this.buildCompileRequest());
-      }, (changes) => {
-        const program = this.compileState.currentProgram;
-        if (!program) return false;
-        const patched = patchProgramConstants(program, changes);
-        if (!patched) return false;
-        this.compileState.currentProgram = patched;
-        return true;
-      }, (err) => {
+      }, undefined, (err) => {
         // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
         const message = err instanceof Error ? err.message : String(err);
         store.diagnostics.log({
