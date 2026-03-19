@@ -134,7 +134,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   getStateMappings(): readonly StateMapping[];
   getStateSlotCount(): number;
   getSlotCount(): number;
-  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number }>;
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string }>;
 
   /** Get a single value expression by ID. */
   getValueExpr(id: ValueExprId): ValueExpr | undefined;

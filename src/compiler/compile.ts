@@ -54,7 +54,7 @@ import { resolveKernels } from './resolve-kernels';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
-import type { CompileError } from './types';
+import { compileError, type CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
 
 import { registerAllBlocks } from '../blocks/all';
@@ -277,6 +277,9 @@ export function compileFromFrontend(
       ],
     };
   } catch (e: unknown) {
+    if (isCompileErrorLike(e)) {
+      return makeFailure([e]);
+    }
     const error = e instanceof Error ? e : new Error(String(e));
     const errorCode = (e as { code?: string }).code || 'CompilationFailed';
     return makeFailure([{ code: errorCode, message: error.message || 'Unknown compilation error' }]);
@@ -294,6 +297,10 @@ function frontendErrorToCompileError(e: FrontendError): CompileError {
     message: e.message,
     where: { blockId: e.blockId, port: e.portId },
   };
+}
+
+function isCompileErrorLike(value: unknown): value is CompileError {
+  return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }
 
 // [LAW:single-enforcer] Events are emitted by CompileOrchestrator, not compile().
@@ -415,6 +422,42 @@ function collectRuntimeLiveExprIdsForPatching(args: {
  */
 function isAlwaysFatalInvariantError(error: CompileError): boolean {
   return error.details?.compilerInvariant === 'unresolvedPlaceholderInstance';
+}
+
+function compileErrorFromUnexpected(args: {
+  readonly code: string;
+  readonly error: unknown;
+  readonly blockId?: string;
+  readonly portId?: string;
+}): CompileError {
+  const message = args.error instanceof Error ? args.error.message : String(args.error);
+  return compileError(args.code, message, {
+    blockId: args.blockId,
+    port: args.portId,
+  });
+}
+
+function parseSlotPortLabel(label: string | undefined): { readonly blockId?: string; readonly portId?: string } {
+  if (!label) return {};
+  const separator = label.lastIndexOf('.');
+  if (separator <= 0 || separator >= label.length - 1) {
+    return {};
+  }
+  return {
+    blockId: label.slice(0, separator),
+    portId: label.slice(separator + 1),
+  };
+}
+
+function readRequiredBlockLabel(
+  blockMap: ReadonlyMap<BlockIndex, string>,
+  blockId: BlockIndex,
+): string {
+  const blockLabel = blockMap.get(blockId);
+  if (!blockLabel) {
+    throw new Error(`Missing debug block label for block index ${blockId}`);
+  }
+  return blockLabel;
 }
 
 function assertCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
@@ -624,9 +667,21 @@ function convertLinkedIRToProgram(
     const slotInfo = slotTypes.get(slot);
     if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
     const type = slotInfo.type;
+    const slotPort = parseSlotPortLabel(slotInfo.label);
 
     // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
-    const { storage: derivedStorage, stride } = deriveStorageLayout(type, slotInfo.stride);
+    let derivedStorage: ReturnType<typeof deriveStorageLayout>['storage'];
+    let stride: number;
+    try {
+      ({ storage: derivedStorage, stride } = deriveStorageLayout(type, slotInfo.stride));
+    } catch (error) {
+      throw compileErrorFromUnexpected({
+        code: 'AxisInvalid',
+        error,
+        blockId: slotPort.blockId,
+        portId: slotPort.portId,
+      });
+    }
     const storage = assertCanonicalRuntimeStorage(derivedStorage);
 
     const offset = storageOffsets[storage];
@@ -752,12 +807,24 @@ function convertLinkedIRToProgram(
 
     for (const [numericBlockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
       const debugBlockId = blockIndex(numericBlockIndex);
+      const debugBlockLabel = readRequiredBlockLabel(blockMap, debugBlockId);
       for (const [portId, ref] of outputs.entries()) {
         const valueId = ref.id;
         const expr = valueExprNodes[valueId];
         if (!expr) continue;
-        const card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
-        const temp = requireInst(expr.type.extent.temporality, 'temporality').kind;
+        let card: 'zero' | 'one' | 'many';
+        let temp: 'continuous' | 'discrete';
+        try {
+          card = requireInst(expr.type.extent.cardinality, 'cardinality').kind;
+          temp = requireInst(expr.type.extent.temporality, 'temporality').kind;
+        } catch (error) {
+          throw compileErrorFromUnexpected({
+            code: 'AxisInvalid',
+            error,
+            blockId: debugBlockLabel,
+            portId,
+          });
+        }
         const slot = ref.slot;
 
         // Generate stable port ID

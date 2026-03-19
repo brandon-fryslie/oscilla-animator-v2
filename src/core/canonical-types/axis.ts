@@ -50,3 +50,8 @@ export function requireInst<T, V>(a: Axis<T, V>, name: string): T {
   if (isAxisInst(a)) return a.value;
   throw new Error(`Expected instantiated ${name}, got var: ${JSON.stringify(a)}`);
 }
+
+/** Extract instantiated value from axis, or undefined if variable. */
+export function readInst<T, V>(a: Axis<T, V>): T | undefined {
+  return isAxisInst(a) ? a.value : undefined;
+}

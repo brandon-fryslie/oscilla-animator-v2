@@ -12,7 +12,7 @@ import { blockId, type ValueSlot } from '../../types';
 import * as PatchPersistence from '../../services/PatchPersistence';
 import { PatchDslError } from '../../patch-dsl';
 import { debugService } from '../../services/DebugService';
-import { canonicalType, FLOAT } from '../../core/canonical-types';
+import { axisVar, canonicalType, FLOAT } from '../../core/canonical-types';
 
 // Import blocks to trigger registration
 import { registerAllBlocks } from '../../blocks/all';
@@ -40,7 +40,6 @@ describe('Store Integration', () => {
     if (originalLocalStorage) {
       Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete (globalThis as { localStorage?: unknown }).localStorage;
     }
     PatchPersistence.clearPatchPersistenceIssues();
@@ -129,6 +128,26 @@ describe('Store Integration', () => {
           entry.message === "DebugService(tryGetEdgeValue): Suppressed debug query failure for edge 'edge1'"
         )
       )).toBe(true);
+    });
+
+    it('routes unresolved debug port metadata through diagnostics without throwing', () => {
+      debugService.setPortToSlotMap(new Map([
+        ['osc1:out', {
+          slotId: 11 as ValueSlot,
+          type: canonicalType(FLOAT, undefined, {
+            cardinality: axisVar('oscillator_cardinality' as any),
+          }),
+        }],
+      ]));
+
+      expect(debugService.getPortMetadata('osc1', 'out')).toBeUndefined();
+      expect(debugService.tryGetPortValue('osc1', 'out')).toBeUndefined();
+
+      expect(
+        debugService.getIssues().some((issue) =>
+          issue.message === "Unresolved cardinality reached debug metadata for port 'osc1.out'"
+        )
+      ).toBe(true);
     });
   });
 
