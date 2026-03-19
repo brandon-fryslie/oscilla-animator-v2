@@ -449,6 +449,17 @@ function parseSlotPortLabel(label: string | undefined): { readonly blockId?: str
   };
 }
 
+function readRequiredBlockLabel(
+  blockMap: ReadonlyMap<BlockIndex, string>,
+  blockId: BlockIndex,
+): string {
+  const blockLabel = blockMap.get(blockId);
+  if (!blockLabel) {
+    throw new Error(`Missing debug block label for block index ${blockId}`);
+  }
+  return blockLabel;
+}
+
 function assertCanonicalRuntimeStorage(storage: SlotMetaEntry['storage']): RuntimeSlotEntry['storage'] {
   if (storage === 'f32' || storage === 'i32' || storage === 'u32') {
     return storage;
@@ -796,7 +807,7 @@ function convertLinkedIRToProgram(
 
     for (const [numericBlockIndex, outputs] of unlinkedIR.blockOutputs.entries()) {
       const debugBlockId = blockIndex(numericBlockIndex);
-      const debugBlockLabel = blockMap.get(debugBlockId) ?? 'unknown';
+      const debugBlockLabel = readRequiredBlockLabel(blockMap, debugBlockId);
       for (const [portId, ref] of outputs.entries()) {
         const valueId = ref.id;
         const expr = valueExprNodes[valueId];

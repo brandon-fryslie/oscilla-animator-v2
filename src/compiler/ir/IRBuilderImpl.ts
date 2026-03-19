@@ -541,7 +541,8 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   registerSlotType(slot: ValueSlot, type: CanonicalType): void {
     const stride = payloadStride(type.payload);
-    this.slotLayoutInputs.set(slot, { type, stride });
+    const existing = this.slotLayoutInputs.get(slot);
+    this.slotLayoutInputs.set(slot, { type, stride, label: existing?.label });
   }
 
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void {

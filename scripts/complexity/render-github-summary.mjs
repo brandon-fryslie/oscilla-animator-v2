@@ -264,10 +264,10 @@ function renderSummaryMarkdown(delta, options) {
     `- improved metrics: ${improvedCount}, regressed metrics: ${regressedCount}, unchanged/near-zero: ${neutralCount}`,
     `- artifact: ${artifactUrl}`,
     ...(fileGate ? [
-      `- changed-file gate: ${fileGate.passed ? 'pass' : 'fail'} (${fileGate.failureCount}/${fileGate.evaluationCount} failing checks across ${fileGate.trackedChangedFilesCount} tracked changed files)`,
-      `- changed-file gate policy: ${formatFileGatePolicy(fileGate)}`,
-      // [LAW:one-source-of-truth] Render the canonical lock notice from delta JSON so CI output cannot drift from the enforced policy.
-      `- changed-file gate policy lock: ${fileGatePolicyNotice(fileGate)}`,
+      `- changed-file threshold advisory: ${fileGate.passed ? 'pass' : 'would fail'} (${fileGate.failureCount}/${fileGate.evaluationCount} failing checks across ${fileGate.trackedChangedFilesCount} tracked changed files)`,
+      `- changed-file threshold policy: ${formatFileGatePolicy(fileGate)}`,
+      // [LAW:one-source-of-truth] Render the canonical advisory notice from delta JSON so CI output cannot drift from the computed report policy.
+      `- changed-file threshold policy note: ${fileGatePolicyNotice(fileGate)}`,
     ] : []),
     '',
     '### High-Signal Regressions',
@@ -285,11 +285,11 @@ function renderSummaryMarkdown(delta, options) {
     ),
     '',
     ...(fileGate ? [
-      '### Changed-File Threshold Gate',
+      '### Changed-File Threshold Advisory',
       '',
       `Policy: ${escapeSummaryText(formatFileGatePolicy(fileGate))}`,
       '',
-      `Policy lock: ${escapeSummaryText(fileGatePolicyNotice(fileGate))}`,
+      `Policy note: ${escapeSummaryText(fileGatePolicyNotice(fileGate))}`,
       '',
       renderTable(
         ['File', 'Metric', 'Base/Head', 'Delta (%)', 'Threshold', 'Result'],
@@ -305,7 +305,7 @@ function renderSummaryMarkdown(delta, options) {
             `${formatMetricValue(evaluation.baseValue)}/${formatMetricValue(evaluation.headValue)}`,
             `${statusEmoji} ${formatDeltaValue(deltaValue)} (${formatPctValue(deltaPct)})`,
             `${evaluation.direction === 'higher' ? '>=' : '<='} ${formatMetricValue(evaluation.threshold)}`,
-            evaluation.passed ? 'pass' : 'fail',
+            evaluation.passed ? 'pass' : 'would fail',
           ];
         }),
       ),
