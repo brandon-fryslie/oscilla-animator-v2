@@ -3,6 +3,8 @@ import {
   canonicalManyDef,
   canonicalType,
   payloadStride,
+  type CanonicalType,
+  requireManyInstance,
   unitNone,
   unitOklch,
   withInstance,
@@ -16,6 +18,8 @@ import { inferType, cardinalityVar, unitVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { DOMAIN_SHAPE } from '../../core/domain-registry';
 import { defaultSource, defaultSourceConst } from '../../types';
+import type { LowerCtx } from '../registry';
+import type { ValueExprId } from '../../compiler/ir/Indices';
 import { promoteToMany, resolveInputConstant } from '../lower-utils';
 
 const TEMPLATE_SIGNAL_CARD = cardinalityVar(cardinalityVarId('parametric_template_signal'), {
@@ -27,6 +31,23 @@ const TEMPLATE_VEC2_CARD = cardinalityVar(cardinalityVarId('parametric_template_
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
 });
+
+function ensureMany(
+  input: { id: ValueExprId; components?: readonly ValueExprId[] },
+  outType: CanonicalType,
+  ctx: LowerCtx,
+): ValueExprId {
+  const expr = ctx.b.getValueExpr(input.id);
+  if (!expr) {
+    throw new Error(`CubicBezierRibbon2D: missing expression ${String(input.id)} during extent promotion`);
+  }
+  try {
+    requireManyInstance(expr.type);
+    return input.id;
+  } catch {
+    return promoteToMany(input.id, outType, ctx.b, input.components);
+  }
+}
 
 export function register(): void {
   registerBlock({
@@ -151,18 +172,18 @@ export function register(): void {
       const vec2FieldType = withInstance(canonicalManyDef(VEC2, unitNone()), instance);
       const scalarFieldType = withInstance(canonicalManyDef(FLOAT, unitNone()), instance);
 
-      const p0Field = promoteToMany(p0Input.id, vec2FieldType, ctx.b, p0Input.components);
-      const p1Field = promoteToMany(p1Input.id, vec2FieldType, ctx.b, p1Input.components);
-      const p2Field = promoteToMany(p2Input.id, vec2FieldType, ctx.b, p2Input.components);
-      const p3Field = promoteToMany(p3Input.id, vec2FieldType, ctx.b, p3Input.components);
-      const thicknessField = promoteToMany(thicknessInput.id, scalarFieldType, ctx.b, thicknessInput.components);
+      const p0Field = ensureMany(p0Input, vec2FieldType, ctx);
+      const p1Field = ensureMany(p1Input, vec2FieldType, ctx);
+      const p2Field = ensureMany(p2Input, vec2FieldType, ctx);
+      const p3Field = ensureMany(p3Input, vec2FieldType, ctx);
+      const thicknessField = ensureMany(thicknessInput, scalarFieldType, ctx);
 
-      const posXField = promoteToMany(posXInput.id, scalarFieldType, ctx.b, posXInput.components);
-      const posYField = promoteToMany(posYInput.id, scalarFieldType, ctx.b, posYInput.components);
+      const posXField = ensureMany(posXInput, scalarFieldType, ctx);
+      const posYField = ensureMany(posYInput, scalarFieldType, ctx);
       const positionField = ctx.b.construct([posXField, posYField], positionType);
-      const colorField = promoteToMany(colorInput.id, colorType, ctx.b, colorInput.components);
-      const scaleField = promoteToMany(scaleInput.id, scaleType, ctx.b, scaleInput.components);
-      const rotationField = promoteToMany(rotInput.id, rotationType, ctx.b, rotInput.components);
+      const colorField = ensureMany(colorInput, colorType, ctx);
+      const scaleField = ensureMany(scaleInput, scaleType, ctx);
+      const rotationField = ensureMany(rotInput, rotationType, ctx);
 
       const shapeRef = ctx.b.shapeRef(
         topologyId,
