@@ -32,7 +32,7 @@ patch "Parametric Ribbon Field" {
   block "Expression" "pos-x" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
-      drift = 0.012 * sin(phase * 0.9 + instances.t * 18.0)
+      drift = 0.012 * sin(phase + instances.t * 18.0)
       grid.controlPoints.x + drift
     EXPR
     outputs {
@@ -43,7 +43,7 @@ patch "Parametric Ribbon Field" {
   block "Expression" "pos-y" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
-      drift = 0.012 * cos(phase * 0.7 + instances.t * 23.0)
+      drift = 0.012 * cos(phase * 2.0 + instances.t * 23.0)
       grid.controlPoints.y + drift
     EXPR
     outputs {
@@ -55,8 +55,8 @@ patch "Parametric Ribbon Field" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
       seed = instances.t * 41.0
-      x = -0.03 + 0.004 * sin(seed + phase * 1.1)
-      y = 0.016 * sin(seed * 1.7 - phase * 0.8)
+      x = -0.03 + 0.004 * sin(seed + phase)
+      y = 0.016 * sin(seed * 1.7 - phase * 2.0)
       vec2(x, y)
     EXPR
     outputs {
@@ -68,8 +68,8 @@ patch "Parametric Ribbon Field" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
       seed = instances.t * 59.0
-      x = -0.012 + 0.01 * sin(seed * 0.9 + phase * 1.3)
-      y = 0.024 * cos(seed * 1.3 - phase * 1.1)
+      x = -0.012 + 0.01 * sin(seed * 0.9 + phase)
+      y = 0.024 * cos(seed * 1.3 - phase * 2.0)
       vec2(x, y)
     EXPR
     outputs {
@@ -81,8 +81,8 @@ patch "Parametric Ribbon Field" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
       seed = instances.t * 73.0
-      x = 0.012 + 0.01 * cos(seed * 1.1 - phase * 1.4)
-      y = 0.024 * sin(seed * 1.5 + phase * 0.9)
+      x = 0.012 + 0.01 * cos(seed * 1.1 - phase * 2.0)
+      y = 0.024 * sin(seed * 1.5 + phase)
       vec2(x, y)
     EXPR
     outputs {
@@ -94,8 +94,8 @@ patch "Parametric Ribbon Field" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
       seed = instances.t * 97.0
-      x = 0.03 + 0.004 * cos(seed - phase * 1.2)
-      y = 0.016 * cos(seed * 1.9 + phase * 0.85)
+      x = 0.03 + 0.004 * cos(seed - phase)
+      y = 0.016 * cos(seed * 1.9 + phase * 2.0)
       vec2(x, y)
     EXPR
     outputs {
@@ -106,7 +106,7 @@ patch "Parametric Ribbon Field" {
   block "Expression" "scale" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
-      0.78 + 0.24 * sin(phase + instances.t * 15.0)
+      0.78 + 0.24 * sin(phase * 2.0 + instances.t * 15.0)
     EXPR
     outputs {
       out = render.scale
@@ -116,7 +116,7 @@ patch "Parametric Ribbon Field" {
   block "Expression" "thickness" {
     expression = <<-EXPR
       phase = mapField(clock.phaseA * 6.2832, instances.t)
-      0.012 + 0.008 * (0.5 + 0.5 * sin(phase * 1.4 + instances.t * 29.0))
+      0.012 + 0.008 * (0.5 + 0.5 * sin(phase * 2.0 + instances.t * 29.0))
     EXPR
     outputs {
       out = render.thickness
