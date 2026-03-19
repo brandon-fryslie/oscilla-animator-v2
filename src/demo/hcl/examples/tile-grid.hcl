@@ -1,36 +1,36 @@
-# Breathing Ring
+# Tile Grid
 #
-# A ring of circles that pulses in size with per-element rainbow and
-# per-instance jitter. The oscillator drives jitter amount through ScaleBias.
-# Demonstrates: ScaleBias, NoisyBroadcast, per-element rainbow.
+# 20x20 grid of rectangles with per-element rainbow and pulsing
+# per-tile scale jitter.
+# Demonstrates: GridLayoutUV, Rect shape, ScaleBias, NoisyBroadcast.
 
-patch "Breathing Ring" {
+patch "Tile Grid" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 2000
+    periodAMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = [breath.phase, dot-wobble.phase]
+      phaseA = [pulse.phase, tile-wobble.phase, hue-shift.b]
     }
   }
 
-  # Shape and instances
-  block "Ellipse" "dot" {
-    rx = 0.03
-    ry = 0.03
+  block "Rect" "tile" {
+    width = 0.016
+    height = 0.010
+    cornerRadius = 0.003
     outputs {
-      controlPoints = dot-wobble.controlPoints
+      controlPoints = tile-wobble.controlPoints
     }
   }
 
-  block "ShapeWobble2D" "dot-wobble" {
-    amount = 0.003
-    frequency = 8
+  block "ShapeWobble2D" "tile-wobble" {
+    amount = 0.0023
+    frequency = 5
     outputs {
-      points = dot-shape.controlPoints
+      points = tile-shape.controlPoints
     }
   }
 
-  block "MakeShape2D" "dot-shape" {
+  block "MakeShape2D" "tile-shape" {
     closed = true
     outputs {
       shape = instances.element
@@ -38,29 +38,30 @@ patch "Breathing Ring" {
   }
 
   block "Array" "instances" {
-    count = 20
+    count = 484
     outputs {
-      elements = ring.elements
-      t = color.h
+      elements = grid.elements
+      t = hue-shift.a
     }
   }
 
-  block "CircleLayoutUV" "ring" {
-    radius = 0.3
+  block "GridLayoutUV" "grid" {
+    rows = 22
+    cols = 22
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
-  # Breathing animation: scale = oscillator * 0.5 + 1.0 → [0.5, 1.5]
-  block "Oscillator" "breath" {
+  # Pulsing scale: oscillator * 0.3 + 1.0 → [0.7, 1.3]
+  block "Oscillator" "pulse" {
     outputs {
       out = scale-map.in
     }
   }
 
   block "Const" "scale-amt" {
-    value = 0.5
+    value = 0.4
     outputs {
       out = scale-map.scale
     }
@@ -87,7 +88,7 @@ patch "Breathing Ring" {
   }
 
   block "Const" "jitter-seed" {
-    value = 7
+    value = 23
     outputs {
       out = scale-jitter.seed
     }
@@ -99,8 +100,17 @@ patch "Breathing Ring" {
     }
   }
 
-  # Per-element rainbow: each dot gets its own hue from Array.t
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
+  # Per-element rainbow
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.69
+    a = 0.92
     outputs {
       color = render.color
     }

@@ -1,15 +1,18 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { registerAllBlocks } from '../../blocks/all';
 import { getBlockDefinition } from '../../blocks/registry';
+import { getHclDemo } from '../../demo';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import { verifyGpuPatchCompatibility } from '../GpuPatchCompatibility';
 
 registerAllBlocks();
 
 function readDemo(filename: string): string {
-  return readFileSync(join(process.cwd(), 'src', 'demo', 'hcl', filename), 'utf8');
+  const demo = getHclDemo(filename);
+  if (!demo) {
+    throw new Error(`Missing demo ${filename}`);
+  }
+  return demo.hcl;
 }
 
 describe('GPU patch compatibility', () => {

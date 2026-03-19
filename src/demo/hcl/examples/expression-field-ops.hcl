@@ -10,29 +10,29 @@ patch "Expression Field Ops" {
     periodAMs = 5000
     role = "timeRoot"
     outputs {
-      phaseA = scale_expr.refs
+      phaseA = [scale_expr.refs, hue-shift.b]
     }
   }
 
   block "Ellipse" "dot" {
-    rx = 0.02
-    ry = 0.02
+    rx = 0.018
+    ry = 0.018
     outputs {
       shape = points.element
     }
   }
 
   block "Array" "points" {
-    count = 120
+    count = 144
     outputs {
       elements = layout.elements
-      t = [scale_expr.refs, color.h]
+      t = [scale_expr.refs, hue-shift.a]
     }
   }
 
   block "GridLayoutUV" "layout" {
     rows = 12
-    cols = 10
+    cols = 12
     outputs {
       controlPoints = render.controlPoints
     }
@@ -66,7 +66,16 @@ patch "Expression Field Ops" {
     }
   }
 
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
   block "MakeColorOKLCH" "color" {
+    s = 0.9
+    l = 0.7
+    a = 0.9
     outputs {
       color = render.color
     }

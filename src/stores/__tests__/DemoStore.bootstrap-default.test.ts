@@ -23,13 +23,23 @@ describe('DemoStore bootstrap default', () => {
     const demos: HclDemo[] = [
       {
         filename: 'broken.hcl',
+        relativePath: 'integration/broken.hcl',
+        group: 'integration',
         name: 'Broken',
         hcl: 'this is not valid hcl',
+        summary: 'Broken fixture',
+        purposes: ['integration'],
+        highlights: ['fixture'],
       },
       {
         filename: GPU_BOOTSTRAP_DEMO_FILENAME,
+        relativePath: 'integration/gpu-bootstrap-triangle.hcl',
+        group: 'integration',
         name: 'Bootstrap',
         hcl: store.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME)!.hcl,
+        summary: 'Bootstrap fixture',
+        purposes: ['integration'],
+        highlights: ['fixture'],
       },
     ];
 

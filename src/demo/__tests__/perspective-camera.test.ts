@@ -2,14 +2,13 @@
  * Perspective Camera demo - compile test (HCL source)
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { deserializePatchFromHCL } from '../../patch-dsl/index';
 import { compile } from '../../compiler/compile';
 import { registerAllBlocks } from '../../blocks/all';
+import { getHclDemo } from '../hcl-demos';
 registerAllBlocks();
 
-const hcl = readFileSync(join(__dirname, '../hcl/perspective-camera.hcl'), 'utf-8');
+const hcl = getHclDemo('perspective-camera.hcl')?.hcl ?? '';
 
 describe('perspective camera demo (HCL)', () => {
   it('deserializes without errors', () => {

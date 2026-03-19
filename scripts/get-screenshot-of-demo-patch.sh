@@ -67,7 +67,7 @@ Burst Mode (default — produces a labeled montage):
 Examples:
   ./scripts/get-screenshot-of-demo-patch.sh breathing-ring.hcl
   ./scripts/get-screenshot-of-demo-patch.sh simple.hcl --no-burst
-  ./scripts/get-screenshot-of-demo-patch.sh golden-spiral.hcl --burst-count 5 --burst-size 2
+  ./scripts/get-screenshot-of-demo-patch.sh aurora-petal-showcase.hcl --burst-count 5 --burst-size 2
   ./scripts/get-screenshot-of-demo-patch.sh mouse-spiral.hcl --output ./evidence/
 
 Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode), dev server (npm run dev)

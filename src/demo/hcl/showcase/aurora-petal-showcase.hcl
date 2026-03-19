@@ -1,4 +1,4 @@
-# Library Kitchen Sink 2
+# Aurora Petal Showcase
 #
 # A visual showcase with two readable layers:
 # - a drifting lattice field that folds toward the center
@@ -6,7 +6,7 @@
 #
 # This patch is about selling the renderer, not exhausting the block catalog.
 
-patch "Library Kitchen Sink 2" {
+patch "Aurora Petal Showcase" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 11000
     periodBMs = 7000
@@ -39,7 +39,7 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "Array" "field_points" {
-    count = 320
+    count = 384
     outputs {
       elements = lattice.elements
       t = [field_position.refs, field_scale.refs, field_hue_shift.a]
@@ -115,9 +115,9 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "MakeColorOKLCH" "field_color" {
-    s = 0.86
-    l = 0.62
-    a = 0.82
+    s = 0.93
+    l = 0.66
+    a = 0.76
     outputs {
       color = field_render.color
     }
@@ -152,7 +152,7 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "Array" "petals" {
-    count = 96
+    count = 112
     outputs {
       elements = petal_ring.elements
       t = [petal_hue_shift.a, petal_scale_base.in]
@@ -160,7 +160,7 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "CircleLayoutUV" "petal_ring" {
-    radius = 0.35
+    radius = 0.38
     outputs {
       controlPoints = petal_render.controlPoints
     }
@@ -179,16 +179,17 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "MakeColorOKLCH" "petal_color" {
-    s = 0.97
-    l = 0.72
+    s = 1.0
+    l = 0.78
+    a = 0.98
     outputs {
       color = petal_render.color
     }
   }
 
   block "ScaleBias" "petal_scale_base" {
-    scale = 0.6
-    bias = 0.7
+    scale = 0.72
+    bias = 0.78
     outputs {
       out = petal_scale_jitter.value
     }
@@ -201,14 +202,14 @@ patch "Library Kitchen Sink 2" {
   }
 
   block "Const" "petal_pulse_amt" {
-    value = 0.22
+    value = 0.28
     outputs {
       out = petal_pulse_shape.scale
     }
   }
 
   block "Const" "petal_pulse_center" {
-    value = 0.20
+    value = 0.24
     outputs {
       out = petal_pulse_shape.bias
     }
