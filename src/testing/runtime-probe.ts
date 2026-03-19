@@ -8,6 +8,57 @@ export const RUNTIME_PROBE_GLOBAL_KEY = '__OSCILLA_RUNTIME_PROBE__' as const;
 
 type BootstrapState = 'not_started' | 'starting' | 'succeeded' | 'failed';
 
+export interface RuntimeProbeHeartbeat {
+  readonly kind: 'runtime-heartbeat';
+  readonly fps: number;
+  readonly stats: {
+    readonly drawOps: number;
+    readonly lastTickMs: number;
+    readonly meanTickMs: number;
+    readonly sinkWords: number;
+    readonly frameCount: number;
+  };
+  readonly scheduler: string;
+  readonly telemetry: {
+    readonly stageTimings: {
+      readonly inputMarshalMs: number;
+      readonly simulationDispatchMs: number;
+      readonly fluidPassChainMs: number;
+      readonly drawPrepMs: number;
+      readonly renderMs: number;
+      readonly swapMs: number;
+      readonly totalFrameMs: number;
+    };
+    readonly dispatchCounters: {
+      readonly computeDispatchCount: number;
+      readonly computeWorkgroupCount: number;
+      readonly activeLaneCount: number;
+      readonly guardedLaneCount: number;
+    };
+    readonly resourceStats: {
+      readonly shapeBankWordCount: number;
+      readonly sinkTableWordCount: number;
+      readonly indexedRecordCount: number;
+      readonly nonIndexedRecordCount: number;
+      readonly totalInstanceCount: number;
+      readonly canvasWidth: number;
+      readonly canvasHeight: number;
+      readonly pingPongIndex: number;
+    };
+  } | null;
+  readonly runtime: {
+    readonly demoFilename: string | null;
+    readonly renderStepCount: number;
+    readonly drawPrepSinkCount: number;
+    readonly installedGpuPassIds: readonly string[];
+    readonly sinkTableSample: unknown;
+    readonly schedulerFrameCount: number;
+    readonly simulationPassCount: number;
+    readonly expectedPingPongIndexFromParity: number;
+  };
+  readonly breadcrumb: unknown;
+}
+
 export interface RuntimeProbeSnapshot {
   readonly version: 1;
   bootstrap: {
@@ -20,6 +71,10 @@ export interface RuntimeProbeSnapshot {
     renderedFrameCount: number;
     lastFrameId: number | null;
     lastFrameAtMs: number | null;
+  };
+  heartbeat: {
+    publishedAtMs: number | null;
+    latest: RuntimeProbeHeartbeat | null;
   };
 }
 
@@ -55,6 +110,10 @@ function ensureRuntimeProbe(): RuntimeProbeSnapshot | null {
       lastFrameId: null,
       lastFrameAtMs: null,
     },
+    heartbeat: {
+      publishedAtMs: null,
+      latest: null,
+    },
   };
   // [LAW:single-enforcer] Runtime probe publication is centralized in this
   // module so browser gate readers consume one canonical probe shape.
@@ -73,6 +132,8 @@ export function markRuntimeBootstrapStarted(nowMs: number = performance.now()): 
   probe.bootstrap.startedAtMs = nowMs;
   probe.bootstrap.finishedAtMs = null;
   probe.bootstrap.failureMessage = null;
+  probe.heartbeat.publishedAtMs = null;
+  probe.heartbeat.latest = null;
 }
 
 export function markRuntimeBootstrapSucceeded(nowMs: number = performance.now()): void {
@@ -109,4 +170,18 @@ export function markRuntimeFrameAdvanced(
   probe.loop.renderedFrameCount += 1;
   probe.loop.lastFrameId = frameId;
   probe.loop.lastFrameAtMs = nowMs;
+}
+
+export function markRuntimeHeartbeat(
+  heartbeat: RuntimeProbeHeartbeat,
+  nowMs: number = performance.now(),
+): void {
+  const probe = ensureRuntimeProbe();
+  if (!probe) {
+    return;
+  }
+  // [LAW:one-source-of-truth] Preview telemetry consumers read one canonical
+  // heartbeat payload instead of reconstructing runtime state from logs.
+  probe.heartbeat.publishedAtMs = nowMs;
+  probe.heartbeat.latest = heartbeat;
 }

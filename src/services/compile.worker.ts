@@ -9,6 +9,7 @@ import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
 import type {
   CompiledGpuArtifactBundle,
+  CompiledGpuPassBundle,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
@@ -17,6 +18,7 @@ import { validateCompiledGpuPassBundle } from './compiled-gpu-pass-validation';
 import { stripKernelRegistry } from './compile-worker-serialization';
 import type { CompileError } from '../compiler/types';
 import type { GeneratedGpuArtifactManifestIR } from '../compiler/ir/program';
+import { buildCompiledRuntimeInstallContract } from '../compiler/backend/compiled-runtime-install-contract';
 
 function attachPreNagaWarnings(
   errors: readonly CompileError[],
@@ -38,7 +40,7 @@ function toBackendError(errors: readonly CompileError[]): CompileWorkerBackendRe
   };
 }
 
-function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuArtifactBundle {
+function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuPassBundle {
   return {
     schemaVersion: 1,
     passes: [{
@@ -63,7 +65,7 @@ function withGpuManifest(
 async function compileNonFluidBundle(
   program: Parameters<typeof compileProgramWithNaga>[0],
 ): Promise<
-  | { readonly kind: 'ok'; readonly bundle: CompiledGpuArtifactBundle }
+  | { readonly kind: 'ok'; readonly bundle: CompiledGpuPassBundle }
   | { readonly kind: 'error'; readonly errors: readonly CompileError[] }
 > {
   // [LAW:single-enforcer] Non-fluid shader lowering is validated by one
@@ -118,12 +120,28 @@ async function toBackendResult(
     return toBackendError(attachPreNagaWarnings(passValidation.errors, result.warnings));
   }
 
+  let runtimeInstall;
+  try {
+    runtimeInstall = buildCompiledRuntimeInstallContract(result.program);
+  } catch (err) {
+    return toBackendError(attachPreNagaWarnings(
+      [{
+        code: 'IRValidationFailed',
+        message: `Compiler emitted invalid runtime install contract: ${err instanceof Error ? err.message : String(err)}`,
+      }],
+      result.warnings,
+    ));
+  }
+
   const program = stripKernelRegistry(result.program);
   const programWithGpuManifest = withGpuManifest(program, passValidation.manifest);
   return {
     kind: 'ok',
     program: programWithGpuManifest,
-    compiledGpuBundle: passValidation.bundle,
+    compiledGpuBundle: {
+      ...passValidation.bundle,
+      runtimeInstall,
+    },
     warnings: result.warnings,
   };
 }

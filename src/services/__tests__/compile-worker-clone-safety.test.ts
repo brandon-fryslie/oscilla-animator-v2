@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compileFromFrontend } from '../../compiler/compile';
+import { buildCompiledRuntimeInstallContract } from '../../compiler/backend/compiled-runtime-install-contract';
 import { compileFrontend } from '../../compiler/frontend';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
@@ -62,6 +63,7 @@ describe('compile worker payload clone safety', () => {
 
       if (backendResult?.kind === 'ok') {
         const serializableProgram = stripKernelRegistry(backendResult.program);
+        const runtimeInstall = buildCompiledRuntimeInstallContract(backendResult.program);
         const workerPayload = {
           kind: 'compiled' as const,
           requestId: 1,
@@ -88,6 +90,7 @@ describe('compile worker payload clone safety', () => {
                   entryPoint: 'compute_main',
                 },
               ],
+              runtimeInstall,
             },
             warnings: backendResult.warnings,
           },

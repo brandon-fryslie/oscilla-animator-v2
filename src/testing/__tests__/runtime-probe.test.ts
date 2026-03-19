@@ -5,8 +5,10 @@ import {
   markRuntimeBootstrapStarted,
   markRuntimeBootstrapSucceeded,
   markRuntimeFrameAdvanced,
+  markRuntimeHeartbeat,
   RUNTIME_PROBE_GLOBAL_KEY,
   shouldEnableRuntimeProbe,
+  type RuntimeProbeHeartbeat,
 } from '../runtime-probe';
 
 type ProbeHost = typeof globalThis & {
@@ -23,11 +25,48 @@ type ProbeHost = typeof globalThis & {
       lastFrameId?: number | null;
       lastFrameAtMs?: number | null;
     };
+    heartbeat?: {
+      publishedAtMs?: number | null;
+      latest?: {
+        kind?: string;
+        fps?: number;
+        stats?: {
+          drawOps?: number;
+        };
+      } | null;
+    };
   };
 };
 
 function probeHost(): ProbeHost {
   return globalThis as ProbeHost;
+}
+
+function makeHeartbeat(): RuntimeProbeHeartbeat {
+  return {
+    kind: 'runtime-heartbeat',
+    fps: 60,
+    stats: {
+      drawOps: 3,
+      lastTickMs: 16,
+      meanTickMs: 15,
+      sinkWords: 12,
+      frameCount: 7,
+    },
+    scheduler: 'Running',
+    telemetry: null,
+    runtime: {
+      demoFilename: 'simple.hcl',
+      renderStepCount: 1,
+      drawPrepSinkCount: 2,
+      installedGpuPassIds: ['simulation'],
+      sinkTableSample: null,
+      schedulerFrameCount: 7,
+      simulationPassCount: 1,
+      expectedPingPongIndexFromParity: 1,
+    },
+    breadcrumb: null,
+  };
 }
 
 describe('runtime-probe', () => {
@@ -46,6 +85,7 @@ describe('runtime-probe', () => {
     markRuntimeFrameAdvanced(1, 11);
     markRuntimeBootstrapSucceeded(12);
     markRuntimeBootstrapFailed('ignored', 13);
+    markRuntimeHeartbeat(makeHeartbeat(), 14);
 
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toBeUndefined();
   });
@@ -88,10 +128,15 @@ describe('runtime-probe', () => {
         lastFrameId: null,
         lastFrameAtMs: null,
       },
+      heartbeat: {
+        publishedAtMs: null,
+        latest: null,
+      },
     });
 
     markRuntimeFrameAdvanced(7, 11);
     markRuntimeBootstrapSucceeded(12);
+    markRuntimeHeartbeat(makeHeartbeat(), 13);
 
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toBe(probe);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toMatchObject({
@@ -105,6 +150,16 @@ describe('runtime-probe', () => {
         renderedFrameCount: 1,
         lastFrameId: 7,
         lastFrameAtMs: 11,
+      },
+      heartbeat: {
+        publishedAtMs: 13,
+        latest: {
+          kind: 'runtime-heartbeat',
+          fps: 60,
+          stats: {
+            drawOps: 3,
+          },
+        },
       },
     });
   });
@@ -134,6 +189,12 @@ describe('runtime-probe', () => {
         lastFrameId: 99,
         lastFrameAtMs: 99,
       },
+      heartbeat: {
+        publishedAtMs: 99,
+        latest: {
+          kind: 'stale',
+        },
+      },
     };
 
     markRuntimeBootstrapStarted(20);
@@ -152,6 +213,10 @@ describe('runtime-probe', () => {
         lastFrameId: null,
         lastFrameAtMs: null,
       },
+      heartbeat: {
+        publishedAtMs: null,
+        latest: null,
+      },
     });
   });
 
@@ -159,6 +224,7 @@ describe('runtime-probe', () => {
     window.history.replaceState({}, '', '/?showPreview=true');
 
     markRuntimeBootstrapFailed('prior failure', 5);
+    markRuntimeHeartbeat(makeHeartbeat(), 6);
     markRuntimeBootstrapStarted(10);
 
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toMatchObject({
@@ -167,6 +233,10 @@ describe('runtime-probe', () => {
         startedAtMs: 10,
         finishedAtMs: null,
         failureMessage: null,
+      },
+      heartbeat: {
+        publishedAtMs: null,
+        latest: null,
       },
     });
   });
