@@ -194,6 +194,18 @@ interface SlotAddressPlan {
   readonly storage: 'f32' | 'i32' | 'u32';
 }
 
+function offsetSlotAddressPlan(
+  plan: SlotAddressPlan,
+  componentOffset: number,
+  stride: number,
+): SlotAddressPlan {
+  return {
+    ...plan,
+    offset: plan.offset + componentOffset * plan.componentStride,
+    stride,
+  };
+}
+
 export interface NagaComputeMetadataIR {
   readonly maxActiveLanes: number;
 }
@@ -2056,9 +2068,20 @@ function emitMaterializeFromExpression(args: {
   if (args.targetPlan.storage !== 'f32') {
     return false;
   }
+  const sourceExpr = args.valueExprs[args.step.field as number];
+  if (!sourceExpr) {
+    return false;
+  }
+  const targetComponentOffset = args.step.componentOffset ?? 0;
+  const targetStride = payloadStride(sourceExpr.type.payload);
+  const effectiveTargetPlan = offsetSlotAddressPlan(
+    args.targetPlan,
+    targetComponentOffset,
+    targetStride,
+  );
   const functionScope = new ScopeEnvironment<number>();
 
-  for (let componentIndex = 0; componentIndex < args.targetPlan.stride; componentIndex++) {
+  for (let componentIndex = 0; componentIndex < effectiveTargetPlan.stride; componentIndex++) {
     const componentScope = functionScope.createChild();
     const valueExpr = emitMaterializeExprComponentF32({
       ctx: args.ctx,
@@ -2069,7 +2092,7 @@ function emitMaterializeFromExpression(args: {
       runtimeAddressTable: args.runtimeAddressTable,
       valueExprs: args.valueExprs,
       source: args.source,
-      targetPlan: args.targetPlan,
+      targetPlan: effectiveTargetPlan,
       componentIndex,
       scope: componentScope,
       depth: 0,
@@ -2079,9 +2102,9 @@ function emitMaterializeFromExpression(args: {
       args.ctx,
       args.builtins,
       args.laneExpr,
-      args.targetPlan.offset,
-      args.targetPlan.laneStride,
-      args.targetPlan.componentStride,
+      effectiveTargetPlan.offset,
+      effectiveTargetPlan.laneStride,
+      effectiveTargetPlan.componentStride,
       componentIndex,
       args.source,
     );
@@ -2168,13 +2191,20 @@ function lowerStep(
             return;
           }
 
+          const sourceExpr = valueExprs[exprId];
+          const targetPlanForStep = offsetSlotAddressPlan(
+            targetPlan,
+            step.componentOffset ?? 0,
+            sourceExpr ? payloadStride(sourceExpr.type.payload) : targetPlan.stride,
+          );
+
           emitTypedCopy(
             ctx,
             builtins,
             laneExpr,
             sourcePlan,
             sourceBinding.buffer,
-            targetPlan,
+            targetPlanForStep,
             'arena_out',
             source,
             `step ${stepIndex} kind=${step.kind}`,

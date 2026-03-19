@@ -47,6 +47,7 @@ import type { ValueExpr, ValueExprId } from './ir/value-expr';
 import type { Step } from './ir/types';
 import type { SerializableTopologyDef } from '../shapes/types';
 import { ShapeClass } from '../shapes/types';
+import { isParametricTemplateTopology } from '../shapes/registry';
 import { lowerScheduleToNagaModule, type NagaLoweringCoverageIR } from './ir/naga-emitter';
 import { compilationInspector } from '../services/CompilationInspectorService';
 import { computeRenderReachableBlocks } from './reachability';
@@ -1017,14 +1018,21 @@ function classifyShapeForRenderStep(
     );
   }
 
-  // [LAW:one-type-per-behavior] The current geometry path is Type 1 rigid and
-  // uses non-indexed draws with GPU vertex pulling from canonical ShapeBank
-  // topology data.
-  // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
-  // to nonIndexed (GPU vertex pulling from topologyBank).
-  const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
+  if (isParametricTemplateTopology(topology)) {
+    // [LAW:one-type-per-behavior] ParametricTemplates are a distinct execution
+    // class with analytical vertex evaluation over template-instanced data.
+    // [LAW:one-source-of-truth] Draw-prep consumes the compile-owned topology
+    // family to choose the parametric render path.
+    return {
+      drawMode: 'nonIndexed',
+      shapeClass: ShapeClass.ParametricTemplate,
+    };
+  }
 
-  return { drawMode, shapeClass: ShapeClass.Type1Rigid };
+  // [LAW:one-type-per-behavior] The rigid geometry path remains the Type1
+  // execution class and uses non-indexed draws with GPU vertex pulling from
+  // canonical ShapeBank topology data.
+  return { drawMode: 'nonIndexed', shapeClass: ShapeClass.Type1Rigid };
 }
 
 function resolveShapeRefExprId(

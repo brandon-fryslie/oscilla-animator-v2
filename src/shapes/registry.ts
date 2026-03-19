@@ -12,6 +12,7 @@ import type {
   TopologyId,
   TopologyDef,
   PathTopologyDef,
+  ParametricTemplateTopologyDef,
   AbstractTopologyDef,
   PathSegmentKind,
   SerializableTopologyDef,
@@ -128,6 +129,12 @@ function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return Array.isArray((topology as Partial<PathTopologyDef>).verbs);
 }
 
+export function isParametricTemplateTopology(
+  topology: TopologyDef,
+): topology is ParametricTemplateTopologyDef {
+  return (topology as Partial<ParametricTemplateTopologyDef>).parametricTemplate === true;
+}
+
 /**
  * Export topology metadata as a packed u32 bank for GPU upload.
  *
@@ -234,7 +241,7 @@ function computePathDispatchData(verbs: readonly PathVerb[]): {
  * @returns Assigned numeric TopologyId
  */
 export function registerDynamicTopology(
-  topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'>,
+  topology: AbstractTopologyDef | Omit<PathTopologyDef, 'id'> | Omit<ParametricTemplateTopologyDef, 'id'>,
   debugName?: string
 ): TopologyId {
   let shapeTopology: Omit<TopologyDef, 'id'>;
@@ -294,9 +301,18 @@ function topologyShapeSignature(topology: Omit<SerializableTopologyDef, 'id'> | 
           hasCubic: topology.hasCubic,
         }
       : null;
+  const parametricTemplateFields =
+    'parametricTemplate' in topology && topology.parametricTemplate === true
+      ? {
+          family: topology.family,
+          resolution: topology.resolution,
+          arenaComponentCount: topology.arenaComponentCount,
+        }
+      : null;
   return JSON.stringify({
     params: topology.params,
     path: pathFields,
+    parametricTemplate: parametricTemplateFields,
   });
 }
 
@@ -354,4 +370,17 @@ export function installSerializableTopologies(topologies: readonly SerializableT
   if (changed) {
     topologyRegistryRevision++;
   }
+}
+
+export function generateParametricTemplateTValues(resolution: number): Float32Array {
+  if (!Number.isInteger(resolution) || resolution < 1) {
+    throw new Error(
+      `generateParametricTemplateTValues: resolution must be an integer >= 1 (received ${resolution})`,
+    );
+  }
+  const values = new Float32Array(resolution + 1);
+  for (let i = 0; i <= resolution; i++) {
+    values[i] = i / resolution;
+  }
+  return values;
 }

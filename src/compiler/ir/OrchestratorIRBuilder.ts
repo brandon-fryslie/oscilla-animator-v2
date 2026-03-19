@@ -46,7 +46,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   // =========================================================================
 
   /** Allocate a typed slot (stride-aware). */
-  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot;
+  allocTypedSlot(type: CanonicalType, label?: string, overrideStride?: number): ValueSlot;
 
   /** Register a slot's type metadata. */
   registerSlotType(slot: ValueSlot, type: CanonicalType): void;
@@ -71,7 +71,12 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   stepFieldStateWrite(stateSlot: StateSlotId, value: ValueExprId): void;
 
   /** Emit a field materialization step. */
-  stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void;
+  stepMaterialize(
+    field: ValueExprId,
+    instanceId: InstanceId,
+    target: ValueSlot,
+    componentOffset?: number,
+  ): void;
 
   /** Emit a continuity map build step. */
   stepContinuityMapBuild(instanceId: InstanceId): void;

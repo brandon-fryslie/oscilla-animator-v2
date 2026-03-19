@@ -1,6 +1,7 @@
 import type { CompiledProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
+import { ShapeClass } from '../shapes/types';
 import { resolveArenaAddress } from './ArenaValueStore';
 import {
   DRAW_PREP_SINK_DESCRIPTOR_WORDS,
@@ -90,16 +91,24 @@ function resolveSlotArenaAddress(
 
 function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[] {
   const indexed: number[] = [];
-  const nonIndexed: number[] = [];
+  const nonIndexedRigid: number[] = [];
+  const nonIndexedParametric: number[] = [];
+  const nonIndexedOther: number[] = [];
   for (let sinkIndex = 0; sinkIndex < sinks.length; sinkIndex++) {
     const sink = sinks[sinkIndex];
     if (sink?.drawMode === 'indexed') {
       indexed.push(sinkIndex);
     } else {
-      nonIndexed.push(sinkIndex);
+      if (sink.shapeClass === ShapeClass.Type1Rigid) {
+        nonIndexedRigid.push(sinkIndex);
+      } else if (sink.shapeClass === ShapeClass.ParametricTemplate) {
+        nonIndexedParametric.push(sinkIndex);
+      } else {
+        nonIndexedOther.push(sinkIndex);
+      }
     }
   }
-  return [...indexed, ...nonIndexed];
+  return [...indexed, ...nonIndexedRigid, ...nonIndexedParametric, ...nonIndexedOther];
 }
 
 /**
@@ -221,6 +230,14 @@ export function packDrawPrepSinkTableV1(
       renderStep.shape.slot,
       `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
     );
+    const parametricParamsAddress =
+      renderStep.parametricParamsSlot !== undefined
+        ? resolveSlotArenaAddress(
+          program,
+          renderStep.parametricParamsSlot,
+          `parametricParamsSlot sink(instance=${String(renderStep.instanceId)})`,
+        )
+        : null;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset] = shapeSlotAddress.baseOffset;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride] = shapeSlotAddress.laneStride;
     words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride] = shapeSlotAddress.componentStride;
@@ -251,6 +268,8 @@ export function packDrawPrepSinkTableV1(
       shapeWordOffset,
       `shapeWordOffset sinkIndex=${sink.sinkIndex}`,
     );
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ParamSlotBaseOffset] =
+      parametricParamsAddress?.baseOffset ?? 0;
 
     recordWriteIndex += 1;
   }

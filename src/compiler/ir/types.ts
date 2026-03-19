@@ -311,6 +311,13 @@ export interface StepMaterialize {
   readonly field: ValueExprId;
   readonly instanceId: InstanceId;
   readonly target: ValueSlot;
+  /**
+   * Optional starting component plane within the target slot.
+   *
+   * // [LAW:one-source-of-truth] Component-plane placement is owned by the
+   * // materialize step contract rather than inferred ad hoc by shader code.
+   */
+  readonly componentOffset?: number;
 }
 
 export interface StepRender {
@@ -332,6 +339,12 @@ export interface StepRender {
    * (numeric handle flow via arena + ShapeBank).
    */
   readonly shape: { readonly k: 'slot'; readonly slot: ValueSlot };
+  /**
+   * Packed SoA parameter planes for ParametricTemplates render paths.
+   * The slot uses `float` payload with override stride equal to the total
+   * number of parameter planes (for `CubicBezierRibbon2D`, stride = 9).
+   */
+  readonly parametricParamsSlot?: ValueSlot;
   /** Optional control points for path rendering - P5c: Add control points field */
   readonly controlPoints?: { readonly k: 'slot'; readonly slot: ValueSlot };
   /** C-13: Per-instance rotation (radians) - slot containing Float32Array */

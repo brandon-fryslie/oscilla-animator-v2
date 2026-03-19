@@ -34,6 +34,18 @@ export enum ShapeClass {
    */
   Type1Rigid = 1,
 
+  /**
+   * ParametricTemplates: template-instanced analytical geometry.
+   * - Immutable template progression in ShapeBank
+   * - Per-batch SoA parameter planes in Arena
+   * - Analytical vertex evaluation in the render shader
+   *
+   * // [LAW:one-type-per-behavior] ParametricTemplates is a distinct execution
+   * // class from rigid stamps because geometry is evaluated analytically from
+   * // template + parameter state rather than pulled as rigid local topology.
+   */
+  ParametricTemplate = 2,
+
   // Future classes will be added as RECOVER tickets progress:
   // Type3Ribbon = 3,
   // Type4ProceduralSDF = 4,
@@ -218,9 +230,32 @@ export interface PathTopologyDef extends TopologyDef {
   readonly hasCubic: boolean;
 }
 
+// =============================================================================
+// Parametric Templates
+// =============================================================================
+
+export type ParametricTemplateFamily = 'cubicBezierRibbon2D';
+
+/**
+ * ParametricTemplateTopologyDef - Template-instanced analytical geometry.
+ *
+ * The ShapeBank stores the immutable template progression (`t` values) while
+ * render-time parameter planes are sourced from the Arena.
+ */
+export interface ParametricTemplateTopologyDef extends TopologyDef {
+  readonly parametricTemplate: true;
+  readonly family: ParametricTemplateFamily;
+  readonly resolution: number;
+  /** Total number of scalar SoA parameter planes consumed per lane. */
+  readonly arenaComponentCount: number;
+}
+
 export type SerializableTopologyDef = TopologyDef & Partial<Pick<
   PathTopologyDef,
   'verbs' | 'pointsPerVerb' | 'totalControlPoints' | 'closed' | 'segmentKind' | 'segmentPointBase' | 'hasQuad' | 'hasCubic'
+> & Pick<
+  ParametricTemplateTopologyDef,
+  'parametricTemplate' | 'family' | 'resolution' | 'arenaComponentCount'
 >>;
 
 

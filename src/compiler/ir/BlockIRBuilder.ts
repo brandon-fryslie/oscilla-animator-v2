@@ -16,7 +16,12 @@ import type {
   DomainTypeId,
   InstanceId,
 } from './Indices';
-import type { AbstractTopologyDef, PathTopologyDefInput, TopologyId } from '../../shapes/types';
+import type {
+  AbstractTopologyDef,
+  ParametricTemplateTopologyDef,
+  PathTopologyDefInput,
+  TopologyId,
+} from '../../shapes/types';
 import type {
   PureFn,
   OpCode,
@@ -98,7 +103,10 @@ export interface BlockIRBuilder {
    * [LAW:one-source-of-truth] Block lowering must route topology creation
    * through the compile-owned builder, not ambient global registries.
    */
-  registerTopology(topology: AbstractTopologyDef | PathTopologyDefInput, debugName?: string): TopologyId;
+  registerTopology(
+    topology: AbstractTopologyDef | PathTopologyDefInput | Omit<ParametricTemplateTopologyDef, 'id'>,
+    debugName?: string,
+  ): TopologyId;
 
   /** Combine multiple expressions (sum, average, max, min, last, product). */
   combine(

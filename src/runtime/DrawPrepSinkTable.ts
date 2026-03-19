@@ -5,7 +5,7 @@ import type { DrawPrepProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 export const DRAW_PREP_SINK_TABLE_V1_VERSION = 1;
 export const DRAW_PREP_SINK_TABLE_HEADER_WORDS = 8;
 export const DRAW_PREP_SINK_TABLE_RECORD_WORDS = 8;
-export const DRAW_PREP_SINK_DESCRIPTOR_WORDS = 26;
+export const DRAW_PREP_SINK_DESCRIPTOR_WORDS = 27;
 
 export type DrawPrepDrawModeCode = 0 | 1;
 
@@ -64,6 +64,14 @@ export enum DrawPrepSinkDescriptorWord {
   // [RECOVER-06] Topology bank word offset resolved from arena at pack time.
   // GPU draw-prep and assembly shaders use this to read ShapeHeaderV1.
   ShapeWordOffset = 25,
+  /**
+   * Packed SoA parameter slot base offset for ParametricTemplates.
+   *
+   * // [LAW:one-source-of-truth] ParametricTemplates routing metadata is
+   * // declared in the sink descriptor ABI once and consumed by both draw-prep
+   * // assembly and the render shader.
+   */
+  ParamSlotBaseOffset = 26,
 }
 
 export interface DrawPrepSinkTableHeaderV1 {

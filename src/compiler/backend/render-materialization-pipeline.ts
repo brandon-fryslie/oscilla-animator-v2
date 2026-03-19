@@ -28,6 +28,7 @@ import { isExprRef } from '../ir/lowerTypes';
 import { getBlockDefinition } from '../../blocks/registry';
 import {
   FLOAT,
+  canonicalMany,
   canonicalType,
   payloadStride,
   requireManyInstance,
@@ -36,6 +37,7 @@ import {
 } from '../../core/canonical-types';
 import type { CanonicalType } from '../../core/canonical-types';
 import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
+import { isParametricTemplateTopology } from '../../shapes/registry';
 
 // =============================================================================
 // Public Interface
@@ -247,7 +249,7 @@ function collectRenderTargets(
   const renderBlocks = findRenderBlocks(blocks);
 
   for (const { block, index } of renderBlocks) {
-    if (block.type === 'WebGPUType1Sink') {
+    if (block.type === 'WebGPUType1Sink' || block.type === 'CubicBezierRibbon2D') {
       const position = asExprValueRef(getOutputRef(index, '_position', blockOutputs));
       const color = asExprValueRef(getOutputRef(index, '_color', blockOutputs));
       const scale = asExprValueRef(getOutputRef(index, '_scale', blockOutputs));
@@ -579,7 +581,8 @@ function resolveShapeOutputs(args: {
   readonly valueExprs: readonly ValueExpr[];
   readonly builder: UnlinkedIRFragments['builder'];
   readonly getFieldSlot: (fieldId: ValueExprId, semantic: FieldSemantic, roleKey: string) => ValueSlot;
-}): Pick<StepRender, 'shape' | 'controlPoints'> {
+  readonly materializeSteps: StepMaterialize[];
+}): Pick<StepRender, 'shape' | 'controlPoints' | 'parametricParamsSlot'> {
   const shapeFieldExprId = resolveFieldExprId({
     sourceExprId: args.shape.sourceExprId,
     renderInstance: args.renderInstance,
@@ -613,8 +616,77 @@ function resolveShapeOutputs(args: {
       }
     : undefined;
 
+  const shapeRefExprId = findShapeRefExprId(args.shape.sourceExprId, args.valueExprs);
+  if (shapeRefExprId === undefined) {
+    throw new Error(
+      `RenderInstances2D (${args.renderBlockId}) shape source ${String(args.shape.sourceExprId)} did not resolve to a shapeRef id`,
+    );
+  }
+  const shapeRefExpr = readValueExprOrThrow(
+    args.valueExprs,
+    shapeRefExprId,
+    renderMissingExprMessage(args.renderBlockId, 'shapeRef', shapeRefExprId),
+  );
+  if (shapeRefExpr.kind !== 'shapeRef') {
+    throw new Error(
+      `RenderInstances2D (${args.renderBlockId}) resolved shape expr ${String(shapeRefExprId)} must be shapeRef, got ${shapeRefExpr.kind}`,
+    );
+  }
+
+  const topology = args.builder.getSerializableTopologies().find(
+    (candidate) => candidate.id === shapeRefExpr.topologyId,
+  );
+  if (!topology) {
+    throw new Error(
+      `RenderInstances2D (${args.renderBlockId}) missing topology ${String(shapeRefExpr.topologyId)} for shapeRef ${String(shapeRefExprId)}`,
+    );
+  }
+
+  const parametricParamsSlot = isParametricTemplateTopology(topology)
+    ? (() => {
+        // [LAW:one-source-of-truth] ParametricTemplates own one packed SoA
+        // slot whose component-plane contract is derived from topology metadata.
+        const paramSlot = args.builder.allocTypedSlot(
+          canonicalMany(FLOAT, unitNone(), args.renderInstance),
+          `render_parametric_${args.renderBlockId}`,
+          topology.arenaComponentCount,
+        );
+        let componentOffset = 0;
+        for (const paramArg of shapeRefExpr.paramArgs) {
+          const paramFieldExprId = resolveFieldExprId({
+            sourceExprId: paramArg,
+            renderInstance: args.renderInstance,
+            valueExprs: args.valueExprs,
+            builder: args.builder,
+            renderBlockId: args.renderBlockId,
+            label: `parametricArg${String(componentOffset)}`,
+          });
+          const paramExpr = readValueExprOrThrow(
+            args.valueExprs,
+            paramFieldExprId,
+            renderMissingExprMessage(args.renderBlockId, 'parametricArg', paramFieldExprId),
+          );
+          args.materializeSteps.push({
+            kind: 'materialize',
+            field: paramFieldExprId,
+            instanceId: args.renderInstance.instanceId,
+            target: paramSlot,
+            componentOffset,
+          });
+          componentOffset += payloadStride(paramExpr.type.payload);
+        }
+        if (componentOffset !== topology.arenaComponentCount) {
+          throw new Error(
+            `RenderInstances2D (${args.renderBlockId}) parametric slot plane mismatch for topology ${String(topology.id)}: expected ${topology.arenaComponentCount}, got ${componentOffset}`,
+          );
+        }
+        return paramSlot;
+      })()
+    : undefined;
+
   return {
     shape: slotRef(shapeSlot),
+    ...(parametricParamsSlot !== undefined && { parametricParamsSlot }),
     ...(controlPoints && { controlPoints }),
   };
 }
@@ -706,6 +778,7 @@ function buildRenderStepForTarget(args: {
     valueExprs,
     builder,
     getFieldSlot,
+    materializeSteps: args.materializeSteps,
   });
 
   return {
@@ -715,6 +788,9 @@ function buildRenderStepForTarget(args: {
     colorSlot,
     scale: slotRef(scaleSlot),
     shape: shapeOutputs.shape,
+    ...(shapeOutputs.parametricParamsSlot !== undefined && {
+      parametricParamsSlot: shapeOutputs.parametricParamsSlot,
+    }),
     ...(shapeOutputs.controlPoints && { controlPoints: shapeOutputs.controlPoints }),
     ...(rotationSlot !== undefined && { rotationSlot }),
   };

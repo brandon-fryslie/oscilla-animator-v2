@@ -28,7 +28,7 @@ pub const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
-const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 27u;
 
 const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
 const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
@@ -54,6 +54,7 @@ const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
 const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
+const DESCRIPTOR_WORD_PARAM_SLOT_BASE_OFFSET: u32 = 26u;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
 
 const OPTIONAL_MODE_CONSTANT: u32 = 0u;
@@ -93,12 +94,12 @@ fn read_sink_f32(index: u32, default_value: f32) -> f32 {
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let max_instance_words = arrayLength(&instance_words);
-  let max_instances = max_instance_words / 12u;
+  let max_instances = max_instance_words / 16u;
   if (gid.x >= max_instances) {
     return;
   }
 
-  let base = gid.x * 12u;
+  let base = gid.x * 16u;
   var pos_x = 0.0;
   var pos_y = 0.0;
   var scale = 1.0;
@@ -106,6 +107,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   var scale2_x = 1.0;
   var scale2_y = 1.0;
   var shape_word_offset = 0u;
+  var param_offset = 0u;
+  var lane_count = 0u;
+  var first_instance = 0u;
   var color_r = 1.0;
   var color_g = 1.0;
   var color_b = 1.0;
@@ -251,6 +255,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
       // [RECOVER-06] Shape word offset from descriptor (resolved at pack time)
       shape_word_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET);
+      param_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_PARAM_SLOT_BASE_OFFSET);
+      lane_count = read_sink_word(descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT);
+      first_instance = running_first_instance;
     }
   }
 
@@ -260,12 +267,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   instance_words[base + 3u] = rotation;
   instance_words[base + 4u] = scale2_x;
   instance_words[base + 5u] = scale2_y;
-  instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
+  instance_words[base + 6u] = 0.0;
   instance_words[base + 7u] = 0.0;
   instance_words[base + 8u] = color_r;
   instance_words[base + 9u] = color_g;
   instance_words[base + 10u] = color_b;
   instance_words[base + 11u] = color_a;
+  instance_words[base + 12u] = bitcast<f32>(shape_word_offset);
+  instance_words[base + 13u] = bitcast<f32>(param_offset);
+  instance_words[base + 14u] = bitcast<f32>(lane_count);
+  instance_words[base + 15u] = bitcast<f32>(first_instance);
 }
 "#;
 
@@ -290,6 +301,7 @@ struct InstanceData {
   transform0: vec4<f32>,
   transform1: vec4<f32>,
   color: vec4<f32>,
+  routing_data: vec4<u32>,
 };
 
 @group(0) @binding(0) var<uniform> frame_header: FrameHeader;
@@ -303,6 +315,8 @@ struct InstanceData {
 // ShapeBankHeaderWord offsets (must match TypeScript ShapeBankHeaderWord enum)
 const SHAPE_WORD_KIND: u32 = 0u;
 const SHAPE_WORD_FLAGS: u32 = 2u;
+const SHAPE_WORD_PARAM_BLOCK_OFFSET: u32 = 9u;
+const SHAPE_WORD_PARAM_BLOCK_WORDS: u32 = 10u;
 // [RECOVER-07] CP arena addressing stored in header words 11, 14, 15.
 const SHAPE_WORD_CP_ARENA_BASE_OFFSET: u32 = 11u;
 const SHAPE_WORD_CP_ARENA_LANE_STRIDE: u32 = 14u;
@@ -322,6 +336,7 @@ const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
 
 // [LAW:one-type-per-behavior] ShapeClass discriminant values.
 const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_PARAMETRIC_TEMPLATE: u32 = 2u;
 const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
 
 struct VertexOutput {
@@ -368,6 +383,30 @@ fn safe_color_from_instance(inst: InstanceData) -> vec4<f32> {
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
   let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
   return vec4<f32>(safeRgb, safeA);
+}
+
+fn transform_local_point(inst: InstanceData, local: vec2<f32>) -> vec4<f32> {
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
+  );
+
+  return model * vec4<f32>(local.x, local.y, 0.0, 1.0);
 }
 
 // [RECOVER-11] Type5 text vertex shader: generates a unit quad (6 vertices)
@@ -420,6 +459,62 @@ fn vs_type5(
   return out;
 }
 
+fn vs_parametric_template(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+  instanceIndex: u32,
+) -> VertexOutput {
+  let paramBlockOffset = topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_OFFSET];
+  let paramBlockWords = max(topologyBank[topologyWordOffset + SHAPE_WORD_PARAM_BLOCK_WORDS], 1u);
+  let paramOffset = inst.routing_data.y;
+  let laneCount = max(inst.routing_data.z, 1u);
+  let firstInstance = inst.routing_data.w;
+  let localLane = instanceIndex - firstInstance;
+
+  let templateIndex = vertexIndex / 2u;
+  let t = bitcast<f32>(topologyBank[paramBlockOffset + min(templateIndex, paramBlockWords - 1u)]);
+  let side = f32((vertexIndex % 2u) * 2u) - 1.0;
+
+  let p0 = vec2<f32>(
+    bitcast<f32>(arenaWords[paramOffset + 0u * laneCount + localLane]),
+    bitcast<f32>(arenaWords[paramOffset + 1u * laneCount + localLane]),
+  );
+  let p1 = vec2<f32>(
+    bitcast<f32>(arenaWords[paramOffset + 2u * laneCount + localLane]),
+    bitcast<f32>(arenaWords[paramOffset + 3u * laneCount + localLane]),
+  );
+  let p2 = vec2<f32>(
+    bitcast<f32>(arenaWords[paramOffset + 4u * laneCount + localLane]),
+    bitcast<f32>(arenaWords[paramOffset + 5u * laneCount + localLane]),
+  );
+  let p3 = vec2<f32>(
+    bitcast<f32>(arenaWords[paramOffset + 6u * laneCount + localLane]),
+    bitcast<f32>(arenaWords[paramOffset + 7u * laneCount + localLane]),
+  );
+  let thickness = bitcast<f32>(arenaWords[paramOffset + 8u * laneCount + localLane]);
+
+  let u = 1.0 - t;
+  let u2 = u * u;
+  let u3 = u2 * u;
+  let t2 = t * t;
+  let t3 = t2 * t;
+
+  let pos = (u3) * p0 + (3.0 * u2 * t) * p1 + (3.0 * u * t2) * p2 + (t3) * p3;
+  let tangent = (3.0 * u2) * (p1 - p0) + (6.0 * u * t) * (p2 - p1) + (3.0 * t2) * (p3 - p2);
+  let safeTangent = normalize(tangent + vec2<f32>(0.00001, 0.00001));
+  let normal = vec2<f32>(-safeTangent.y, safeTangent.x);
+  let extrudedPos = pos + (normal * side * thickness * 0.5);
+  let worldPos = transform_local_point(inst, extrudedPos);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(0.0, 0.0);
+  out.shape_class = SHAPE_CLASS_PARAMETRIC_TEMPLATE;
+  return out;
+}
+
 // [RECOVER-07] Vertex pulling: control-point positions are read from the
 // compiler arena buffer (GPU-computed). Arena addressing is stored in the
 // topology header (words 11, 14, 15). Triangle fan generated from vertex_index.
@@ -428,14 +523,15 @@ fn vs_type5(
   @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
-  // [RECOVER-04] Assembly shader stores shape_word_offset via bitcast<f32>(u32).
-  // Recover the original u32 bit pattern — numeric f32→u32 truncates denorms to 0.
-  let topologyWordOffset = bitcast<u32>(inst.transform1.z);
+  let topologyWordOffset = inst.routing_data.x;
 
   // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
   if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
     return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+  if (shapeClass == SHAPE_CLASS_PARAMETRIC_TEMPLATE) {
+    return vs_parametric_template(inst, topologyWordOffset, vertexIndex, instanceIndex);
   }
 
   // --- Type1Rigid path (existing behavior) ---
@@ -460,27 +556,7 @@ fn vs_type5(
   let pulledX = bitcast<f32>(arenaWords[xAddr]);
   let pulledY = bitcast<f32>(arenaWords[yAddr]);
 
-  let rawCenterX = inst.transform0.x;
-  let rawCenterY = inst.transform0.y;
-  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
-  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
-  let rawScaleX = inst.transform0.z * inst.transform1.x;
-  let rawScaleY = inst.transform0.z * inst.transform1.y;
-  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
-  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
-  let rawRotation = inst.transform0.w;
-  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
-
-  let c = cos(safeRotation);
-  let s = sin(safeRotation);
-  let model = mat4x4<f32>(
-    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
-    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
-    vec4<f32>(0.0, 0.0, 1.0, 0.0),
-    vec4<f32>(centerX, centerY, 0.0, 1.0),
-  );
-
-  let worldPos = model * vec4<f32>(pulledX, pulledY, 0.0, 1.0);
+  let worldPos = transform_local_point(inst, vec2<f32>(pulledX, pulledY));
 
   var out: VertexOutput;
   out.position = frame_header.view_proj * worldPos;

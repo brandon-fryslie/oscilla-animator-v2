@@ -39,6 +39,8 @@ const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_INSTALL_REVISION: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
+const SHAPE_WORD_KIND: usize = 0;
+const SHAPE_CLASS_PARAMETRIC_TEMPLATE: u32 = 2;
 
 pub struct EngineConfig {
     pub max_particles: usize,
@@ -188,6 +190,7 @@ fn create_msaa_color_target(
 // RECOVER-05 zeroed all record fields; instance counts live in descriptors.
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: usize = 25;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 
 impl Engine {
@@ -808,6 +811,9 @@ impl Engine {
         let Some(shared_sink_table) = self.shared_sink_table.as_ref() else {
             return IndirectRegionPlan::default();
         };
+        let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() else {
+            return IndirectRegionPlan::default();
+        };
         if sink_table_words == 0 {
             return IndirectRegionPlan::default();
         }
@@ -865,6 +871,8 @@ impl Engine {
         let descriptor_region_base =
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;
+        let mut non_indexed_triangle_list_record_count: u32 = 0;
+        let mut non_indexed_triangle_strip_record_count: u32 = 0;
         for record in 0..total_record_count_usize {
             let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
             if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
@@ -876,6 +884,22 @@ impl Engine {
                     plane_words[descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT],
                 );
             }
+            if record >= indexed_record_count as usize {
+                let shape_word_offset = plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET];
+                let shape_kind_index = shape_word_offset as usize + SHAPE_WORD_KIND;
+                let shape_kind = if shape_kind_index < shared_shape_bank.length() as usize {
+                    shared_shape_bank.get_index(shape_kind_index as u32)
+                } else {
+                    0
+                };
+                if shape_kind == SHAPE_CLASS_PARAMETRIC_TEMPLATE {
+                    non_indexed_triangle_strip_record_count =
+                        non_indexed_triangle_strip_record_count.saturating_add(1);
+                } else {
+                    non_indexed_triangle_list_record_count =
+                        non_indexed_triangle_list_record_count.saturating_add(1);
+                }
+            }
         }
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.
@@ -883,6 +907,8 @@ impl Engine {
             total_instance_count,
             indexed_record_count,
             non_indexed_record_count,
+            non_indexed_triangle_list_record_count,
+            non_indexed_triangle_strip_record_count,
             indexed_region_base_words,
             non_indexed_region_base_words,
             indexed_stride_words,

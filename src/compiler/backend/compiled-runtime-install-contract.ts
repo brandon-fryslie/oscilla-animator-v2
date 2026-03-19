@@ -22,12 +22,13 @@ import { getProgramTopology } from '../ir/program-topology';
 import { resolveArenaAddress } from '../../runtime/ArenaValueStore';
 import { packDrawPrepSinkTableV1 } from '../../runtime/DrawPrepSinkTablePacker';
 import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
+import { generateParametricTemplateTValues, isParametricTemplateTopology } from '../../shapes/registry';
 import {
   SHAPE_BANK_HEADER_WORDS,
   ShapeBankHeaderWord,
 } from '../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../shapes/types';
-import type { PathTopologyDef, TopologyDef } from '../../shapes/types';
+import type { ParametricTemplateTopologyDef, PathTopologyDef, TopologyDef } from '../../shapes/types';
 
 export interface CompiledDrawPrepInstallArtifact {
   readonly words: Uint32Array;
@@ -64,6 +65,43 @@ function assertFiniteUint32(value: number, context: string): number {
 
 function isPathTopology(topology: TopologyDef): topology is PathTopologyDef {
   return 'verbs' in topology;
+}
+
+function getTopologyWordSpan(topology: TopologyDef): number {
+  if (isParametricTemplateTopology(topology)) {
+    return SHAPE_BANK_HEADER_WORDS + topology.resolution + 1;
+  }
+  return SHAPE_BANK_HEADER_WORDS;
+}
+
+function writeParametricTemplateHeader(args: {
+  readonly shapeBankWords: Uint32Array;
+  readonly wordOffset: number;
+  readonly topology: ParametricTemplateTopologyDef;
+}): void {
+  const { shapeBankWords, wordOffset, topology } = args;
+  const tValues = generateParametricTemplateTValues(topology.resolution);
+  const tWords = new Uint32Array(tValues.buffer, tValues.byteOffset, tValues.length);
+  const vertexCount = (topology.resolution + 1) * 2;
+  const paramBlockOffset = wordOffset + SHAPE_BANK_HEADER_WORDS;
+
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.Kind] = ShapeClass.ParametricTemplate >>> 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.TopologyMode] = TopologyMode.NonPath >>> 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.Flags] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.MaterialClass] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.IndexCount] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstIndex] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.BaseVertex] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.VertexCount] = vertexCount >>> 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstVertex] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockOffset] = paramBlockOffset >>> 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockWords] = tWords.length >>> 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaBaseOffset] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMinPacked] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMaxPacked] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaLaneStride] = 0;
+  shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaComponentStride] = 0;
+  shapeBankWords.set(tWords, paramBlockOffset);
 }
 
 // [RECOVER-04] Resolve through expression wrappers (broadcast, etc.) to find
@@ -133,7 +171,10 @@ function buildCanonicalTopologyHeaders(
   }
 
   const topologies = shapeRefSteps.map(({ expr }) => getProgramTopology(program, expr.topologyId));
-  const totalWords = shapeRefSteps.length * SHAPE_BANK_HEADER_WORDS;
+  const totalWords = topologies.reduce(
+    (sum, topology) => sum + getTopologyWordSpan(topology),
+    0,
+  );
   const shapeBankWords = new Uint32Array(totalWords);
   const topologyIdByHandle = new Uint32Array(totalWords);
 
@@ -141,6 +182,17 @@ function buildCanonicalTopologyHeaders(
   for (let stepIdx = 0; stepIdx < shapeRefSteps.length; stepIdx++) {
     const { target, expr } = shapeRefSteps[stepIdx]!;
     const topology = topologies[stepIdx]!;
+    if (isParametricTemplateTopology(topology)) {
+      writeParametricTemplateHeader({
+        shapeBankWords,
+        wordOffset,
+        topology,
+      });
+      shapeWordOffsetBySlot.set(target, wordOffset);
+      topologyIdByHandle[wordOffset] = (expr.topologyId as number) >>> 0;
+      wordOffset += getTopologyWordSpan(topology);
+      continue;
+    }
     const isPath = isPathTopology(topology);
 
     // Resolve CP arena addressing from compile-time address table.
@@ -205,7 +257,7 @@ function buildCanonicalTopologyHeaders(
     // Record sidecar metadata (same contract as ShapeBankState sidecar).
     topologyIdByHandle[wordOffset] = (expr.topologyId as number) >>> 0;
 
-    wordOffset += SHAPE_BANK_HEADER_WORDS;
+    wordOffset += getTopologyWordSpan(topology);
   }
 
   return {

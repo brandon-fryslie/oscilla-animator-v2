@@ -142,6 +142,8 @@ pub struct IndirectRegionPlan {
     pub total_instance_count: u32,
     pub indexed_record_count: u32,
     pub non_indexed_record_count: u32,
+    pub non_indexed_triangle_list_record_count: u32,
+    pub non_indexed_triangle_strip_record_count: u32,
     pub indexed_region_base_words: u32,
     pub non_indexed_region_base_words: u32,
     pub indexed_stride_words: u32,
@@ -149,7 +151,8 @@ pub struct IndirectRegionPlan {
 }
 
 pub struct RenderDispatcher {
-    render_pipeline: wgpu::RenderPipeline,
+    triangle_list_pipeline: wgpu::RenderPipeline,
+    triangle_strip_pipeline: wgpu::RenderPipeline,
     pub instance_layout: wgpu::BindGroupLayout,
     pub topology_layout: wgpu::BindGroupLayout,
     // [RECOVER-07] Layout for compiler arena buffer bound to vertex shader.
@@ -239,7 +242,7 @@ impl RenderDispatcher {
             push_constant_ranges: &[],
         });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let triangle_list_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render.UberPipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -279,8 +282,46 @@ impl RenderDispatcher {
             cache: None,
         });
 
+        let triangle_strip_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render.UberPipeline.TriangleStrip"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: None,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::LessEqual,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: build_multisample_state(sample_count),
+            multiview: None,
+            cache: None,
+        });
+
         Self {
-            render_pipeline,
+            triangle_list_pipeline,
+            triangle_strip_pipeline,
             instance_layout,
             topology_layout,
             arena_render_layout,
@@ -329,7 +370,6 @@ impl RenderDispatcher {
             occlusion_query_set: None,
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &arena.uniform_bind_group, &[]);
         render_pass.set_bind_group(1, &arena.instance_bind_group, &[]);
         render_pass.set_bind_group(2, &arena.topology_bind_group, &[]);
@@ -339,6 +379,7 @@ impl RenderDispatcher {
         let indexed_stride_words = plan.indexed_stride_words.max(5);
         let non_indexed_stride_words = plan.non_indexed_stride_words.max(4);
 
+        render_pass.set_pipeline(&self.triangle_list_pipeline);
         for record_index in 0..plan.indexed_record_count {
             let word_offset = plan
                 .indexed_region_base_words
@@ -347,10 +388,22 @@ impl RenderDispatcher {
                 .draw_indexed_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
         }
 
-        for record_index in 0..plan.non_indexed_record_count {
+        render_pass.set_pipeline(&self.triangle_list_pipeline);
+        for record_index in 0..plan.non_indexed_triangle_list_record_count {
             let word_offset = plan
                 .non_indexed_region_base_words
                 .saturating_add(record_index.saturating_mul(non_indexed_stride_words));
+            render_pass.draw_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
+        }
+
+        render_pass.set_pipeline(&self.triangle_strip_pipeline);
+        for record_index in 0..plan.non_indexed_triangle_strip_record_count {
+            let global_record_index = plan
+                .non_indexed_triangle_list_record_count
+                .saturating_add(record_index);
+            let word_offset = plan
+                .non_indexed_region_base_words
+                .saturating_add(global_record_index.saturating_mul(non_indexed_stride_words));
             render_pass.draw_indirect(&arena.indirect_buffer, (word_offset as u64) * U32_BYTES);
         }
     }

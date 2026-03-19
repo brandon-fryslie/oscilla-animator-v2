@@ -17,6 +17,7 @@ import type {
 import type { BlockId } from '../../types/compiler';
 import {
   PathVerb,
+  type ParametricTemplateTopologyDef,
   type AbstractTopologyDef,
   type PathSegmentKind,
   type PathTopologyDef,
@@ -387,7 +388,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField });
   }
 
-  registerTopology(topology: AbstractTopologyDef | PathTopologyDefInput, _debugName?: string): TopologyId {
+  registerTopology(
+    topology: AbstractTopologyDef | PathTopologyDefInput | Omit<ParametricTemplateTopologyDef, 'id'>,
+    _debugName?: string,
+  ): TopologyId {
     const normalized = toSerializableTopologyShape(topology);
     const shapeSignature = topologyShapeSignature(normalized);
     const existingId = this.topologyByShapeSignature.get(shapeSignature);
@@ -532,9 +536,9 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   // Slot Allocation & Registration (orchestrator-only)
   // ===========================================================================
 
-  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
+  allocTypedSlot(type: CanonicalType, label?: string, overrideStride?: number): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
-    const stride = payloadStride(type.payload);
+    const stride = overrideStride ?? payloadStride(type.payload);
     this.slotLayoutInputs.set(slot, { type, stride, label });
     return slot;
   }
@@ -575,8 +579,13 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     this.steps.push({ kind: 'fieldStateWrite', stateSlot, value });
   }
 
-  stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void {
-    this.steps.push({ kind: 'materialize', field, instanceId, target });
+  stepMaterialize(
+    field: ValueExprId,
+    instanceId: InstanceId,
+    target: ValueSlot,
+    componentOffset?: number,
+  ): void {
+    this.steps.push({ kind: 'materialize', field, instanceId, target, componentOffset });
   }
 
   stepContinuityMapBuild(instanceId: InstanceId): void {
