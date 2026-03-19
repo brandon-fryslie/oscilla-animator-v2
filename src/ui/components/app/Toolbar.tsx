@@ -98,10 +98,10 @@ function DemoCard({
       <Stack gap={rem(8)}>
         <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
           <Stack gap={rem(2)} style={{ minWidth: 0, flex: 1 }}>
-            <Text fw={700} size="sm" c="gray.0" truncate>
+            <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
               {demo.name}
             </Text>
-            <Text size="xs" c="dimmed" lineClamp={2}>
+            <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
               {demo.summary}
             </Text>
           </Stack>
@@ -124,6 +124,7 @@ function DemoCard({
                           : 'violet'
             }
             radius="sm"
+            style={{ flexShrink: 0, alignSelf: 'flex-start' }}
           >
             {selected ? 'Live' : disabled ? 'Disabled' : featured ? 'Featured' : demo.group}
           </Badge>
@@ -529,14 +530,14 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
                     Current Demo
                   </Text>
-                  <Text fw={700} size="sm" c="gray.0" truncate>
+                  <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
                     {currentDemo.name}
                   </Text>
-                  <Text size="xs" c="dimmed" lineClamp={2}>
+                  <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
                     {currentDemo.summary}
                   </Text>
                 </Stack>
-                <Badge size="xs" variant="filled" color="pink">
+                <Badge size="xs" variant="filled" color="pink" style={{ flexShrink: 0, alignSelf: 'flex-start' }}>
                   Live
                 </Badge>
               </Group>
@@ -557,7 +558,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   Quick path to the strongest visual demos.
                 </Text>
               </Stack>
-              <SimpleGrid cols={isMobile ? 1 : 2} spacing="sm">
+              <SimpleGrid cols={1} spacing="sm">
                 {featuredDemos.map((entry) => (
                   <DemoCard
                     key={entry.filename}
