@@ -25,7 +25,7 @@ patch "Feedback Accumulator" {
   }
 
   block "Const" "speed-swing" {
-    value = 0.008
+    value = 0.01
     outputs {
       out = speed-scaled.b
     }
@@ -93,15 +93,15 @@ patch "Feedback Accumulator" {
   # --- Visuals: ring of 24 circles with per-element rainbow ---
 
   block "Ellipse" "dot" {
-    rx = 0.025
-    ry = 0.025
+    rx = 0.022
+    ry = 0.022
     outputs {
       shape = instances.element
     }
   }
 
   block "Array" "instances" {
-    count = 24
+    count = 32
     outputs {
       elements = ring.elements
       t = hue-shift.a
@@ -115,13 +115,16 @@ patch "Feedback Accumulator" {
   }
 
   block "CircleLayoutUV" "ring" {
-    radius = 0.3
+    radius = 0.34
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.74
+    a = 0.95
     outputs {
       color = render.color
     }

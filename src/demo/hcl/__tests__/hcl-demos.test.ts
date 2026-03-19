@@ -13,11 +13,25 @@ import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../../../patch-dsl/index';
 import { compile } from '../../../compiler/compile';
+import { hclDemos } from '../../hcl-demos';
 import { registerAllBlocks } from '../../../blocks/all';
 registerAllBlocks();
 
 const HCL_DIR = join(__dirname, '..');
-const hclFiles = readdirSync(HCL_DIR).filter(f => f.endsWith('.hcl'));
+
+function listHclFiles(dir: string, prefix = ''): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      if (entry.name === '__tests__') {
+        return [];
+      }
+      if (entry.isDirectory()) {
+        return listHclFiles(join(dir, entry.name), `${prefix}${entry.name}/`);
+      }
+      return entry.name.endsWith('.hcl') ? [`${prefix}${entry.name}`] : [];
+    })
+    .sort((a, b) => a.localeCompare(b));
+}
 
 function expectedCompileErrorSubstring(hcl: string): string | null {
   const match = hcl.match(/@expect-compile-error(?:\s+([^\n\r]+))?/);
@@ -27,12 +41,17 @@ function expectedCompileErrorSubstring(hcl: string): string | null {
 }
 
 describe('HCL demo patches', () => {
-  for (const file of hclFiles) {
-    describe(file, () => {
-      const hcl = readFileSync(join(HCL_DIR, file), 'utf-8');
+  it('catalog is the complete source of truth for demo files', () => {
+    const diskFiles = listHclFiles(HCL_DIR);
+    const catalogFiles = hclDemos.map((entry) => entry.relativePath);
+    expect(catalogFiles).toEqual(diskFiles);
+  });
+
+  for (const demo of hclDemos) {
+    describe(demo.relativePath, () => {
+      const hcl = readFileSync(join(HCL_DIR, demo.relativePath), 'utf-8');
       const expectedCompileError = expectedCompileErrorSubstring(hcl);
-      const nameMatch = hcl.match(/patch\s+"([^"]+)"/);
-      const name = nameMatch ? nameMatch[1] : file.replace('.hcl', '');
+      const name = demo.name;
 
       let parsed!: ReturnType<typeof deserializePatchFromHCL>;
       let compileResult: ReturnType<typeof compile> | null = null;

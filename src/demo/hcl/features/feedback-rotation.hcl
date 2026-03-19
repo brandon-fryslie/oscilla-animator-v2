@@ -1,15 +1,12 @@
-# Feedback Simple
+# Feedback Rotation
 #
-# Demonstrates feedback-driven rotation with VARIABLE SPEED.
-# The rotation accelerates and decelerates - impossible without feedback!
+# UnitDelay showcase: feedback-driven rotation with variable speed.
+# Scale breathes in sync with speed — dots grow when fast, shrink when slow.
+# Per-element rainbow on outer ring differentiates from feedback-simple.
 #
-# Two rings with per-element rainbow color:
-# - OUTER (32 dots): Feedback-driven - speeds up and slows down
-# - INNER (12 dots): Time-driven - constant speed
-#
-# Demonstrates: UnitDelay feedback loop, Modulo wrap, per-element rainbow.
+# Demonstrates: UnitDelay, ScaleBias speed-responsive scale, per-element color.
 
-patch "Feedback Simple" {
+patch "Feedback Rotation" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 3000
     periodBMs = 3000
@@ -21,91 +18,111 @@ patch "Feedback Simple" {
   }
 
   # ===========================================================================
-  # FEEDBACK ACCUMULATOR WITH VARIABLE SPEED
+  # FEEDBACK ACCUMULATOR
   # ===========================================================================
 
-  block "Const" "one" {
-    value = 1.0
+  block "Const" "speed-base" {
+    value = 0.015
     outputs {
-      out = wrap.b
+      out = speed-delta.a
     }
   }
 
-  block "Const" "speed-base" {
+  block "Const" "speed-amp" {
     value = 0.01
     outputs {
-      out = delta.a
-    }
-  }
-
-  block "Const" "speed-amplitude" {
-    value = 0.008
-    outputs {
-      out = speed-variation.b
+      out = speed-modulation.b
     }
   }
 
   block "Oscillator" "speed-osc" {
-    mode = 0
     outputs {
-      out = speed-variation.a
+      out = [speed-modulation.a, scale-map.in]
     }
   }
 
-  block "Multiply" "speed-variation" {
+  block "Multiply" "speed-modulation" {
     outputs {
-      out = delta.b
+      out = speed-delta.b
     }
   }
 
-  block "Add" "delta" {
+  block "Add" "speed-delta" {
     outputs {
-      out = accumulate.b
+      out = phase-add.b
     }
   }
 
-  block "UnitDelay" "prev-phase" {
+  block "UnitDelay" "phase-delay" {
     initialValue = 0
     outputs {
-      out = accumulate.a
+      out = phase-add.a
     }
   }
 
-  block "Add" "accumulate" {
+  block "Add" "phase-add" {
     outputs {
-      out = wrap.a
+      out = phase-wrap.a
     }
   }
 
-  block "Modulo" "wrap" {
+  block "Const" "phase-wrap-divisor" {
+    value = 1.0
     outputs {
-      out = [prev-phase.in, feedback-phase.in]
+      out = phase-wrap.b
+    }
+  }
+
+  block "Modulo" "phase-wrap" {
+    outputs {
+      out = [phase-delay.in, feedback-phase.in]
     }
   }
 
   block "Adapter_ScalarToPhase01" "feedback-phase" {
     outputs {
-      out = outer-layout.phase
+      out = [outer-layout.phase, outer-hue.b]
+    }
+  }
+
+  # Speed-responsive scale: scale = osc * 0.4 + 1.0 → [0.6, 1.4]
+  block "Const" "scale-amt" {
+    value = 0.55
+    outputs {
+      out = scale-map.scale
+    }
+  }
+
+  block "Const" "scale-center" {
+    value = 1.05
+    outputs {
+      out = scale-map.bias
+    }
+  }
+
+  block "ScaleBias" "scale-map" {
+    outputs {
+      out = render-outer.scale
     }
   }
 
   # ===========================================================================
-  # OUTER RING: Feedback-driven (variable speed), 32 dots, rainbow
+  # OUTER RING: Feedback-driven, per-element rainbow
   # ===========================================================================
 
   block "Ellipse" "outer-dot" {
-    rx = 0.02
-    ry = 0.02
+    rx = 0.018
+    ry = 0.018
     outputs {
       shape = outer-instances.element
     }
   }
 
   block "Array" "outer-instances" {
-    count = 32
+    count = 36
     outputs {
       elements = outer-layout.elements
-      t = outer-color.h
+      t = outer-hue.a
     }
   }
 
@@ -117,28 +134,36 @@ patch "Feedback Simple" {
   }
 
   block "MakeColorOKLCH" "outer-color" {
+    s = 0.95
+    l = 0.74
+    a = 0.95
     outputs {
       color = render-outer.color
     }
   }
 
+  block "Add" "outer-hue" {
+    outputs {
+      out = outer-color.h
+    }
+  }
+
   # ===========================================================================
-  # INNER RING: Time-driven (constant speed), 12 dots, rainbow
+  # INNER RING: Constant speed, warm orange
   # ===========================================================================
 
   block "Ellipse" "inner-dot" {
-    rx = 0.02
-    ry = 0.02
+    rx = 0.013
+    ry = 0.013
     outputs {
       shape = inner-instances.element
     }
   }
 
   block "Array" "inner-instances" {
-    count = 12
+    count = 20
     outputs {
       elements = inner-layout.elements
-      t = inner-color.h
     }
   }
 
@@ -149,17 +174,13 @@ patch "Feedback Simple" {
     }
   }
 
-  block "MakeColorOKLCH" "inner-color" {
+  block "Const" "inner-color" {
+    value = { r = 1.0, g = 0.6, b = 0.3, a = 1.0 }
     outputs {
-      color = render-inner.color
+      out = render-inner.color
     }
   }
 
-  # ===========================================================================
-  # RENDER BOTH RINGS
-  # ===========================================================================
-
   block "RenderInstances2D" "render-outer" {}
-
   block "RenderInstances2D" "render-inner" {}
 }

@@ -9,20 +9,20 @@ patch "Simple" {
     periodAMs = 4000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, dot-wobble.phase]
+      phaseA = [layout.phase, dot-wobble.phase, hue-shift.b]
     }
   }
 
   block "Ellipse" "dot" {
-    rx = 0.04
-    ry = 0.04
+    rx = 0.034
+    ry = 0.034
     outputs {
       controlPoints = dot-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "dot-wobble" {
-    amount = 0.004
+    amount = 0.006
     frequency = 6
     outputs {
       points = dot-shape.controlPoints
@@ -37,22 +37,31 @@ patch "Simple" {
   }
 
   block "Array" "instances" {
-    count = 8
+    count = 12
     outputs {
       elements = layout.elements
-      t = color.h
+      t = hue-shift.a
     }
   }
 
   block "CircleLayoutUV" "layout" {
-    radius = 0.2
+    radius = 0.26
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
   # Per-element rainbow: each dot gets its own hue from Array.t
   block "MakeColorOKLCH" "color" {
+    s = 0.92
+    l = 0.74
+    a = 0.96
     outputs {
       color = render.color
     }

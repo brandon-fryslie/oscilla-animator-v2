@@ -9,7 +9,7 @@ patch "Mouse Spiral" {
     periodAMs = 4000
     role = "timeRoot"
     outputs {
-      phaseA = layout.phase
+      phaseA = [layout.phase, hue-shift.b]
     }
   }
 
@@ -38,23 +38,23 @@ patch "Mouse Spiral" {
 
   # Shape and instances
   block "Ellipse" "dot" {
-    rx = 0.02
-    ry = 0.02
+    rx = 0.018
+    ry = 0.018
     outputs {
       shape = instances.element
     }
   }
 
   block "Array" "instances" {
-    count = 24
+    count = 32
     outputs {
       elements = layout.elements
-      t = color.h
+      t = hue-shift.a
     }
   }
 
   block "CircleLayoutUV" "layout" {
-    radius = 0.3
+    radius = 0.34
     outputs {
       controlPoints = render.controlPoints
     }
@@ -62,7 +62,7 @@ patch "Mouse Spiral" {
 
   # Scale: smoothed mouse modulates base size, click adds bonus
   block "Const" "mouse-scale" {
-    value = 0.8
+    value = 0.95
     outputs {
       out = mouse-contrib.b
     }
@@ -75,7 +75,7 @@ patch "Mouse Spiral" {
   }
 
   block "Const" "base-size" {
-    value = 0.4
+    value = 0.35
     outputs {
       out = final-size.b
     }
@@ -88,7 +88,7 @@ patch "Mouse Spiral" {
   }
 
   block "Const" "click-scale" {
-    value = 0.5
+    value = 0.7
     outputs {
       out = click-bonus.b
     }
@@ -106,8 +106,17 @@ patch "Mouse Spiral" {
     }
   }
 
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
   # Per-element rainbow
   block "MakeColorOKLCH" "color" {
+    s = 0.94
+    l = 0.72
+    a = 0.94
     outputs {
       color = render.color
     }

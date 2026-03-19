@@ -42,23 +42,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
-  const splitDemos = useMemo(() => {
-    const midpoint = Math.ceil(demo.demos.length / 2);
-    const primary = demo.demos.slice(0, midpoint);
-    const secondary = demo.demos.slice(midpoint);
-    const formatLabel = (items: readonly { name: string }[], fallback: string) => {
-      const first = items[0]?.name?.trim()?.[0]?.toUpperCase();
-      const last = items[items.length - 1]?.name?.trim()?.[0]?.toUpperCase();
-      if (!first || !last) return fallback;
-      return `Demos ${first}-${last}`;
-    };
-    return {
-      primary,
-      secondary,
-      primaryLabel: formatLabel(primary, 'Demos 1'),
-      secondaryLabel: formatLabel(secondary, 'Demos 2'),
-    };
-  }, [demo.demos]);
+  const demoGroups = useMemo(() => demo.groups.filter((group) => group.demos.length > 0), [demo.groups]);
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -215,39 +199,40 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               </Menu.Dropdown>
             </Menu>
 
-            <Menu shadow="md" width={260} withinPortal>
-              <Menu.Target>
-                <Button variant="subtle" color="gray" size="xs">{splitDemos.primaryLabel}</Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {splitDemos.primary.map((item) => (
-                  <Menu.Item
-                    key={item.filename}
-                    onClick={() => handleDemoSelect(item.filename)}
-                  >
-                    {item.name}
-                  </Menu.Item>
-                ))}
-              </Menu.Dropdown>
-            </Menu>
-
-            {splitDemos.secondary.length > 0 ? (
-              <Menu shadow="md" width={260} withinPortal>
+            {demoGroups.map((group) => (
+              <Menu key={group.key} shadow="md" width={300} withinPortal>
                 <Menu.Target>
-                  <Button variant="subtle" color="gray" size="xs">{splitDemos.secondaryLabel}</Button>
+                  <Button variant="subtle" color="gray" size="xs">{group.label}</Button>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  {splitDemos.secondary.map((item) => (
+                  {group.demos.map((item) => (
                     <Menu.Item
                       key={item.filename}
                       onClick={() => handleDemoSelect(item.filename)}
                     >
-                      {item.name}
+                      <Group justify="space-between" gap="sm" wrap="nowrap">
+                        <Text size="sm">{item.name}</Text>
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color={
+                            group.key === 'showcase'
+                              ? 'pink'
+                              : group.key === 'integration'
+                                ? 'orange'
+                                : group.key === 'stress'
+                                  ? 'red'
+                                  : 'violet'
+                          }
+                        >
+                          {item.highlights[0] ?? group.key}
+                        </Badge>
+                      </Group>
                     </Menu.Item>
                   ))}
                 </Menu.Dropdown>
               </Menu>
-            ) : null}
+            ))}
 
             <Menu shadow="md" width={220} withinPortal>
               <Menu.Target>

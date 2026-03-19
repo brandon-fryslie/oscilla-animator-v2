@@ -1,29 +1,30 @@
-# Tile Grid
+# Neon Grid
 #
-# 20x20 grid of rectangles with per-element rainbow and pulsing
-# per-tile scale jitter.
-# Demonstrates: GridLayoutUV, Rect shape, ScaleBias, NoisyBroadcast.
+# 625 rectangles in a 25x25 grid with StepQuantize stepped pulsing
+# and per-element rainbow color plus per-tile jitter.
+# Demonstrates: StepQuantize, NoisyBroadcast, per-element rainbow, GridLayoutUV.
 
-patch "Tile Grid" {
+patch "Neon Grid" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 3000
+    periodAMs = 2000
     role = "timeRoot"
     outputs {
-      phaseA = [pulse.phase, tile-wobble.phase]
+      phaseA = [pulse.phase, tile-wobble.phase, hue-shift.b]
     }
   }
 
   block "Rect" "tile" {
-    width = 0.018
+    width = 0.012
     height = 0.012
+    cornerRadius = 0.0035
     outputs {
       controlPoints = tile-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "tile-wobble" {
-    amount = 0.0018
-    frequency = 5
+    amount = 0.0022
+    frequency = 7
     outputs {
       points = tile-shape.controlPoints
     }
@@ -32,35 +33,48 @@ patch "Tile Grid" {
   block "MakeShape2D" "tile-shape" {
     closed = true
     outputs {
-      shape = instances.element
+      shape = grid-elements.element
     }
   }
 
-  block "Array" "instances" {
-    count = 400
+  block "Array" "grid-elements" {
+    count = 625
     outputs {
       elements = grid.elements
-      t = color.h
+      t = hue-shift.a
     }
   }
 
   block "GridLayoutUV" "grid" {
-    rows = 20
-    cols = 20
+    rows = 25
+    cols = 25
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
-  # Pulsing scale: oscillator * 0.3 + 1.0 → [0.7, 1.3]
+  # Stepped pulsing: Oscillator → StepQuantize (discrete sizes)
   block "Oscillator" "pulse" {
+    outputs {
+      out = quantize.in
+    }
+  }
+
+  block "Const" "step-size" {
+    value = 0.33
+    outputs {
+      out = quantize.step
+    }
+  }
+
+  block "StepQuantize" "quantize" {
     outputs {
       out = scale-map.in
     }
   }
 
   block "Const" "scale-amt" {
-    value = 0.3
+    value = 0.42
     outputs {
       out = scale-map.scale
     }
@@ -87,7 +101,7 @@ patch "Tile Grid" {
   }
 
   block "Const" "jitter-seed" {
-    value = 23
+    value = 31
     outputs {
       out = scale-jitter.seed
     }
@@ -99,8 +113,23 @@ patch "Tile Grid" {
     }
   }
 
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
   # Per-element rainbow
+  block "Const" "saturation" {
+    value = 0.98
+    outputs {
+      out = color.s
+    }
+  }
+
   block "MakeColorOKLCH" "color" {
+    l = 0.72
+    a = 0.92
     outputs {
       color = render.color
     }

@@ -10,7 +10,13 @@
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import { GPU_BOOTSTRAP_DEMO_FILENAME, hclDemos, type HclDemo } from '../demo';
+import {
+  GPU_BOOTSTRAP_DEMO_FILENAME,
+  hclDemos,
+  hclDemoGroups,
+  type HclDemo,
+  type HclDemoGroup,
+} from '../demo';
 import { deserializePatchFromHCL } from '../patch-dsl';
 import { verifyGpuPatchCompatibility } from '../services/GpuPatchCompatibility';
 import type { PatchStore } from './PatchStore';
@@ -24,6 +30,7 @@ function isVerifiedGpuDemo(hcl: string): boolean {
 
 export class DemoStore {
   readonly demos: readonly HclDemo[] = hclDemos;
+  readonly groups: readonly HclDemoGroup[] = hclDemoGroups;
   currentFilename: string | null = null;
 
   constructor(private readonly patchStore: PatchStore) {
