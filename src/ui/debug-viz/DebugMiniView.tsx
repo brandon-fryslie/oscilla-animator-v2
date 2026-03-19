@@ -27,12 +27,13 @@ import { FieldBandChart } from './charts/FieldBandChart';
 import { RasterHeatmap } from './charts/RasterHeatmap';
 import { selectFieldCharts, type FieldChartId } from './vizSelector';
 import { ChartHelpButton } from './charts/ChartHelpButton';
+import { getDebugMiniViewDisplayMode } from './cardinalityDisplay';
 import type { HelpTopicId } from '../../help/types';
 import type { RendererSample, AggregateStats, HistoryView, BufferHistoryView, Stride, FieldHistoryView } from './types';
 import type { EdgeValueResult } from '../../services/DebugService';
 import type { EdgeMetadata } from '../../services/mapDebugEdges';
 import type { CanonicalType } from '../../core/canonical-types';
-import { payloadStride, requireInst } from '../../core/canonical-types';
+import { payloadStride, readInst } from '../../core/canonical-types';
 import { oklchToEncodedSrgb, toCssOklch } from '../../core/color/oklch';
 
 // Side-effect import: registers all renderers
@@ -154,7 +155,7 @@ export function formatTypeLine(type: CanonicalType): string {
   const payloadUnit = unitKind === 'none'
     ? payloadKind
     : `${payloadKind}:${unitKind}`;
-  const card = requireInst(type.extent.cardinality, 'cardinality').kind;
+  const card = readInst(type.extent.cardinality)?.kind ?? 'unresolved';
   return `${payloadUnit} · ${card} · cont`;
 }
 
@@ -469,6 +470,8 @@ function renderFieldChart(
  * Accepts MiniViewData as props, making it reusable in both hover and inspector contexts.
  */
 export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.ReactElement {
+  const cardinality = readInst(data.meta.type.extent.cardinality)?.kind ?? null;
+  const displayMode = getDebugMiniViewDisplayMode(cardinality);
   return React.createElement('div', { style: debugMiniViewStyles.container },
     // Header
     React.createElement('div', { style: debugMiniViewStyles.header },
@@ -482,20 +485,26 @@ export function DebugEdgeValueDisplay({ data }: { data: MiniViewData }): React.R
       formatTypeLine(data.meta.type)),
 
     // Value section
-    requireInst(data.meta.type.extent.cardinality, 'cardinality').kind === 'one'
+    displayMode === 'scalar'
       ? React.createElement(OneValueSection, {
           value: data.value,
           meta: data.meta,
           history: data.history,
           spyReadbackMeta: data.spyReadbackMeta,
         })
-      : React.createElement(FieldValueSection, {
+      : displayMode === 'field'
+        ? React.createElement(FieldValueSection, {
           value: data.value,
           meta: data.meta,
           fieldHistory: data.fieldHistory,
           fieldInstanceHistory: data.fieldInstanceHistory,
           fieldBufferHistory: data.fieldBufferHistory,
-        }),
+        })
+        : React.createElement(
+            'div',
+            { style: { ...debugMiniViewStyles.placeholder, padding: '8px 0', textAlign: 'left' } },
+            'Debug metadata unavailable for this port.',
+          ),
 
     // Storage line
     React.createElement('div', { style: debugMiniViewStyles.storageLine },

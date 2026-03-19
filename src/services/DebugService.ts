@@ -13,7 +13,7 @@
 
 import type { ValueSlot } from '../types';
 import type { CanonicalType } from '../core/canonical-types';
-import { payloadStride, requireInst } from '../core/canonical-types';
+import { payloadStride, readInst } from '../core/canonical-types';
 import type { UnmappedEdgeInfo, EdgeMetadata } from './mapDebugEdges';
 import type { ConstantValue } from './ConstantValueTracker';
 import { HistoryService, type KeyResolver, type ResolvedKeyMetadata } from '../ui/debug-viz/HistoryService';
@@ -201,10 +201,20 @@ class DebugService {
     const resolver: KeyResolver = (key: DebugTargetKey): ResolvedKeyMetadata | undefined => {
       let meta: EdgeMetadata | undefined;
       if (key.kind === 'edge') {
-        meta = this.edgeToSlotMap.get(key.edgeId);
+        meta = this.validateMetadata(
+          this.edgeToSlotMap.get(key.edgeId),
+          'reporter',
+          `edge:${key.edgeId}`,
+          `edge '${key.edgeId}'`,
+        );
       } else {
         const portKey = `${key.blockId}:${key.portName}`;
-        meta = this.portToSlotMap.get(portKey);
+        meta = this.validateMetadata(
+          this.portToSlotMap.get(portKey),
+          'reporter',
+          `port:${portKey}`,
+          `port '${key.blockId}.${key.portName}'`,
+        );
       }
       if (!meta) return undefined;
       return {
@@ -485,8 +495,8 @@ class DebugService {
   getEdgeValue(edgeId: string): EdgeValueResult | undefined {
     // [LAW:one-source-of-truth] Debug queries are sourced from canonical debug
     // stores (arena-backed reads/tap caches), not the generic object map.
-    const meta = this.edgeToSlotMap.get(edgeId);
-    if (!meta) {
+    const rawMeta = this.edgeToSlotMap.get(edgeId);
+    if (!rawMeta) {
       // Edge not in mapping - this indicates the compiler failed to register
       // the edge's source output in debugIndex. This is a compiler bug.
       throw new Error(
@@ -494,8 +504,10 @@ class DebugService {
         `This indicates a compiler bug - the edge's source output was not registered in debugIndex.`
       );
     }
+    const meta = this.validateMetadata(rawMeta, 'reporter', `edge:${edgeId}`, `edge '${edgeId}'`);
+    if (!meta) return undefined;
 
-    if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+    if (this.readCardinalityKind(meta, 'reporter', `edge:${edgeId}`, `edge '${edgeId}'`) === 'many') {
       return this.queryFieldValue(meta);
     }
     return this.queryScalarValue(meta);
@@ -508,10 +520,15 @@ class DebugService {
    * Strict callers should use getEdgeValue() to preserve invariant exceptions.
    */
   tryGetEdgeValue(edgeId: string): EdgeValueResult | undefined {
-    const meta = this.edgeToSlotMap.get(edgeId);
+    const meta = this.validateMetadata(
+      this.edgeToSlotMap.get(edgeId),
+      'tryGetEdgeValue',
+      `edge:${edgeId}`,
+      `edge '${edgeId}'`,
+    );
     if (!meta) return undefined;
     try {
-      if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+      if (this.readCardinalityKind(meta, 'tryGetEdgeValue', `edge:${edgeId}`, `edge '${edgeId}'`) === 'many') {
         return this.queryFieldValue(meta);
       }
       return this.queryScalarValue(meta);
@@ -534,12 +551,17 @@ class DebugService {
    */
   getPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
     const key = `${blockId}:${portName}`;
-    const meta = this.portToSlotMap.get(key);
+    const meta = this.validateMetadata(
+      this.portToSlotMap.get(key),
+      'reporter',
+      `port:${key}`,
+      `port '${blockId}.${portName}'`,
+    );
     if (!meta) {
       return undefined;
     }
 
-    if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+    if (this.readCardinalityKind(meta, 'reporter', `port:${key}`, `port '${blockId}.${portName}'`) === 'many') {
       return this.queryFieldValue(meta);
     }
     return this.queryScalarValue(meta);
@@ -553,10 +575,15 @@ class DebugService {
    */
   tryGetPortValue(blockId: string, portName: string): EdgeValueResult | undefined {
     const key = `${blockId}:${portName}`;
-    const meta = this.portToSlotMap.get(key);
+    const meta = this.validateMetadata(
+      this.portToSlotMap.get(key),
+      'tryGetPortValue',
+      `port:${key}`,
+      `port '${blockId}.${portName}'`,
+    );
     if (!meta) return undefined;
     try {
-      if (requireInst(meta.type.extent.cardinality, 'cardinality').kind === 'many') {
+      if (this.readCardinalityKind(meta, 'tryGetPortValue', `port:${key}`, `port '${blockId}.${portName}'`) === 'many') {
         return this.queryFieldValue(meta);
       }
       return this.queryScalarValue(meta);
@@ -579,7 +606,12 @@ class DebugService {
    * Used by UI to derive tracking policy and chart shape for port probes.
    */
   getPortMetadata(blockId: string, portName: string): EdgeMetadata | undefined {
-    return this.portToSlotMap.get(`${blockId}:${portName}`);
+    return this.validateMetadata(
+      this.portToSlotMap.get(`${blockId}:${portName}`),
+      'reporter',
+      `port:${blockId}:${portName}`,
+      `port '${blockId}.${portName}'`,
+    );
   }
 
   /**
@@ -587,7 +619,12 @@ class DebugService {
    * Used by UI to determine whether to track a field before polling.
    */
   getEdgeMetadata(edgeId: string): EdgeMetadata | undefined {
-    return this.edgeToSlotMap.get(edgeId);
+    return this.validateMetadata(
+      this.edgeToSlotMap.get(edgeId),
+      'reporter',
+      `edge:${edgeId}`,
+      `edge '${edgeId}'`,
+    );
   }
 
   /**
@@ -771,14 +808,14 @@ class DebugService {
 
     if (this.autoTrackAllDebugData) {
       for (const [edgeId, meta] of this.edgeToSlotMap) {
-        if (this.isScalarHistoryEligible(meta.type)) {
+        if (this.isScalarHistoryEligible(meta, 'reporter', `edge:${edgeId}`, `edge '${edgeId}'`)) {
           const key: DebugTargetKey = { kind: 'edge', edgeId };
           desiredHistory.set(serializeKey(key), key);
         }
       }
 
       for (const [portKey, meta] of this.portToSlotMap) {
-        if (this.isScalarHistoryEligible(meta.type)) {
+        if (this.isScalarHistoryEligible(meta, 'reporter', `port:${portKey}`, `port '${portKey}'`)) {
           const parsed = this.parseDebugPortKey(portKey);
           if (parsed) {
             const key: DebugTargetKey = { kind: 'port', blockId: parsed.blockId, portName: parsed.portName };
@@ -809,10 +846,15 @@ class DebugService {
   /**
    * Scalar history supports one-cardinality sampleable payloads only.
    */
-  private isScalarHistoryEligible(type: CanonicalType): boolean {
-    const cardinality = requireInst(type.extent.cardinality, 'cardinality').kind;
+  private isScalarHistoryEligible(
+    meta: EdgeMetadata,
+    source: DebugServiceIssue['source'],
+    key: string,
+    label: string,
+  ): boolean {
+    const cardinality = this.readCardinalityKind(meta, source, key, label);
     if (cardinality !== 'one') return false;
-    const encoding = getSampleEncoding(type.payload);
+    const encoding = getSampleEncoding(meta.type.payload);
     return encoding.sampleable && encoding.stride === 1;
   }
 
@@ -830,9 +872,19 @@ class DebugService {
 
   private resolveDebugTargetMeta(key: DebugTargetKey): EdgeMetadata | undefined {
     if (key.kind === 'edge') {
-      return this.edgeToSlotMap.get(key.edgeId);
+      return this.validateMetadata(
+        this.edgeToSlotMap.get(key.edgeId),
+        'reporter',
+        `edge:${key.edgeId}`,
+        `edge '${key.edgeId}'`,
+      );
     }
-    return this.portToSlotMap.get(`${key.blockId}:${key.portName}`);
+    return this.validateMetadata(
+      this.portToSlotMap.get(`${key.blockId}:${key.portName}`),
+      'reporter',
+      `port:${key.blockId}:${key.portName}`,
+      `port '${key.blockId}.${key.portName}'`,
+    );
   }
 
   private resolveSlotMetadata(slotId: ValueSlot): EdgeMetadata | undefined {
@@ -845,10 +897,26 @@ class DebugService {
     }
     const index = new Map<ValueSlot, EdgeMetadata>();
     for (const meta of this.edgeToSlotMap.values()) {
-      index.set(meta.slotId, meta);
+      const valid = this.validateMetadata(
+        meta,
+        'reporter',
+        `slot:${meta.slotId as number}`,
+        `slot '${meta.slotId as number}'`,
+      );
+      if (valid) {
+        index.set(valid.slotId, valid);
+      }
     }
     for (const meta of this.portToSlotMap.values()) {
-      index.set(meta.slotId, meta);
+      const valid = this.validateMetadata(
+        meta,
+        'reporter',
+        `slot:${meta.slotId as number}`,
+        `slot '${meta.slotId as number}'`,
+      );
+      if (valid) {
+        index.set(valid.slotId, valid);
+      }
     }
     this.slotMetadataBySlot = index;
     return index;
@@ -856,7 +924,9 @@ class DebugService {
 
   private trackSpyScalarSlotForKey(key: DebugTargetKey): void {
     const meta = this.resolveDebugTargetMeta(key);
-    if (!meta || !this.isScalarHistoryEligible(meta.type)) {
+    const keyLabel = key.kind === 'edge' ? `edge '${key.edgeId}'` : `port '${key.blockId}.${key.portName}'`;
+    const keyId = key.kind === 'edge' ? `edge:${key.edgeId}` : `port:${key.blockId}:${key.portName}`;
+    if (!meta || !this.isScalarHistoryEligible(meta, 'reporter', keyId, keyLabel)) {
       return;
     }
     const refs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
@@ -871,7 +941,9 @@ class DebugService {
 
   private untrackSpyScalarSlotForKey(key: DebugTargetKey): void {
     const meta = this.resolveDebugTargetMeta(key);
-    if (!meta || !this.isScalarHistoryEligible(meta.type)) {
+    const keyLabel = key.kind === 'edge' ? `edge '${key.edgeId}'` : `port '${key.blockId}.${key.portName}'`;
+    const keyId = key.kind === 'edge' ? `edge:${key.edgeId}` : `port:${key.blockId}:${key.portName}`;
+    if (!meta || !this.isScalarHistoryEligible(meta, 'reporter', keyId, keyLabel)) {
       return;
     }
     const refs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
@@ -895,7 +967,9 @@ class DebugService {
       const refs = this.trackedHistoryRefs.get(serialized) ?? 0;
       if (refs <= 0) continue;
       const meta = this.resolveDebugTargetMeta(key);
-      if (!meta || !this.isScalarHistoryEligible(meta.type)) continue;
+      const keyLabel = key.kind === 'edge' ? `edge '${key.edgeId}'` : `port '${key.blockId}.${key.portName}'`;
+      const keyId = key.kind === 'edge' ? `edge:${key.edgeId}` : `port:${key.blockId}:${key.portName}`;
+      if (!meta || !this.isScalarHistoryEligible(meta, 'reporter', keyId, keyLabel)) continue;
       const slotRefs = this.trackedSpyScalarSlotRefs.get(meta.slotId) ?? 0;
       this.trackedSpyScalarSlotRefs.set(meta.slotId, slotRefs + refs);
       this.trackedSpyScalarSlots.add(meta.slotId);
@@ -919,6 +993,38 @@ class DebugService {
     for (const subscriber of this.debugProbeSubscribers) {
       subscriber(trackedSubscriptionCount);
     }
+  }
+
+  private validateMetadata(
+    meta: EdgeMetadata | undefined,
+    source: DebugServiceIssue['source'],
+    key: string,
+    label: string,
+  ): EdgeMetadata | undefined {
+    if (!meta) return undefined;
+    return this.readCardinalityKind(meta, source, key, label) ? meta : undefined;
+  }
+
+  private readCardinalityKind(
+    meta: EdgeMetadata,
+    source: DebugServiceIssue['source'],
+    key: string,
+    label: string,
+  ): 'zero' | 'one' | 'many' | null {
+    const cardinality = readInst(meta.type.extent.cardinality);
+    if (cardinality) {
+      return cardinality.kind;
+    }
+    // [LAW:no-silent-fallbacks] Invalid compile metadata must degrade UI behavior
+    // without crashing, but the failure still has to be surfaced in diagnostics.
+    this.recordIssue({
+      level: 'error',
+      source,
+      key,
+      message: `Unresolved cardinality reached debug metadata for ${label}`,
+      detail: meta.type.extent.cardinality,
+    });
+    return null;
   }
 
   private recordIssue(issue: DebugServiceIssue): void {

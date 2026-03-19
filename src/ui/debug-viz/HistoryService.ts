@@ -14,7 +14,7 @@
 
 import type { ValueSlot } from '../../types';
 import type { CanonicalType } from '../../core/canonical-types';
-import { requireInst } from '../../core/canonical-types';
+import { readInst } from '../../core/canonical-types';
 import type { DebugTargetKey, HistoryView, Stride } from './types';
 import { serializeKey, getSampleEncoding } from './types';
 
@@ -127,7 +127,7 @@ export class HistoryService {
     if (!meta) return;
 
     // [LAW:one-source-of-truth] Derive cardinality from CanonicalType, not debug-domain labels.
-    const cardinality = requireInst(meta.type.extent.cardinality, 'cardinality').kind;
+    const cardinality = readInst(meta.type.extent.cardinality)?.kind;
     if (cardinality !== 'one') return;
 
     // Guard: must be sampleable with stride=1
@@ -226,7 +226,7 @@ export class HistoryService {
     for (const [serialized, entry] of this.entries) {
       const meta = this.resolver(entry.key);
 
-      if (!meta || requireInst(meta.type.extent.cardinality, 'cardinality').kind !== 'one') {
+      if (!meta || readInst(meta.type.extent.cardinality)?.kind !== 'one') {
         // Key no longer valid — pause (set slot to null)
         if (entry.slotId !== null) {
           this.removeFromReverseMap(entry.slotId, serialized);
