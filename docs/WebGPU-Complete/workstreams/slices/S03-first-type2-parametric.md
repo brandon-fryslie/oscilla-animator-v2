@@ -29,4 +29,4 @@ Render a parametric curve shape using template topology + per-instance control p
 - `docs/WebGPU-Complete/P3-3_GPU_Draw_Prep__Autonomous_Rendering_Logistics.md`
 - `docs/WebGPU-Complete/P3-4__WebGPU_Render_Pass_Deep_Dive.md`
 - `docs/WebGPU-Complete/shapes/Shapes 2_ The Parametric Curve (Template Instancing).md`
-
+- `docs/WebGPU-Complete/workstreams/slices/S03A-cubic-bezier-ribbon-naga-ast-reference.md`
