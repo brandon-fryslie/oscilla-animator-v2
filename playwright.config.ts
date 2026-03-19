@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5784',
+    baseURL: 'http://localhost:5794',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     launchOptions: {
@@ -26,8 +26,10 @@ export default defineConfig({
   webServer: {
     // [LAW:single-enforcer] The Playwright harness owns the dev-server launch
     // contract, including the exact port it binds for browser tests.
-    command: 'pnpm exec vite --port 5784 --strictPort',
-    port: 5784,
-    reuseExistingServer: !process.env.CI,
+    // [LAW:one-source-of-truth] Use one repo-dedicated port so tests cannot
+    // silently attach to another worktree's Vite server.
+    command: 'pnpm exec vite --port 5794 --strictPort',
+    port: 5794,
+    reuseExistingServer: false,
   },
 });
