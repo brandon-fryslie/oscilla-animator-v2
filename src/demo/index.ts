@@ -16,6 +16,7 @@ export {
 export {
   DEMO_GROUP_LABELS,
   DEMO_GROUP_ORDER,
+  type DemoAvailability,
   type DemoCatalogEntry,
   type DemoGroup,
   type DemoPurpose,

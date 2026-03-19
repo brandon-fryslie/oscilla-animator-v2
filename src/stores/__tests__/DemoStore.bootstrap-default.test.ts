@@ -25,6 +25,7 @@ describe('DemoStore bootstrap default', () => {
         filename: 'broken.hcl',
         relativePath: 'integration/broken.hcl',
         group: 'integration',
+        availability: 'active',
         name: 'Broken',
         hcl: 'this is not valid hcl',
         summary: 'Broken fixture',
@@ -35,6 +36,7 @@ describe('DemoStore bootstrap default', () => {
         filename: GPU_BOOTSTRAP_DEMO_FILENAME,
         relativePath: 'integration/gpu-bootstrap-triangle.hcl',
         group: 'integration',
+        availability: 'active',
         name: 'Bootstrap',
         hcl: store.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME)!.hcl,
         summary: 'Bootstrap fixture',
@@ -48,5 +50,16 @@ describe('DemoStore bootstrap default', () => {
 
     expect(store.currentFilename).toBe(GPU_BOOTSTRAP_DEMO_FILENAME);
     expect(loadFromHCL).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not load temporarily disabled demos', () => {
+    const loadFromHCL = vi.fn();
+    const store = new DemoStore({ loadFromHCL } as never);
+    const disabledDemo = store.demos.find((demo) => demo.availability === 'disabled');
+
+    expect(disabledDemo).toBeDefined();
+    expect(store.selectDemo(disabledDemo!.filename)).toBe(false);
+    expect(store.currentFilename).toBeNull();
+    expect(loadFromHCL).not.toHaveBeenCalled();
   });
 });
