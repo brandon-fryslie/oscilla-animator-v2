@@ -176,7 +176,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       lastRegistryFailureRef.current = null;
       return;
     }
-    if (!failure || lastRegistryFailureRef.current === failure.message) return;
+    if (lastRegistryFailureRef.current === failure.message) return;
     lastRegistryFailureRef.current = failure.message;
     const offendingBlock = failure.offendingBlockId ? patch.blocks.get(failure.offendingBlockId) : null;
     // [LAW:single-enforcer] SharedExpressionEditor is the recovery boundary for

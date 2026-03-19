@@ -144,18 +144,42 @@ function cloneOutputPort(outputPort: OutputPort): OutputPort {
   });
 }
 
+function cloneBlockRole(role: BlockRole): BlockRole {
+  return Object.freeze({
+    ...role,
+    meta: Object.freeze({ ...role.meta }),
+  }) as BlockRole;
+}
+
 function cloneBlockSnapshot(block: Block): Block {
   return Object.freeze({
     ...block,
+    role: cloneBlockRole(block.role),
     params: Object.freeze({ ...block.params }),
     inputPorts: new Map(Array.from(block.inputPorts.entries(), ([portId, port]) => [portId, cloneInputPort(port)])),
     outputPorts: new Map(Array.from(block.outputPorts.entries(), ([portId, port]) => [portId, cloneOutputPort(port)])),
   });
 }
 
+function cloneEndpoint(endpoint: Endpoint): Endpoint {
+  return Object.freeze({
+    ...endpoint,
+  });
+}
+
+function cloneEdgeRole(role: EdgeRole): EdgeRole {
+  return Object.freeze({
+    ...role,
+    meta: Object.freeze({ ...role.meta }),
+  }) as EdgeRole;
+}
+
 function cloneEdgeSnapshot(edge: Edge): Edge {
   return Object.freeze({
     ...edge,
+    from: cloneEndpoint(edge.from),
+    to: cloneEndpoint(edge.to),
+    role: cloneEdgeRole(edge.role),
   });
 }
 
