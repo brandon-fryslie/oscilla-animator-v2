@@ -47,7 +47,7 @@ export function register(): void {
         type: canonicalType(FLOAT),
         defaultValue: 0.1,
         exposedAsPort: false,
-        uiHint: { kind: 'slider', min: 0.001, max: 2, step: 0.001 },
+        uiHint: { kind: 'slider', min: 0.005, max: 0.5, step: 0.001 },
       },
     },
     outputs: {

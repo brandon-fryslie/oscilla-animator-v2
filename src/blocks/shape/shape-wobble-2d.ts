@@ -46,14 +46,14 @@ export function register(): void {
         type: canonicalType(FLOAT),
         defaultValue: 0.005,
         defaultSource: defaultSourceConst(0.005),
-        uiHint: { kind: 'slider', min: 0, max: 0.05, step: 0.0005 },
+        uiHint: { kind: 'slider', min: 0, max: 0.02, step: 0.0005 },
       },
       frequency: {
         label: 'Frequency',
         type: canonicalType(FLOAT),
         defaultValue: 3,
         defaultSource: defaultSourceConst(3),
-        uiHint: { kind: 'slider', min: 0, max: 24, step: 0.25 },
+        uiHint: { kind: 'slider', min: 0, max: 12, step: 0.25 },
       },
     },
     outputs: {

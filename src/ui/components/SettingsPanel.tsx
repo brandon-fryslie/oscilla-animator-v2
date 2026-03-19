@@ -21,6 +21,7 @@ import { useStore } from '../../stores';
 import { NumberInput } from './common/NumberInput';
 import { SelectInput } from './common/SelectInput';
 import { TextInput } from './common/TextInput';
+import { SliderWithInput } from './common/SliderWithInput';
 import type { SettingsToken, FieldUIHint } from '../../settings/types';
 
 export const SettingsPanel: React.FC = observer(() => {
@@ -127,7 +128,6 @@ const FieldControl: React.FC<{
       );
 
     case 'number':
-    case 'slider':
       return (
         <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
           {label}
@@ -140,6 +140,24 @@ const FieldControl: React.FC<{
             size="xs"
           />
         </Group>
+      );
+
+    case 'slider':
+      return (
+        <div style={{ paddingTop: rem(2), paddingBottom: rem(2) }}>
+          {/* [LAW:one-source-of-truth] Settings sliders reuse the shared slider instead of introducing a panel-specific variant. */}
+          <SliderWithInput
+            label={hint.label}
+            value={value as number}
+            onChange={(next) => onChange(next)}
+            min={hint.min ?? 0}
+            max={hint.max ?? 1}
+            step={hint.step ?? 0.01}
+            helperText={hint.description}
+            size="xs"
+            editableBounds
+          />
+        </div>
       );
 
     case 'select':

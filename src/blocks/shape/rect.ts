@@ -47,14 +47,14 @@ export function register(): void {
         type: canonicalType(FLOAT),
         defaultValue: 0.04,
         defaultSource: defaultSourceConst(0.04),
-        uiHint: { kind: 'slider', min: 0.001, max: 0.5, step: 0.001 },
+        uiHint: { kind: 'slider', min: 0.01, max: 0.12, step: 0.001 },
       },
       height: {
         label: 'Height',
         type: canonicalType(FLOAT),
         defaultValue: 0.02,
         defaultSource: defaultSourceConst(0.02),
-        uiHint: { kind: 'slider', min: 0.001, max: 0.5, step: 0.001 },
+        uiHint: { kind: 'slider', min: 0.005, max: 0.08, step: 0.001 },
       },
       rotation: {
         label: 'Rotation',
@@ -75,7 +75,7 @@ export function register(): void {
         type: canonicalType(INT),
         defaultValue: 64,
         defaultSource: defaultSourceConst(64),
-        uiHint: { kind: 'slider', min: 8, max: 256, step: 1 },
+        uiHint: { kind: 'slider', min: 16, max: 128, step: 1 },
       },
     },
     outputs: {

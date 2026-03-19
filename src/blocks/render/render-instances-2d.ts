@@ -57,7 +57,7 @@ export function register(): void {
         type: inferType(FLOAT, unitVar('render_scale_U'), { cardinality: RENDER_SCALE_CARD }),
         defaultValue: 1.0,
         defaultSource: defaultSourceConst(1.0),
-        uiHint: { kind: 'slider', min: 0.1, max: 1, step: 0.1 },
+        uiHint: { kind: 'slider', min: 0.25, max: 2, step: 0.05 },
       },
     },
     outputs: {},
