@@ -406,56 +406,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 </Badge>
               )}
             </Group>
-          </Group>
-
-          <Group gap="xs" wrap="nowrap">
-            {!isMobile && (
-              <Badge
-                variant="outline"
-                color="dark"
-                size="lg"
-                radius="md"
-                styles={{
-                  root: {
-                    fontFamily: 'var(--mantine-font-family-monospace)',
-                    fontWeight: 500,
-                    fontSize: rem(11),
-                    padding: `${rem(4)} ${rem(12)}`,
-                    borderColor: 'rgba(139, 92, 246, 0.3)',
-                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                  },
-                }}
-              >
-                {stats}
-              </Badge>
-            )}
-
-            {diagnostics.gpuFaultState && (
-              <Tooltip
-                label={diagnostics.gpuFaultState.message}
-                withArrow
-                multiline
-                w={300}
-              >
-                <Badge
-                  variant="filled"
-                  color={diagnostics.gpuFaultState.severity === 'fatal' ? 'red' : 'orange'}
-                  size="lg"
-                  radius="md"
-                  styles={{
-                    root: {
-                      fontFamily: 'var(--mantine-font-family-monospace)',
-                      fontWeight: 700,
-                      fontSize: rem(11),
-                      padding: `${rem(4)} ${rem(12)}`,
-                      cursor: 'help',
-                    },
-                  }}
-                >
-                  {diagnostics.gpuFaultState.severity === 'fatal' ? 'GPU LOST' : 'GPU ERROR'}
-                </Badge>
-              </Tooltip>
-            )}
 
             <Button
               variant="gradient"
@@ -497,6 +447,56 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 <span style={{ fontSize: rem(13), fontWeight: 700 }}>☰</span>
               </ActionIcon>
             </Tooltip>
+          </Group>
+
+          <Group gap="xs" wrap="nowrap">
+            {diagnostics.gpuFaultState && (
+              <Tooltip
+                label={diagnostics.gpuFaultState.message}
+                withArrow
+                multiline
+                w={300}
+              >
+                <Badge
+                  variant="filled"
+                  color={diagnostics.gpuFaultState.severity === 'fatal' ? 'red' : 'orange'}
+                  size="lg"
+                  radius="md"
+                  styles={{
+                    root: {
+                      fontFamily: 'var(--mantine-font-family-monospace)',
+                      fontWeight: 700,
+                      fontSize: rem(11),
+                      padding: `${rem(4)} ${rem(12)}`,
+                      cursor: 'help',
+                    },
+                  }}
+                >
+                  {diagnostics.gpuFaultState.severity === 'fatal' ? 'GPU LOST' : 'GPU ERROR'}
+                </Badge>
+              </Tooltip>
+            )}
+
+            {!isMobile && (
+              <Badge
+                variant="outline"
+                color="dark"
+                size="lg"
+                radius="md"
+                styles={{
+                  root: {
+                    fontFamily: 'var(--mantine-font-family-monospace)',
+                    fontWeight: 500,
+                    fontSize: rem(11),
+                    padding: `${rem(4)} ${rem(12)}`,
+                    borderColor: 'rgba(139, 92, 246, 0.3)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  },
+                }}
+              >
+                {stats}
+              </Badge>
+            )}
           </Group>
         </Group>
       </Box>
