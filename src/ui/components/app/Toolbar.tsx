@@ -172,12 +172,14 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   );
   const featuredDemos = useMemo(
     () =>
-      demo.demos.filter(
-        (entry) =>
-          !isDisabledDemo(entry) &&
-          entry.purposes.includes('showcase') &&
-          matchesDemoQuery(entry, normalizedDemoQuery),
-      ).slice(0, 4),
+      demo.demos
+        .filter(
+          (entry) =>
+            !isDisabledDemo(entry) &&
+            entry.featuredRank != null &&
+            matchesDemoQuery(entry, normalizedDemoQuery),
+        )
+        .sort((left, right) => (left.featuredRank ?? Number.POSITIVE_INFINITY) - (right.featuredRank ?? Number.POSITIVE_INFINITY)),
     [demo.demos, normalizedDemoQuery],
   );
   const activeDemoGroups = useMemo(
@@ -515,73 +517,93 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         }
       >
         <Stack gap="md">
-          {currentDemo && (
-            <Paper
-              withBorder
-              radius="md"
-              p="sm"
-              style={{
-                background: 'linear-gradient(180deg, rgba(76, 29, 149, 0.24) 0%, rgba(15, 23, 42, 0.5) 100%)',
-                borderColor: 'rgba(236, 72, 153, 0.3)',
-              }}
-            >
-              <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
-                <Stack gap={rem(2)} style={{ minWidth: 0 }}>
-                  <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
-                    Current Demo
-                  </Text>
-                  <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
-                    {currentDemo.name}
-                  </Text>
-                  <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
-                    {currentDemo.summary}
-                  </Text>
-                </Stack>
-                <Badge size="xs" variant="filled" color="pink" style={{ flexShrink: 0, alignSelf: 'flex-start' }}>
-                  Live
-                </Badge>
-              </Group>
-            </Paper>
-          )}
-
           <TextInput
             value={demoQuery}
             onChange={(event) => setDemoQuery(event.currentTarget.value)}
             placeholder="Search demos, highlights, or status"
           />
 
-          {featuredDemos.length > 0 && (
-            <>
-              <Stack gap={0}>
-                <Text fw={700} size="sm">Featured</Text>
-                <Text size="xs" c="dimmed">
-                  Quick path to the strongest visual demos.
-                </Text>
-              </Stack>
-              <SimpleGrid cols={1} spacing="sm">
-                {featuredDemos.map((entry) => (
-                  <DemoCard
-                    key={entry.filename}
-                    demo={entry}
-                    selected={entry.filename === demo.currentFilename}
-                    featured
-                    onSelect={handleDemoSelect}
-                  />
-                ))}
-              </SimpleGrid>
-              <Divider />
-            </>
-          )}
-
           <Accordion
             multiple
             variant="separated"
             radius="md"
-            defaultValue={[
-              ...activeDemoGroups.map((group) => group.key),
-              ...(disabledDemos.length > 0 ? ['disabled'] : []),
-            ]}
           >
+            {currentDemo && (
+              <Accordion.Item value="current-demo">
+                <Accordion.Control>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Stack gap={0}>
+                      <Text fw={700} size="sm">Current Demo</Text>
+                      <Text size="xs" c="dimmed">
+                        {currentDemo.name}
+                      </Text>
+                    </Stack>
+                    <Badge size="xs" variant="filled" color="pink">
+                      Live
+                    </Badge>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <Paper
+                    withBorder
+                    radius="md"
+                    p="sm"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(76, 29, 149, 0.24) 0%, rgba(15, 23, 42, 0.5) 100%)',
+                      borderColor: 'rgba(236, 72, 153, 0.3)',
+                    }}
+                  >
+                    <Stack gap={rem(6)}>
+                      <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
+                        {currentDemo.name}
+                      </Text>
+                      <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
+                        {currentDemo.summary}
+                      </Text>
+                      <Group gap={rem(6)}>
+                        {currentDemo.highlights.slice(0, 3).map((highlight) => (
+                          <Badge key={highlight} size="xs" variant="outline" color="gray" radius="sm">
+                            {highlight}
+                          </Badge>
+                        ))}
+                      </Group>
+                    </Stack>
+                  </Paper>
+                </Accordion.Panel>
+              </Accordion.Item>
+            )}
+
+            {featuredDemos.length > 0 && (
+              <Accordion.Item value="featured">
+                <Accordion.Control>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Stack gap={0}>
+                      <Text fw={700} size="sm">Featured</Text>
+                      <Text size="xs" c="dimmed">
+                        Quick path to the strongest visual demos.
+                      </Text>
+                    </Stack>
+                    <Badge size="xs" variant="light" color="grape">
+                      {featuredDemos.length}
+                    </Badge>
+                  </Group>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <SimpleGrid cols={1} spacing="sm">
+                    {featuredDemos.map((entry) => (
+                      <DemoCard
+                        key={entry.filename}
+                        demo={entry}
+                        selected={entry.filename === demo.currentFilename}
+                        featured
+                        onSelect={handleDemoSelect}
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Accordion.Panel>
+              </Accordion.Item>
+            )}
+
             {activeDemoGroups.map((group: HclDemoGroup) => (
               <Accordion.Item key={group.key} value={group.key}>
                 <Accordion.Control>
