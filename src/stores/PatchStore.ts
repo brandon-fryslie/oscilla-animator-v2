@@ -114,6 +114,64 @@ function isTimeSourceBlockType(blockType: string): boolean {
   return getBlockDefinition(blockType)?.capability === 'time';
 }
 
+function cloneLensAttachment(lens: LensAttachment): LensAttachment {
+  return Object.freeze({
+    ...lens,
+    ...(lens.params ? { params: Object.freeze({ ...lens.params }) } : {}),
+  });
+}
+
+function cloneDefaultSource(defaultSource: DefaultSource | undefined): DefaultSource | undefined {
+  if (!defaultSource) return undefined;
+  return Object.freeze({
+    ...defaultSource,
+    ...(defaultSource.params ? { params: Object.freeze({ ...defaultSource.params }) } : {}),
+  });
+}
+
+function cloneInputPort(inputPort: InputPort): InputPort {
+  return Object.freeze({
+    ...inputPort,
+    defaultSource: cloneDefaultSource(inputPort.defaultSource),
+    ...(inputPort.lenses ? { lenses: Object.freeze(inputPort.lenses.map(cloneLensAttachment)) } : {}),
+  });
+}
+
+function cloneOutputPort(outputPort: OutputPort): OutputPort {
+  return Object.freeze({
+    ...outputPort,
+    ...(outputPort.lenses ? { lenses: Object.freeze(outputPort.lenses.map(cloneLensAttachment)) } : {}),
+  });
+}
+
+function cloneBlockSnapshot(block: Block): Block {
+  return Object.freeze({
+    ...block,
+    params: Object.freeze({ ...block.params }),
+    role: Object.freeze({ ...block.role, meta: Object.freeze({ ...block.role.meta }) }),
+    inputPorts: new Map(Array.from(block.inputPorts.entries(), ([portId, port]) => [portId, cloneInputPort(port)])),
+    outputPorts: new Map(Array.from(block.outputPorts.entries(), ([portId, port]) => [portId, cloneOutputPort(port)])),
+  });
+}
+
+function cloneEdgeSnapshot(edge: Edge): Edge {
+  return Object.freeze({
+    ...edge,
+    from: Object.freeze({ ...edge.from }),
+    to: Object.freeze({ ...edge.to }),
+    role: Object.freeze({ ...edge.role, meta: Object.freeze({ ...edge.role.meta }) }),
+  });
+}
+
+function clonePatchData(patch: Patch): PatchData {
+  return {
+    // [LAW:one-source-of-truth] PatchStore owns canonical block objects; load/read
+    // boundaries must clone external patch values instead of sharing mutable references.
+    blocks: new Map(Array.from(patch.blocks.entries(), ([blockId, block]) => [blockId, cloneBlockSnapshot(block)])),
+    edges: patch.edges.map(cloneEdgeSnapshot),
+  };
+}
+
 export class PatchStore {
   // Private mutable state - THE source of truth
   private _data: PatchData;
@@ -239,10 +297,10 @@ export class PatchStore {
     // Create new snapshot with defensive copies
     // We still create copies here, but only when data actually changes,
     // not on every access (which was the bug)
-    const snapshot = {
-      blocks: new Map(this._data.blocks),
-      edges: [...this._data.edges],
-    };
+    const snapshot = clonePatchData({
+      blocks: this._data.blocks,
+      edges: this._data.edges,
+    });
 
     // Freeze the snapshot to prevent accidental mutations
     // This provides runtime safety - any mutation attempt will fail
@@ -1229,10 +1287,7 @@ export class PatchStore {
    */
   loadPatch(patch: Patch): void {
     this._hasStructuralChange = true;
-    this._data = {
-      blocks: new Map(patch.blocks),
-      edges: [...patch.edges],
-    };
+    this._data = clonePatchData(patch);
 
     // Update ID generators to avoid conflicts with loaded IDs
     // Find max block ID
