@@ -950,11 +950,9 @@ function classifyShapeForRenderStep(
     );
   }
 
-  // [LAW:one-type-per-behavior] All current shapes are Type 1 Rigid and use
-  // non-indexed draws with GPU vertex pulling. The vertex shader generates
-  // triangle fan geometry from canonical ShapeBank topology data. Future shape
-  // classes (parametric, ribbon, SDF, text) will add new classification
-  // branches here.
+  // [LAW:one-type-per-behavior] The current geometry path is Type 1 rigid and
+  // uses non-indexed draws with GPU vertex pulling from canonical ShapeBank
+  // topology data.
   // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
   // to nonIndexed (GPU vertex pulling from topologyBank).
   const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
