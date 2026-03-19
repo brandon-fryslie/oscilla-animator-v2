@@ -3,11 +3,14 @@ export const DEMO_GROUP_ORDER = ['examples', 'features', 'showcase', 'integratio
 export type DemoGroup = typeof DEMO_GROUP_ORDER[number];
 
 export type DemoPurpose = 'example' | 'feature' | 'integration' | 'showcase';
+export type DemoAvailability = 'active' | 'disabled';
 
 export interface DemoCatalogEntry {
   readonly filename: string;
   readonly relativePath: string;
   readonly group: DemoGroup;
+  readonly availability?: DemoAvailability;
+  readonly availabilityReason?: string;
   readonly summary: string;
   readonly purposes: readonly DemoPurpose[];
   readonly highlights: readonly string[];
@@ -132,14 +135,16 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     filename: 'path-flow.hcl',
     relativePath: 'features/path-flow.hcl',
     group: 'features',
-    summary: 'PathLayout and AttractorLayout working together on a flowing path necklace.',
+    summary: 'PathLayout sampling turned into a centered flowing path necklace.',
     purposes: ['feature', 'showcase'],
-    highlights: ['path layout', 'attractor layout', 'procedural polygon'],
+    highlights: ['path layout', 'expression recenter', 'procedural polygon'],
   },
   {
     filename: 'perspective-camera.hcl',
     relativePath: 'features/perspective-camera.hcl',
     group: 'features',
+    availability: 'disabled',
+    availabilityReason: 'Temporarily disabled while the GPU renderer lacks perspective-camera support.',
     summary: 'Best single patch for the current perspective camera authoring surface.',
     purposes: ['feature', 'integration', 'showcase'],
     highlights: ['camera', '3D', 'slew'],
