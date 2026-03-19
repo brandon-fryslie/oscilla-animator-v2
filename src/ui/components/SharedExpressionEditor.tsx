@@ -298,8 +298,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       const outputSuggestion = suggestion as OutputSuggestion;
       patchStore.addCollectEdge(
         { kind: 'port', blockId: outputSuggestion.blockId, slotId: outputSuggestion.portId },
-        { kind: 'port', blockId, slotId: 'refs' },
-        `${outputSuggestion.blockId}.${outputSuggestion.portId}`
+        { kind: 'port', blockId, slotId: 'refs' }
       );
     }
 
