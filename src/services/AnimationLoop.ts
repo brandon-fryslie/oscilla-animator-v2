@@ -14,6 +14,7 @@ import { isRuntimeConsoleEnabled } from '../testing/test-params';
 import {
   markRuntimeFrameAdvanced,
   markRuntimeHeartbeat,
+  shouldEnableRuntimeProbe,
   type RuntimeProbeHeartbeat,
 } from '../testing/runtime-probe';
 
@@ -116,6 +117,7 @@ function readRuntimeInputPlaneValues(currentState: RuntimeState | null): Runtime
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
+const RUNTIME_HEARTBEAT_ENABLED = RUNTIME_CONSOLE_ENABLED || shouldEnableRuntimeProbe();
 const FPS_UPDATE_INTERVAL_MS = 500;
 const TELEMETRY_LOG_INTERVAL_MS = 5000;
 const TELEMETRY_INITIAL_LOG_AT = 0;
@@ -362,9 +364,11 @@ function runFpsCadence({
     fps: state.fps,
     telemetry: heartbeatInputs.telemetry,
   });
-  const heartbeat = buildRuntimeHeartbeat(heartbeatInputs);
-  markRuntimeHeartbeat(heartbeat, now);
-  emitRuntimeConsoleHeartbeat(heartbeat);
+  if (RUNTIME_HEARTBEAT_ENABLED) {
+    const heartbeat = buildRuntimeHeartbeat(heartbeatInputs);
+    markRuntimeHeartbeat(heartbeat, now);
+    emitRuntimeConsoleHeartbeat(heartbeat);
+  }
   state.frameCount = 0;
   state.lastFpsUpdate = now;
   state.minFrameTime = Infinity;
@@ -467,13 +471,15 @@ export function executeAnimationFrame(
 
   state.frameCount++;
   const now = performance.now();
-  // [LAW:one-source-of-truth] Preview probes read the same live renderer
-  // snapshot on every frame instead of inferring runtime state from cadence
-  // throttles or console output.
-  markRuntimeHeartbeat(
-    buildRuntimeHeartbeat(readRuntimeHeartbeatInputs(currentProgram, store, renderer, state.fps)),
-    now,
-  );
+  if (RUNTIME_HEARTBEAT_ENABLED) {
+    // [LAW:one-source-of-truth] Probe/console consumers read the same live
+    // renderer heartbeat payload when enabled instead of reconstructing
+    // runtime state from throttled logs.
+    markRuntimeHeartbeat(
+      buildRuntimeHeartbeat(readRuntimeHeartbeatInputs(currentProgram, store, renderer, state.fps)),
+      now,
+    );
+  }
   runFpsCadence({
     now,
     state,

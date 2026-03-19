@@ -8,7 +8,6 @@ import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import { maybeBuildFluidGpuBundle } from './fluid-gpu-bundle';
 import type {
-  CompiledGpuArtifactBundle,
   CompiledGpuPassBundle,
   CompileWorkerRequest,
   CompileWorkerResponse,
