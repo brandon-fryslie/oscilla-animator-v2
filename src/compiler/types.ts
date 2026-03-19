@@ -4,6 +4,8 @@
  * Error types and other compiler-specific types.
  */
 
+import type { BlockParamSourceSpan } from '../diagnostics/sourceSpan';
+
 // =============================================================================
 // Compile Error (Unified)
 // =============================================================================
@@ -58,6 +60,9 @@ export interface CompileError {
 
   /** Optional additional details */
   readonly details?: Record<string, unknown>;
+
+  /** Optional inline source span for parameter editor diagnostics. */
+  readonly sourceSpan?: BlockParamSourceSpan;
 }
 
 /**
@@ -67,9 +72,10 @@ export function compileError(
   code: CompileErrorCode | string,
   message: string,
   where?: CompileErrorWhere,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  sourceSpan?: BlockParamSourceSpan,
 ): CompileError {
-  return { code, message, where, details };
+  return { code, message, where, details, sourceSpan };
 }
 
 // =============================================================================

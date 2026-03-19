@@ -27,6 +27,12 @@ import { addressToString } from '../../types/canonical-address';
  * - Valid reference (isReference = true, metadata populated)
  */
 export interface TokenizedSegment {
+  /** Absolute start offset in the source text */
+  readonly start: number;
+
+  /** Absolute end offset in the source text */
+  readonly end: number;
+
   /** The text of this segment */
   readonly text: string;
 
@@ -117,6 +123,8 @@ export function tokenizeExpression(
     // Add plain text before this match
     if (matchIndex > lastIndex) {
       segments.push({
+        start: lastIndex,
+        end: matchIndex,
         text: text.substring(lastIndex, matchIndex),
         isReference: false,
       });
@@ -132,6 +140,8 @@ export function tokenizeExpression(
         const sourceAddress = addressToString(canonicalAddress);
         const isConnected = connectedAddresses.has(sourceAddress);
         segments.push({
+          start: matchIndex,
+          end: matchIndex + fullMatch.length,
           text: fullMatch,
           isReference: true,
           canonicalName: blockName,
@@ -141,6 +151,8 @@ export function tokenizeExpression(
         });
       } else {
         segments.push({
+          start: matchIndex,
+          end: matchIndex + fullMatch.length,
           text: fullMatch,
           isReference: false,
           isConstant: false,
@@ -150,6 +162,8 @@ export function tokenizeExpression(
       const constant = resolveExpressionConstant(ident);
       if (constant) {
         segments.push({
+          start: matchIndex,
+          end: matchIndex + ident.length,
           text: ident,
           isReference: false,
           isConstant: true,
@@ -158,6 +172,8 @@ export function tokenizeExpression(
         });
       } else {
         segments.push({
+          start: matchIndex,
+          end: matchIndex + ident.length,
           text: ident,
           isReference: false,
           isConstant: false,
@@ -165,6 +181,8 @@ export function tokenizeExpression(
       }
     } else {
       segments.push({
+        start: matchIndex,
+        end: matchIndex + fullMatch.length,
         text: fullMatch,
         isReference: false,
         isConstant: false,
@@ -177,6 +195,8 @@ export function tokenizeExpression(
   // Add remaining text after last match
   if (lastIndex < text.length) {
     segments.push({
+      start: lastIndex,
+      end: text.length,
       text: text.substring(lastIndex),
       isReference: false,
     });
@@ -185,6 +205,8 @@ export function tokenizeExpression(
   // Handle edge case: empty text
   if (segments.length === 0) {
     segments.push({
+      start: 0,
+      end: 0,
       text: '',
       isReference: false,
     });

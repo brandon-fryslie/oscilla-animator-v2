@@ -66,6 +66,7 @@ function requireBlockEffects(
 
 interface LoweringError extends Error {
   code?: CompileError['code'];
+  sourceSpan?: CompileError['sourceSpan'];
 }
 
 function isLoweringError(error: unknown): error is LoweringError {
@@ -99,6 +100,9 @@ export interface UnlinkedIRFragments {
   /** Compilation errors encountered during lowering */
   errors: CompileError[];
 
+  /** Non-fatal compile warnings encountered during lowering */
+  warnings: CompileError[];
+
   /** Maps user-facing port key ("blockId:portId") → component ValueExprIds for patchable constants */
   constantProvenance: Map<string, ConstantProvenanceEntry>;
 
@@ -116,6 +120,8 @@ export interface Pass6Options {
   compileId?: string;
   /** Patch revision for event context */
   patchRevision?: number;
+  /** Partial compile fragments may omit a time source entirely. */
+  allowMissingTimeRoot?: boolean;
 }
 
 interface TimeModelState {
@@ -125,6 +131,7 @@ interface TimeModelState {
 function validateSingleTimeSource(
   blocks: readonly Block[],
   errors: CompileError[],
+  allowMissingTimeRoot: boolean,
 ): void {
   const timeBlocks = blocks.filter((block) => {
     const def = getBlockDefinition(block.type);
@@ -132,10 +139,12 @@ function validateSingleTimeSource(
   });
 
   if (timeBlocks.length === 0) {
-    errors.push({
-      code: 'NoTimeRoot',
-      message: 'Patch must have exactly one time source block',
-    });
+    if (!allowMissingTimeRoot) {
+      errors.push({
+        code: 'NoTimeRoot',
+        message: 'Patch must have exactly one time source block',
+      });
+    }
     return;
   }
 
@@ -507,6 +516,7 @@ function lowerBlockInstance(
   blockIndex: BlockIndex,
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
+  warnings: CompileError[],
   edges: readonly NormalizedEdge[],
   blocks: readonly Block[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
@@ -709,7 +719,11 @@ function lowerBlockInstance(
       }
 
     // Call lowering function (with existingOutputs if this is phase 2)
-    let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, existingOutputs });
+      let result = blockDef.lower({ ctx, inputs, inputsById, collectInputsById: resolvedCollectInputsById, config, existingOutputs });
+      warnings.push(...(result.warnings ?? []).map((warning) => ({
+        ...warning,
+        where: warning.where ?? { blockId: block.id },
+      })));
 
     // Auto-propagate instanceContext for blocks with field outputs
     // Only applies if the block didn't explicitly set instanceContext
@@ -910,6 +924,7 @@ function lowerBlockInstance(
       code: classifyLoweringErrorCode(error),
       message: errorMsg,
       where: { blockId: block.id },
+      sourceSpan: isLoweringError(error) ? error.sourceSpan : undefined,
     });
   }
 
@@ -949,6 +964,7 @@ function lowerSCCTwoPass(
   edges: readonly NormalizedEdge[],
   builder: OrchestratorIRBuilder,
   errors: CompileError[],
+  warnings: CompileError[],
   blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
   blockIdToIndex: Map<string, BlockIndex>,
   instanceContextByBlock: Map<BlockIndex, InstanceId>,
@@ -1008,6 +1024,10 @@ function lowerSCCTwoPass(
 
         // Call lowerOutputsOnly
         const partialResult: LowerOutputsOnlyResult = blockDef.lowerOutputsOnly!({ ctx, config });
+        warnings.push(...(partialResult.warnings ?? []).map((warning) => ({
+          ...warning,
+          where: warning.where ?? { blockId: block.id },
+        })));
         // Store partial result for phase 2
         phase1Results.set(blockIndex, partialResult);
 
@@ -1104,6 +1124,7 @@ function lowerSCCTwoPass(
       blockIndex,
       builder,
       errors,
+      warnings,
       edges,
       blocks,
       blockOutputs,
@@ -1506,6 +1527,7 @@ export function pass6BlockLowering(
   const edges = validated.edges;
   const blockOutputs = new Map<BlockIndex, Map<string, ValueRefExpr>>();
   const errors: CompileError[] = [];
+  const warnings: CompileError[] = [];
   const timeModelState: TimeModelState = {};
 
   // Track blocks that failed to lower — downstream blocks skip cascade errors
@@ -1520,12 +1542,13 @@ export function pass6BlockLowering(
     blockIdToIndex.set(blocks[i].id, i as BlockIndex);
   }
 
-  validateSingleTimeSource(blocks, errors);
+  validateSingleTimeSource(blocks, errors, options?.allowMissingTimeRoot ?? false);
   if (errors.length > 0) {
     return {
       builder,
       blockOutputs,
       errors,
+      warnings,
       constantProvenance: new Map<string, ConstantProvenanceEntry>(),
       instanceCountProvenance: new Map<string, InstanceCountProvenanceEntry>(),
     };
@@ -1547,6 +1570,7 @@ export function pass6BlockLowering(
         edges,
         builder,
         errors,
+        warnings,
         blockOutputs,
         blockIdToIndex,
         instanceContextByBlock,
@@ -1585,6 +1609,7 @@ export function pass6BlockLowering(
           blockIndex,
           builder,
           errors,
+          warnings,
           edges,
           blocks,
           blockOutputs,
@@ -1644,7 +1669,7 @@ export function pass6BlockLowering(
   // [LAW:single-enforcer] Pass 6 emits unresolved instance diagnostics before backend slot derivation.
   reportUnresolvedOutputInstances(blocks, builder, blockOutputs, errors);
   reportUnresolvedSlotInstances(builder, errors);
-  if (!timeModelState.sourceBlockId) {
+  if (!timeModelState.sourceBlockId && !(options?.allowMissingTimeRoot ?? false)) {
     errors.push({
       code: 'NoTimeRoot',
       message: 'Patch must have exactly one time source block',
@@ -1664,6 +1689,7 @@ export function pass6BlockLowering(
     builder,
     blockOutputs,
     errors,
+    warnings,
     constantProvenance,
     instanceCountProvenance,
   };

@@ -20,6 +20,7 @@
  */
 
 import type { Patch } from '../../graph';
+import type { BlockParamSourceSpan } from '../../diagnostics/sourceSpan';
 import type { NormalizedPatch } from './normalize-indexing';
 import type { TypedPatch, TypeResolvedPatch } from '../ir/patches';
 import type { CanonicalType } from '../../core/canonical-types';
@@ -66,6 +67,7 @@ export interface FrontendError {
   readonly blockId?: string;
   readonly portId?: string;
   readonly severity: 'error' | 'warn' | 'info';
+  readonly sourceSpan?: BlockParamSourceSpan;
   /** Present for configurable diagnostics (maps to DIAGNOSTIC_FLAGS code) */
   readonly diagnosticFlagCode?: string;
 }

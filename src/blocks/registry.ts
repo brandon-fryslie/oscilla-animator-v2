@@ -83,6 +83,9 @@ export interface LowerResult {
   /** Map of port ID to ValueRef (required) */
   readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
 
+  /** Optional non-fatal compile warnings emitted by the block's real compiler path. */
+  readonly warnings?: readonly import('../compiler/types').CompileError[];
+
   /**
    * Instance context (optional).
    * Set by blocks that create instances (e.g., Array) to provide instance context
@@ -119,6 +122,8 @@ export interface LowerResult {
 export interface LowerOutputsOnlyResult {
   /** Map of port ID to ValueRef (required) */
   readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
+  /** Optional non-fatal compile warnings emitted by phase-1 lowering. */
+  readonly warnings?: readonly import('../compiler/types').CompileError[];
   /** Declarative effects (required). */
   readonly effects: import('../compiler/ir/lowerTypes').LowerEffects;
   /** Optional instance context propagated to downstream blocks. */

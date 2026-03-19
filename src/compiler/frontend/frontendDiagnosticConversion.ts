@@ -170,6 +170,7 @@ export function convertFrontendErrorToDiagnostic(
       lastSeenAt: Date.now(),
       occurrenceCount: 1,
     },
+    sourceSpan: error.sourceSpan,
   };
 }
 

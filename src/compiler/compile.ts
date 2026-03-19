@@ -95,6 +95,7 @@ export interface CompileOptions {
   readonly patchId?: string;
   readonly patchRevision?: number;
   readonly events?: EventHub;
+  readonly allowMissingTimeRoot?: boolean;
 }
 
 export type CompileFromFrontendOptions = CompileOptions;
@@ -171,6 +172,7 @@ export function compileFromFrontend(
       events: options?.events,
       compileId,
       patchRevision: options?.patchRevision,
+      allowMissingTimeRoot: options?.allowMissingTimeRoot,
     });
 
     compilationInspector.capturePass('block-lowering', acyclicPatch, unlinkedIR);
@@ -273,6 +275,7 @@ export function compileFromFrontend(
       program: compiledIR,
       warnings: [
         ...unreachableBlockWarnings,
+        ...unlinkedIR.warnings,
         ...nagaLoweringDiagnostics.warnings,
       ],
     };
@@ -296,6 +299,7 @@ function frontendErrorToCompileError(e: FrontendError): CompileError {
     code: e.kind,
     message: e.message,
     where: { blockId: e.blockId, port: e.portId },
+    sourceSpan: e.sourceSpan,
   };
 }
 

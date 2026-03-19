@@ -11,6 +11,8 @@
  * Spec Reference: design-docs/CANONICAL-oscilla-v2.5-20260109/topics/07-diagnostics-system.md
  */
 
+import type { BlockParamSourceSpan } from './sourceSpan';
+
 // =============================================================================
 // TargetRef - Discriminated Union for Diagnostic Targets
 // =============================================================================
@@ -137,6 +139,7 @@ export type DiagnosticCode =
   | 'E_EXPR_SYNTAX' // Expression syntax error (parse failure)
   | 'E_EXPR_TYPE' // Expression type error (type check failure)
   | 'E_EXPR_COMPILE' // Expression compilation error (IR generation failure)
+  | 'W_EXPR_VAR_REASSIGNED' // Expression variable reassigned; latest assignment wins
 
   // --- Authoring Hints ---
   | 'I_SILENT_VALUE_USED' // Unconnected input using default value (pre-normalization only)
@@ -394,6 +397,9 @@ export interface Diagnostic {
   /** Optional structured payload */
   readonly payload?: DiagnosticPayload;
 
+  /** Optional inline source span for block parameter editors. */
+  readonly sourceSpan?: BlockParamSourceSpan;
+
   /** Optional actions for resolution */
   readonly actions?: readonly DiagnosticAction[];
 }
@@ -434,6 +440,7 @@ export function createDiagnostic(params: {
   message: string;
   scope: { patchRevision: number; compileId?: string };
   payload?: DiagnosticPayload;
+  sourceSpan?: BlockParamSourceSpan;
   actions?: DiagnosticAction[];
 }): Omit<Diagnostic, 'id'> {
   const now = Date.now();
@@ -451,6 +458,7 @@ export function createDiagnostic(params: {
       occurrenceCount: 1,
     },
     payload: params.payload,
+    sourceSpan: params.sourceSpan,
     actions: params.actions,
   };
 }

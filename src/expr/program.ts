@@ -5,6 +5,10 @@ export interface ExpressionProgramWarning {
   readonly line: number;
   readonly variable: string;
   readonly message: string;
+  readonly position: {
+    readonly start: number;
+    readonly end: number;
+  };
 }
 
 export interface ExpressionProgramAssignment {
@@ -19,10 +23,21 @@ export interface ExtractedExpressionProgram {
   readonly warnings: readonly ExpressionProgramWarning[];
 }
 
+export interface LoweredExpressionProgram {
+  readonly expression: string;
+  readonly warnings: readonly ExpressionProgramWarning[];
+  readonly positionMap: readonly number[];
+}
+
 interface ProgramLine {
   readonly line: number;
   readonly text: string;
   readonly absoluteOffset: number;
+}
+
+interface LoweredExpressionSnippet {
+  readonly text: string;
+  readonly positionMap: readonly number[];
 }
 
 export class ExpressionProgramError extends Error {
@@ -75,10 +90,12 @@ function extractRelativePosition(err: unknown): number | null {
 
 function inlineVariables(
   expression: string,
-  env: ReadonlyMap<string, string>,
+  env: ReadonlyMap<string, LoweredExpressionSnippet>,
   line: ProgramLine,
-): string {
+  expressionOffset = 0,
+): LoweredExpressionSnippet {
   let tokens;
+  const absoluteBase = line.absoluteOffset + expressionOffset;
   try {
     tokens = tokenize(expression);
   } catch (err) {
@@ -87,12 +104,13 @@ function inlineVariables(
       err instanceof Error ? err.message : String(err),
       {
         line: line.line,
-        absolutePosition: relative === null ? line.absoluteOffset : line.absoluteOffset + relative,
+        absolutePosition: relative === null ? absoluteBase : absoluteBase + relative,
       },
     );
   }
 
   const rewritten: string[] = [];
+  const positionMap: number[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (token.kind === TokenKind.EOF) break;
@@ -100,15 +118,40 @@ function inlineVariables(
     if (token.kind === TokenKind.IDENT) {
       const replacement = env.get(token.value);
       if (replacement !== undefined) {
-        rewritten.push(`(${replacement})`);
+        rewritten.push(`(${replacement.text})`);
+        const absoluteStart = absoluteBase + token.pos.start;
+        const absoluteEnd = absoluteBase + Math.max(token.pos.start, token.pos.end - 1);
+        positionMap.push(replacement.positionMap[0] ?? absoluteStart);
+        positionMap.push(...replacement.positionMap);
+        positionMap.push(replacement.positionMap[replacement.positionMap.length - 1] ?? absoluteEnd);
         continue;
       }
     }
 
     rewritten.push(token.value);
+    for (let charIndex = 0; charIndex < token.value.length; charIndex++) {
+      positionMap.push(absoluteBase + token.pos.start + charIndex);
+    }
   }
 
-  return rewritten.join('');
+  return {
+    text: rewritten.join(''),
+    positionMap,
+  };
+}
+
+function variablePositionForLine(line: ProgramLine, variable: string): { start: number; end: number } {
+  const assignmentMatch = line.text.match(ASSIGNMENT_RE);
+  const variableIndex = assignmentMatch?.index === 0
+    ? line.text.indexOf(variable)
+    : -1;
+  const absoluteStart = variableIndex >= 0
+    ? line.absoluteOffset + variableIndex
+    : line.absoluteOffset;
+  return {
+    start: absoluteStart,
+    end: absoluteStart + Math.max(variable.length, 1),
+  };
 }
 
 /**
@@ -135,6 +178,7 @@ export function extractExpressionProgram(exprText: string): ExtractedExpressionP
         line: line.line,
         variable,
         message: `Variable '${variable}' reassigned; latest assignment is used.`,
+        position: variablePositionForLine(line, variable),
       });
     }
     seen.add(variable);
@@ -155,17 +199,14 @@ export function extractExpressionProgram(exprText: string): ExtractedExpressionP
  * - Final line is the output expression (or assignment, where RHS is output).
  * - Assignments are pure aliases and are inlined into subsequent lines.
  */
-export function lowerExpressionProgram(exprText: string): {
-  readonly expression: string;
-  readonly warnings: readonly ExpressionProgramWarning[];
-} {
+export function lowerExpressionProgram(exprText: string): LoweredExpressionProgram {
   const lines = collectProgramLines(exprText);
   if (lines.length === 0) {
-    return { expression: '', warnings: [] };
+    return { expression: '', warnings: [], positionMap: [] };
   }
 
   const warnings: ExpressionProgramWarning[] = [];
-  const env = new Map<string, string>();
+  const env = new Map<string, LoweredExpressionSnippet>();
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -181,7 +222,8 @@ export function lowerExpressionProgram(exprText: string): {
 
     if (match) {
       const variable = match[1];
-      const rhs = match[2].trim();
+      const rawRhs = match[2];
+      const rhs = rawRhs.trim();
       if (rhs.length === 0) {
         throw new ExpressionProgramError(
           `Line ${line.line}: assignment for '${variable}' is missing a right-hand expression.`,
@@ -189,7 +231,8 @@ export function lowerExpressionProgram(exprText: string): {
         );
       }
 
-      const expandedRhs = inlineVariables(rhs, env, line);
+      const rhsOffset = line.text.indexOf(rawRhs) + (rawRhs.length - rawRhs.trimStart().length);
+      const expandedRhs = inlineVariables(rhs, env, line, rhsOffset);
 
       if (env.has(variable)) {
         warnings.push({
@@ -197,18 +240,27 @@ export function lowerExpressionProgram(exprText: string): {
           line: line.line,
           variable,
           message: `Variable '${variable}' reassigned; latest assignment is used.`,
+          position: variablePositionForLine(line, variable),
         });
       }
       env.set(variable, expandedRhs);
 
       if (isLast) {
-        return { expression: expandedRhs, warnings };
+        return {
+          expression: expandedRhs.text,
+          warnings,
+          positionMap: expandedRhs.positionMap,
+        };
       }
       continue;
     }
 
     const output = inlineVariables(line.text, env, line);
-    return { expression: output, warnings };
+    return {
+      expression: output.text,
+      warnings,
+      positionMap: output.positionMap,
+    };
   }
 
   throw new ExpressionProgramError('Expression program could not determine an output expression.');
