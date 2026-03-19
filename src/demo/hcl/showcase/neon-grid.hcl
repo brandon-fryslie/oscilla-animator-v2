@@ -1,47 +1,53 @@
 # Neon Grid
 #
-# 625 rectangles in a 25x25 grid with StepQuantize stepped pulsing
-# and per-element rainbow color plus per-tile jitter.
-# Demonstrates: StepQuantize, NoisyBroadcast, per-element rainbow, GridLayoutUV.
+# A three-layer neon wall:
+# - a dim static scaffold that keeps the matrix legible
+# - a larger cyan glow layer drifting in diagonal waves
+# - a hot magenta core layer with stepped, noisy pulse changes
+#
+# Demonstrates: GridLayoutUV, Expression field warping, StepQuantize,
+# NoisyBroadcast, dual render layering.
 
 patch "Neon Grid" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 2000
+    periodAMs = 3600
+    periodBMs = 7200
     role = "timeRoot"
     outputs {
-      phaseA = [pulse.phase, tile-wobble.phase, hue-shift.b]
+      phaseA = [position.refs, pulse.phase, core_hue_shift.b]
+      phaseB = [position.refs, tile_wobble.phase]
     }
   }
 
   block "Rect" "tile" {
-    width = 0.012
-    height = 0.012
-    cornerRadius = 0.0035
+    width = 0.014
+    height = 0.014
+    cornerRadius = 0.004
     outputs {
-      controlPoints = tile-wobble.controlPoints
+      controlPoints = tile_wobble.controlPoints
     }
   }
 
-  block "ShapeWobble2D" "tile-wobble" {
-    amount = 0.0022
-    frequency = 7
+  block "ShapeWobble2D" "tile_wobble" {
+    amount = 0.0028
+    frequency = 9
     outputs {
-      points = tile-shape.controlPoints
+      points = tile_shape.controlPoints
     }
   }
 
-  block "MakeShape2D" "tile-shape" {
+  block "MakeShape2D" "tile_shape" {
     closed = true
     outputs {
-      shape = grid-elements.element
+      shape = grid_elements.element
     }
   }
 
-  block "Array" "grid-elements" {
+  block "Array" "grid_elements" {
     count = 625
     outputs {
-      elements = grid.elements
-      t = hue-shift.a
+      elements = [grid.elements, scaffold_color.elements, glow_color.elements]
+      t = [position.refs, core_hue_shift.a]
     }
   }
 
@@ -49,19 +55,69 @@ patch "Neon Grid" {
     rows = 25
     cols = 25
     outputs {
-      controlPoints = render.controlPoints
+      controlPoints = [scaffold_render.controlPoints, position.refs]
     }
   }
 
-  # Stepped pulsing: Oscillator → StepQuantize (discrete sizes)
+  block "Expression" "position" {
+    expression = <<-EXPR
+      phase_a = clock.phaseA * 6.2832
+      phase_b = clock.phaseB * 6.2832
+      lane = grid_elements.t
+
+      x0 = grid.controlPoints.x - 0.5
+      y0 = grid.controlPoints.y - 0.5
+      diag = x0 + y0
+      cross = x0 - y0
+
+      wave_a = 0.038 * sin(diag * 26.0 + phase_a * 2.7 + lane * 18.0)
+      wave_b = 0.028 * cos(cross * 22.0 - phase_b * 2.1 + lane * 15.0)
+      scan = 0.014 * sin(y0 * 34.0 + phase_a * 5.0)
+
+      x = 0.5 + x0 * 0.96 + wave_a + scan
+      y = 0.5 + y0 * 0.96 + wave_b + 0.014 * cos(x0 * 34.0 - phase_b * 4.0)
+      vec2(x, y)
+    EXPR
+    outputs {
+      out = [glow_render.controlPoints, core_render.controlPoints]
+    }
+  }
+
+  block "FieldConstColor" "scaffold_color" {
+    r = 0.05
+    g = 0.1
+    b = 0.3
+    a = 0.16
+    outputs {
+      color = scaffold_render.color
+    }
+  }
+
+  block "FieldConstColor" "glow_color" {
+    r = 0.02
+    g = 0.92
+    b = 1
+    a = 0.18
+    outputs {
+      color = glow_render.color
+    }
+  }
+
+  block "Const" "scaffold_scale" {
+    value = 0.46
+    outputs {
+      out = scaffold_render.scale
+    }
+  }
+
   block "Oscillator" "pulse" {
     outputs {
       out = quantize.in
     }
   }
 
-  block "Const" "step-size" {
-    value = 0.33
+  block "Const" "step_size" {
+    value = 0.24
     outputs {
       out = quantize.step
     }
@@ -69,71 +125,62 @@ patch "Neon Grid" {
 
   block "StepQuantize" "quantize" {
     outputs {
-      out = scale-map.in
+      out = [glow_scale_map.in, core_scale_map.in]
     }
   }
 
-  block "Const" "scale-amt" {
-    value = 0.42
+  block "ScaleBias" "glow_scale_map" {
+    scale = 0.58
+    bias = 1.26
     outputs {
-      out = scale-map.scale
+      out = glow_render.scale
     }
   }
 
-  block "Const" "scale-center" {
-    value = 1.0
+  block "ScaleBias" "core_scale_map" {
+    scale = 0.34
+    bias = 0.78
     outputs {
-      out = scale-map.bias
+      out = core_scale_noise.amount
     }
   }
 
-  block "ScaleBias" "scale-map" {
+  block "Const" "core_scale_base" {
+    value = 0.92
     outputs {
-      out = scale-jitter.amount
+      out = core_scale_noise.value
     }
   }
 
-  block "Const" "base-scale" {
-    value = 1.0
+  block "Const" "core_scale_seed" {
+    value = 43
     outputs {
-      out = scale-jitter.value
+      out = core_scale_noise.seed
     }
   }
 
-  block "Const" "jitter-seed" {
-    value = 31
+  block "NoisyBroadcast" "core_scale_noise" {
     outputs {
-      out = scale-jitter.seed
+      out = core_render.scale
     }
   }
 
-  block "NoisyBroadcast" "scale-jitter" {
+  block "Add" "core_hue_shift" {
     outputs {
-      out = render.scale
+      out = core_color.h
     }
   }
 
-  block "Add" "hue-shift" {
+  block "MakeColorOKLCH" "core_color" {
+    s = 1
+    l = 0.76
+    a = 0.96
     outputs {
-      out = color.h
+      color = core_render.color
     }
   }
 
-  # Per-element rainbow
-  block "Const" "saturation" {
-    value = 0.98
-    outputs {
-      out = color.s
-    }
-  }
-
-  block "MakeColorOKLCH" "color" {
-    l = 0.72
-    a = 0.92
-    outputs {
-      color = render.color
-    }
-  }
-
-  block "RenderInstances2D" "render" {}
+  block "RenderInstances2D" "scaffold_render" {}
+  block "RenderInstances2D" "glow_render" {}
+  block "RenderInstances2D" "core_render" {}
 }
