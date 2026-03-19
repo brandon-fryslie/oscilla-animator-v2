@@ -2,7 +2,7 @@ import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { CompilerGraphBlock } from '../compiler/ir/CompilerGraph';
 import type { CompiledProgramIR } from '../compiler/ir/program';
 import type { Step, StepRender } from '../compiler/ir/types';
-import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from './compile-worker-protocol';
+import type { CompiledGpuPassArtifact, CompiledGpuPassBundle } from './compile-worker-protocol';
 
 const LEGACY_FLUID_BLOCK_TYPE = 'FluidDynamics2D';
 const COMPOSABLE_FLUID_BLOCK_TYPES = [
@@ -845,7 +845,7 @@ function buildFluidPassBundle(
   bindings: FluidBindings,
   plan: FluidRenderPlan,
   stages: readonly FluidPassStage[],
-): CompiledGpuArtifactBundle {
+): CompiledGpuPassBundle {
   const passes: CompiledGpuPassArtifact[] = [];
   for (const stage of stages) {
     if (stage === 'splat') {
@@ -927,7 +927,7 @@ function buildFluidPassBundle(
 export function maybeBuildFluidGpuBundle(
   normalizedPatch: NormalizedPatch,
   program: CompiledProgramIR,
-): CompiledGpuArtifactBundle | null {
+): CompiledGpuPassBundle | null {
   const fluidBlockIds = getFluidBlockIds(normalizedPatch);
   if (fluidBlockIds.length === 0) return null;
   const stages = resolveFluidPassStages(normalizedPatch);

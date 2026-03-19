@@ -64,7 +64,6 @@ import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
 import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
-import { buildRuntimeHotpathInstallPlanes } from './runtime-hotpath-install';
 import {
   deriveRendererExecutionStateFromGpuFault,
   shouldClearStoredStartupPatch,
@@ -73,7 +72,6 @@ import {
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
-const EMPTY_U32_WORDS = new Uint32Array(0);
 const STARTUP_STORAGE_RESET_ARM_MS = 10_000;
 
 function describeFatalGpuFault(fault: GpuFault): string {
@@ -278,11 +276,10 @@ export class RuntimeService {
       await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
-      if (expectedProgram && this.compileState.currentProgram === expectedProgram) {
-        // [RECOVER-08] Publish canonical compile-time assets (ShapeBank
-        // topology headers + sink table descriptors) to the renderer worker.
-        // No CPU runtime schedule execution — GPU handles all frame computation.
-        this.installRendererCanonicalAssets();
+      if (expectedProgram && this.compileState.currentProgram === expectedProgram && next.compiledGpuBundle) {
+        // [RECOVER-08] Publish the worker-owned static install contract directly.
+        // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
+        this.installRendererCanonicalAssets(next.compiledGpuBundle);
       }
       this.asyncCompiler?.markSwapComplete();
     } catch (err) {
@@ -304,17 +301,16 @@ export class RuntimeService {
   // table descriptors only. No CPU materialization, no instance count
   // resolution, no ShapeBank allocator. The compile-time topology install
   // stage is the single GPU-visible runtime stage for shape-handle production.
-  private installRendererCanonicalAssets(): void {
+  private installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): void {
     const renderer = this.renderer;
     const canvas = this.canvas;
-    const program = this.compileState.currentProgram;
-    if (!renderer || !canvas || !program || this.rendererExecutionState !== 'active') {
+    if (!renderer || !canvas || this.rendererExecutionState !== 'active') {
       return;
     }
 
-    // [RECOVER-07] Install planes are built from compile-time topology data
-    // only — no RuntimeState dependency.
-    const planes = buildRuntimeHotpathInstallPlanes(program);
+    // [LAW:one-source-of-truth] RuntimeService publishes the canonical
+    // worker-owned install contract without rebuilding static metadata.
+    const installContract = compiledGpuBundle.runtimeInstall;
     const viewport = this.store.viewport;
     const renderWidth = Math.max(1, Math.floor(viewport?.canvasWidth || canvas.width || 1));
     const renderHeight = Math.max(1, Math.floor(viewport?.canvasHeight || canvas.height || 1));
@@ -324,16 +320,16 @@ export class RuntimeService {
 
     renderer.render({
       shapeBank: {
-        data: planes.shapeBankWords,
-        volatilePtr: planes.shapeBankWordCount,
+        data: installContract.shapeBank.words,
+        volatilePtr: installContract.shapeBank.wordCount,
         // [RECOVER-07] staticBoundary is 0: all topology headers are
         // produced by the compile-time install stage, not the ShapeBank
         // frame allocator.
         staticBoundary: 0,
-        topologyIdByHandle: planes.topologyIdByHandle,
+        topologyIdByHandle: installContract.shapeBank.topologyIdByHandle,
       },
-      drawPrepSinkTableV1: planes.sinkTableWords ?? EMPTY_U32_WORDS,
-      drawPrepSinkTableWordCount: planes.sinkTableWordCount,
+      drawPrepSinkTableV1: installContract.drawPrep.words,
+      drawPrepSinkTableWordCount: installContract.drawPrep.wordCount,
       width: renderWidth,
       height: renderHeight,
       zoom,

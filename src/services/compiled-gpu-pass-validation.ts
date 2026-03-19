@@ -1,6 +1,6 @@
 import type { GeneratedGpuArtifactManifestIR, GpuPassManifestEntryIR } from '../compiler/ir/program';
 import type { CompileError } from '../compiler/types';
-import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from './compile-worker-protocol';
+import type { CompiledGpuPassArtifact, CompiledGpuPassBundle } from './compile-worker-protocol';
 import { CANONICAL_FLUID_PASS_STAGES } from './fluid-gpu-bundle';
 import {
   type GpuPassStage,
@@ -9,7 +9,7 @@ import {
 
 interface ValidCompiledGpuPassValidation {
   readonly kind: 'ok';
-  readonly bundle: CompiledGpuArtifactBundle;
+  readonly bundle: CompiledGpuPassBundle;
   readonly manifest: GeneratedGpuArtifactManifestIR;
 }
 
@@ -210,7 +210,7 @@ function buildManifestFromPasses(passes: readonly CompiledGpuPassArtifact[]): Ge
  * // [LAW:single-enforcer] Compile worker owns pass-metadata normalization
  * so runtime renderer install does not duplicate this policy.
  */
-export function validateCompiledGpuPassBundle(bundle: CompiledGpuArtifactBundle): CompiledGpuPassValidationResult {
+export function validateCompiledGpuPassBundle(bundle: CompiledGpuPassBundle): CompiledGpuPassValidationResult {
   const errors: CompileError[] = [];
   const passes = Array.isArray(bundle.passes) ? bundle.passes : [];
   if (passes.length === 0) {
