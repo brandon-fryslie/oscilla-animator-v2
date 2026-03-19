@@ -117,7 +117,6 @@ function readRuntimeInputPlaneValues(currentState: RuntimeState | null): Runtime
 }
 
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
-const RUNTIME_HEARTBEAT_ENABLED = RUNTIME_CONSOLE_ENABLED || shouldEnableRuntimeProbe();
 const FPS_UPDATE_INTERVAL_MS = 500;
 const TELEMETRY_LOG_INTERVAL_MS = 5000;
 const TELEMETRY_INITIAL_LOG_AT = 0;
@@ -125,8 +124,23 @@ const TELEMETRY_INITIAL_LOG_AT = 0;
 type RuntimeTelemetrySnapshot = ReturnType<WebGPURenderer['getLatestRuntimeTelemetry']>;
 type RuntimeTelemetryValue = NonNullable<RuntimeTelemetrySnapshot>;
 
+interface RuntimeHeartbeatConsumers {
+  readonly probeEnabled: boolean;
+  readonly consoleEnabled: boolean;
+  readonly hasAnyConsumer: boolean;
+}
+
 function shouldRunFpsCadence(now: number, lastFpsUpdate: number): boolean {
   return now - lastFpsUpdate > FPS_UPDATE_INTERVAL_MS;
+}
+
+function readRuntimeHeartbeatConsumers(): RuntimeHeartbeatConsumers {
+  const probeEnabled = shouldEnableRuntimeProbe();
+  return {
+    probeEnabled,
+    consoleEnabled: RUNTIME_CONSOLE_ENABLED,
+    hasAnyConsumer: probeEnabled || RUNTIME_CONSOLE_ENABLED,
+  };
 }
 
 function formatStatsText(fps: number, drawOps: number, tickMs: number): string {
@@ -324,8 +338,11 @@ function buildRuntimeHeartbeat(inputs: RuntimeHeartbeatInputs): RuntimeProbeHear
   };
 }
 
-function emitRuntimeConsoleHeartbeat(heartbeat: RuntimeProbeHeartbeat): void {
-  if (!RUNTIME_CONSOLE_ENABLED) {
+function emitRuntimeConsoleHeartbeat(
+  heartbeat: RuntimeProbeHeartbeat,
+  consumers: RuntimeHeartbeatConsumers,
+): void {
+  if (!consumers.consoleEnabled) {
     return;
   }
   // [LAW:one-source-of-truth] Runtime console emits one canonical JSON
@@ -334,6 +351,8 @@ function emitRuntimeConsoleHeartbeat(heartbeat: RuntimeProbeHeartbeat): void {
 }
 
 interface FpsCadenceInputs {
+  cadenceDue: boolean;
+  heartbeatConsumers: RuntimeHeartbeatConsumers;
   now: number;
   state: AnimationLoopState;
   currentProgram: CompiledProgramIR;
@@ -343,6 +362,8 @@ interface FpsCadenceInputs {
 }
 
 function runFpsCadence({
+  cadenceDue,
+  heartbeatConsumers,
   now,
   state,
   currentProgram,
@@ -350,7 +371,7 @@ function runFpsCadence({
   store,
   onStatsUpdate,
 }: FpsCadenceInputs): void {
-  if (!shouldRunFpsCadence(now, state.lastFpsUpdate)) {
+  if (!cadenceDue) {
     return;
   }
   state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
@@ -364,10 +385,12 @@ function runFpsCadence({
     fps: state.fps,
     telemetry: heartbeatInputs.telemetry,
   });
-  if (RUNTIME_HEARTBEAT_ENABLED) {
+  if (heartbeatConsumers.hasAnyConsumer) {
     const heartbeat = buildRuntimeHeartbeat(heartbeatInputs);
-    markRuntimeHeartbeat(heartbeat, now);
-    emitRuntimeConsoleHeartbeat(heartbeat);
+    if (heartbeatConsumers.probeEnabled) {
+      markRuntimeHeartbeat(heartbeat, now);
+    }
+    emitRuntimeConsoleHeartbeat(heartbeat, heartbeatConsumers);
   }
   state.frameCount = 0;
   state.lastFpsUpdate = now;
@@ -471,16 +494,23 @@ export function executeAnimationFrame(
 
   state.frameCount++;
   const now = performance.now();
-  if (RUNTIME_HEARTBEAT_ENABLED) {
+  const heartbeatConsumers = readRuntimeHeartbeatConsumers();
+  const cadenceDue = shouldRunFpsCadence(now, state.lastFpsUpdate);
+  if (heartbeatConsumers.probeEnabled && !cadenceDue) {
     // [LAW:one-source-of-truth] Probe/console consumers read the same live
     // renderer heartbeat payload when enabled instead of reconstructing
     // runtime state from throttled logs.
+    // [LAW:single-enforcer] AnimationLoop evaluates preview-consumer state at
+    // the frame boundary so showPreview changes take effect without a second
+    // cached heartbeat gate drifting from runtime-probe behavior.
     markRuntimeHeartbeat(
       buildRuntimeHeartbeat(readRuntimeHeartbeatInputs(currentProgram, store, renderer, state.fps)),
       now,
     );
   }
   runFpsCadence({
+    cadenceDue,
+    heartbeatConsumers,
     now,
     state,
     currentProgram,
