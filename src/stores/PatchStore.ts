@@ -148,7 +148,6 @@ function cloneBlockSnapshot(block: Block): Block {
   return Object.freeze({
     ...block,
     params: Object.freeze({ ...block.params }),
-    role: Object.freeze({ ...block.role, meta: Object.freeze({ ...block.role.meta }) }),
     inputPorts: new Map(Array.from(block.inputPorts.entries(), ([portId, port]) => [portId, cloneInputPort(port)])),
     outputPorts: new Map(Array.from(block.outputPorts.entries(), ([portId, port]) => [portId, cloneOutputPort(port)])),
   });
@@ -157,9 +156,6 @@ function cloneBlockSnapshot(block: Block): Block {
 function cloneEdgeSnapshot(edge: Edge): Edge {
   return Object.freeze({
     ...edge,
-    from: Object.freeze({ ...edge.from }),
-    to: Object.freeze({ ...edge.to }),
-    role: Object.freeze({ ...edge.role, meta: Object.freeze({ ...edge.role.meta }) }),
   });
 }
 
