@@ -38,7 +38,7 @@ Today the repo has useful evidence, but not a final architecture:
 - `WebGPUType1Sink` is a bootstrap block with authoring-facing inputs and backend-facing hidden outputs.
 - `render-materialization-pipeline.ts` turns render blocks into slot/materialize steps that still look like field plumbing.
 - `DrawPrepSinkTablePacker.ts` publishes descriptor tables shaped around current backend needs.
-- `runtime-hotpath-install.ts` publishes static topology and sink metadata into the renderer worker.
+- `src/compiler/backend/compiled-runtime-install-contract.ts` publishes static topology and sink metadata into compile-worker output for runtime swap publication.
 - the renderer is converging toward GPU-owned draw-prep and direct topology consumption, but the upper boundary is still shaped by old sink/block concepts.
 
 Actual current dataflow:
