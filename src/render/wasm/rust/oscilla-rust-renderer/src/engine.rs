@@ -496,8 +496,13 @@ impl Engine {
     }
 
     pub fn should_schedule_next_frame(&self) -> bool {
-        self.scheduler.state() != SchedulerState::Lost
-            && !self.pending_fatal_gpu_error.load(Ordering::SeqCst)
+        // [LAW:dataflow-not-control-flow] The worker loop uses one canonical
+        // arm/resume path; bootstrap keeps cadence unarmed by leaving the
+        // scheduler in Booting until shared runtime inputs are attached.
+        matches!(
+            self.scheduler.state(),
+            SchedulerState::Running | SchedulerState::Paused
+        ) && !self.pending_fatal_gpu_error.load(Ordering::SeqCst)
     }
 
     fn build_pipeline_rebuild_failure(

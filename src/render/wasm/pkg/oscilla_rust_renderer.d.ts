@@ -13,7 +13,7 @@ export function inject_poison_alloc(): void;
 
 export function pause_engine(): void;
 
-export function rebuild_gpu_pipelines(passes: any): void;
+export function rebuild_gpu_pipelines(passes: any): Promise<void>;
 
 export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
 
@@ -37,17 +37,17 @@ export interface InitOutput {
     readonly init_engine: (a: any, b: number, c: number, d: number) => any;
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
-    readonly rebuild_gpu_pipelines: (a: any) => [number, number];
+    readonly rebuild_gpu_pipelines: (a: any) => any;
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];
     readonly upload_atlas_data: (a: any) => [number, number];
-    readonly wasm_bindgen__closure__destroy__h22c5c9496e43279b: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h5931e681d5dee89c: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h8725eb454c15ba22: (a: number, b: number, c: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h226acc91fc00b34c: (a: number, b: number, c: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hcb563ba53ad42ec8: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1d4d9e8783fdfb62: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338: (a: number, b: number, c: any) => void;
