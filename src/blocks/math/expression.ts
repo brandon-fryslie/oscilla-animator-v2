@@ -30,6 +30,14 @@ export function register(): void {
     label: 'Expression',
     category: 'math',
     description: 'Compute value from mathematical expression',
+    ui: {
+      openBehavior: { kind: 'open-expression-editor' },
+      inspector: {
+        paramEditors: {
+          expression: { kind: 'expression-editor' },
+        },
+      },
+    },
     form: 'primitive',
     capability: 'pure',
     payload: {

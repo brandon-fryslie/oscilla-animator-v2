@@ -28,7 +28,7 @@ import { PatchDslError, PatchDslWarning } from './errors';
 import { tokenize } from './lexer';
 import { parse } from './parser';
 import { expandTopLevelLocals } from './locals';
-import { getBlockDefinition } from '../blocks/registry';
+import { DEFAULT_BLOCK_UI, getBlockDefinition } from '../blocks/registry';
 import type { Capability } from '../blocks/registry';
 import { toIdentifier } from './serialize';
 
@@ -226,6 +226,7 @@ export function deserializeCompositeFromHCL(hcl: string): CompositeDeserializeRe
       category,
       description,
       form: 'composite',
+      ui: DEFAULT_BLOCK_UI,
       capability,
       internalBlocks,
       internalEdges,

@@ -21,6 +21,7 @@ import {
   getCompositeDefinition,
   getAnyBlockDefinition,
   validateCompositeDefinition,
+  DEFAULT_BLOCK_UI,
 } from '../blocks/registry';
 
 import type { Capability, InputDef, OutputDef } from '../blocks/registry';
@@ -942,6 +943,7 @@ export class CompositeEditorStore {
       form: 'composite',
       label: this.metadata.label || this.metadata.name,
       category: this.metadata.category || 'user',
+      ui: DEFAULT_BLOCK_UI,
       capability,
       internalBlocks: internalBlocksMap,
       internalEdges: [...this.internalEdges],

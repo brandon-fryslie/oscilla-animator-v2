@@ -36,6 +36,7 @@ import { DisplayNameEditor } from './DisplayNameEditor';
 import { compilationInspector } from '../../services/CompilationInspectorService';
 import { EdgeInspector } from './EdgeInspector';
 import { SharedExpressionEditor } from './SharedExpressionEditor';
+import { getBlockParamEditor } from '../block-ui';
 
 // =============================================================================
 // Helper Functions
@@ -1708,12 +1709,9 @@ interface ParamFieldProps {
 
 const ParamField = function ParamField({ blockId, paramKey, value, typeInfo, patch }: ParamFieldProps) {
   const { patch: patchStore } = useStores();
-  // Special case: Expression block with expression parameter
-  // Render multiline textarea instead of single-line text input
-  if (typeInfo.type === 'Expression' && paramKey === 'expression') {
+  if (getBlockParamEditor(typeInfo, paramKey).kind === 'expression-editor') {
     return <ExpressionEditor blockId={blockId} value={String(value ?? '')} patch={patch} />;
   }
-
 
   // Find uiHint if this param corresponds to an input
   const inputDef = typeInfo.inputs[paramKey];

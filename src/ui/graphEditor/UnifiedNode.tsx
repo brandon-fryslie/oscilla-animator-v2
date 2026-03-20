@@ -17,12 +17,14 @@
  */
 
 import React, { useCallback } from 'react';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { observer } from 'mobx-react-lite';
 import { useGraphEditor } from './GraphEditorContext';
 import { useStores } from '../../stores';
 import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { DefaultSource, PortId, BlockId } from '../../types';
+import { getAnyBlockDefinition, DEFAULT_BLOCK_UI } from '../../blocks/registry';
 import { ParameterControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
@@ -36,6 +38,8 @@ import {
 import { resolvePortStyle } from './port-style';
 import { graphColors } from './graph-tokens';
 import { isTimeDefaultSource } from '../defaultSourcePresentation';
+import { DockviewContext } from '../dockview';
+import { getBlockOpenBehaviorLabel, hasBlockOpenBehavior, runBlockOpenBehavior } from '../block-ui';
 
 /**
  * Get indicator color based on default source type.
@@ -129,7 +133,10 @@ function computePortPopoverPlacement(anchorEl: HTMLElement, isInput: boolean): P
  */
 export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ data }) => {
   const { adapter, enableParamEditing, onPortContextMenu, selection, portHighlight } = useGraphEditor();
-  const { diagnostics } = useStores();
+  const { diagnostics, expressionEditor } = useStores();
+  const dockview = React.useContext(DockviewContext);
+  const blockUi = getAnyBlockDefinition(data.blockType)?.ui ?? DEFAULT_BLOCK_UI;
+  const canRunOpenBehavior = hasBlockOpenBehavior(blockUi.openBehavior);
 
   const portPopover = usePinPopoverState<PortPopoverData>({
     isSame: (a, b) => a.port.id === b.port.id && a.isInput === b.isInput,
@@ -200,6 +207,16 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   }, [portHighlight, portPopover]);
 
   const selectedPort = selection?.selectedPort;
+  const handleOpenBehavior = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    runBlockOpenBehavior(blockUi.openBehavior, {
+      blockId: data.blockId as BlockId,
+      api: dockview?.api ?? null,
+      diagnostics,
+      expressionEditor,
+    });
+  }, [blockUi.openBehavior, data.blockId, diagnostics, dockview?.api, expressionEditor]);
 
   return (
     <div
@@ -360,39 +377,70 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
       {/* Node Label with Inline Editing */}
       <div
         style={{
-          textAlign: 'center',
-          fontWeight: 600,
+          display: 'grid',
+          gridTemplateColumns: canRunOpenBehavior ? '1fr auto' : '1fr',
+          alignItems: 'center',
+          gap: '6px',
           marginBottom: '6px',
-          fontSize: '14px',
-          letterSpacing: '0.3px',
-          color: '#f1f5f9',
         }}
       >
-        {canEditDisplayName ? (
-          <DisplayNameEditor
-            blockId={data.blockId as BlockId}
-            currentDisplayName={data.displayName}
-            fallbackLabel={data.label}
+        <div
+          style={{
+            textAlign: 'center',
+            fontWeight: 600,
+            fontSize: '14px',
+            letterSpacing: '0.3px',
+            color: '#f1f5f9',
+          }}
+        >
+          {canEditDisplayName ? (
+            <DisplayNameEditor
+              blockId={data.blockId as BlockId}
+              currentDisplayName={data.displayName}
+              fallbackLabel={data.label}
+              style={{
+                fontSize: '14px',
+                fontWeight: 600,
+                letterSpacing: '0.3px',
+                color: '#f1f5f9',
+              }}
+              editStyle={{
+                fontSize: '14px',
+                fontWeight: 600,
+                background: '#1a1a2e',
+                color: '#f1f5f9',
+                textAlign: 'center',
+              }}
+              errorStyle={{
+                fontSize: '10px',
+              }}
+            />
+          ) : (
+            <span>{data.displayName}</span>
+          )}
+        </div>
+        {canRunOpenBehavior && (
+          <button
+            type="button"
+            aria-label={getBlockOpenBehaviorLabel(blockUi.openBehavior)}
+            title={getBlockOpenBehaviorLabel(blockUi.openBehavior)}
+            onClick={handleOpenBehavior}
             style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              letterSpacing: '0.3px',
-              color: '#f1f5f9',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '22px',
+              height: '22px',
+              borderRadius: '6px',
+              border: '1px solid rgba(78, 205, 196, 0.35)',
+              background: 'rgba(15, 23, 42, 0.65)',
+              color: '#d8f3ff',
+              cursor: 'pointer',
+              padding: 0,
             }}
-            editStyle={{
-              fontSize: '14px',
-              fontWeight: 600,
-              background: '#1a1a2e',
-              color: '#f1f5f9',
-              textAlign: 'center',
-            }}
-            errorStyle={{
-              fontSize: '10px',
-            }}
-          />
-        ) : (
-          // No editing - just display name
-          <span>{data.displayName}</span>
+          >
+            <OpenInNewRoundedIcon sx={{ fontSize: 14 }} />
+          </button>
         )}
       </div>
 
