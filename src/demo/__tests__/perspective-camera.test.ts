@@ -8,7 +8,11 @@ import { registerAllBlocks } from '../../blocks/all';
 import { getHclDemo } from '../hcl-demos';
 registerAllBlocks();
 
-const hcl = getHclDemo('perspective-camera.hcl')?.hcl ?? '';
+const demo = getHclDemo('perspective-camera.hcl');
+if (!demo) {
+  throw new Error('Missing HCL demo: perspective-camera.hcl');
+}
+const hcl = demo.hcl;
 
 describe('perspective camera demo (HCL)', () => {
   it('deserializes without errors', () => {
