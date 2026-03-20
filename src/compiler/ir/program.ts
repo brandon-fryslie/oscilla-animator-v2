@@ -246,11 +246,13 @@ export interface CompiledProgramIR {
   readonly generatedComputeProgram: GeneratedComputeProgramIR;
 
   /**
-   * Compiler-owned GPU pass manifest describing installable runtime passes.
+   * Optional worker-attached GPU pass manifest describing installable runtime
+   * passes.
    *
-   * [LAW:one-source-of-truth] Runtime pass identity/order metadata is emitted
+   * [LAW:one-source-of-truth] Runtime pass identity/order metadata is attached
    * once by the compile-worker validation boundary and consumed by worker
-   * transport/renderer install.
+   * transport/renderer install. Raw compiler IR may not carry this yet; the
+   * worker-enriched runtime contract does.
    */
   readonly generatedGpuArtifactManifest?: GeneratedGpuArtifactManifestIR;
 
