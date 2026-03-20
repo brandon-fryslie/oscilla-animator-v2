@@ -9,20 +9,21 @@ patch "Tile Grid" {
     periodAMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = [pulse.phase, tile-wobble.phase]
+      phaseA = [pulse.phase, tile-wobble.phase, hue-shift.b]
     }
   }
 
   block "Rect" "tile" {
-    width = 0.018
-    height = 0.012
+    width = 0.016
+    height = 0.010
+    cornerRadius = 0.003
     outputs {
       controlPoints = tile-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "tile-wobble" {
-    amount = 0.0018
+    amount = 0.0023
     frequency = 5
     outputs {
       points = tile-shape.controlPoints
@@ -37,16 +38,16 @@ patch "Tile Grid" {
   }
 
   block "Array" "instances" {
-    count = 400
+    count = 484
     outputs {
       elements = grid.elements
-      t = color.h
+      t = hue-shift.a
     }
   }
 
   block "GridLayoutUV" "grid" {
-    rows = 20
-    cols = 20
+    rows = 22
+    cols = 22
     outputs {
       controlPoints = render.controlPoints
     }
@@ -60,7 +61,7 @@ patch "Tile Grid" {
   }
 
   block "Const" "scale-amt" {
-    value = 0.3
+    value = 0.4
     outputs {
       out = scale-map.scale
     }
@@ -99,8 +100,17 @@ patch "Tile Grid" {
     }
   }
 
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
   # Per-element rainbow
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.69
+    a = 0.92
     outputs {
       color = render.color
     }

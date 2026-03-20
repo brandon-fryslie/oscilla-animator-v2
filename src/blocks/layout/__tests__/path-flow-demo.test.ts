@@ -10,7 +10,7 @@ patch "Path Flow" {
     periodAMs = 8000
     role = "timeRoot"
     outputs {
-      phaseA = pathLayout.offset
+      phaseA = path-layout.offset
     }
   }
 
@@ -20,7 +20,7 @@ patch "Path Flow" {
     radiusY = 0.2
     outputs {
       controlPoints = assembler.controlPoints
-      shape = pathLayout.shape
+      shape = path-layout.shape
     }
   }
 
@@ -39,21 +39,25 @@ patch "Path Flow" {
   block "Array" "arr" {
     count = 40
     outputs {
-      elements = pathLayout.elements
+      elements = path-layout.elements
       t = color.h
     }
   }
 
-  block "PathLayout" "pathLayout" {
+  block "PathLayout" "path-layout" {
     outputs {
-      controlPoints = attractor.points
+      controlPoints = center-path.refs
     }
   }
 
-  block "AttractorLayout" "attractor" {
-    strength = 0.6
+  block "Expression" "center-path" {
+    expression = <<-EXPR
+      x = path_layout.controlPoints.x + 0.5
+      y = path_layout.controlPoints.y + 0.5
+      vec2(x, y)
+    EXPR
     outputs {
-      controlPoints = render.controlPoints
+      out = render.controlPoints
     }
   }
 
@@ -78,7 +82,7 @@ patch "Path Flow" {
 
     const blockTypes = result.typedPatch.blocks.map(b => b.type);
     expect(blockTypes).toContain('PathLayout');
-    expect(blockTypes).toContain('AttractorLayout');
+    expect(blockTypes).toContain('Expression');
     expect(blockTypes).toContain('ProceduralPolygon');
     expect(blockTypes).toContain('RenderInstances2D');
   });
@@ -95,15 +99,12 @@ patch "Path Flow" {
     expect(pathLayoutOutputs).toBeGreaterThanOrEqual(2);
   });
 
-  it('AttractorLayout has controlPoints output', () => {
+  it('Expression block is present for viewport recentering', () => {
     const { patch, errors } = deserializePatchFromHCL(hcl);
     expect(errors).toEqual([]);
     const result = compileFrontend(patch);
 
-    const attractorIndex = result.typedPatch.blocks.findIndex(b => b.type === 'AttractorLayout');
-    expect(attractorIndex).toBeGreaterThanOrEqual(0);
-    const attractorOutputs = Array.from(result.typedPatch.portTypes.keys())
-      .filter(key => key.startsWith(`${attractorIndex}:`) && key.endsWith(':out')).length;
-    expect(attractorOutputs).toBeGreaterThanOrEqual(1);
+    const expressionIndex = result.typedPatch.blocks.findIndex(b => b.type === 'Expression');
+    expect(expressionIndex).toBeGreaterThanOrEqual(0);
   });
 });

@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'fs';
-import { basename, join } from 'path';
+import { basename } from 'path';
 import { deserializePatchFromHCL, serializePatchToHCL } from '../index';
 import type { Block, Edge, Patch } from '../../graph/Patch';
 import { registerAllBlocks } from '../../blocks/all';
+import { hclDemos } from '../../demo/hcl-demos';
 
 registerAllBlocks();
-
-const HCL_DEMO_DIR = join(__dirname, '../../demo/hcl');
-const HCL_DEMO_FILES = readdirSync(HCL_DEMO_DIR)
-  .filter((file) => file.endsWith('.hcl'))
-  .sort((a, b) => a.localeCompare(b));
 
 function normalizeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -108,14 +103,14 @@ function inferPatchName(hcl: string, file: string): string {
 }
 
 describe('demo HCL parser round-trip', () => {
-  for (const file of HCL_DEMO_FILES) {
-    it(`preserves structure for ${file}`, () => {
-      const hcl = readFileSync(join(HCL_DEMO_DIR, file), 'utf-8');
+  for (const demo of hclDemos) {
+    it(`preserves structure for ${demo.relativePath}`, () => {
+      const hcl = demo.hcl;
       const firstParse = deserializePatchFromHCL(hcl);
       expect(firstParse.errors).toEqual([]);
 
       const serialized = serializePatchToHCL(firstParse.patch, {
-        name: inferPatchName(hcl, file),
+        name: inferPatchName(hcl, demo.filename),
       });
       const secondParse = deserializePatchFromHCL(serialized);
       expect(secondParse.errors).toEqual([]);

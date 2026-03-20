@@ -1,17 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { registerAllBlocks } from '../../blocks/all';
 import { compile } from '../../compiler/compile';
 import { ShapeClass } from '../../shapes/types';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import type { StepRender } from '../../compiler/ir/types';
-import { GPU_BOOTSTRAP_DEMO_FILENAME } from '../hcl-demos';
+import { getHclDemo, GPU_BOOTSTRAP_DEMO_FILENAME } from '../hcl-demos';
 
 registerAllBlocks();
 
 function readBootstrapDemo(): string {
-  return readFileSync(join(process.cwd(), 'src', 'demo', 'hcl', GPU_BOOTSTRAP_DEMO_FILENAME), 'utf8');
+  const demo = getHclDemo(GPU_BOOTSTRAP_DEMO_FILENAME);
+  if (!demo) {
+    throw new Error(`Missing demo ${GPU_BOOTSTRAP_DEMO_FILENAME}`);
+  }
+  return demo.hcl;
 }
 
 describe('GPU bootstrap demo', () => {

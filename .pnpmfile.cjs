@@ -1,12 +1,10 @@
-// pnpm hook to pre-approve prebuild scripts
+// pnpm hook file.
 // See: https://pnpm.io/pnpmfile
 //
-// This file works in conjunction with .npmrc to allow specific packages
-// to run their build scripts without prompting during install.
+// [LAW:one-source-of-truth] Build-script approvals are configured in
+// pnpm-workspace.yaml via onlyBuiltDependencies, not duplicated here.
 
 function readPackage(pkg, context) {
-  // Additional hook processing if needed
-  // Most configuration is handled via .npmrc allow-build-scripts setting
   return pkg;
 }
 

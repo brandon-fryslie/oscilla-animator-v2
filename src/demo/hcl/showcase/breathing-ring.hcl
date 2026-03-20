@@ -1,31 +1,30 @@
-# Golden Spiral
+# Breathing Ring
 #
-# 200 ellipses in a slowly rotating Archimedean spiral with gentle pulsing
-# scale jitter and vivid per-element rainbow gradient.
-# Demonstrates: SpiralLayout, ScaleBias, NoisyBroadcast, per-element rainbow.
+# A ring of circles that pulses in size with per-element rainbow and
+# per-instance jitter. The oscillator drives jitter amount through ScaleBias.
+# Demonstrates: ScaleBias, NoisyBroadcast, per-element rainbow.
 
-patch "Golden Spiral" {
+patch "Breathing Ring" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 30000
-    periodBMs = 12000
+    periodAMs = 2000
     role = "timeRoot"
     outputs {
-      phaseA = layout.phase
-      phaseB = [scale-osc.phase, dot-wobble.phase]
+      phaseA = [breath.phase, dot-wobble.phase, hue-shift.b]
     }
   }
 
+  # Shape and instances
   block "Ellipse" "dot" {
-    rx = 0.008
-    ry = 0.008
+    rx = 0.026
+    ry = 0.026
     outputs {
       controlPoints = dot-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "dot-wobble" {
-    amount = 0.0018
-    frequency = 10
+    amount = 0.0045
+    frequency = 8
     outputs {
       points = dot-shape.controlPoints
     }
@@ -39,37 +38,36 @@ patch "Golden Spiral" {
   }
 
   block "Array" "instances" {
-    count = 200
+    count = 28
     outputs {
-      elements = layout.elements
-      t = color.h
+      elements = ring.elements
+      t = hue-shift.a
     }
   }
 
-  block "SpiralLayout" "layout" {
-    turns = 8
-    expansion = 0.4
+  block "CircleLayoutUV" "ring" {
+    radius = 0.34
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
-  # Gentle pulsing scale
-  block "Oscillator" "scale-osc" {
+  # Breathing animation: scale = oscillator * 0.5 + 1.0 → [0.5, 1.5]
+  block "Oscillator" "breath" {
     outputs {
       out = scale-map.in
     }
   }
 
   block "Const" "scale-amt" {
-    value = 0.3
+    value = 0.65
     outputs {
       out = scale-map.scale
     }
   }
 
   block "Const" "scale-center" {
-    value = 0.85
+    value = 1.0
     outputs {
       out = scale-map.bias
     }
@@ -82,14 +80,14 @@ patch "Golden Spiral" {
   }
 
   block "Const" "base-scale" {
-    value = 0.9
+    value = 1.0
     outputs {
       out = scale-jitter.value
     }
   }
 
   block "Const" "jitter-seed" {
-    value = 29
+    value = 7
     outputs {
       out = scale-jitter.seed
     }
@@ -101,8 +99,17 @@ patch "Golden Spiral" {
     }
   }
 
-  # Per-element rainbow from Array.t
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
+  # Per-element rainbow: each dot gets its own hue from Array.t
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.75
+    a = 0.96
     outputs {
       color = render.color
     }

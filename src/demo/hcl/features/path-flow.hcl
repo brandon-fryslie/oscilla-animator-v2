@@ -3,8 +3,7 @@
 # Demonstrates the v2.5 layout system:
 #   - PathLayout (Type B Relation): distributes elements along an arc-length
 #     parameterized path defined by a ProceduralPolygon
-#   - AttractorLayout (Type C Deformer): pulls distributed control points toward
-#     a target point, centering them in the viewport
+#   - Expression recentering: lifts origin-authored path samples into viewport UV space
 #   - Animated offset: elements flow continuously around the pentagon path
 #
 # ═══════════════════════════════════════════════════════════════════════════
@@ -12,10 +11,8 @@
 # ═══════════════════════════════════════════════════════════════════════════
 #
 # Visual:
-#   - 40 small ellipses arranged in a pentagonal pattern near the center
+#   - 40 glowing ellipses arranged in a pentagonal path around the center
 #     of the viewport
-#   - The pentagon is "softened" (pulled inward) because AttractorLayout
-#     lerps each control point 60% toward the center point (0.5, 0.5)
 #   - Each ellipse has a unique hue from the rainbow spectrum (red → orange
 #     → yellow → green → cyan → blue → violet), cycling across the 40
 #     elements based on their normalized index
@@ -38,16 +35,15 @@
 #   - ProceduralPolygon generates 5 vertices centered at (0, 0) with
 #     radius 0.2, so vertices lie at distance 0.2 from origin
 #   - PathLayout samples M=40 positions along these 5 edges
-#   - AttractorLayout with strength=0.6 lerps: output = 0.4*path + 0.6*target
-#     where target defaults to (0.5, 0.5)
-#   - Result: control points are roughly in the range (0.2, 0.15) to (0.4, 0.38),
-#     visible in the center-left area of the viewport
+#   - Expression adds (0.5, 0.5) to each sampled point
+#   - Result: control points are roughly in the range (0.3, 0.3) to (0.7, 0.7),
+#     centered in the viewport instead of clustering in the upper-left quadrant
 #
 # Blocks exercised:
 #   PathLayout       — arc-length path sampling via pathSample kernel
-#   AttractorLayout  — component-wise control-point lerp deformer
 #   ProceduralPolygon — pentagon path source (shapeRef + controlPoints)
 #   MakeShape2D      — topology assembler (consumes controlPoints)
+#   Expression       — field swizzle + viewport recentering
 #
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -59,7 +55,7 @@ patch "Path Flow" {
     periodAMs = 8000
     role = "timeRoot"
     outputs {
-      phaseA = [pathLayout.offset, polygon-wobble.phase]
+      phaseA = [path-layout.offset, polygon-wobble.phase]
     }
   }
 
@@ -88,15 +84,15 @@ patch "Path Flow" {
   block "MakeShape2D" "assembler" {
     closed = true
     outputs {
-      shape = pathLayout.shape
+      shape = path-layout.shape
     }
   }
 
   # --- Visual stamp: small ellipses for each instance ---
 
   block "Ellipse" "dot" {
-    rx = 0.008
-    ry = 0.008
+    rx = 0.011
+    ry = 0.011
     outputs {
       shape = arr.element
     }
@@ -107,7 +103,7 @@ patch "Path Flow" {
   block "Array" "arr" {
     count = 40
     outputs {
-      elements = pathLayout.elements
+      elements = path-layout.elements
       t = color.h
     }
   }
@@ -116,19 +112,22 @@ patch "Path Flow" {
   # spacing=1 (default) → elements span exactly one path length
   # offset ← animated 0→1 ramp from clock → continuous flow
 
-  block "PathLayout" "pathLayout" {
+  block "PathLayout" "path-layout" {
     outputs {
-      controlPoints = attractor.points
+      controlPoints = center-path.refs
     }
   }
 
-  # --- AttractorLayout: pull control points toward viewport center ---
-  # target defaults to (0.5, 0.5), strength=0.6 → gentle centering
-
-  block "AttractorLayout" "attractor" {
-    strength = 0.6
+  block "Expression" "center-path" {
+    expression = <<-EXPR
+      // PathLayout samples the pentagon in origin space.
+      // Visual: offset the flowing necklace into centered UV space without collapsing its radius.
+      x = path_layout.controlPoints.x + 0.5
+      y = path_layout.controlPoints.y + 0.5
+      vec2(x, y)
+    EXPR
     outputs {
-      controlPoints = render.controlPoints
+      out = render.controlPoints
     }
   }
 

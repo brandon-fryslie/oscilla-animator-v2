@@ -1,19 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compileFromFrontend } from '../../compiler/compile';
 import { buildCompiledRuntimeInstallContract } from '../../compiler/backend/compiled-runtime-install-contract';
 import { compileFrontend } from '../../compiler/frontend';
+import { hclDemos } from '../../demo';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import { stripKernelRegistry } from '../compile-worker-serialization';
-
-function listDemoFiles(): readonly string[] {
-  const demoDir = join(process.cwd(), 'src', 'demo', 'hcl');
-  return readdirSync(demoDir)
-    .filter((name) => name.endsWith('.hcl'))
-    .sort((a, b) => a.localeCompare(b));
-}
 
 const REPRESENTATIVE_DEMOS = [
   'simple.hcl',
@@ -22,7 +14,7 @@ const REPRESENTATIVE_DEMOS = [
   'feedback-accumulator.hcl',
   'path-field-demo.hcl',
   'library-kitchen-sink.hcl',
-  'mouse-reactive.hcl',
+  'mouse-spiral.hcl',
   'rect-mosaic.hcl',
 ] as const;
 
@@ -35,11 +27,14 @@ function selectRepresentativeDemos(allFiles: readonly string[]): readonly string
 describe('compile worker payload clone safety', () => {
   it('frontend and backend payloads are structured-clone safe for representative demos', () => {
     const failures: string[] = [];
-    const demoFiles = selectRepresentativeDemos(listDemoFiles());
+    const demoFiles = selectRepresentativeDemos(hclDemos.map((demo) => demo.filename));
 
     for (const filename of demoFiles) {
-      const fullPath = join(process.cwd(), 'src', 'demo', 'hcl', filename);
-      const hcl = readFileSync(fullPath, 'utf8');
+      const hcl = hclDemos.find((demo) => demo.filename === filename)?.hcl;
+      if (!hcl) {
+        failures.push(`${filename}: demo not found`);
+        continue;
+      }
       const parsed = deserializePatchFromHCL(hcl);
       if (!parsed) {
         failures.push(`${filename}: patch parse failed`);

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import path from 'path';
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 function readRealpath(candidate: string): string {
   try {
@@ -13,16 +14,38 @@ function readRealpath(candidate: string): string {
   }
 }
 
+function readGitWorktreeRoots(repoRoot: string): string[] {
+  try {
+    const output = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return output
+      .split('\n')
+      .filter((line) => line.startsWith('worktree '))
+      .map((line) => line.slice('worktree '.length).trim())
+      .filter((value) => value.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 const workspaceRoot = path.resolve(__dirname);
 const cwdRoot = path.resolve(process.cwd());
 const pwdRoot = process.env.PWD ? path.resolve(process.env.PWD) : null;
+const localFsRoots = [workspaceRoot, cwdRoot, pwdRoot].filter((value): value is string => Boolean(value));
+const gitWorktreeRoots = readGitWorktreeRoots(workspaceRoot);
+const extraFsRootsEnabled = gitWorktreeRoots.some((candidate) => !localFsRoots.includes(candidate));
 const allowedFsRoots = Array.from(
   new Set(
-    [workspaceRoot, cwdRoot, pwdRoot]
+    [...localFsRoots, ...gitWorktreeRoots]
       .filter((value): value is string => Boolean(value))
       .flatMap((candidate) => [candidate, readRealpath(candidate)])
   )
 );
+const devServerHost = extraFsRootsEnabled ? '127.0.0.1' : '0.0.0.0';
+const devAllowedHosts = extraFsRootsEnabled ? ['127.0.0.1', 'localhost'] : true;
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -40,13 +63,16 @@ export default defineConfig({
   },
   server: {
     port: 5784,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host: devServerHost,
+    allowedHosts: devAllowedHosts,
     // [LAW:single-enforcer] SharedArrayBuffer capability is enforced at the
     // HTTP boundary so worker ABI availability does not vary by caller.
     headers: crossOriginIsolationHeaders,
     // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
-    // here so every harness/browser lane resolves the same source roots.
+    // here so every harness/browser lane resolves the same source roots,
+    // including sibling git worktrees that source maps can legitimately target.
+    // [LAW:single-enforcer] When extra roots are enabled, this same boundary
+    // also narrows host exposure so @fs access stays local-only.
     fs: {
       allow: allowedFsRoots,
     },
