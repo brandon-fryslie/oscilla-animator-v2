@@ -62,6 +62,7 @@ function makeRendererStub() {
     rebuildGpuPipelines: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
     setGpuFaultCallback: vi.fn<(callback: unknown) => void>(),
     dispose: vi.fn<() => void>(),
+    resizeCanvas: vi.fn<(width: number, height: number) => void>(),
     render: vi.fn<(payload: unknown) => void>(),
   };
 }
@@ -115,6 +116,7 @@ describe('RuntimeService', () => {
 
     serviceAccess.installRendererCanonicalAssets(bundle);
 
+    expect(renderer.resizeCanvas).toHaveBeenCalledWith(800, 800);
     expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
       shapeBank: expect.objectContaining({
         data: bundle.runtimeInstall.shapeBank.words,

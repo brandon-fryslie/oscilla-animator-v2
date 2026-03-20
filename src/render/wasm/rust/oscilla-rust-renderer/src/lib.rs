@@ -233,8 +233,9 @@ pub fn resume_engine() -> Result<(), JsValue> {
             JsValue::from_str("Rust engine must be initialized before resume_engine")
         })?;
         engine.resume();
-        Ok(())
-    })
+        Ok::<(), JsValue>(())
+    })?;
+    arm_worker_loop_if_needed()
 }
 
 #[wasm_bindgen]

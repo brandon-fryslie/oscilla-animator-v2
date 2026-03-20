@@ -41,7 +41,7 @@ export interface PanelMenuItem {
  */
 export const PANEL_DEFINITIONS: PanelDefinition[] = [
   // Left sidebar
-  { id: 'left-sidebar', component: 'left-sidebar', title: 'Library', group: 'left-top' },
+  { id: 'left-sidebar', component: 'left-sidebar', title: 'Block Library', group: 'left-top' },
 
   // Center (tabbed editors)
   { id: 'flow-editor', component: 'flow-editor', title: 'Patch', group: 'center' },
