@@ -46,78 +46,216 @@ import {
 } from './blocks/composites';
 import type { ExternalWriteBus } from './runtime/ExternalChannel';
 
+type StatsSink = (statsText: string) => void;
+type RenderApp = () => void;
+
+interface RuntimeBootstrapCallbacks {
+  readonly statsSink: StatsSink;
+  readonly renderApp: RenderApp;
+}
+
+interface RuntimeBootstrapActiveState {
+  readonly kind: 'active';
+  readonly canvas: HTMLCanvasElement;
+  readonly store: RootStore;
+  readonly runtimeService: RuntimeService;
+  readonly callbacks: RuntimeBootstrapCallbacks;
+}
+
+type RuntimeBootstrapState =
+  | {
+    readonly kind: 'idle';
+    readonly callbacks: RuntimeBootstrapCallbacks;
+  }
+  | {
+    readonly kind: 'waiting-for-store';
+    readonly canvas: HTMLCanvasElement;
+    readonly callbacks: RuntimeBootstrapCallbacks;
+  }
+  | {
+    readonly kind: 'waiting-for-canvas';
+    readonly store: RootStore;
+    readonly runtimeService: RuntimeService;
+    readonly callbacks: RuntimeBootstrapCallbacks;
+  }
+  | RuntimeBootstrapActiveState;
+
+const noopStatsSink: StatsSink = () => {};
+const noopRenderApp: RenderApp = () => {};
+
+function createRuntimeBootstrapCallbacks(): RuntimeBootstrapCallbacks {
+  return {
+    statsSink: noopStatsSink,
+    renderApp: noopRenderApp,
+  };
+}
+
+function createRuntimeService(
+  rootStore: RootStore,
+  callbacks: RuntimeBootstrapCallbacks,
+): RuntimeService {
+  return new RuntimeService(rootStore, {
+    onStatsUpdate: callbacks.statsSink,
+    onRuntimeReady: callbacks.renderApp,
+  });
+}
+
 function createRuntimeBootstrap() {
   // [LAW:no-shared-mutable-globals] Main bootstrap mutable state is owned by a
-  // single coordinator object instead of module-level mutable variables.
-  const state: {
-    runtimeService: RuntimeService | null;
-    pendingCanvas: HTMLCanvasElement | null;
-    pendingStore: RootStore | null;
-    runtimeInitStarted: boolean;
-    statsSink: ((statsText: string) => void) | null;
-    renderApp: (() => void) | null;
-  } = {
-    runtimeService: null,
-    pendingCanvas: null,
-    pendingStore: null,
-    runtimeInitStarted: false,
-    statsSink: null,
-    renderApp: null,
+  // single state machine instead of independent nullable slots.
+  let state: RuntimeBootstrapState = {
+    kind: 'idle',
+    callbacks: createRuntimeBootstrapCallbacks(),
   };
 
-  const tryInitRuntime = (): void => {
-    if (state.runtimeInitStarted || !state.runtimeService || !state.pendingStore || !state.pendingCanvas) return;
-    state.runtimeInitStarted = true;
-    state.runtimeService.setCanvas(state.pendingCanvas);
-    state.pendingCanvas = null;
-    state.runtimeService.init().catch((err) => {
+  const syncRuntimeServiceCallbacks = (runtimeService: RuntimeService, callbacks: RuntimeBootstrapCallbacks): void => {
+    runtimeService.setStatsSink(callbacks.statsSink);
+    runtimeService.setRuntimeReadySink(callbacks.renderApp);
+  };
+
+  const startRuntime = (
+    rootStore: RootStore,
+    runtimeService: RuntimeService,
+    canvasEl: HTMLCanvasElement,
+    callbacks: RuntimeBootstrapCallbacks,
+  ): RuntimeBootstrapActiveState => {
+    runtimeService.setCanvas(canvasEl);
+    runtimeService.init().catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       // [LAW:single-enforcer] Main boot is the one boundary that reports
       // fatal runtime init failures to both diagnostics and browser console.
       console.error('Failed to initialize runtime:', err);
       // [LAW:single-enforcer] Main boot reports runtime init failures via diagnostics.
-      state.pendingStore?.diagnostics.log({
+      rootStore.diagnostics.log({
         level: 'error',
         message: `Failed to initialize runtime: ${message}`,
       });
     });
+    return {
+      kind: 'active',
+      canvas: canvasEl,
+      store: rootStore,
+      runtimeService,
+      callbacks,
+    };
+  };
+
+  const setCallbacks = (
+    current: RuntimeBootstrapState,
+    callbacks: RuntimeBootstrapCallbacks,
+  ): RuntimeBootstrapState => {
+    switch (current.kind) {
+      case 'idle':
+        return { kind: 'idle', callbacks };
+      case 'waiting-for-store':
+        return { kind: 'waiting-for-store', canvas: current.canvas, callbacks };
+      case 'waiting-for-canvas':
+        syncRuntimeServiceCallbacks(current.runtimeService, callbacks);
+        return { ...current, callbacks };
+      case 'active':
+        syncRuntimeServiceCallbacks(current.runtimeService, callbacks);
+        return { ...current, callbacks };
+    }
   };
 
   return {
     setCanvas(canvasEl: HTMLCanvasElement): void {
-      state.pendingCanvas = canvasEl;
-      state.runtimeService?.setCanvas(canvasEl);
-      // [LAW:dataflow-not-control-flow] Runtime init depends on data readiness
-      // (store/canvas presence), not callback ordering.
-      tryInitRuntime();
+      switch (state.kind) {
+        case 'idle':
+          state = {
+            kind: 'waiting-for-store',
+            canvas: canvasEl,
+            callbacks: state.callbacks,
+          };
+          return;
+        case 'waiting-for-store':
+          state = {
+            kind: 'waiting-for-store',
+            canvas: canvasEl,
+            callbacks: state.callbacks,
+          };
+          return;
+        case 'waiting-for-canvas':
+          // [LAW:dataflow-not-control-flow] Runtime init depends on acquiring a
+          // total bootstrap tuple (store + canvas), not callback ordering.
+          state = startRuntime(state.store, state.runtimeService, canvasEl, state.callbacks);
+          return;
+        case 'active':
+          state.runtimeService.setCanvas(canvasEl);
+          state = {
+            ...state,
+            canvas: canvasEl,
+          };
+      }
     },
     setStore(rootStore: RootStore): void {
-      state.pendingStore = rootStore;
-      state.runtimeService = new RuntimeService(rootStore, {
-        onStatsUpdate: (statsText) => state.statsSink?.(statsText),
-        onRuntimeReady: () => state.renderApp?.(),
+      switch (state.kind) {
+        case 'idle': {
+          const runtimeService = createRuntimeService(rootStore, state.callbacks);
+          state = {
+            kind: 'waiting-for-canvas',
+            store: rootStore,
+            runtimeService,
+            callbacks: state.callbacks,
+          };
+          return;
+        }
+        case 'waiting-for-store': {
+          const runtimeService = createRuntimeService(rootStore, state.callbacks);
+          state = startRuntime(rootStore, runtimeService, state.canvas, state.callbacks);
+          return;
+        }
+        case 'waiting-for-canvas':
+        case 'active': {
+          state.runtimeService.dispose();
+          const runtimeService = createRuntimeService(rootStore, state.callbacks);
+          state = state.kind === 'active'
+            ? startRuntime(rootStore, runtimeService, state.canvas, state.callbacks)
+            : {
+              kind: 'waiting-for-canvas',
+              store: rootStore,
+              runtimeService,
+              callbacks: state.callbacks,
+            };
+        }
+      }
+    },
+    setStatsSink(sink: StatsSink | null): void {
+      state = setCallbacks(state, {
+        ...state.callbacks,
+        statsSink: sink ?? noopStatsSink,
       });
-      tryInitRuntime();
     },
-    setStatsSink(sink: ((statsText: string) => void) | null): void {
-      state.statsSink = sink;
-      state.runtimeService?.setStatsSink(sink);
-    },
-    setRenderApp(renderApp: (() => void) | null): void {
-      state.renderApp = renderApp;
-      state.runtimeService?.setRuntimeReadySink(renderApp);
+    setRenderApp(renderApp: RenderApp | null): void {
+      state = setCallbacks(state, {
+        ...state.callbacks,
+        renderApp: renderApp ?? noopRenderApp,
+      });
     },
     getExternalWriteBus(): ExternalWriteBus | undefined {
-      return state.runtimeService?.compileState.currentState?.externalChannels.writeBus;
+      switch (state.kind) {
+        case 'idle':
+        case 'waiting-for-store':
+          return undefined;
+        case 'waiting-for-canvas':
+        case 'active':
+          return state.runtimeService.compileState.currentState?.externalChannels.writeBus;
+      }
     },
     dispose(): void {
-      state.runtimeService?.dispose();
-      state.runtimeService = null;
-      state.pendingCanvas = null;
-      state.pendingStore = null;
-      state.runtimeInitStarted = false;
-      state.statsSink = null;
-      state.renderApp = null;
+      switch (state.kind) {
+        case 'waiting-for-canvas':
+        case 'active':
+          state.runtimeService.dispose();
+          break;
+        case 'idle':
+        case 'waiting-for-store':
+          break;
+      }
+      state = {
+        kind: 'idle',
+        callbacks: createRuntimeBootstrapCallbacks(),
+      };
     },
   };
 }

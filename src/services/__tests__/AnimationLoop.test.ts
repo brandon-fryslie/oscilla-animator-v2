@@ -87,12 +87,15 @@ function makeDeps(renderer: ReturnType<typeof makeRenderer>) {
   return {
     getCurrentProgram: () => makeProgram() as never,
     getCurrentState: () => null,
-    getCanvas: () => ({ width: 640, height: 360 }) as HTMLCanvasElement,
-    getRenderer: () => renderer as never,
-    getArena: () => ({
-      beginFrame: vi.fn(),
-      endFrame: vi.fn(),
-    }) as never,
+    runtime: {
+      canvas: { width: 640, height: 360 } as HTMLCanvasElement,
+      renderer: renderer as never,
+      arena: {
+        beginFrame: vi.fn(),
+        endFrame: vi.fn(),
+      } as never,
+    },
+    onStatsUpdate: () => {},
     store,
   };
 }

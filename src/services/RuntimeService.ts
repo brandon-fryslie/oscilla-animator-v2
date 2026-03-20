@@ -46,6 +46,7 @@ import { AsyncCompilerService, type AsyncCompilerState } from './AsyncCompilerSe
 import {
   startAnimationLoop,
   createAnimationLoopState,
+  type ActiveAnimationLoopRuntime,
   type AnimationLoopDeps,
   type AnimationLoopController,
   type AnimationLoopState,
@@ -72,6 +73,55 @@ import {
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
 const STARTUP_STORAGE_RESET_ARM_MS = 10_000;
+
+type StatsSink = (statsText: string) => void;
+type RuntimeReadySink = () => void;
+
+export interface RawRuntimeServiceOptions {
+  readonly onStatsUpdate?: StatsSink;
+  readonly onRuntimeReady?: RuntimeReadySink;
+}
+
+interface RuntimeServiceOptions {
+  readonly onStatsUpdate: StatsSink;
+  readonly onRuntimeReady: RuntimeReadySink;
+}
+
+interface CompilerServices {
+  readonly client: CompileWorkerClient;
+  readonly compiler: AsyncCompilerService;
+  readonly unsubscribeCompilerState: () => void;
+}
+
+type RuntimeCanvasState =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'ready'; readonly canvas: HTMLCanvasElement };
+
+type RuntimeResourcesState =
+  | { readonly kind: 'inactive' }
+  | { readonly kind: 'bootstrapping'; readonly canvas: HTMLCanvasElement }
+  | { readonly kind: 'active'; readonly runtime: ActiveAnimationLoopRuntime }
+  | {
+    readonly kind: 'faulted';
+    readonly canvas: HTMLCanvasElement;
+    readonly arena: RenderBufferArena;
+    readonly fault: GpuFault;
+  }
+  | { readonly kind: 'disposed' };
+
+type CompilerServicesState =
+  | { readonly kind: 'inactive' }
+  | { readonly kind: 'active'; readonly services: CompilerServices };
+
+const noopStatsSink: StatsSink = () => {};
+const noopRuntimeReadySink: RuntimeReadySink = () => {};
+
+function normalizeRuntimeServiceOptions(raw: RawRuntimeServiceOptions): RuntimeServiceOptions {
+  return {
+    onStatsUpdate: raw.onStatsUpdate ?? noopStatsSink,
+    onRuntimeReady: raw.onRuntimeReady ?? noopRuntimeReadySink,
+  };
+}
 
 function describeFatalGpuFault(fault: GpuFault): string {
   return fault.source === 'CIRCUIT_BREAKER'
@@ -111,15 +161,12 @@ export class RuntimeService {
   };
 
   private animationState: AnimationLoopState = createAnimationLoopState();
-  private canvas: HTMLCanvasElement | null = null;
-  private renderer: WebGPURenderer | null = null;
-  private arena: RenderBufferArena | null = null;
+  private canvasState: RuntimeCanvasState = { kind: 'missing' };
+  private runtimeResourcesState: RuntimeResourcesState = { kind: 'inactive' };
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
-  private compileWorkerClient: CompileWorkerClient | null = null;
-  private asyncCompiler: AsyncCompilerService | null = null;
-  private unsubCompilerState: (() => void) | null = null;
+  private compilerServicesState: CompilerServicesState = { kind: 'inactive' };
   private swapInFlight = false;
   private swapRafId: number | null = null;
   // [LAW:one-source-of-truth] Swap mode is carried by one flag that is
@@ -128,8 +175,8 @@ export class RuntimeService {
   private lastWorkerFallbackLog = { message: '', atMs: 0 };
   private compileWorkerUnavailableLogged = false;
   private readonly liveRecompile: LiveRecompileController = createLiveRecompileController();
-  private statsSink: ((statsText: string) => void) | null;
-  private runtimeReadySink: (() => void) | null;
+  private statsSink: StatsSink;
+  private runtimeReadySink: RuntimeReadySink;
   private unsubSpyTracking: (() => void) | null = null;
   private spyReadbackTimer: ReturnType<typeof setTimeout> | null = null;
   private spyReadbackLoopActive = false;
@@ -146,13 +193,11 @@ export class RuntimeService {
 
   constructor(
     private readonly store: RootStore,
-    options: {
-      onStatsUpdate?: (statsText: string) => void;
-      onRuntimeReady?: () => void;
-    } = {}
+    rawOptions: RawRuntimeServiceOptions = {}
   ) {
-    this.statsSink = options.onStatsUpdate ?? null;
-    this.runtimeReadySink = options.onRuntimeReady ?? null;
+    const options = normalizeRuntimeServiceOptions(rawOptions);
+    this.statsSink = options.onStatsUpdate;
+    this.runtimeReadySink = options.onRuntimeReady;
     this.debugProbeTransport = new LocalDebugProbeTransport(() => ({
       program: this.compileState.currentProgram,
       state: this.compileState.currentState,
@@ -163,16 +208,65 @@ export class RuntimeService {
     });
   }
 
-  setStatsSink(onStatsUpdate: ((statsText: string) => void) | null): void {
+  setStatsSink(onStatsUpdate: StatsSink): void {
     // [LAW:no-shared-mutable-globals] RuntimeService owns the stats sink
     // explicitly; no ambient window callback is used.
     this.statsSink = onStatsUpdate;
   }
 
-  setRuntimeReadySink(onRuntimeReady: (() => void) | null): void {
+  setRuntimeReadySink(onRuntimeReady: RuntimeReadySink): void {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
+  }
+
+  private requireCanvas(): HTMLCanvasElement {
+    if (this.canvasState.kind !== 'ready') {
+      throw new Error('RuntimeService: preview canvas is required before initialization');
+    }
+    return this.canvasState.canvas;
+  }
+
+  private readActiveRuntimeResources(): ActiveAnimationLoopRuntime | null {
+    return this.runtimeResourcesState.kind === 'active'
+      ? this.runtimeResourcesState.runtime
+      : null;
+  }
+
+  private requireActiveRuntimeResources(context: string): ActiveAnimationLoopRuntime {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime) {
+      throw new Error(`RuntimeService: active runtime resources are required before ${context}`);
+    }
+    return runtime;
+  }
+
+  private activateRuntimeResources(runtime: ActiveAnimationLoopRuntime): void {
+    this.runtimeResourcesState = {
+      kind: 'active',
+      runtime,
+    };
+  }
+
+  private setCompilerServices(services: CompilerServices): void {
+    this.compilerServicesState = {
+      kind: 'active',
+      services,
+    };
+  }
+
+  private readCompilerServices(): CompilerServices | null {
+    return this.compilerServicesState.kind === 'active'
+      ? this.compilerServicesState.services
+      : null;
+  }
+
+  private requireCompilerServices(context: string): CompilerServices {
+    const services = this.readCompilerServices();
+    if (!services) {
+      throw new Error(`RuntimeService: compiler services are required before ${context}`);
+    }
+    return services;
   }
 
   private logWorkerFailure(err: unknown): void {
@@ -211,14 +305,13 @@ export class RuntimeService {
   }
 
   private animationLoopDeps(): AnimationLoopDeps {
+    const runtime = this.requireActiveRuntimeResources('starting the animation loop');
     return {
       getCurrentProgram: () => this.compileState.currentProgram,
       getCurrentState: () => this.compileState.currentState,
-      getCanvas: () => this.canvas,
-      getRenderer: () => this.renderer,
-      getArena: () => this.arena,
+      runtime,
       store: this.store,
-      onStatsUpdate: (statsText) => this.statsSink?.(statsText),
+      onStatsUpdate: this.statsSink,
     };
   }
 
@@ -262,7 +355,8 @@ export class RuntimeService {
 
   private async flushPendingSwap(): Promise<void> {
     if (this.swapInFlight) return;
-    const next = this.asyncCompiler?.takeReadyArtifactsForSwap() ?? null;
+    const compilerServices = this.readCompilerServices();
+    const next = compilerServices?.compiler.takeReadyArtifactsForSwap() ?? null;
     if (!next) return;
     const expectedProgram = next.backendResult?.kind === 'ok'
       ? next.backendResult.program
@@ -280,9 +374,9 @@ export class RuntimeService {
         // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
         this.installRendererCanonicalAssets(next.compiledGpuBundle);
       }
-      this.asyncCompiler?.markSwapComplete();
+      compilerServices?.compiler.markSwapComplete();
     } catch (err) {
-      this.asyncCompiler?.markSwapFailed(err);
+      compilerServices?.compiler.markSwapFailed(err);
       const message = err instanceof Error ? err.message : String(err);
       this.store.diagnostics.log({
         level: 'error',
@@ -290,7 +384,7 @@ export class RuntimeService {
       });
     } finally {
       this.swapInFlight = false;
-      if (this.asyncCompiler?.getState() === 'ready') {
+      if (compilerServices?.compiler.getState() === 'ready') {
         this.requestSwapFlush();
       }
     }
@@ -301,11 +395,11 @@ export class RuntimeService {
   // resolution, no ShapeBank allocator. The compile-time topology install
   // stage is the single GPU-visible runtime stage for shape-handle production.
   private installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): void {
-    const renderer = this.renderer;
-    const canvas = this.canvas;
-    if (!renderer || !canvas || this.rendererExecutionState !== 'active') {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime || this.rendererExecutionState !== 'active') {
       return;
     }
+    const { renderer, canvas } = runtime;
 
     // [LAW:one-source-of-truth] RuntimeService publishes the canonical
     // worker-owned install contract without rebuilding static metadata.
@@ -359,13 +453,14 @@ export class RuntimeService {
       throw new Error('RuntimeService: compile backend result is missing required GPU pass bundle');
     }
 
-    const renderer = this.renderer;
-    if (!renderer) {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime) {
       if (this.rendererExecutionState !== 'active') {
         return;
       }
       throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
     }
+    const { renderer } = runtime;
 
     // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
     // compiler-emitted GPU shader artifacts into the active renderer.
@@ -391,10 +486,7 @@ export class RuntimeService {
   private async waitForCompilerState(
     targets: readonly AsyncCompilerState[],
   ): Promise<AsyncCompilerState> {
-    const compiler = this.asyncCompiler;
-    if (!compiler) {
-      throw new Error('RuntimeService: async compiler is required before waiting for state');
-    }
+    const { compiler } = this.requireCompilerServices('waiting for async compiler state');
     const targetSet = new Set<AsyncCompilerState>(targets);
     const current = compiler.getState();
     if (targetSet.has(current)) return current;
@@ -408,10 +500,7 @@ export class RuntimeService {
   }
 
   private async runInitialCompileViaWorker(): Promise<void> {
-    const compiler = this.asyncCompiler;
-    if (!compiler) {
-      throw new Error('RuntimeService: async compiler is required before startup compile');
-    }
+    const { compiler } = this.requireCompilerServices('running the startup compile');
 
     this.nextSwapIsInitial = true;
     try {
@@ -470,6 +559,7 @@ export class RuntimeService {
 
   private handleGpuFault = (fault: GpuFault): void => {
     const { store } = this;
+    const runtime = this.readActiveRuntimeResources();
     const level = fault.severity === 'fatal' ? 'error' : 'warn';
     this.rendererExecutionState = deriveRendererExecutionStateFromGpuFault(fault);
     this.maybeClearStartupRestoreOnGpuFault(fault);
@@ -500,9 +590,16 @@ export class RuntimeService {
     }
     this.animationLoop?.stop();
     this.animationLoop = null;
-    this.renderer?.setGpuFaultCallback(null);
-    this.renderer?.dispose();
-    this.renderer = null;
+    if (runtime) {
+      runtime.renderer.setGpuFaultCallback(null);
+      runtime.renderer.dispose();
+      this.runtimeResourcesState = {
+        kind: 'faulted',
+        canvas: runtime.canvas,
+        arena: runtime.arena,
+        fault,
+      };
+    }
     store.diagnostics.log({
       level: 'error',
       message: describeFatalGpuFault(fault),
@@ -513,7 +610,16 @@ export class RuntimeService {
    * Called by React when the canvas element is available.
    */
   setCanvas(canvasEl: HTMLCanvasElement): void {
-    this.canvas = canvasEl;
+    this.canvasState = {
+      kind: 'ready',
+      canvas: canvasEl,
+    };
+    if (this.runtimeResourcesState.kind === 'bootstrapping') {
+      this.runtimeResourcesState = {
+        kind: 'bootstrapping',
+        canvas: canvasEl,
+      };
+    }
   }
 
   /**
@@ -528,20 +634,22 @@ export class RuntimeService {
     let bootstrapFailureRecorded = false;
     markRuntimeBootstrapStarted();
     try {
-      if (!this.canvas) {
-        throw new Error('RuntimeService: preview canvas is required before initialization');
-      }
+      const canvas = this.requireCanvas();
+      this.runtimeResourcesState = {
+        kind: 'bootstrapping',
+        canvas,
+      };
       // [LAW:single-enforcer] RuntimeService owns startup capability validation.
       // [LAW:no-silent-fallbacks] WebGPU-only runtime hard-fails when prerequisites are missing.
-      assertWebGPUStartupContract(this.canvas);
+      assertWebGPUStartupContract(canvas);
 
-      this.compileWorkerClient = new CompileWorkerClient();
-      this.asyncCompiler = new AsyncCompilerService({
-        runCompile: (request) => this.compileWorkerClient!.compile(request),
+      const compileWorkerClient = new CompileWorkerClient();
+      const asyncCompiler = new AsyncCompilerService({
+        runCompile: (request) => compileWorkerClient.compile(request),
         onCompileFailure: (error) => this.logWorkerFailure(error),
         debounceMs: 50,
       });
-      this.unsubCompilerState = this.asyncCompiler.subscribe((nextState) => {
+      const unsubscribeCompilerState = asyncCompiler.subscribe((nextState) => {
         // [LAW:single-enforcer] RuntimeService is the single boundary that exposes
         // async compiler lifecycle state to app-level observers via EventHub.
         store.events.emit({
@@ -549,18 +657,23 @@ export class RuntimeService {
           patchId: 'patch-0',
           patchRevision: store.getPatchRevision(),
           state: nextState,
-          errorMessage: this.asyncCompiler?.getLastErrorMessage() ?? undefined,
+          errorMessage: asyncCompiler.getLastErrorMessage() ?? undefined,
         });
         if (nextState === 'ready') {
           this.requestSwapFlush();
         }
       });
+      this.setCompilerServices({
+        client: compileWorkerClient,
+        compiler: asyncCompiler,
+        unsubscribeCompilerState,
+      });
       store.events.emit({
         type: 'CompilerStateChanged',
         patchId: 'patch-0',
         patchRevision: store.getPatchRevision(),
-        state: this.asyncCompiler.getState(),
-        errorMessage: this.asyncCompiler.getLastErrorMessage() ?? undefined,
+        state: asyncCompiler.getState(),
+        errorMessage: asyncCompiler.getLastErrorMessage() ?? undefined,
       });
       // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
       debugService.clear();
@@ -578,8 +691,8 @@ export class RuntimeService {
 
       // [LAW:no-shared-mutable-globals] RuntimeService owns one arena instance
       // per runtime lifecycle instead of relying on module-level singleton state.
-      this.arena = new RenderBufferArena(50_000);
-      this.arena.init();
+      const arena = new RenderBufferArena(50_000);
+      arena.init();
       setRenderIssueReporter((issue) => {
         // [LAW:single-enforcer] RuntimeService owns render issue routing into diagnostics.
         store.diagnostics.log({
@@ -604,8 +717,13 @@ export class RuntimeService {
       // [LAW:single-enforcer] RuntimeService is the only startup boundary that
       // instantiates the renderer after prerequisites are validated.
       try {
-        this.renderer = await createWebGPURenderer(this.canvas, {
+        const renderer = await createWebGPURenderer(canvas, {
           onGpuFault: this.handleGpuFault,
+        });
+        this.activateRuntimeResources({
+          canvas,
+          renderer,
+          arena,
         });
         this.rendererExecutionState = 'active';
       } catch (error) {
@@ -650,7 +768,7 @@ export class RuntimeService {
         this.compileState.currentState !== null;
 
       // Re-render App to update externalWriteBus prop now that runtime state exists.
-      this.runtimeReadySink?.();
+      this.runtimeReadySink();
 
       // Start auto-persistence (PatchStore watches itself)
       store.patch.startPersistence();
@@ -662,7 +780,7 @@ export class RuntimeService {
       // through the canonical async compile path until a worker-owned patch
       // protocol exists.
       this.liveRecompile.setup(store, async () => {
-        this.asyncCompiler!.scheduleCompile(this.buildCompileRequest());
+        this.requireCompilerServices('scheduling a live recompile').compiler.scheduleCompile(this.buildCompileRequest());
       }, undefined, (err) => {
         // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
         const message = err instanceof Error ? err.message : String(err);
@@ -728,7 +846,8 @@ export class RuntimeService {
   dispose(): void {
     compilationInspector.setErrorReporter(null);
     setRenderIssueReporter(null);
-    this.renderer?.setGpuFaultCallback(null);
+    const runtime = this.readActiveRuntimeResources();
+    runtime?.renderer.setGpuFaultCallback(null);
     this.disarmStartupStorageResetGuard();
     this.animationLoop?.stop();
     this.animationLoop = null;
@@ -740,25 +859,24 @@ export class RuntimeService {
       this.swapRafId = null;
     }
     this.swapInFlight = false;
-    this.unsubCompilerState?.();
-    this.unsubCompilerState = null;
-    this.asyncCompiler?.dispose();
-    this.asyncCompiler = null;
+    const compilerServices = this.readCompilerServices();
+    compilerServices?.unsubscribeCompilerState();
+    compilerServices?.compiler.dispose();
+    this.compilerServicesState = { kind: 'inactive' };
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;
-    this.compileWorkerClient?.dispose();
-    this.compileWorkerClient = null;
+    compilerServices?.client.dispose();
     this.store.patch.stopPersistence();
     this.domainChangeDetector.cleanup();
     this.liveRecompile.cleanup();
     debugService.clear();
-    this.renderer?.dispose();
-    this.renderer = null;
+    runtime?.renderer.dispose();
+    this.runtimeResourcesState = { kind: 'disposed' };
+    this.canvasState = { kind: 'missing' };
     this.rendererExecutionState = 'active';
-    this.arena = null;
     shaderInspector.clear();
-    this.statsSink = null;
-    this.runtimeReadySink = null;
+    this.statsSink = noopStatsSink;
+    this.runtimeReadySink = noopRuntimeReadySink;
   }
 
   private bindSpyReadbackTracking(): void {
