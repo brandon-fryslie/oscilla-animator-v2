@@ -20,8 +20,8 @@ patch "GPU 100K Swarm Stress" {
   }
 
   block "Ellipse" "dot" {
-    rx = 0.0014
-    ry = 0.0014
+    rx = 0.0018
+    ry = 0.0018
     outputs {
       shape = swarm.element
     }
@@ -50,8 +50,8 @@ patch "GPU 100K Swarm Stress" {
       phase_a_field = mapField(phase_a, swarm.t)
       phase_b_field = mapField(phase_b, swarm.t)
 
-      x0 = lattice.controlPoints.x
-      y0 = lattice.controlPoints.y
+      x0 = lattice.controlPoints.x - 0.5
+      y0 = lattice.controlPoints.y - 0.5
       lane = swarm.t
 
       wave_x = sin(x0 * 14.0 + phase_a_field * 2.3 + lane * 55.0)
@@ -61,10 +61,10 @@ patch "GPU 100K Swarm Stress" {
       r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
       theta_seed = (x0 * 3.7 + y0 * 2.9) * 6.2832
       theta = theta_seed + 0.42 * turbulence + phase_a_field * 0.9
-      ring = 0.72 * r + 0.09 * sin(lane * 90.0 + phase_b_field * 5.0)
+      ring = 0.54 * r + 0.07 * sin(lane * 90.0 + phase_b_field * 5.0)
 
-      x = ring * cos(theta) + 0.08 * sin(phase_a_field * 3.0 + y0 * 19.0)
-      y = ring * sin(theta) + 0.08 * cos(phase_b_field * 2.2 + x0 * 17.0)
+      x = 0.5 + ring * cos(theta) + 0.06 * sin(phase_a_field * 3.0 + y0 * 19.0)
+      y = 0.5 + ring * sin(theta) + 0.06 * cos(phase_b_field * 2.2 + x0 * 17.0)
 
       vec2(x, y)
     EXPR
@@ -81,8 +81,10 @@ patch "GPU 100K Swarm Stress" {
       phase_b_field = mapField(phase_b, swarm.t)
 
       lane = swarm.t
+      x0 = lattice.controlPoints.x - 0.5
+      y0 = lattice.controlPoints.y - 0.5
       base = 0.75 + 0.25 * sin(lane * 240.0 + phase_a_field * 8.0)
-      detail = 0.5 + 0.5 * cos((lattice.controlPoints.x + lattice.controlPoints.y) * 36.0 + phase_b_field * 7.0)
+      detail = 0.5 + 0.5 * cos((x0 + y0) * 36.0 + phase_b_field * 7.0)
       0.18 + 0.42 * base * detail
     EXPR
     outputs {

@@ -10,7 +10,13 @@
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import { GPU_BOOTSTRAP_DEMO_FILENAME, hclDemos, type HclDemo } from '../demo';
+import {
+  GPU_BOOTSTRAP_DEMO_FILENAME,
+  hclDemos,
+  hclDemoGroups,
+  type HclDemo,
+  type HclDemoGroup,
+} from '../demo';
 import { deserializePatchFromHCL } from '../patch-dsl';
 import { verifyGpuPatchCompatibility } from '../services/GpuPatchCompatibility';
 import type { PatchStore } from './PatchStore';
@@ -22,8 +28,13 @@ function isVerifiedGpuDemo(hcl: string): boolean {
   return parsed.errors.length === 0 && verifyGpuPatchCompatibility(parsed.patch).ok;
 }
 
+function isSelectableDemo(demo: HclDemo): boolean {
+  return demo.availability !== 'disabled';
+}
+
 export class DemoStore {
   readonly demos: readonly HclDemo[] = hclDemos;
+  readonly groups: readonly HclDemoGroup[] = hclDemoGroups;
   currentFilename: string | null = null;
 
   constructor(private readonly patchStore: PatchStore) {
@@ -42,7 +53,9 @@ export class DemoStore {
    */
   selectDemo(filename: string): boolean {
     const demo = this.demos.find(d => d.filename === filename);
-    if (!demo) return false;
+    // [LAW:single-enforcer] Demo availability is enforced here so UI surfaces
+    // can render the catalog model without re-implementing selection policy.
+    if (!demo || !isSelectableDemo(demo)) return false;
 
     this.currentFilename = filename;
     this.patchStore.loadFromHCL(demo.hcl);
@@ -53,13 +66,14 @@ export class DemoStore {
    * Load the default demo (GPU bootstrap demo when verified).
    */
   loadDefault(): void {
-    const preferredDemo = this.demos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME);
-    const verifiedDemo = this.demos.find((demo) => isVerifiedGpuDemo(demo.hcl));
+    const selectableDemos = this.demos.filter(isSelectableDemo);
+    const preferredDemo = selectableDemos.find((demo) => demo.filename === GPU_BOOTSTRAP_DEMO_FILENAME);
+    const verifiedDemo = selectableDemos.find((demo) => isVerifiedGpuDemo(demo.hcl));
     const defaultDemo = preferredDemo && isVerifiedGpuDemo(preferredDemo.hcl)
       ? preferredDemo
       : verifiedDemo
         ?? preferredDemo
-        ?? this.demos[0];
+        ?? selectableDemos[0];
     if (defaultDemo) {
       this.selectDemo(defaultDemo.filename);
     }
