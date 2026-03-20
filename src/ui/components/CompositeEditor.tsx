@@ -19,7 +19,7 @@ import {
   CallSplit as ExplodeIcon,
 } from '@mui/icons-material';
 import { useStores } from '../../stores';
-import type { InternalBlockId } from '../../blocks/composite-types';
+import { internalBlockId, type InternalBlockId } from '../../blocks/composite-types';
 import { getCompositeDefinition } from '../../blocks/registry';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
@@ -74,7 +74,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
         return adapter.addBlock(blockType, pos);
       },
       async removeBlock(blockId) {
-        adapter.removeBlock(blockId as any);
+        adapter.removeBlock(internalBlockId(blockId));
       },
       async zoomToFit() {
         graphEditorRef.current?.zoomToFit();

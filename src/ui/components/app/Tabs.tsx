@@ -13,7 +13,7 @@ export interface TabConfig {
   id: string;
   label: string;
   icon?: string;
-  component: React.ComponentType<any>;
+  component: React.ComponentType;
 }
 
 interface TabsProps {

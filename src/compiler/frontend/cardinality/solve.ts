@@ -20,6 +20,8 @@ import type { CardinalityValue, InstanceRef } from '../../../core/canonical-type
 import { isAxisVar, isAxisInst, type Axis, UNBOUND_INSTANCE } from '../../../core/canonical-types';
 import type { CardinalityVarId } from '../../../core/ids';
 import type { InstanceVarId } from '../../../core/ids';
+import { domainTypeId, instanceId } from '../../../core/ids';
+import type { CardinalityVarAxis } from '../../../core/canonical-types/cardinality';
 import type { DraftPortKey } from '../type-facts';
 import type { ConstraintOrigin } from '../payload-unit/solve';
 import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
@@ -492,7 +494,10 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
         facts.resolved = { kind: 'many', instance: resolved.ref };
       } else {
         // many(var) — leave resolved as a sentinel; will check in phase 5
-        facts.resolved = { kind: 'many', instance: { domainTypeId: '__var__' as any, instanceId: resolved.id as any } };
+        facts.resolved = {
+          kind: 'many',
+          instance: { domainTypeId: domainTypeId('__var__'), instanceId: instanceId(resolved.id) },
+        };
       }
       continue;
     }
@@ -589,7 +594,10 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
             if (resolvedTerm.kind === 'inst') {
               facts.resolved = { kind: 'many', instance: resolvedTerm.ref };
             } else {
-              facts.resolved = { kind: 'many', instance: { domainTypeId: '__var__' as any, instanceId: resolvedTerm.id as any } };
+              facts.resolved = {
+                kind: 'many',
+                instance: { domainTypeId: domainTypeId('__var__'), instanceId: instanceId(resolvedTerm.id) },
+              };
             }
             // Also add forcedMany terms so further zips can unify
             facts.forcedManyTerms.push(manyGroup.forcedManyTerms[0]);
@@ -633,7 +641,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
           const allowsDeferredInstance = members.some((port) => {
             const axis = baseCardinalityAxis.get(port);
             if (!axis || !isAxisVar(axis)) return false;
-            const cardAxis = axis as any;
+            const cardAxis = axis as CardinalityVarAxis;
             const hasDeclaredPolicy = cardAxis.relation !== undefined
               || cardAxis.acceptance !== undefined
               || cardAxis.instanceBinding !== undefined;

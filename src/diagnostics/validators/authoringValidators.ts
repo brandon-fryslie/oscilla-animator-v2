@@ -19,6 +19,18 @@ import type { Diagnostic, DiagnosticAction } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
 import { validateDisplayNameUniqueness } from '../../core/canonical-name';
 
+interface Vec2Like {
+  readonly x: number;
+  readonly y: number;
+}
+
+interface ColorLike {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a?: number;
+}
+
 // =============================================================================
 // Main Entry Point
 // =============================================================================
@@ -422,7 +434,7 @@ function validateConstValueRepresentation(patch: Patch, patchRevision: number): 
             isValid = typeof parsed === 'object' && parsed !== null &&
               typeof parsed.x === 'number' && typeof parsed.y === 'number';
           } else if (typeof rawValue === 'object' && rawValue !== null) {
-            const obj = rawValue as any;
+            const obj = rawValue as Partial<Vec2Like>;
             isValid = typeof obj.x === 'number' && typeof obj.y === 'number';
           }
           if (!isValid) errorMsg = `Value must be {x: number, y: number}`;
@@ -434,7 +446,7 @@ function validateConstValueRepresentation(patch: Patch, patchRevision: number): 
             // Simple check: hex format #RRGGBB or #RRGGBBAA
             isValid = /^#[0-9A-F]{6}([0-9A-F]{2})?$/i.test(rawValue);
           } else if (typeof rawValue === 'object' && rawValue !== null) {
-            const obj = rawValue as any;
+            const obj = rawValue as Partial<ColorLike>;
             isValid = typeof obj.r === 'number' && typeof obj.g === 'number' &&
               typeof obj.b === 'number' &&
               (obj.a === undefined || typeof obj.a === 'number');

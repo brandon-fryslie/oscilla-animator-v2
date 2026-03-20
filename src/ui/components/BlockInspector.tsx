@@ -1355,6 +1355,24 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   };
 
   const constValue = isConstBlock ? parseConstValue(currentParams.value) : 0;
+  const readVec2 = (value: unknown): readonly [number, number] => {
+    if (!Array.isArray(value)) return [0, 0];
+    const x = typeof value[0] === 'number' ? value[0] : 0;
+    const y = typeof value[1] === 'number' ? value[1] : 0;
+    return [x, y];
+  };
+  const readColor = (value: unknown): string => {
+    if (typeof value === 'string') return value;
+    if (
+      typeof value === 'object'
+      && value !== null
+      && 'toHexString' in value
+      && typeof value.toHexString === 'function'
+    ) {
+      return value.toHexString();
+    }
+    return '#000000';
+  };
 
   // [LAW:one-source-of-truth] Time-source handling is keyed by block capability, not type string aliasing.
   const isTimeRootBlock = currentBlockDef?.capability === 'time';
@@ -1422,23 +1440,23 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <SliderWithInput
                   label="X"
-                  value={Array.isArray(constValue) ? (constValue as any)[0] ?? 0 : 0}
+                  value={readVec2(constValue)[0]}
                   min={cfg.min}
                   max={cfg.max}
                   step={cfg.step}
                   onChange={(v) => {
-                    const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                    const cur = readVec2(constValue);
                     handleParamChange('value', [v, cur[1] ?? 0]);
                   }}
                 />
                 <SliderWithInput
                   label="Y"
-                  value={Array.isArray(constValue) ? (constValue as any)[1] ?? 0 : 0}
+                  value={readVec2(constValue)[1]}
                   min={cfg.min}
                   max={cfg.max}
                   step={cfg.step}
                   onChange={(v) => {
-                    const cur = Array.isArray(constValue) ? (constValue as any) : [0, 0];
+                    const cur = readVec2(constValue);
                     handleParamChange('value', [cur[0] ?? 0, v]);
                   }}
                 />
@@ -1448,9 +1466,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
           {payloadType.kind === 'color' && (
             <MuiColorInput
               value={
-                typeof constValue === 'string'
-                  ? constValue
-                  : (constValue as any)?.toHexString?.() ?? '#000000'
+                readColor(constValue)
               }
               onChange={(value) => handleParamChange('value', value)}
             />

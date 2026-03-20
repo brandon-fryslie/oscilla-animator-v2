@@ -159,7 +159,7 @@ export const RasterHeatmap: React.FC<RasterHeatmapProps> = ({ history, width, he
       width: `${width}px`,
       height: `${height}px`,
       display: 'block',
-      imageRendering: 'pixelated' as any,
+      imageRendering: 'pixelated',
     },
   });
 };

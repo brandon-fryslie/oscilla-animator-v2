@@ -20,7 +20,7 @@ function trace(...args: unknown[]): void {
   // [LAW:verifiable-goals] Debug logging remains available behind an explicit
   // switch; default test runs stay deterministic and low-noise.
   if (TRACE) {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 }

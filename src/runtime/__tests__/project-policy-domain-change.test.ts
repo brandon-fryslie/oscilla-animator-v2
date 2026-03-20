@@ -571,15 +571,15 @@ describe('Project Policy Domain Change', () => {
       // [LAW:verifiable-goals] Keep deep continuity traces opt-in so
       // default test runs stay concise.
       const targetState = state.continuity.targets.get(targetId);
-      // eslint-disable-next-line no-console
+       
       console.log('After 500ms at count=7:');
-      // eslint-disable-next-line no-console
+       
       console.log('  slew[0,1]:', targetState?.slewBuffer[0], targetState?.slewBuffer[1]);
-      // eslint-disable-next-line no-console
+       
       console.log('  gauge[0,1]:', targetState?.gaugeBuffer[0], targetState?.gaugeBuffer[1]);
-      // eslint-disable-next-line no-console
+       
       console.log('  base[0,1]:', spiralFor7[0], spiralFor7[1]);
-      // eslint-disable-next-line no-console
+       
       console.log('  result[0,1]:', result[0], result[1]);
     }
 
@@ -603,13 +603,13 @@ describe('Project Policy Domain Change', () => {
     // - Incorrect mapping application
     // - Slew state corruption
     if (TRACE) {
-      // eslint-disable-next-line no-console
+       
       console.log('Final result after round-trip:');
-      // eslint-disable-next-line no-console
+       
       console.log('Element 0:', result[0], result[1], 'expected:', spiralFor5[0], spiralFor5[1]);
-      // eslint-disable-next-line no-console
+       
       console.log('Element 1:', result[2], result[3], 'expected:', spiralFor5[2], spiralFor5[3]);
-      // eslint-disable-next-line no-console
+       
       console.log('Element 2:', result[4], result[5], 'expected:', spiralFor5[4], spiralFor5[5]);
     }
 
