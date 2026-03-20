@@ -43,7 +43,7 @@ function materializeRenderControlPoints(relativePath: string): { values: Float32
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
     result.program.valueExprs.nodes.length,
-    result.program.arenaZones.totalFloats,
+    result.program.arenaZones?.totalFloats ?? 0,
     undefined,
     undefined,
     result.program.arenaRuntimeLayout,

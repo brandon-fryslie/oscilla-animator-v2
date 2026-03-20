@@ -234,14 +234,6 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     highlights: ['continuity', 'hot swap', 'judder'],
   },
   {
-    filename: 'attractor-bloom.hcl',
-    relativePath: 'showcase/attractor-bloom.hcl',
-    group: 'showcase',
-    summary: 'Mouse-guided eclipse bloom with a cool mist layer and a hot petal crown.',
-    purposes: ['feature', 'showcase'],
-    highlights: ['attractor layout', 'mouse input', 'triple layer'],
-  },
-  {
     filename: 'aurora-petal-showcase.hcl',
     relativePath: 'showcase/aurora-petal-showcase.hcl',
     group: 'showcase',
