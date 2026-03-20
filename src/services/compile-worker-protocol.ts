@@ -1,10 +1,11 @@
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompiledRuntimeInstallContract } from '../compiler/backend/compiled-runtime-install-contract';
 import type { CompileError } from '../compiler/types';
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, GpuReadyCompiledProgramIR } from '../compiler/ir/program';
 import type { GpuPassStage } from '../types/gpu-pass-stage';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
+export type SerializableGpuReadyCompiledProgramIR = Omit<GpuReadyCompiledProgramIR, 'kernelRegistry'>;
 export type {
   CompiledDrawPrepInstallArtifact,
   CompiledShapeBankInstallArtifact,
@@ -51,7 +52,7 @@ export function toCompiledGpuPassSignature(
 export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
-      readonly program: SerializableCompiledProgramIR;
+      readonly program: SerializableGpuReadyCompiledProgramIR;
       readonly compiledGpuBundle: CompiledGpuArtifactBundle;
       readonly warnings: readonly CompileError[];
     }

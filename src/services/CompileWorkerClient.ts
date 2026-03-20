@@ -1,7 +1,7 @@
 import type { FrontendOptions } from '../compiler/frontend';
 import type { CompileResult } from '../compiler/compile';
 import { fetchNagaShimWasmBytes } from '../compiler/wasm/naga-shim-asset';
-import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { GpuReadyCompiledProgramIR } from '../compiler/ir/program';
 import { createDefaultRegistry } from '../runtime/kernels/default-registry';
 import type { Patch } from '../graph';
 import { serializePatch } from './PatchPersistence';
@@ -85,7 +85,7 @@ function reviveBackendResult(
 
   // [LAW:one-source-of-truth] Kernel handles are compile-time data; runtime registry
   // is reconstructed deterministically from the canonical default registry definition.
-  const revivedProgram: CompiledProgramIR = {
+  const revivedProgram: GpuReadyCompiledProgramIR = {
     ...backend.program,
     kernelRegistry: createDefaultRegistry(),
   };
