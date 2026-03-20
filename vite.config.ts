@@ -34,14 +34,18 @@ function readGitWorktreeRoots(repoRoot: string): string[] {
 const workspaceRoot = path.resolve(__dirname);
 const cwdRoot = path.resolve(process.cwd());
 const pwdRoot = process.env.PWD ? path.resolve(process.env.PWD) : null;
+const localFsRoots = [workspaceRoot, cwdRoot, pwdRoot].filter((value): value is string => Boolean(value));
 const gitWorktreeRoots = readGitWorktreeRoots(workspaceRoot);
+const extraFsRootsEnabled = gitWorktreeRoots.some((candidate) => !localFsRoots.includes(candidate));
 const allowedFsRoots = Array.from(
   new Set(
-    [workspaceRoot, cwdRoot, pwdRoot, ...gitWorktreeRoots]
+    [...localFsRoots, ...gitWorktreeRoots]
       .filter((value): value is string => Boolean(value))
       .flatMap((candidate) => [candidate, readRealpath(candidate)])
   )
 );
+const devServerHost = extraFsRootsEnabled ? '127.0.0.1' : '0.0.0.0';
+const devAllowedHosts = extraFsRootsEnabled ? ['127.0.0.1', 'localhost'] : true;
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -59,14 +63,16 @@ export default defineConfig({
   },
   server: {
     port: 5784,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host: devServerHost,
+    allowedHosts: devAllowedHosts,
     // [LAW:single-enforcer] SharedArrayBuffer capability is enforced at the
     // HTTP boundary so worker ABI availability does not vary by caller.
     headers: crossOriginIsolationHeaders,
     // [LAW:one-source-of-truth] Dev-server filesystem access is centralized
     // here so every harness/browser lane resolves the same source roots,
     // including sibling git worktrees that source maps can legitimately target.
+    // [LAW:single-enforcer] When extra roots are enabled, this same boundary
+    // also narrows host exposure so @fs access stays local-only.
     fs: {
       allow: allowedFsRoots,
     },
