@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin, type ResolvedConfig } from 'vite';
 import path from 'path';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -52,10 +52,33 @@ const crossOriginIsolationHeaders = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 } as const;
 
+function emitCoiServiceWorker(): Plugin {
+  let resolvedConfig: ResolvedConfig | null = null;
+  const sourceFile = path.resolve(workspaceRoot, 'public', 'coi-serviceworker.js');
+  return {
+    name: 'emit-coi-service-worker',
+    apply: 'build',
+    configResolved(config) {
+      resolvedConfig = config;
+    },
+    closeBundle() {
+      if (!resolvedConfig) {
+        return;
+      }
+      // [LAW:one-source-of-truth] Build output location is read from resolved
+      // Vite config so service-worker emission stays aligned with one outDir.
+      const outDir = path.resolve(resolvedConfig.root, resolvedConfig.build.outDir);
+      const destinationFile = path.resolve(outDir, 'coi-serviceworker.js');
+      fs.copyFileSync(sourceFile, destinationFile);
+    },
+  };
+}
+
 export default defineConfig({
   base: process.env.BASE_URL || '/',
   root: 'public',
   publicDir: false,
+  plugins: [emitCoiServiceWorker()],
   worker: {
     // [LAW:single-enforcer] Worker bundling format is centralized here so
     // compile-worker wasm code-splitting uses one valid Rollup output mode.
