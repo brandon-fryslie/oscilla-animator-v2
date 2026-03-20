@@ -87,19 +87,23 @@ patch "Aurora Petal Showcase" {
       phase_b = clock.phaseB * 6.2832
       phase_a_field = mapField(phase_a, field_points.t)
       phase_b_field = mapField(phase_b, field_points.t)
+      sin_a = sin(phase_a_field)
+      cos_a = cos(phase_a_field)
+      sin_b = sin(phase_b_field)
+      cos_b = cos(phase_b_field)
 
       x0 = lattice.controlPoints.x - 0.5
       y0 = lattice.controlPoints.y - 0.5
       r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
-      bend = r * 8.4 + phase_b_field * 1.2
+      bend = r * 8.4 + 1.2 * sin_b
       veil = 0.76 + 0.16 * cos(bend)
-      plume = 0.72 + 0.14 * sin(bend + (x0 + y0) * 6.0)
-      curl_x = 0.080 * sin(y0 * 12.0 + phase_a_field * 1.4 + 0.6 * cos(x0 * 8.0 - phase_b_field))
-      curl_y = 0.092 * cos(x0 * 11.0 - phase_b_field * 1.1 + 0.5 * sin(y0 * 9.0 + phase_a_field))
-      drift = 0.034 * sin((x0 + y0) * 10.0 - phase_b_field * 0.9)
-      orbit_x = 0.020 * sin((x0 - y0) * 7.0 + phase_a_field * 1.7)
-      orbit_y = 0.024 * cos((x0 + y0) * 6.0 - phase_b_field * 1.5)
+      plume = 0.72 + 0.14 * sin(bend + (x0 + y0) * 6.0 + 0.4 * cos_a)
+      curl_x = 0.080 * sin(y0 * 12.0 + 1.4 * sin_a + 0.6 * cos(x0 * 8.0 - sin_b))
+      curl_y = 0.092 * cos(x0 * 11.0 - 1.1 * sin_b + 0.5 * sin(y0 * 9.0 + cos_a))
+      drift = 0.034 * sin((x0 + y0) * 10.0 - 0.9 * cos_b)
+      orbit_x = 0.020 * sin((x0 - y0) * 7.0 + 1.7 * sin_a)
+      orbit_y = 0.024 * cos((x0 + y0) * 6.0 - 1.5 * cos_b)
 
       x = 0.5 + x0 * veil + curl_x + drift + orbit_x
       y = 0.5 + y0 * plume + curl_y + orbit_y
