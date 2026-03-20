@@ -1,6 +1,8 @@
 // Export compiler types (selective to avoid conflicts)
 export { compile, compileFromFrontend } from './compile';
 export type { CompileResult, CompileFailure, CompileFromFrontendOptions } from './compile';
+export { compilePartialPatch, createConnectedPatchFragment } from './partial';
+export type { CompilePartialPatchOptions, PartialCompileResult, BlockParamOverride } from './partial';
 
 // Export IR types (selective to avoid conflicts)
 export { createIRBuilder, IRBuilderImpl } from './ir';

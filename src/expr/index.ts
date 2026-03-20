@@ -33,6 +33,7 @@ import {
   ExpressionProgramError,
   type ExpressionProgramWarning,
 } from './program';
+import type { Position } from './ast';
 
 /**
  * Block reference context for member access support (e.g., circle_1.radius).
@@ -57,7 +58,7 @@ export interface ExpressionCompileError {
  * Result type for compilation.
  */
 export type CompileResult =
-  | { ok: true; value: ValueExprId; warnings?: readonly ExpressionProgramWarning[] }
+  | { ok: true; value: ValueExprId; warnings: readonly ExpressionProgramWarning[] }
   | { ok: false; error: ExpressionCompileError };
 
 /**
@@ -95,8 +96,14 @@ export function compileExpression(
   inputExprs: ReadonlyMap<string, ValueExprId>,
   blockRefs?: BlockRefsContext
 ): CompileResult {
+  let loweredProgram: ReturnType<typeof lowerExpressionProgram> = {
+    expression: '',
+    warnings: [],
+    positionMap: [],
+  };
+
   try {
-    const loweredProgram = lowerExpressionProgram(exprText);
+    loweredProgram = lowerExpressionProgram(exprText);
 
     // Step 1: Tokenize
     const tokens = tokenize(loweredProgram.expression);
@@ -144,7 +151,7 @@ export function compileExpression(
         error: {
           code: 'ExprSyntaxError',
           message: err.message,
-          position: err.pos,
+          position: remapLoweredPosition(err.pos, loweredProgram.positionMap),
           suggestion: err.expected ? `Expected: ${err.expected.join(', ')}` : undefined,
         },
       };
@@ -156,7 +163,7 @@ export function compileExpression(
         error: {
           code: 'ExprTypeError',
           message: err.message,
-          position: err.pos,
+          position: remapLoweredPosition(err.pos, loweredProgram.positionMap),
           suggestion: err.suggestion,
         },
       };
@@ -171,6 +178,22 @@ export function compileExpression(
       },
     };
   }
+}
+
+function remapLoweredPosition(position: Position, positionMap: readonly number[]): Position {
+  if (positionMap.length === 0) {
+    return position;
+  }
+
+  const loweredStart = Math.min(Math.max(position.start, 0), positionMap.length - 1);
+  const loweredEnd = Math.min(Math.max(position.end - 1, loweredStart), positionMap.length - 1);
+  const mappedStart = positionMap[loweredStart];
+  const mappedEnd = positionMap[loweredEnd] + 1;
+
+  return {
+    start: Math.min(mappedStart, mappedEnd - 1),
+    end: Math.max(mappedStart + 1, mappedEnd),
+  };
 }
 
 /**

@@ -83,6 +83,9 @@ export interface LowerResult {
   /** Map of port ID to ValueRef (required) */
   readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
 
+  /** Optional non-fatal compile warnings emitted by the block's real compiler path. */
+  readonly warnings?: readonly import('../compiler/types').CompileError[];
+
   /**
    * Instance context (optional).
    * Set by blocks that create instances (e.g., Array) to provide instance context
@@ -119,6 +122,8 @@ export interface LowerResult {
 export interface LowerOutputsOnlyResult {
   /** Map of port ID to ValueRef (required) */
   readonly outputsById: Record<string, import('../compiler/ir/lowerTypes').ValueRefExpr>;
+  /** Optional non-fatal compile warnings emitted by phase-1 lowering. */
+  readonly warnings?: readonly import('../compiler/types').CompileError[];
   /** Declarative effects (required). */
   readonly effects: import('../compiler/ir/lowerTypes').LowerEffects;
   /** Optional instance context propagated to downstream blocks. */
@@ -337,6 +342,38 @@ export interface OutputDef {
   readonly hidden?: boolean;         // For symmetry
 }
 
+export type BlockOpenBehaviorDef =
+  | { readonly kind: 'noop' }
+  | { readonly kind: 'open-expression-editor' };
+
+export type BlockParamEditorDef =
+  | { readonly kind: 'default' }
+  | { readonly kind: 'expression-editor' };
+
+export interface BlockInspectorUiDef {
+  readonly paramEditors: Readonly<Record<string, BlockParamEditorDef>>;
+}
+
+export interface BlockUiDef {
+  readonly openBehavior: BlockOpenBehaviorDef;
+  readonly inspector: BlockInspectorUiDef;
+}
+
+export interface PartialBlockUiDef {
+  readonly openBehavior?: BlockOpenBehaviorDef;
+  readonly inspector?: {
+    readonly paramEditors?: Readonly<Record<string, BlockParamEditorDef>>;
+  };
+}
+
+export const NOOP_BLOCK_OPEN_BEHAVIOR: BlockOpenBehaviorDef = { kind: 'noop' };
+export const DEFAULT_BLOCK_UI: BlockUiDef = {
+  openBehavior: NOOP_BLOCK_OPEN_BEHAVIOR,
+  inspector: {
+    paramEditors: {},
+  },
+};
+
 /**
  * Block definition - the ONE AND ONLY definition type.
  * Contains both UI metadata and IR lowering.
@@ -349,6 +386,7 @@ export interface BlockDef {
   readonly label: string;
   readonly category: string;
   readonly description?: string;
+  readonly ui: BlockUiDef;
 
   // Compilation metadata
   readonly form: BlockForm;
@@ -439,6 +477,24 @@ export interface BlockDef {
   // Optional tags
   readonly tags?: {
     readonly irPortContract?: 'strict' | 'relaxed';
+  };
+}
+
+export type BlockDefRegistration =
+  Omit<BlockDef, 'gpuVerified' | 'ui'>
+  & {
+    readonly gpuVerified?: boolean;
+    readonly ui?: PartialBlockUiDef;
+  };
+
+function normalizeBlockUi(ui: PartialBlockUiDef | undefined): BlockUiDef {
+  // [LAW:one-source-of-truth] Block UI behavior defaults are normalized once at
+  // registration so every consumer reads the same total contract.
+  return {
+    openBehavior: ui?.openBehavior ?? DEFAULT_BLOCK_UI.openBehavior,
+    inspector: {
+      paramEditors: ui?.inspector?.paramEditors ?? DEFAULT_BLOCK_UI.inspector.paramEditors,
+    },
   };
 }
 
@@ -535,10 +591,11 @@ export function requireBlockDef(blockType: string): BlockDef {
 /**
  * Register a block definition.
  */
-export function registerBlock(def: BlockDef): void {
+export function registerBlock(def: BlockDefRegistration): void {
   const normalizedDef: BlockDef = {
     ...def,
     gpuVerified: def.gpuVerified ?? false,
+    ui: normalizeBlockUi(def.ui),
   };
 
   if (declaredRegistry.has(normalizedDef.type)) {
@@ -1034,6 +1091,7 @@ export function registerComposite(def: CompositeBlockDef): void {
   const normalizedDef: CompositeBlockDef = {
     ...def,
     gpuVerified: def.gpuVerified ?? false,
+    ui: normalizeBlockUi(def.ui),
   };
   // Check for name collision with primitive blocks
   if (registry.has(normalizedDef.type)) {

@@ -38,46 +38,11 @@
   color: #90a0c5;
 }
 
-.expression-workbench__grid {
+.expression-workbench__body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
-  grid-template-areas:
-    "editor reference"
-    "editor diagnostics"
-    "editor tips";
-  gap: 12px;
   padding: 12px;
-  align-content: start;
-}
-
-.expression-workbench__editor,
-.expression-workbench__docs,
-.expression-workbench__debug,
-.expression-workbench__library {
-  min-width: 0;
-  border: 1px solid #27365a;
-  border-radius: 8px;
-  background: #171f35;
-  padding: 12px;
-}
-
-.expression-workbench__editor {
-  grid-area: editor;
-}
-
-.expression-workbench__docs {
-  grid-area: reference;
-}
-
-.expression-workbench__debug {
-  grid-area: diagnostics;
-}
-
-.expression-workbench__library {
-  grid-area: tips;
+  overflow: hidden;
 }
 
 .expression-workbench__section-title {
@@ -134,18 +99,23 @@
   overflow: hidden;
 }
 
-.expression-workbench__paneview {
-  width: 100%;
-  height: 100%;
-  border: 1px solid #27365a;
-  border-radius: 8px;
-  background: #171f35;
-}
-
 .expression-workbench__pane {
   height: 100%;
   overflow: auto;
-  padding: 8px;
+  padding: 10px 12px;
+}
+
+.expression-workbench__pane--editor {
+  padding: 12px;
+}
+
+.expression-workbench__paneview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid #27365a;
+  border-radius: 8px;
+  background: #171f35;
 }
 
 .expression-workbench__docs-body {
@@ -214,19 +184,8 @@
 }
 
 @media (max-width: 960px) {
-  .expression-workbench__grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "editor"
-      "reference"
-      "diagnostics"
-      "tips";
+  .expression-workbench__body {
     padding: 8px;
-    gap: 8px;
-  }
-
-  .expression-workbench__top,
-  .expression-workbench__bottom {
-    padding: 8px;
+    overflow: auto;
   }
 }

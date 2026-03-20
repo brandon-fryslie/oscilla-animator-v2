@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { observer } from 'mobx-react-lite';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import { Switch } from '@mantine/core';
+import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
+import { compilePartialPatch, type PartialCompileResult } from '../../compiler';
 import { colors } from '../theme';
 import type { Patch } from '../../graph/Patch';
 import type { BlockId } from '../../types';
@@ -12,6 +14,8 @@ import { AutocompleteDropdown } from '../expression-editor/AutocompleteDropdown'
 import { adjustPositionForViewport } from '../expression-editor/cursorPosition';
 import { TokenExpressionEditor } from '../expression-editor/TokenExpressionEditor';
 import type { TokenExpressionEditorHandle } from '../expression-editor/TokenExpressionEditor';
+import type { ExpressionInlineDiagnostic } from '../expression-editor/editorAnnotations';
+import { buildExpressionSyntaxSpans } from '../expression-editor/syntaxHighlighting';
 import { DockviewContext, openExpressionEditorPanel } from '../dockview';
 
 export interface SharedExpressionEditorProps {
@@ -118,6 +122,19 @@ function computeSuggestionInsertion(
   };
 }
 
+const EMPTY_DIAGNOSTICS: readonly ExpressionInlineDiagnostic[] = [];
+const EMPTY_SUMMARY_DIAGNOSTICS: readonly { code: string; severity: 'error' | 'warning'; message: string }[] = [];
+
+function toExpressionEditorSeverity(severity: string): 'warning' | 'error' | null {
+  if (severity === 'warn') {
+    return 'warning';
+  }
+  if (severity === 'error' || severity === 'fatal') {
+    return 'error';
+  }
+  return null;
+}
+
 export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   blockId,
   value,
@@ -131,8 +148,14 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   const { patch: patchStore, diagnostics: diagnosticsStore, expressionEditor } = useStores();
   const dockview = React.useContext(DockviewContext);
   const api = dockview?.api ?? null;
-  const [localValue, setLocalValue] = useState(value);
+  const [autoCompileOnKeypress, setAutoCompileOnKeypress] = useState(
+    liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0,
+  );
   const tokenEditorRef = useRef<TokenExpressionEditorHandle>(null);
+  const draftValue = expressionEditor.getDraftValue(blockId, value);
+  const persistedValue = expressionEditor.getPersistedValue(blockId, value);
+  const isDirty = draftValue !== persistedValue;
+  const deferredDraftValue = useDeferredValue(draftValue);
 
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
@@ -141,6 +164,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   const [blockContext, setBlockContext] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [filteredSuggestions, setFilteredSuggestions] = useState<readonly Suggestion[]>([]);
+  const [draftCompilation, setDraftCompilation] = useState<PartialCompileResult | null>(null);
   const lastRegistryFailureRef = useRef<string | null>(null);
 
   const addressRegistryState = useMemo(() => {
@@ -163,12 +187,12 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [addressRegistryState.registry, patch]);
 
   useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+    expressionEditor.syncPersistedValue(blockId, value);
+  }, [blockId, expressionEditor, value]);
 
   useEffect(() => {
-    onValueChange?.(localValue);
-  }, [localValue, onValueChange]);
+    onValueChange?.(draftValue);
+  }, [draftValue, onValueChange]);
 
   useEffect(() => {
     const failure = addressRegistryState.failure;
@@ -196,25 +220,103 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     });
   }, [addressRegistryState.failure, diagnosticsStore, patch.blocks]);
 
+  // [LAW:single-enforcer] Draft persistence flows through one callback so all
+  // editor instances apply the same patch-write + draft-sync sequence.
+  const commitDraft = useCallback((nextValue: string) => {
+    patchStore.updateBlockParams(blockId, { expression: nextValue });
+    expressionEditor.commitDraftValue(blockId, nextValue);
+  }, [blockId, expressionEditor, patchStore]);
+
   useEffect(() => {
-    if (liveCommitDebounceMs === undefined || liveCommitDebounceMs < 0) return;
-    if (localValue === value) return;
+    if (!autoCompileOnKeypress) return;
+    if (!isDirty) return;
 
+    const commitDelayMs = liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0
+      ? liveCommitDebounceMs
+      : 0;
     const timer = window.setTimeout(() => {
-      patchStore.updateBlockParams(blockId, { expression: localValue });
-    }, liveCommitDebounceMs);
+      commitDraft(draftValue);
+    }, commitDelayMs);
     return () => window.clearTimeout(timer);
-  }, [blockId, liveCommitDebounceMs, localValue, patchStore, value]);
+  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty, liveCommitDebounceMs]);
 
-  const expressionError = useMemo(() => {
-    const blockErrors = diagnosticsStore.activeDiagnostics.filter(
-      (diag) =>
-        diag.primaryTarget.kind === 'block'
-        && diag.primaryTarget.blockId === blockId
-        && (diag.code === 'E_EXPR_SYNTAX' || diag.code === 'E_EXPR_TYPE' || diag.code === 'E_EXPR_COMPILE')
-    );
-    return blockErrors.length > 0 ? blockErrors[0] : null;
-  }, [blockId, diagnosticsStore.activeDiagnostics]);
+  useEffect(() => {
+    expressionEditor.pruneDrafts(patch.blocks.keys());
+  }, [expressionEditor, patch.blocks]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const nextCompilation = compilePartialPatch(patch, {
+      rootBlockIds: [blockId],
+      blockParamOverrides: [{ blockId, params: { expression: deferredDraftValue } }],
+      compileId: `expression-editor:${blockId}`,
+    });
+    if (cancelled) {
+      return;
+    }
+    startTransition(() => {
+      if (!cancelled) {
+        setDraftCompilation(nextCompilation);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [blockId, deferredDraftValue, patch]);
+
+  const inlineDiagnostics = useMemo<readonly ExpressionInlineDiagnostic[]>(() => {
+    if (!draftCompilation) {
+      return EMPTY_DIAGNOSTICS;
+    }
+    return draftCompilation.diagnostics.flatMap((diagnostic) => {
+      const sourceSpan = diagnostic.sourceSpan;
+      if (!sourceSpan || sourceSpan.kind !== 'blockParam') {
+        return [];
+      }
+      if (sourceSpan.blockId !== blockId || sourceSpan.paramId !== 'expression' || !sourceSpan.range) {
+        return [];
+      }
+      const severity = toExpressionEditorSeverity(diagnostic.severity);
+      if (!severity) {
+        return [];
+      }
+      return [{
+        code: diagnostic.code,
+        severity,
+        message: [diagnostic.message, sourceSpan.suggestion].filter(Boolean).join(' '),
+        start: sourceSpan.range.start,
+        end: sourceSpan.range.end,
+      }];
+    });
+  }, [blockId, draftCompilation]);
+
+  const summaryDiagnostics = useMemo(() => {
+    if (!draftCompilation) {
+      return EMPTY_SUMMARY_DIAGNOSTICS;
+    }
+    return draftCompilation.diagnostics
+      .filter((diagnostic) => {
+        if (!toExpressionEditorSeverity(diagnostic.severity)) {
+          return false;
+        }
+        if (diagnostic.primaryTarget.kind === 'block' && diagnostic.primaryTarget.blockId === blockId) {
+          return true;
+        }
+        const sourceSpan = diagnostic.sourceSpan;
+        return sourceSpan?.kind === 'blockParam' && sourceSpan.blockId === blockId;
+      })
+      .map((diagnostic) => ({
+        code: diagnostic.code,
+        severity: toExpressionEditorSeverity(diagnostic.severity)!,
+        message: diagnostic.message,
+      }));
+  }, [blockId, draftCompilation]);
+
+  const hasInlineError = useMemo(() => {
+    return inlineDiagnostics.some((diagnostic) => diagnostic.severity === 'error');
+  }, [inlineDiagnostics]);
+
+  const syntaxSpans = useMemo(() => buildExpressionSyntaxSpans(draftValue), [draftValue]);
 
   useEffect(() => {
     if (!showAutocomplete || !suggestionProvider) {
@@ -256,7 +358,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, []);
 
   const handleEditorChange = useCallback((nextValue: string, cursor: number) => {
-    setLocalValue(nextValue);
+    expressionEditor.setDraftValue(blockId, nextValue);
     setCursorPosition(cursor);
 
     const blockCtx = detectBlockContext(nextValue, cursor);
@@ -275,23 +377,24 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       setShowAutocomplete(false);
       setFilterPrefix('');
     }
-  }, [suggestionProvider, updateDropdownPosition]);
+  }, [blockId, expressionEditor, suggestionProvider, updateDropdownPosition]);
 
   const handleBlur = useCallback(() => {
+    if (autoCompileOnKeypress) return;
     setTimeout(() => {
-      if (localValue !== value) {
-        patchStore.updateBlockParams(blockId, { expression: localValue });
+      if (isDirty) {
+        commitDraft(draftValue);
       }
     }, 120);
-  }, [blockId, localValue, patchStore, value]);
+  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty]);
 
   const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
-    const identifierData = extractIdentifierPrefix(localValue, cursorPosition);
+    const identifierData = extractIdentifierPrefix(draftValue, cursorPosition);
     const prefixStartOffset = identifierData?.startOffset ?? cursorPosition;
     const { newValue, newCursorPos } = computeSuggestionInsertion(
-      localValue, cursorPosition, suggestion, prefixStartOffset
+      draftValue, cursorPosition, suggestion, prefixStartOffset
     );
-    setLocalValue(newValue);
+    expressionEditor.setDraftValue(blockId, newValue);
     setCursorPosition(newCursorPos);
 
     if (suggestion.type === 'output') {
@@ -312,7 +415,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       tokenEditorRef.current.refreshChips();
       tokenEditorRef.current.focus();
     });
-  }, [blockId, cursorPosition, localValue, patchStore]);
+  }, [blockId, cursorPosition, draftValue, expressionEditor, patchStore]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (showAutocomplete && filteredSuggestions.length > 0) {
@@ -351,8 +454,8 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [cursorPosition, filteredSuggestions, handleSelectSuggestion, showAutocomplete, suggestionIndex, suggestionProvider, updateDropdownPosition]);
 
   const handlePopOut = useCallback(() => {
-    if (localValue !== value) {
-      patchStore.updateBlockParams(blockId, { expression: localValue });
+    if (isDirty) {
+      commitDraft(draftValue);
     }
     expressionEditor.openForBlock(blockId);
     if (!api) {
@@ -364,7 +467,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       return;
     }
     openExpressionEditorPanel(api, blockId);
-  }, [api, blockId, expressionEditor, localValue, patchStore, value, diagnosticsStore]);
+  }, [api, blockId, commitDraft, diagnosticsStore, draftValue, expressionEditor, isDirty]);
 
   const registryFailureMessage = useMemo(() => {
     const failure = addressRegistryState.failure;
@@ -404,11 +507,36 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         )}
       </div>
 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        marginBottom: '8px',
+      }}>
+        <div style={{ fontSize: '11px', color: colors.textSecondary }}>
+          Syntax checks run as you type. Enable auto-compile to save edits live.
+        </div>
+        <Switch
+          checked={autoCompileOnKeypress}
+          onChange={(event) => setAutoCompileOnKeypress(event.currentTarget.checked)}
+          size="sm"
+          color="cyan"
+          label="Auto-compile on keypress"
+          styles={{
+            body: { alignItems: 'center' },
+            label: { color: colors.textPrimary, fontSize: '11px', paddingLeft: '8px' },
+            track: { cursor: 'pointer' },
+            thumb: { cursor: 'pointer' },
+          }}
+        />
+      </div>
+
       {addressRegistryState.registry ? (
         <TokenExpressionEditor
           ref={tokenEditorRef}
           blockId={blockId}
-          value={localValue}
+          value={draftValue}
           patch={patch}
           addressRegistry={addressRegistryState.registry}
           onChange={handleEditorChange}
@@ -416,12 +544,14 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
           onKeyDown={handleKeyDown}
           maxLength={maxLength}
           placeholder={placeholder}
-          hasError={expressionError !== null}
+          hasError={hasInlineError}
+          diagnostics={inlineDiagnostics}
+          syntaxSpans={syntaxSpans}
         />
       ) : (
         <textarea
-          value={localValue}
-          onChange={(e) => setLocalValue(e.target.value)}
+          value={draftValue}
+          onChange={(e) => expressionEditor.setDraftValue(blockId, e.target.value)}
           onBlur={handleBlur}
           maxLength={maxLength}
           placeholder={placeholder}
@@ -444,7 +574,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       )}
 
       <div style={{ fontSize: '10px', color: colors.textSecondary, textAlign: 'right', marginTop: '2px' }}>
-        {localValue.length} / {maxLength}
+        {draftValue.length} / {maxLength}
       </div>
 
       {registryFailureMessage && (
@@ -461,17 +591,26 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
         </div>
       )}
 
-      {expressionError && (
-        <div style={{
-          fontSize: '11px',
-          color: colors.error,
-          marginTop: '4px',
-          padding: '4px 8px',
-          backgroundColor: 'rgba(255, 0, 0, 0.1)',
-          borderRadius: '4px',
-          borderLeft: `3px solid ${colors.error}`,
-        }}>
-          {expressionError.message}
+      {summaryDiagnostics.length > 0 && (
+        <div style={{ display: 'grid', gap: '4px', marginTop: '4px' }}>
+          {summaryDiagnostics.map((diagnostic, index) => {
+            const isWarning = diagnostic.severity === 'warning';
+            return (
+              <div
+                key={`${diagnostic.code}-${diagnostic.message}-${index}`}
+                style={{
+                  fontSize: '11px',
+                  color: isWarning ? '#ffe8a3' : colors.error,
+                  padding: '4px 8px',
+                  backgroundColor: isWarning ? 'rgba(240, 195, 91, 0.1)' : 'rgba(255, 0, 0, 0.1)',
+                  borderRadius: '4px',
+                  borderLeft: `3px solid ${isWarning ? '#f0c35b' : colors.error}`,
+                }}
+              >
+                {diagnostic.message}
+              </div>
+            );
+          })}
         </div>
       )}
 

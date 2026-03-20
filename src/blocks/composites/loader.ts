@@ -15,7 +15,7 @@ import type {
 } from '../composite-types';
 import { internalBlockId } from '../composite-types';
 import { CompositeDefJSONSchema, type CompositeDefJSON, type InternalBlockJSON } from './schema';
-import { getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
+import { DEFAULT_BLOCK_UI, getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
 
 // =============================================================================
 // Result Type
@@ -168,6 +168,7 @@ export function jsonToCompositeBlockDef(json: CompositeDefJSON): CompositeBlockD
     category: json.category,
     capability,
     description: json.description,
+    ui: DEFAULT_BLOCK_UI,
     internalBlocks,
     internalEdges,
     exposedInputs,
