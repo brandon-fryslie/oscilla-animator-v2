@@ -163,7 +163,7 @@ export function register(): void {
         throw error;
       }
 
-      const warnings: CompileError[] = result.warnings?.map((warning) => ({
+      const warnings: CompileError[] = result.warnings.map((warning) => ({
         code: warning.code,
         message: warning.message,
         where: { blockId: ctx.instanceId },
@@ -173,7 +173,7 @@ export function register(): void {
           paramId: 'expression',
           range: warning.position,
         },
-      })) ?? [];
+      }));
   
       // Compilation succeeded - return output expression
       const outExprId = result.value;
