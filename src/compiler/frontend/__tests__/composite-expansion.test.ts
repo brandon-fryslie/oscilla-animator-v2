@@ -24,6 +24,7 @@ import {
   type CxEdgeOrigin,
 } from '../composite-expansion';
 import {
+  DEFAULT_BLOCK_UI,
   registerComposite,
   unregisterComposite,
 } from '../../../blocks/registry';
@@ -48,6 +49,7 @@ function createSimpleAddComposite(): CompositeBlockDef {
     form: 'composite',
     label: 'Add Wrapper',
     category: 'test',
+    ui: DEFAULT_BLOCK_UI,
     capability: 'pure',
     internalBlocks: new Map([
       [internalBlockId('add'), { type: 'Add' }],
@@ -71,6 +73,7 @@ function createSmoothNoiseComposite(): CompositeBlockDef {
     form: 'composite',
     label: 'Smooth Noise',
     category: 'test',
+    ui: DEFAULT_BLOCK_UI,
     capability: 'state',
     internalBlocks: new Map([
       [internalBlockId('noise'), { type: 'Noise' }],
@@ -371,6 +374,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Outer Wrapper',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('inner'), { type: 'TestAddWrapper' }],
@@ -420,6 +424,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Outer Wrapper 2',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('inner'), { type: 'TestAddWrapper' }],
@@ -464,6 +469,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Complex Chain',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('add1'), { type: 'Add' }],
@@ -523,6 +529,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Removed',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([[internalBlockId('x'), { type: 'Add' }]]),
         internalEdges: [],
@@ -560,6 +567,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Bad Binding',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('add'), { type: 'Add' }],
@@ -584,6 +592,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Bad Port Binding',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('add'), { type: 'Add' }],
@@ -608,6 +617,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Missing Internal Edge Endpoint',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('add'), { type: 'Add' }],
@@ -655,6 +665,7 @@ describe('expandComposites', () => {
           form: 'composite',
           label: `Nest Level ${i}`,
           category: 'test',
+          ui: DEFAULT_BLOCK_UI,
           capability: 'pure',
           internalBlocks: new Map([
             [internalBlockId('inner'), { type: i === 3 ? 'Add' : `TestNestLevel${i + 1}` }],
@@ -689,6 +700,7 @@ describe('expandComposites', () => {
           form: 'composite',
           label: `Shallow ${i}`,
           category: 'test',
+          ui: DEFAULT_BLOCK_UI,
           capability: 'pure',
           internalBlocks: new Map([
             [internalBlockId('inner'), { type: i === 4 ? 'Add' : `TestShallowNest${i + 1}` }],
@@ -879,6 +891,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Dup Input',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'pure',
         internalBlocks: new Map([
           [internalBlockId('add'), { type: 'Add' }],
@@ -909,6 +922,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Stateful Composite',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'state',
         internalBlocks: new Map([
           [internalBlockId('lag1'), { type: 'Lag' }],
@@ -946,6 +960,7 @@ describe('expandComposites', () => {
         form: 'composite',
         label: 'Stateful Single',
         category: 'test',
+        ui: DEFAULT_BLOCK_UI,
         capability: 'state',
         internalBlocks: new Map([
           [internalBlockId('lag'), { type: 'Lag' }],

@@ -17,7 +17,7 @@
 
 import type { CompositeBlockDef, InternalBlockId, ExposedInputPort, ExposedOutputPort, InternalEdge } from '../composite-types';
 import { internalBlockId } from '../composite-types';
-import { getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
+import { DEFAULT_BLOCK_UI, getAnyBlockDefinition, type Capability, type InputDef, type OutputDef } from '../registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -169,6 +169,7 @@ class CompositeBuilder {
       category: this._category,
       capability: this._capability,
       description: this._description,
+      ui: DEFAULT_BLOCK_UI,
       readonly: this._readonly,
       internalBlocks,
       internalEdges: [...this._edges],

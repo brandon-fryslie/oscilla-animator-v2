@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
+import { PaneviewReact, type IPaneviewPanelProps, type PaneviewReadyEvent } from 'dockview';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { SharedExpressionEditor } from './SharedExpressionEditor';
@@ -17,6 +18,14 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
 
   const block = blockId && patch ? patch.blocks.get(blockId) : null;
   const expressionValue = String(block?.params?.expression ?? '');
+  // [LAW:dataflow-not-control-flow] Keep hook order stable; render variants
+  // are driven by data state instead of early-returning before later hooks run.
+  const workbenchState = useMemo(
+    () => patch && blockId && block
+      ? { kind: 'ready' as const, patch, blockId, block, expressionValue }
+      : { kind: 'empty' as const },
+    [block, blockId, expressionValue, patch],
+  );
 
   const expressionDiagnostics = useMemo(() => {
     if (!blockId) return [];
@@ -28,64 +37,97 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
     );
   }, [blockId, diagnostics.activeDiagnostics]);
 
-  if (!patch || !blockId || !block) {
-    return (
-      <div className="expression-workbench expression-workbench--empty">
-        Select an Expression block to edit.
+  const paneComponents = useMemo<Record<string, React.FC<IPaneviewPanelProps>>>(() => ({
+    editor: () => {
+      if (workbenchState.kind === 'empty') {
+        return (
+          <div className="expression-workbench__pane expression-workbench__empty-pane">
+            Select an Expression block to edit.
+          </div>
+        );
+      }
+      return (
+        <div className="expression-workbench__pane expression-workbench__pane--editor">
+          <SharedExpressionEditor
+            blockId={workbenchState.blockId}
+            value={workbenchState.expressionValue}
+            patch={workbenchState.patch}
+            showPopOutButton={false}
+          />
+        </div>
+      );
+    },
+    reference: () => (
+      <div className="expression-workbench__pane">
+        <div className="expression-workbench__docs-body">
+          <p>Use block outputs by canonical address only.</p>
+          <p>Autocomplete: type, or press Ctrl/Cmd+Space.</p>
+          <p>Functions are inserted with placeholders and can be nested.</p>
+        </div>
       </div>
-    );
-  }
+    ),
+    diagnostics: () => (
+      <div className="expression-workbench__pane">
+        {expressionDiagnostics.length === 0 ? (
+          <div className="expression-workbench__empty">No expression diagnostics.</div>
+        ) : (
+          <div className="expression-workbench__warnings">
+            {expressionDiagnostics.map((diag) => (
+              <div key={`${diag.code}-${diag.message}`} className="expression-workbench__warning">
+                [{diag.code}] {diag.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    ),
+    tips: () => (
+      <div className="expression-workbench__pane">
+        <div className="expression-workbench__docs-body">
+          <p>Expression diagnostics now come from the real compiler fragment path.</p>
+          <p>Inline squiggles anchor to compiler-reported source ranges.</p>
+          <p>Turn on auto-compile to persist expression edits on each keypress.</p>
+        </div>
+      </div>
+    ),
+  }), [expressionDiagnostics, workbenchState]);
+
+  const handlePaneReady = useCallback((event: PaneviewReadyEvent) => {
+    [
+      { id: 'editor', title: 'Editor', size: 520, isExpanded: true },
+      { id: 'reference', title: 'Reference', size: 140, isExpanded: false },
+      { id: 'diagnostics', title: 'Diagnostics', size: 140, isExpanded: false },
+      { id: 'tips', title: 'Tips', size: 120, isExpanded: false },
+    ].forEach((panel) => {
+      if (event.api.getPanel(panel.id)) {
+        return;
+      }
+      event.api.addPanel({
+        id: panel.id,
+        component: panel.id,
+        title: panel.title,
+        size: panel.size,
+        isExpanded: panel.isExpanded,
+      });
+    });
+    event.api.getPanel('editor')?.api.setActive();
+  }, []);
 
   return (
     <div className="expression-workbench">
       <div className="expression-workbench__header">
         <div className="expression-workbench__title">Expression Editor</div>
-        <div className="expression-workbench__subtitle">{block.displayName ?? block.type}</div>
+        <div className="expression-workbench__subtitle">
+          {workbenchState.kind === 'ready' ? (workbenchState.block.displayName ?? workbenchState.block.type) : 'No block selected'}
+        </div>
       </div>
 
-      <div className="expression-workbench__grid">
-        <section className="expression-workbench__editor">
-          <div className="expression-workbench__section-title">Editor</div>
-          <SharedExpressionEditor
-            blockId={blockId}
-            value={expressionValue}
-            patch={patch}
-            showPopOutButton={false}
-          />
-        </section>
-
-        <section className="expression-workbench__docs">
-          <div className="expression-workbench__section-title">Reference</div>
-          <div className="expression-workbench__docs-body">
-            <p>Use block outputs as <code>blockId.portId</code>.</p>
-            <p>Autocomplete: type, or press Ctrl/Cmd+Space.</p>
-            <p>Functions are inserted with placeholders and can be nested.</p>
-          </div>
-        </section>
-
-        <section className="expression-workbench__debug">
-          <div className="expression-workbench__section-title">Diagnostics</div>
-          {expressionDiagnostics.length === 0 ? (
-            <div className="expression-workbench__empty">No expression diagnostics.</div>
-          ) : (
-            <div className="expression-workbench__warnings">
-              {expressionDiagnostics.map((diag) => (
-                <div key={`${diag.code}-${diag.message}`} className="expression-workbench__warning">
-                  [{diag.code}] {diag.message}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="expression-workbench__library">
-          <div className="expression-workbench__section-title">Tips</div>
-          <div className="expression-workbench__docs-body">
-            <p>Cardinality is inferred from connected ports.</p>
-            <p>Use explicit constructs for vectors/colors when needed.</p>
-            <p>Prefer deterministic expressions without hidden state.</p>
-          </div>
-        </section>
+      <div className="expression-workbench__body">
+        <PaneviewReact
+          className="expression-workbench__paneview oscilla-sidebar-paneview"
+          components={paneComponents}
+          onReady={handlePaneReady}
+        />
       </div>
     </div>
   );
