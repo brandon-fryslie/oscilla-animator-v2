@@ -124,6 +124,13 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     attachRustRendererSharedInput(message.sharedInput);
     attachRustRendererSharedShapeBank(message.sharedShapeBank);
     attachRustRendererSharedSinkTable(message.sharedSinkTable);
+    // [LAW:single-enforcer] Bootstrap owns first-frame ordering so the worker
+    // loop cannot race ahead of shared-plane attachment or initial surface size.
+    resizeRustRendererSurface(
+      Math.max(1, Math.floor(message.canvas.width || 1)),
+      Math.max(1, Math.floor(message.canvas.height || 1)),
+    );
+    resumeRustRendererEngine();
     bootstrapped = true;
     deviceLostNotified = false;
     runtimePollFatalNotified = false;

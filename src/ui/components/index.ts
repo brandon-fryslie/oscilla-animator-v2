@@ -12,6 +12,7 @@ export { TableView } from './TableView';
 export { ConnectionMatrix } from './ConnectionMatrix';
 export { BlockInspector } from './BlockInspector';
 export { BlockLibrary } from './BlockLibrary';
+export { DemoBrowserSidebar } from './DemoBrowserSidebar';
 export { DomainsPanel } from './DomainsPanel';
 
 export { InspectorContainer } from './InspectorContainer';
