@@ -183,6 +183,102 @@ describe('SharedExpressionEditor', () => {
     expect(pruneDrafts).toHaveBeenCalled();
   });
 
+  it('persists on blur when auto-compile is disabled even if a debounce prop is configured', async () => {
+    const blockId = 'expr-blur' as BlockId;
+    const patch = createValidPatch(blockId);
+    compilePartialPatchMock.mockReturnValue({
+      fragment: patch,
+      frontendResult: { errors: [], backendReady: true } as never,
+      backendResult: { kind: 'ok', warnings: [], program: {} } as never,
+      diagnostics: [],
+    });
+
+    const { container } = renderWithProviders(
+      <SharedExpressionEditor
+        blockId={blockId}
+        value="1 + 1"
+        patch={patch}
+        liveCommitDebounceMs={50}
+      />,
+    );
+
+    const autoCompileToggle = screen.getByRole('switch', { name: /Auto-compile on keypress/i });
+    fireEvent.click(autoCompileToggle);
+
+    const editor = container.querySelector('.token-expr-editor');
+    expect(editor).not.toBeNull();
+    if (!editor) {
+      return;
+    }
+
+    editor.textContent = '1 + 2';
+    fireEvent.input(editor);
+    fireEvent.blur(editor);
+
+    await waitFor(() => {
+      expect(updateBlockParams).toHaveBeenCalledWith(blockId, { expression: '1 + 2' });
+    });
+  });
+
+  it('ignores info diagnostics in inline and summary rendering', async () => {
+    const blockId = 'expr-info' as BlockId;
+    const patch = createValidPatch(blockId);
+    compilePartialPatchMock.mockReturnValue({
+      fragment: patch,
+      frontendResult: { errors: [], backendReady: true } as never,
+      backendResult: { kind: 'ok', warnings: [], program: {} } as never,
+      diagnostics: [
+        {
+          id: 'diag-info',
+          code: 'E_EXPR_COMPILE',
+          severity: 'info',
+          domain: 'compile',
+          primaryTarget: { kind: 'block', blockId },
+          title: 'Expression Note',
+          message: 'Informational note',
+          scope: { patchRevision: 0, compileId: 'expression-editor:expr-info' },
+          metadata: { firstSeenAt: 0, lastSeenAt: 0, occurrenceCount: 1 },
+          sourceSpan: {
+            kind: 'blockParam',
+            blockId,
+            paramId: 'expression',
+            range: { start: 0, end: 1 },
+          },
+        },
+        {
+          id: 'diag-warn',
+          code: 'W_EXPR_VAR_REASSIGNED',
+          severity: 'warn',
+          domain: 'compile',
+          primaryTarget: { kind: 'block', blockId },
+          title: 'Expression Warning',
+          message: 'Potential issue',
+          scope: { patchRevision: 0, compileId: 'expression-editor:expr-info' },
+          metadata: { firstSeenAt: 0, lastSeenAt: 0, occurrenceCount: 1 },
+          sourceSpan: {
+            kind: 'blockParam',
+            blockId,
+            paramId: 'expression',
+            range: { start: 0, end: 1 },
+          },
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <SharedExpressionEditor
+        blockId={blockId}
+        value="1 + 1"
+        patch={patch}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Potential issue/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/Informational note/i)).not.toBeInTheDocument();
+  });
+
   it('renders fallback UI and logs diagnostics when registry construction fails', async () => {
     const malformedPatch = createMalformedPatch('bad-expression' as BlockId);
     compilePartialPatchMock.mockReturnValue({
