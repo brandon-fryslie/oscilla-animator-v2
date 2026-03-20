@@ -16,6 +16,20 @@ import { RuntimeService } from '../RuntimeService';
 import type { CompiledGpuArtifactBundle, CompiledGpuPassArtifact } from '../compile-worker-protocol';
 import { RootStore } from '../../stores/RootStore';
 
+function makeActiveRuntimeState(
+  renderer: ReturnType<typeof makeRendererStub>,
+  canvas: HTMLCanvasElement = { width: 640, height: 360 } as HTMLCanvasElement,
+) {
+  return {
+    kind: 'active' as const,
+    runtime: {
+      canvas,
+      renderer,
+      arena: {} as never,
+    },
+  };
+}
+
 function makePass(passId: string): CompiledGpuPassArtifact {
   return {
     passId,
@@ -61,7 +75,7 @@ describe('RuntimeService', () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
-      renderer: ReturnType<typeof makeRendererStub>;
+      runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
       publishRendererPipelines: (artifacts: {
         readonly backendResult: { readonly kind: 'ok' };
@@ -71,7 +85,7 @@ describe('RuntimeService', () => {
     const candidateBundle = makeBundle('candidate');
     const renderer = makeRendererStub();
     renderer.rebuildGpuPipelines.mockRejectedValue(new Error('reject install'));
-    serviceAccess.renderer = renderer;
+    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer);
     serviceAccess.rendererExecutionState = 'active';
 
     await expect(
@@ -82,23 +96,21 @@ describe('RuntimeService', () => {
     ).rejects.toThrow('reject install');
 
     expect(renderer.rebuildGpuPipelines).toHaveBeenCalledWith(candidateBundle.passes);
-    expect(serviceAccess.renderer).toBe(renderer);
+    expect(serviceAccess.runtimeResourcesState.runtime.renderer).toBe(renderer);
   });
 
   it('publishes worker-owned install metadata directly to renderer.render', () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
-      renderer: ReturnType<typeof makeRendererStub>;
-      canvas: HTMLCanvasElement;
+      runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
       installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => void;
     };
     const renderer = makeRendererStub();
     const bundle = makeBundle('worker-owned-install');
     const canvas = { width: 640, height: 360 } as HTMLCanvasElement;
-    serviceAccess.renderer = renderer;
-    serviceAccess.canvas = canvas;
+    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer, canvas);
     serviceAccess.rendererExecutionState = 'active';
 
     serviceAccess.installRendererCanonicalAssets(bundle);
@@ -118,7 +130,12 @@ describe('RuntimeService', () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
-      renderer: ReturnType<typeof makeRendererStub> | null;
+      runtimeResourcesState:
+        | ReturnType<typeof makeActiveRuntimeState>
+        | {
+          readonly kind: 'faulted';
+          readonly fault: { readonly code: string };
+        };
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
       handleGpuFault: (fault: {
         severity: 'fatal';
@@ -129,7 +146,7 @@ describe('RuntimeService', () => {
       }) => void;
     };
     const activeRenderer = makeRendererStub();
-    serviceAccess.renderer = activeRenderer;
+    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(activeRenderer);
     serviceAccess.rendererExecutionState = 'active';
     store.playback.play();
 
@@ -145,7 +162,7 @@ describe('RuntimeService', () => {
     expect(activeRenderer.setGpuFaultCallback).toHaveBeenCalledWith(null);
     expect(activeRenderer.dispose).toHaveBeenCalledTimes(1);
     expect(hoisted.createWebGPURendererMock).not.toHaveBeenCalled();
-    expect(serviceAccess.renderer).toBeNull();
+    expect(serviceAccess.runtimeResourcesState.kind).toBe('faulted');
     expect(serviceAccess.rendererExecutionState).toBe('fatal');
     expect(store.diagnostics.logs.at(-1)?.message).toBe(
       'Fatal GPU fault [GPU_DRIVER/WEBGPU_VALIDATION] stopped rendering. Patch and editor state were preserved.',
