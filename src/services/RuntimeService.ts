@@ -269,6 +269,11 @@ export class RuntimeService {
     return services;
   }
 
+  private readMatchingCompilerServices(services: CompilerServices | null): CompilerServices | null {
+    const activeServices = this.readCompilerServices();
+    return activeServices === services ? activeServices : null;
+  }
+
   private logWorkerFailure(err: unknown): void {
     const message = err instanceof Error ? err.message : String(err);
     const now = performance.now();
@@ -374,9 +379,9 @@ export class RuntimeService {
         // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
         this.installRendererCanonicalAssets(next.compiledGpuBundle);
       }
-      compilerServices?.compiler.markSwapComplete();
+      this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapComplete();
     } catch (err) {
-      compilerServices?.compiler.markSwapFailed(err);
+      this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapFailed(err);
       const message = err instanceof Error ? err.message : String(err);
       this.store.diagnostics.log({
         level: 'error',
@@ -384,7 +389,7 @@ export class RuntimeService {
       });
     } finally {
       this.swapInFlight = false;
-      if (compilerServices?.compiler.getState() === 'ready') {
+      if (this.readMatchingCompilerServices(compilerServices)?.compiler.getState() === 'ready') {
         this.requestSwapFlush();
       }
     }
@@ -610,6 +615,17 @@ export class RuntimeService {
    * Called by React when the canvas element is available.
    */
   setCanvas(canvasEl: HTMLCanvasElement): void {
+    const activeRuntime = this.readActiveRuntimeResources();
+    if (activeRuntime && activeRuntime.canvas !== canvasEl) {
+      // [LAW:one-source-of-truth] The active runtime owns the canonical canvas
+      // reference after initialization; ignore divergent remounts until the
+      // runtime is explicitly rebuilt around the new edge input.
+      this.store.diagnostics.log({
+        level: 'warn',
+        message: 'RuntimeService ignored a new canvas after activation; rebuild the runtime to adopt a remounted canvas.',
+      });
+      return;
+    }
     this.canvasState = {
       kind: 'ready',
       canvas: canvasEl,
