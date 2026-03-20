@@ -6,6 +6,7 @@ import { hclDemos } from '../../demo';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import { stripKernelRegistry } from '../compile-worker-serialization';
+import { validateCompiledGpuPassBundle } from '../compiled-gpu-pass-validation';
 
 const REPRESENTATIVE_DEMOS = [
   'simple.hcl',
@@ -59,6 +60,24 @@ describe('compile worker payload clone safety', () => {
       if (backendResult?.kind === 'ok') {
         const serializableProgram = stripKernelRegistry(backendResult.program);
         const runtimeInstall = buildCompiledRuntimeInstallContract(backendResult.program);
+        const passBundle = {
+          schemaVersion: 1 as const,
+          passes: [
+            {
+              passId: 'simulation',
+              stage: 'compute' as const,
+              entryPoint: 'compute_main',
+              wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+            },
+          ],
+        };
+        const passValidation = validateCompiledGpuPassBundle(passBundle);
+        if (passValidation.kind !== 'ok') {
+          failures.push(
+            `${filename}: pass validation failed: ${passValidation.errors.map((error) => error.message).join('; ')}`,
+          );
+          continue;
+        }
         const workerPayload = {
           kind: 'compiled' as const,
           requestId: 1,
@@ -67,24 +86,12 @@ describe('compile worker payload clone safety', () => {
           frontendResult,
           backendResult: {
             kind: 'ok' as const,
-            program: serializableProgram,
+            program: {
+              ...serializableProgram,
+              generatedGpuArtifactManifest: passValidation.manifest,
+            },
             compiledGpuBundle: {
-              schemaVersion: 1 as const,
-              passes: [
-                {
-                  passId: 'simulation',
-                  stage: 'compute' as const,
-                  entryPoint: 'compute_main',
-                  wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-                },
-              ],
-              passSignatures: [
-                {
-                  passId: 'simulation',
-                  stage: 'compute' as const,
-                  entryPoint: 'compute_main',
-                },
-              ],
+              ...passValidation.bundle,
               runtimeInstall,
             },
             warnings: backendResult.warnings,

@@ -249,7 +249,8 @@ export interface CompiledProgramIR {
    * Compiler-owned GPU pass manifest describing installable runtime passes.
    *
    * [LAW:one-source-of-truth] Runtime pass identity/order metadata is emitted
-   * once by compile output and consumed by worker transport/renderer install.
+   * once by the compile-worker validation boundary and consumed by worker
+   * transport/renderer install.
    */
   readonly generatedGpuArtifactManifest?: GeneratedGpuArtifactManifestIR;
 
@@ -258,6 +259,17 @@ export interface CompiledProgramIR {
    * Contains the structured module and expr/statement source-map provenance.
    */
   readonly nagaLoweringProgram: NagaLoweringProgramIR;
+}
+
+/**
+ * Worker-enriched compiled program contract for runtime GPU consumers.
+ *
+ * [LAW:one-source-of-truth] The compile worker is the single owner that
+ * attaches validated GPU pass manifest metadata to compiled IR before runtime
+ * transport; downstream runtime code consumes this total contract directly.
+ */
+export interface GpuReadyCompiledProgramIR extends CompiledProgramIR {
+  readonly generatedGpuArtifactManifest: GeneratedGpuArtifactManifestIR;
 }
 
 export interface ProgramTopologyTableIR {
