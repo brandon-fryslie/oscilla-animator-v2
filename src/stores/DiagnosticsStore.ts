@@ -618,16 +618,36 @@ export class DiagnosticsStore {
    * Logs are capped at MAX_LOGS entries (FIFO eviction).
    */
   log(entry: Omit<LogEntry, 'id' | 'timestamp'>): void {
-    this._logs.push({
+    const nextEntry: LogEntry = {
       ...entry,
       id: `log-${this._nextId++}`,
       timestamp: Date.now(),
-    });
+    };
+    this._logs.push(nextEntry);
+
+    this.emitErrorToConsole(nextEntry);
 
     // Cap log size to prevent unbounded memory growth
     if (this._logs.length > DiagnosticsStore.MAX_LOGS) {
       this._logs.shift();
     }
+  }
+
+  private emitErrorToConsole(entry: LogEntry): void {
+    if (entry.level !== 'error') {
+      return;
+    }
+    // [LAW:single-enforcer] DiagnosticsStore is the canonical log boundary;
+    // error-level diagnostics are mirrored to one browser console path here.
+    const payload =
+      entry.data === undefined && entry.details === undefined
+        ? undefined
+        : { data: entry.data, details: entry.details };
+    if (payload === undefined) {
+      console.error(`[Diagnostics] ${entry.message}`);
+      return;
+    }
+    console.error(`[Diagnostics] ${entry.message}`, payload);
   }
 
   /**
