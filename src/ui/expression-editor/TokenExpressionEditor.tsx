@@ -286,6 +286,39 @@ function setCursorByPlainTextOffset(element: HTMLDivElement, targetOffset: numbe
 // Helper: Build innerHTML from segments
 // =============================================================================
 
+type TokenSegment = ReturnType<typeof tokenizeExpression>[number];
+
+function compareRangesByStart<T extends { start: number; end: number }>(left: T, right: T): number {
+  return left.start - right.start || left.end - right.end;
+}
+
+function partitionRangesBySegments<T extends { start: number; end: number }>(
+  segments: readonly TokenSegment[],
+  ranges: readonly T[],
+): readonly (readonly T[])[] {
+  const sortedRanges = [...ranges].sort(compareRangesByStart);
+  const rangesBySegment: T[][] = segments.map(() => []);
+  let rangeCursor = 0;
+
+  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+    const segment = segments[segmentIndex];
+    while (rangeCursor < sortedRanges.length && sortedRanges[rangeCursor].end <= segment.start) {
+      rangeCursor += 1;
+    }
+    for (let scanIndex = rangeCursor; scanIndex < sortedRanges.length; scanIndex += 1) {
+      const range = sortedRanges[scanIndex];
+      if (range.start >= segment.end) {
+        break;
+      }
+      if (range.end > segment.start) {
+        rangesBySegment[segmentIndex].push(range);
+      }
+    }
+  }
+
+  return rangesBySegment;
+}
+
 function buildInnerHTML(
   text: string,
   addressRegistry: AddressRegistry,
@@ -294,11 +327,12 @@ function buildInnerHTML(
   syntaxSpans: readonly ExpressionSyntaxSpan[],
 ): string {
   const segments = tokenizeExpression(text, addressRegistry, connectedAddresses);
+  const diagnosticsBySegment = partitionRangesBySegments(segments, diagnostics);
+  const syntaxSpansBySegment = partitionRangesBySegments(segments, syntaxSpans);
   return segments
-    .map(segment => {
-      const segmentDiagnostics = diagnostics.filter(
-        (diagnostic) => diagnostic.start < segment.end && diagnostic.end > segment.start,
-      );
+    .map((segment, segmentIndex) => {
+      const segmentDiagnostics = diagnosticsBySegment[segmentIndex];
+      const segmentSyntaxSpans = syntaxSpansBySegment[segmentIndex];
       const diagnosticBubbleHtml = segmentDiagnostics
         .filter((diagnostic) => diagnostic.end === segment.end)
         .map(renderInlineDiagnostic)
@@ -335,14 +369,14 @@ function buildInnerHTML(
           .replace(/>/g, '&gt;');
         return `<span class="${constantClasses}" contenteditable="false" data-const="${sourceName}" data-token="${sourceName}">${displayText}</span>${diagnosticBubbleHtml}`;
       } else {
-        return renderPlainTextSegment(segment, syntaxSpans, segmentDiagnostics);
+        return renderPlainTextSegment(segment, segmentSyntaxSpans, segmentDiagnostics);
       }
     })
     .join('');
 }
 
 function renderPlainTextSegment(
-  segment: ReturnType<typeof tokenizeExpression>[number],
+  segment: TokenSegment,
   syntaxSpans: readonly ExpressionSyntaxSpan[],
   diagnostics: readonly ExpressionInlineDiagnostic[],
 ): string {
@@ -360,6 +394,8 @@ function renderPlainTextSegment(
 
   const orderedBoundaries = Array.from(boundaries).sort((left, right) => left - right);
   const parts: string[] = [];
+  let syntaxIndex = 0;
+  let diagnosticIndex = 0;
 
   for (let index = 0; index < orderedBoundaries.length - 1; index++) {
     const partStart = orderedBoundaries[index];
@@ -367,20 +403,38 @@ function renderPlainTextSegment(
     if (partStart === partEnd) continue;
 
     const textSlice = segment.text.slice(partStart - segment.start, partEnd - segment.start);
-    const classes = [
-      syntaxSpans.find((span) => span.start <= partStart && span.end >= partEnd)?.className,
-      ...diagnostics
-        .filter((diagnostic) => diagnostic.start < partEnd && diagnostic.end > partStart)
-        .map(diagnosticClassName),
-    ].filter((value): value is string => Boolean(value));
+    while (syntaxIndex < syntaxSpans.length && syntaxSpans[syntaxIndex].end <= partStart) {
+      syntaxIndex += 1;
+    }
+    while (diagnosticIndex < diagnostics.length && diagnostics[diagnosticIndex].end <= partStart) {
+      diagnosticIndex += 1;
+    }
+
+    const classes: string[] = [];
+    const activeSyntaxSpan = syntaxSpans[syntaxIndex];
+    if (activeSyntaxSpan && activeSyntaxSpan.start <= partStart && activeSyntaxSpan.end >= partEnd) {
+      classes.push(activeSyntaxSpan.className);
+    }
+
+    const endingDiagnostics: ExpressionInlineDiagnostic[] = [];
+    for (
+      let overlapIndex = diagnosticIndex;
+      overlapIndex < diagnostics.length && diagnostics[overlapIndex].start < partEnd;
+      overlapIndex += 1
+    ) {
+      const diagnostic = diagnostics[overlapIndex];
+      if (diagnostic.end <= partStart) {
+        continue;
+      }
+      classes.push(diagnosticClassName(diagnostic));
+      if (diagnostic.end === partEnd) {
+        endingDiagnostics.push(diagnostic);
+      }
+    }
 
     parts.push(renderTextSlice(textSlice, classes));
 
-    parts.push(
-      ...diagnostics
-        .filter((diagnostic) => diagnostic.end === partEnd)
-        .map(renderInlineDiagnostic),
-    );
+    parts.push(...endingDiagnostics.map(renderInlineDiagnostic));
   }
 
   return parts.join('');

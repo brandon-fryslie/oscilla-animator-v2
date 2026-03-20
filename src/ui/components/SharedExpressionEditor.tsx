@@ -125,6 +125,16 @@ function computeSuggestionInsertion(
 const EMPTY_DIAGNOSTICS: readonly ExpressionInlineDiagnostic[] = [];
 const EMPTY_SUMMARY_DIAGNOSTICS: readonly { code: string; severity: 'error' | 'warning'; message: string }[] = [];
 
+function toExpressionEditorSeverity(severity: string): 'warning' | 'error' | null {
+  if (severity === 'warn') {
+    return 'warning';
+  }
+  if (severity === 'error' || severity === 'fatal') {
+    return 'error';
+  }
+  return null;
+}
+
 export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   blockId,
   value,
@@ -266,9 +276,13 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       if (sourceSpan.blockId !== blockId || sourceSpan.paramId !== 'expression' || !sourceSpan.range) {
         return [];
       }
+      const severity = toExpressionEditorSeverity(diagnostic.severity);
+      if (!severity) {
+        return [];
+      }
       return [{
         code: diagnostic.code,
-        severity: diagnostic.severity === 'warn' ? 'warning' : 'error',
+        severity,
         message: [diagnostic.message, sourceSpan.suggestion].filter(Boolean).join(' '),
         start: sourceSpan.range.start,
         end: sourceSpan.range.end,
@@ -282,6 +296,9 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
     }
     return draftCompilation.diagnostics
       .filter((diagnostic) => {
+        if (!toExpressionEditorSeverity(diagnostic.severity)) {
+          return false;
+        }
         if (diagnostic.primaryTarget.kind === 'block' && diagnostic.primaryTarget.blockId === blockId) {
           return true;
         }
@@ -290,7 +307,7 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
       })
       .map((diagnostic) => ({
         code: diagnostic.code,
-        severity: diagnostic.severity === 'warn' ? 'warning' as const : 'error' as const,
+        severity: toExpressionEditorSeverity(diagnostic.severity)!,
         message: diagnostic.message,
       }));
   }, [blockId, draftCompilation]);
@@ -363,14 +380,13 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [blockId, expressionEditor, suggestionProvider, updateDropdownPosition]);
 
   const handleBlur = useCallback(() => {
-    const commitOnKeypress = autoCompileOnKeypress || (liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0);
-    if (commitOnKeypress) return;
+    if (autoCompileOnKeypress) return;
     setTimeout(() => {
       if (isDirty) {
         commitDraft(draftValue);
       }
     }, 120);
-  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty, liveCommitDebounceMs]);
+  }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty]);
 
   const handleSelectSuggestion = useCallback((suggestion: Suggestion) => {
     const identifierData = extractIdentifierPrefix(draftValue, cursorPosition);
