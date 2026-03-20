@@ -75,7 +75,7 @@ patch "Aurora Petal Showcase" {
 
   block "GridLayoutUV" "lattice" {
     rows = 16
-    cols = 20
+    cols = 24
     outputs {
       controlPoints = [field_position.refs, field_scale.refs]
     }
