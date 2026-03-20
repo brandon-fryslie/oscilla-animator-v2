@@ -58,7 +58,7 @@ export interface ExpressionCompileError {
  * Result type for compilation.
  */
 export type CompileResult =
-  | { ok: true; value: ValueExprId; warnings?: readonly ExpressionProgramWarning[] }
+  | { ok: true; value: ValueExprId; warnings: readonly ExpressionProgramWarning[] }
   | { ok: false; error: ExpressionCompileError };
 
 /**

@@ -129,7 +129,7 @@ export function compileFromFrontend(
   options?: CompileFromFrontendOptions,
 ): CompileResult {
   const compileId = options?.patchId ? `${options.patchId}:${options.patchRevision || 0}` : 'unknown';
-  const captureInspector = options?.captureInspector ?? true;
+  const captureInspector = options?.captureInspector !== false;
 
   // [LAW:one-source-of-truth] compile() owns the inspector snapshot lifecycle unconditionally.
   // [LAW:single-enforcer] Inspector is internally resilient — no try/catch needed.
