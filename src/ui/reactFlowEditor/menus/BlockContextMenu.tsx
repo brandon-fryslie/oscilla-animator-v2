@@ -15,11 +15,15 @@ import {
   Delete as DeleteIcon,
   LinkOff as DisconnectIcon,
   CenterFocusStrong as CenterIcon,
+  OpenInNewRounded as OpenIcon,
 } from '@mui/icons-material';
 import type { BlockId } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { findCompatibleReplacementPlans } from './blockReplacement';
+import { getAnyBlockDefinition, DEFAULT_BLOCK_UI } from '../../../blocks/registry';
+import { DockviewContext } from '../../dockview';
+import { getBlockOpenBehaviorLabel, hasBlockOpenBehavior, runBlockOpenBehavior } from '../../block-ui';
 
 export interface BlockContextMenuProps {
   blockId: BlockId;
@@ -34,11 +38,13 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
   onClose,
   onCenter,
 }) => {
-  const { patch, layout, selection } = useStores();
+  const { patch, layout, selection, diagnostics, expressionEditor } = useStores();
+  const dockview = React.useContext(DockviewContext);
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
     if (!block) return [];
+    const blockUi = getAnyBlockDefinition(block.type)?.ui ?? DEFAULT_BLOCK_UI;
 
     // Count connected edges
     const connectedEdges = patch.edges.filter(
@@ -47,7 +53,24 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
     const hasConnections = connectedEdges.length > 0;
     const replacementPlans = findCompatibleReplacementPlans(patch.patch, blockId);
 
+    const openItems: ContextMenuItem[] = hasBlockOpenBehavior(blockUi.openBehavior)
+      ? [{
+          label: getBlockOpenBehaviorLabel(blockUi.openBehavior),
+          icon: <OpenIcon fontSize="small" />,
+          action: () => {
+            runBlockOpenBehavior(blockUi.openBehavior, {
+              blockId,
+              api: dockview?.api ?? null,
+              diagnostics,
+              expressionEditor,
+            });
+          },
+          dividerAfter: true,
+        }]
+      : [];
+
     return [
+      ...openItems,
       {
         label: 'Duplicate Block',
         icon: <DuplicateIcon fontSize="small" />,
@@ -150,7 +173,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         danger: true,
       },
     ];
-  }, [blockId, onCenter, patch, layout, selection]);
+  }, [blockId, diagnostics, dockview?.api, expressionEditor, layout, onCenter, patch, selection]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };

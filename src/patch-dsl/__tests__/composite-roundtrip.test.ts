@@ -10,6 +10,7 @@ import { serializeCompositeToHCL } from '../composite-serialize';
 import { deserializeCompositeFromHCL } from '../composite-deserialize';
 import type { CompositeBlockDef } from '../../blocks/composite-types';
 import { internalBlockId } from '../../blocks/composite-types';
+import { DEFAULT_BLOCK_UI } from '../../blocks/registry';
 import {
   SmoothNoiseComposite,
   PingPongComposite,
@@ -417,6 +418,7 @@ describe('Round-Trip: Edge Cases', () => {
       form: 'composite',
       label: 'Minimal',
       category: 'test',
+      ui: DEFAULT_BLOCK_UI,
       capability: 'pure',
       internalBlocks: new Map([[internalBlockId('c'), { type: 'Const' }]]),
       internalEdges: [],
@@ -446,6 +448,7 @@ describe('Round-Trip: Edge Cases', () => {
       form: 'composite',
       label: 'No Params',
       category: 'test',
+      ui: DEFAULT_BLOCK_UI,
       capability: 'pure',
       internalBlocks: new Map([
         [internalBlockId('c'), { type: 'Const', params: {} }],
@@ -476,6 +479,7 @@ describe('Round-Trip: Edge Cases', () => {
       form: 'composite',
       label: 'Array Param',
       category: 'test',
+      ui: DEFAULT_BLOCK_UI,
       capability: 'pure',
       internalBlocks: new Map([
         [internalBlockId('c'), { type: 'Const', params: { value: [1, 2, 3] } }],
@@ -507,6 +511,7 @@ describe('Round-Trip: Edge Cases', () => {
       form: 'composite',
       label: 'Fan Out',
       category: 'test',
+      ui: DEFAULT_BLOCK_UI,
       capability: 'pure',
       internalBlocks: new Map([
         [internalBlockId('c'), { type: 'Const' }],

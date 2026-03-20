@@ -10,7 +10,7 @@
 
 import type { CanonicalType } from '../core/canonical-types';
 import type { DefaultSource, UIControlHint } from '../types';
-import type { BlockDef, InputDef, OutputDef, Capability, BlockPayloadMetadata } from './registry';
+import type { BlockDef, InputDef, OutputDef, Capability, BlockPayloadMetadata, BlockUiDef } from './registry';
 
 // =============================================================================
 // Internal Block Types
@@ -117,6 +117,7 @@ export interface CompositeBlockDef {
   readonly label: string;
   readonly category: string;
   readonly description?: string;
+  readonly ui: BlockUiDef;
 
   // Form is always 'composite'
   readonly form: 'composite';

@@ -61,9 +61,14 @@ test.describe('Expression Editor browser console', () => {
     // flow; clear unrelated startup noise before driving that interaction.
     collector.clear();
 
-    await page.locator('.react-flow__node', { hasText: /\bscale\b/ }).first().dispatchEvent('click');
-    await expect(page.getByRole('button', { name: 'Pop out' })).toBeVisible();
-    await page.getByRole('button', { name: 'Pop out' }).click();
+    // [LAW:behavior-not-structure] Dismiss the floating Preview panel through
+    // its visible close affordance so the graph interaction path is reachable.
+    await expect(page.locator('.dv-groupview-floating .dv-default-tab-content').filter({ hasText: 'Preview' })).toBeVisible();
+    await page.locator('.dv-groupview-floating .dv-default-tab-action').click();
+
+    const scaleNode = page.locator('.react-flow__node', { hasText: /\bscale\b/ }).first();
+    await expect(scaleNode.getByRole('button', { name: 'Open Expression Editor' })).toBeVisible();
+    await scaleNode.getByRole('button', { name: 'Open Expression Editor' }).click();
 
     // [LAW:behavior-not-structure] Assert the user-visible workbench labels
     // instead of implementation details beyond the actual editor flow.
