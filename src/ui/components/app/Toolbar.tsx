@@ -1,18 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Accordion,
   ActionIcon,
   Badge,
   Box,
   Button,
-  Drawer,
   Group,
   Menu,
-  Paper,
-  SimpleGrid,
-  Stack,
   Text,
-  TextInput,
   Tooltip,
   rem,
 } from '@mantine/core';
@@ -29,129 +23,15 @@ import {
   toggleSidebar,
 } from '../../dockview/layoutActions';
 import { PANEL_MENU_ITEMS } from '../../dockview/panelRegistry';
-import type { HclDemo, HclDemoGroup } from '../../../demo';
 
 interface ToolbarProps {
   stats?: string;
   dockviewApi?: DockviewApi | null;
 }
 
-function isDisabledDemo(demo: HclDemo): boolean {
-  return demo.availability === 'disabled';
-}
-
-function matchesDemoQuery(demo: HclDemo, query: string): boolean {
-  if (query.length === 0) {
-    return true;
-  }
-  const haystack = [
-    demo.name,
-    demo.summary,
-    demo.group,
-    demo.purposes.join(' '),
-    demo.highlights.join(' '),
-    demo.availabilityReason ?? '',
-  ].join(' ').toLowerCase();
-  return haystack.includes(query);
-}
-
-function DemoCard({
-  demo,
-  selected,
-  featured = false,
-  onSelect,
-}: {
-  demo: HclDemo;
-  selected: boolean;
-  featured?: boolean;
-  onSelect: (filename: string) => void;
-}): React.ReactElement {
-  const disabled = isDisabledDemo(demo);
-  const Component = disabled ? 'div' : 'button';
-
-  return (
-    <Box
-      component={Component}
-      type={disabled ? undefined : 'button'}
-      onClick={disabled ? undefined : () => onSelect(demo.filename)}
-      style={{
-        width: '100%',
-        textAlign: 'left',
-        borderRadius: rem(14),
-        border: selected
-          ? '1px solid rgba(236, 72, 153, 0.55)'
-          : disabled
-            ? '1px solid rgba(245, 158, 11, 0.28)'
-            : '1px solid rgba(139, 92, 246, 0.18)',
-        background: selected
-          ? 'linear-gradient(180deg, rgba(76, 29, 149, 0.45) 0%, rgba(45, 27, 105, 0.3) 100%)'
-          : disabled
-            ? 'linear-gradient(180deg, rgba(69, 26, 3, 0.28) 0%, rgba(31, 41, 55, 0.28) 100%)'
-            : 'linear-gradient(180deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.5) 100%)',
-        padding: rem(12),
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.72 : 1,
-        transition: 'border-color 140ms ease, transform 140ms ease',
-      }}
-    >
-      <Stack gap={rem(8)}>
-        <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
-          <Stack gap={rem(2)} style={{ minWidth: 0, flex: 1 }}>
-            <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
-              {demo.name}
-            </Text>
-            <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
-              {demo.summary}
-            </Text>
-          </Stack>
-          <Badge
-            size="xs"
-            variant={selected ? 'filled' : 'light'}
-            color={
-              selected
-                ? 'pink'
-                : disabled
-                  ? 'orange'
-                  : featured
-                    ? 'grape'
-                    : demo.group === 'showcase'
-                      ? 'pink'
-                      : demo.group === 'stress'
-                        ? 'red'
-                        : demo.group === 'integration'
-                          ? 'orange'
-                          : 'violet'
-            }
-            radius="sm"
-            style={{ flexShrink: 0, alignSelf: 'flex-start' }}
-          >
-            {selected ? 'Live' : disabled ? 'Disabled' : featured ? 'Featured' : demo.group}
-          </Badge>
-        </Group>
-
-        <Group gap={rem(6)}>
-          {demo.highlights.slice(0, 3).map((highlight) => (
-            <Badge key={highlight} size="xs" variant="outline" color="gray" radius="sm">
-              {highlight}
-            </Badge>
-          ))}
-        </Group>
-
-        {disabled && demo.availabilityReason && (
-          <Text size="xs" c="orange.2">
-            {demo.availabilityReason}
-          </Text>
-        )}
-      </Stack>
-    </Box>
-  );
-}
-
 export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', dockviewApi }) => {
   const camera = useStore('camera');
   const patch = useStore('patch');
-  const demo = useStore('demo');
-  const viewport = useStore('viewport');
   const diagnostics = useStore('diagnostics');
   const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -160,43 +40,8 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
-  const [demoBrowserOpen, setDemoBrowserOpen] = useState(false);
-  const [demoQuery, setDemoQuery] = useState('');
 
   const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
-  const normalizedDemoQuery = demoQuery.trim().toLowerCase();
-  const currentDemo = useMemo(
-    () => demo.demos.find((entry) => entry.filename === demo.currentFilename) ?? null,
-    [demo.currentFilename, demo.demos],
-  );
-  const featuredDemos = useMemo(
-    () =>
-      demo.demos
-        .filter(
-          (entry) =>
-            !isDisabledDemo(entry) &&
-            entry.featuredRank != null &&
-            matchesDemoQuery(entry, normalizedDemoQuery),
-        )
-        .sort((left, right) => (left.featuredRank ?? Number.POSITIVE_INFINITY) - (right.featuredRank ?? Number.POSITIVE_INFINITY)),
-    [demo.demos, normalizedDemoQuery],
-  );
-  const activeDemoGroups = useMemo(
-    () =>
-      demo.groups
-        .map((group) => ({
-          ...group,
-          demos: group.demos.filter(
-            (entry) => !isDisabledDemo(entry) && matchesDemoQuery(entry, normalizedDemoQuery),
-          ),
-        }))
-        .filter((group) => group.demos.length > 0),
-    [demo.groups, normalizedDemoQuery],
-  );
-  const disabledDemos = useMemo(
-    () => demo.demos.filter((entry) => isDisabledDemo(entry) && matchesDemoQuery(entry, normalizedDemoQuery)),
-    [demo.demos, normalizedDemoQuery],
-  );
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -217,26 +62,6 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     }
     patch.clear();
     setToastMessage('New patch created');
-    setToastSeverity('success');
-    setToastOpen(true);
-  };
-
-  const handleDemoSelect = (filename: string) => {
-    const loaded = demo.selectDemo(filename);
-    if (!loaded) {
-      const targetDemo = demo.demos.find((entry) => entry.filename === filename);
-      setToastMessage(
-        targetDemo?.availabilityReason
-          ? `Demo unavailable: ${targetDemo.availabilityReason}`
-          : `Failed to load demo: ${filename}`,
-      );
-      setToastSeverity('error');
-      setToastOpen(true);
-      return;
-    }
-    viewport.resetView();
-    setDemoBrowserOpen(false);
-    setToastMessage(`Loaded demo: ${filename}`);
     setToastSeverity('success');
     setToastOpen(true);
   };
@@ -411,7 +236,8 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               gradient={{ from: 'violet', to: 'grape', deg: 90 }}
               color="gray"
               size="xs"
-              onClick={() => setDemoBrowserOpen(true)}
+              onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, 'left-sidebar')}
+              disabled={!dockviewApi}
             >
               Demos
             </Button>
@@ -500,177 +326,11 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         </Group>
       </Box>
 
-      <Drawer
-        opened={demoBrowserOpen}
-        onClose={() => setDemoBrowserOpen(false)}
-        position="right"
-        size={isMobile ? '100%' : rem(480)}
-        padding="md"
-        title={
-          <Stack gap={0}>
-            <Text fw={700}>Demo Browser</Text>
-            <Text size="xs" c="dimmed">
-              Browse by purpose, summary, and availability instead of a flat menu bar.
-            </Text>
-          </Stack>
-        }
-      >
-        <Stack gap="md">
-          <TextInput
-            value={demoQuery}
-            onChange={(event) => setDemoQuery(event.currentTarget.value)}
-            placeholder="Search demos, highlights, or status"
-          />
-
-          <Accordion
-            multiple
-            variant="separated"
-            radius="md"
-          >
-            {currentDemo && (
-              <Accordion.Item value="current-demo">
-                <Accordion.Control>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Stack gap={0}>
-                      <Text fw={700} size="sm">Current Demo</Text>
-                      <Text size="xs" c="dimmed">
-                        {currentDemo.name}
-                      </Text>
-                    </Stack>
-                    <Badge size="xs" variant="filled" color="pink">
-                      Live
-                    </Badge>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Paper
-                    withBorder
-                    radius="md"
-                    p="sm"
-                    style={{
-                      background: 'linear-gradient(180deg, rgba(76, 29, 149, 0.24) 0%, rgba(15, 23, 42, 0.5) 100%)',
-                      borderColor: 'rgba(236, 72, 153, 0.3)',
-                    }}
-                  >
-                    <Stack gap={rem(6)}>
-                      <Text fw={700} size="sm" c="gray.0" style={{ whiteSpace: 'normal', lineHeight: 1.2 }}>
-                        {currentDemo.name}
-                      </Text>
-                      <Text size="xs" c="dimmed" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
-                        {currentDemo.summary}
-                      </Text>
-                      <Group gap={rem(6)}>
-                        {currentDemo.highlights.slice(0, 3).map((highlight) => (
-                          <Badge key={highlight} size="xs" variant="outline" color="gray" radius="sm">
-                            {highlight}
-                          </Badge>
-                        ))}
-                      </Group>
-                    </Stack>
-                  </Paper>
-                </Accordion.Panel>
-              </Accordion.Item>
-            )}
-
-            {featuredDemos.length > 0 && (
-              <Accordion.Item value="featured">
-                <Accordion.Control>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Stack gap={0}>
-                      <Text fw={700} size="sm">Featured</Text>
-                      <Text size="xs" c="dimmed">
-                        Quick path to the strongest visual demos.
-                      </Text>
-                    </Stack>
-                    <Badge size="xs" variant="light" color="grape">
-                      {featuredDemos.length}
-                    </Badge>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <SimpleGrid cols={1} spacing="sm">
-                    {featuredDemos.map((entry) => (
-                      <DemoCard
-                        key={entry.filename}
-                        demo={entry}
-                        selected={entry.filename === demo.currentFilename}
-                        featured
-                        onSelect={handleDemoSelect}
-                      />
-                    ))}
-                  </SimpleGrid>
-                </Accordion.Panel>
-              </Accordion.Item>
-            )}
-
-            {activeDemoGroups.map((group: HclDemoGroup) => (
-              <Accordion.Item key={group.key} value={group.key}>
-                <Accordion.Control>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Stack gap={0}>
-                      <Text fw={700} size="sm">{group.label}</Text>
-                      <Text size="xs" c="dimmed">
-                        {group.demos.length} available
-                      </Text>
-                    </Stack>
-                    <Badge size="xs" variant="light" color="violet">
-                      {group.key}
-                    </Badge>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="xs">
-                    {group.demos.map((entry) => (
-                      <DemoCard
-                        key={entry.filename}
-                        demo={entry}
-                        selected={entry.filename === demo.currentFilename}
-                        onSelect={handleDemoSelect}
-                      />
-                    ))}
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            ))}
-
-            {disabledDemos.length > 0 && (
-              <Accordion.Item value="disabled">
-                <Accordion.Control>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Stack gap={0}>
-                      <Text fw={700} size="sm">Temporarily Disabled</Text>
-                      <Text size="xs" c="dimmed">
-                        {disabledDemos.length} hidden from live selection
-                      </Text>
-                    </Stack>
-                    <Badge size="xs" variant="light" color="orange">
-                      hold
-                    </Badge>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap="xs">
-                    {disabledDemos.map((entry) => (
-                      <DemoCard
-                        key={entry.filename}
-                        demo={entry}
-                        selected={false}
-                        onSelect={handleDemoSelect}
-                      />
-                    ))}
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            )}
-          </Accordion>
-        </Stack>
-      </Drawer>
-
       <Toast
-        open={toastOpen}
         message={toastMessage}
-        severity={toastSeverity}
+        open={toastOpen}
         onClose={() => setToastOpen(false)}
+        severity={toastSeverity}
       />
     </>
   );
