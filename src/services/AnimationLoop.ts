@@ -31,25 +31,23 @@ export interface AnimationLoopState {
   lastContinuityStoreUpdate: number;
 }
 
+export interface ActiveAnimationLoopRuntime {
+  readonly canvas: HTMLCanvasElement;
+  readonly renderer: WebGPURenderer;
+  readonly arena: RenderBufferArena;
+}
+
 export interface AnimationLoopDeps {
   getCurrentProgram: () => CompiledProgramIR | null;
   getCurrentState: () => RuntimeState | null;
-  getCanvas: () => HTMLCanvasElement | null;
-  getRenderer: () => WebGPURenderer | null;
-  getArena: () => RenderBufferArena | null;
+  runtime: ActiveAnimationLoopRuntime;
   store: RootStore;
-  onStatsUpdate?: (statsText: string) => void;
+  onStatsUpdate: (statsText: string) => void;
 }
 
 export interface AnimationLoopController {
   stop: () => void;
   onCompileSuccess: () => boolean;
-}
-
-interface ResolvedWebGPULoopRuntime {
-  canvas: HTMLCanvasElement;
-  renderer: WebGPURenderer;
-  arena: RenderBufferArena;
 }
 
 interface RuntimeInputPlaneValues {
@@ -71,20 +69,6 @@ const EMPTY_RUNTIME_INPUT_VALUES: RuntimeInputPlaneValues = Object.freeze({
   inputAudioHigh: 0,
   inputGaugeActive: 0,
 });
-
-function resolveWebGPULoopRuntime(deps: AnimationLoopDeps): ResolvedWebGPULoopRuntime {
-  const canvas = deps.getCanvas();
-  const renderer = deps.getRenderer();
-  const arena = deps.getArena();
-
-  if (!canvas || !renderer || !arena) {
-    // [LAW:no-silent-fallbacks] Runtime loop must hard-fail when required
-    // WebGPU rendering dependencies are missing.
-    throw new Error('AnimationLoop: WebGPU runtime contract requires canvas, renderer, and arena');
-  }
-
-  return { canvas, renderer, arena };
-}
 
 function toHeldBit(value: number): number {
   return value > 0 ? 1 : 0;
@@ -358,7 +342,7 @@ interface FpsCadenceInputs {
   currentProgram: CompiledProgramIR;
   renderer: WebGPURenderer;
   store: RootStore;
-  onStatsUpdate?: (statsText: string) => void;
+  onStatsUpdate: (statsText: string) => void;
 }
 
 function runFpsCadence({
@@ -376,7 +360,7 @@ function runFpsCadence({
   }
   state.fps = Math.round((state.frameCount * 1000) / (now - state.lastFpsUpdate));
   const heartbeatInputs = readRuntimeHeartbeatInputs(currentProgram, store, renderer, state.fps);
-  onStatsUpdate?.(formatStatsText(state.fps, heartbeatInputs.drawOps, heartbeatInputs.tickMs));
+  onStatsUpdate(formatStatsText(state.fps, heartbeatInputs.drawOps, heartbeatInputs.tickMs));
   maybeLogRuntimeTelemetry({
     store,
     state,
@@ -456,11 +440,12 @@ export function executeAnimationFrame(
   const {
     getCurrentProgram,
     getCurrentState,
+    runtime,
     store,
     onStatsUpdate,
   } = deps;
 
-  const { canvas, renderer, arena } = resolveWebGPULoopRuntime(deps);
+  const { canvas, renderer, arena } = runtime;
   const currentProgram = getCurrentProgram();
   if (!currentProgram) {
     return;
@@ -530,7 +515,6 @@ export function startAnimationLoop(
   state: AnimationLoopState,
   onError: (err: unknown) => void
 ): AnimationLoopController {
-  resolveWebGPULoopRuntime(deps);
   // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
   // so boundary checks are enforced here exactly once per published program.
   assertProgramPhaseBoundary(deps);
