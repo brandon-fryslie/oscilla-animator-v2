@@ -829,16 +829,16 @@ export class RuntimeService {
         }
       });
 
-      // Start animation loop
-      if (this.renderer && this.arena && this.rendererExecutionState === 'active') {
-        this.animationState = createAnimationLoopState();
-        this.animationLoop = startAnimationLoop(
-          this.animationLoopDeps(),
-          this.animationState,
-          this.handleAnimationLoopError,
-        );
-        this.bindSpyReadbackTracking();
-      }
+      // [LAW:one-source-of-truth] Active runtime state is the single authority
+      // for animation-loop resources; startup no longer mirrors that state in
+      // nullable service fields.
+      this.animationState = createAnimationLoopState();
+      this.animationLoop = startAnimationLoop(
+        this.animationLoopDeps(),
+        this.animationState,
+        this.handleAnimationLoopError,
+      );
+      this.bindSpyReadbackTracking();
 
       // [LAW:verifiable-goals] Browser matrix gates require explicit bootstrap
       // success/failure state instead of inferring readiness from page liveness.
