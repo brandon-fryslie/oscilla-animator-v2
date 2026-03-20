@@ -29,6 +29,25 @@ describe('compile worker payload clone safety', () => {
   it('frontend and backend payloads are structured-clone safe for representative demos', () => {
     const failures: string[] = [];
     const demoFiles = selectRepresentativeDemos(hclDemos.map((demo) => demo.filename));
+    const passBundle = {
+      schemaVersion: 1 as const,
+      passes: [
+        {
+          passId: 'simulation',
+          stage: 'compute' as const,
+          entryPoint: 'compute_main',
+          wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+        },
+      ],
+    };
+    const passValidation = validateCompiledGpuPassBundle(passBundle);
+
+    if (passValidation.kind !== 'ok') {
+      throw new Error(
+        'Representative clone-safety test fixture is invalid: ' +
+          passValidation.errors.map((error) => error.message).join('; '),
+      );
+    }
 
     for (const filename of demoFiles) {
       const hcl = hclDemos.find((demo) => demo.filename === filename)?.hcl;
@@ -60,24 +79,6 @@ describe('compile worker payload clone safety', () => {
       if (backendResult?.kind === 'ok') {
         const serializableProgram = stripKernelRegistry(backendResult.program);
         const runtimeInstall = buildCompiledRuntimeInstallContract(backendResult.program);
-        const passBundle = {
-          schemaVersion: 1 as const,
-          passes: [
-            {
-              passId: 'simulation',
-              stage: 'compute' as const,
-              entryPoint: 'compute_main',
-              wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-            },
-          ],
-        };
-        const passValidation = validateCompiledGpuPassBundle(passBundle);
-        if (passValidation.kind !== 'ok') {
-          failures.push(
-            `${filename}: pass validation failed: ${passValidation.errors.map((error) => error.message).join('; ')}`,
-          );
-          continue;
-        }
         const workerPayload = {
           kind: 'compiled' as const,
           requestId: 1,
