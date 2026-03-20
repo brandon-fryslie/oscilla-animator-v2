@@ -30,7 +30,7 @@ describe('PatchPersistence issue reporting', () => {
     if (originalLocalStorage) {
       Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+       
       delete (globalThis as { localStorage?: unknown }).localStorage;
     }
   });

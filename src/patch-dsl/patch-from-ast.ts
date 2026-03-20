@@ -22,8 +22,16 @@ import { normalizeCanonicalName } from '../core/canonical-name';
 import { deriveEdgeAlias } from '../graph/edge-alias';
 import { getBlockDefinition } from '../blocks/registry';
 import { toIdentifier } from './serialize';
-import type { BlockId, CombineMode } from '../types';
-import { canonicalizeCombineMode } from '../types';
+import type { BlockId, BlockRole, CombineMode, DefaultSource } from '../types';
+import {
+  canonicalizeCombineMode,
+  defaultSourceConst,
+  userRole,
+  timeRootRole,
+  busRole,
+  domainRole,
+  rendererRole,
+} from '../types';
 
 /**
  * A deferred inline edge collected during Phase 1 block processing.
@@ -253,7 +261,7 @@ function processBlock(
 
   // Extract role
   const roleAttr = hclBlock.attributes.role;
-  const role = roleAttr ? { kind: convertHclValue(roleAttr) as string, meta: {} } : { kind: 'user', meta: {} };
+  const role = parseBlockRole(roleAttr ? convertHclValue(roleAttr) : 'user', warnings, hclBlock.pos);
 
   // Extract domain
   const domainIdAttr = hclBlock.attributes.domain;
@@ -301,7 +309,7 @@ function processBlock(
                 combineMode: canonicalizeCombineMode(convertHclValue(combineModeAttr) as CombineMode),
               }
             : {}),
-          ...(defaultSourceAttr ? { defaultSource: convertHclValue(defaultSourceAttr) as any } : {}),
+          ...(defaultSourceAttr ? { defaultSource: parseDefaultSource(convertHclValue(defaultSourceAttr)) } : {}),
         };
         inputPorts.set(portId, newPort);
       } else {
@@ -361,12 +369,49 @@ function processBlock(
     params,
     displayName: finalDisplayName,
     domainId,
-    role: role as any,
+    role,
     inputPorts,
     outputPorts,
   };
 
   return block;
+}
+
+function isDefaultSource(value: unknown): value is DefaultSource {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('blockType' in value) || !('output' in value)) return false;
+  const candidate = value as { blockType: unknown; output: unknown; params?: unknown };
+  if (typeof candidate.blockType !== 'string' || typeof candidate.output !== 'string') return false;
+  if (candidate.params === undefined) return true;
+  return typeof candidate.params === 'object' && candidate.params !== null && !Array.isArray(candidate.params);
+}
+
+function parseDefaultSource(value: unknown): DefaultSource {
+  if (isDefaultSource(value)) return value;
+  return defaultSourceConst(value);
+}
+
+function parseBlockRole(value: unknown, warnings: PatchDslWarning[], pos: Position): BlockRole {
+  if (typeof value !== 'string') {
+    warnings.push(new PatchDslWarning(`Invalid role value "${String(value)}", using "user"`, pos));
+    return userRole();
+  }
+
+  switch (value) {
+    case 'user':
+      return userRole();
+    case 'timeRoot':
+      return timeRootRole();
+    case 'bus':
+      return busRole();
+    case 'domain':
+      return domainRole();
+    case 'renderer':
+      return rendererRole();
+    default:
+      warnings.push(new PatchDslWarning(`Unknown role "${value}", using "user"`, pos));
+      return userRole();
+  }
 }
 
 /**

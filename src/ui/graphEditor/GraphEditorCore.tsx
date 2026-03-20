@@ -30,6 +30,7 @@ import ReactFlow, {
   type NodeChange,
   type EdgeChange,
   type Connection,
+  type NodeTypes,
   type NodeMouseHandler,
   type EdgeMouseHandler,
 } from 'reactflow';
@@ -56,6 +57,7 @@ import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import type { DebugStore } from '../../stores/DebugStore';
 import type { Patch } from '../../graph/Patch';
+import { blockId } from '../../types';
 import './GraphEditorCore.css';
 
 /**
@@ -104,7 +106,7 @@ export interface GraphEditorCoreProps {
   patch?: Patch | null;
 
   /** Custom node types map (default: { unified: UnifiedNode }) */
-  nodeTypes?: Record<string, React.ComponentType<any>>;
+  nodeTypes?: NodeTypes;
 
   /** Callback when editor is ready (for external imperative API) */
   onEditorReady?: (handle: GraphEditorCoreHandle) => void;
@@ -448,8 +450,7 @@ export const GraphEditorCoreInner = observer(
       const handleNodeClick = useCallback(
         (_event: React.MouseEvent, node: Node) => {
           if (selection) {
-            // Cast to any to handle both BlockId and InternalBlockId
-            selection.selectBlock(node.id as any);
+            selection.selectBlock(blockId(node.id));
           }
         },
         [selection]

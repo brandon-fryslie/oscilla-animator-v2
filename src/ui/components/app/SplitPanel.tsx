@@ -8,8 +8,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 interface SplitPanelProps {
-  topComponent: React.ComponentType<any>;
-  bottomComponent: React.ComponentType<any>;
+  topComponent: React.ComponentType;
+  bottomComponent: React.ComponentType;
   initialSplit?: number; // 0-1, percentage for top panel (default 0.5)
 }
 

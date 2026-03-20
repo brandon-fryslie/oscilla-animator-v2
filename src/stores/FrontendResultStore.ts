@@ -17,8 +17,8 @@ import { makeAutoObservable } from 'mobx';
 import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
-import type { TypedPatch } from '../compiler/ir/patches';
-import type { BlockId, DefaultSource, PortId, TransformStep } from '../types';
+import type { TypedPatch, PortKey } from '../compiler/ir/patches';
+import { blockId, type BlockId, type DefaultSource, type PortId, type TransformStep } from '../types';
 import { addressToString } from '../types/canonical-address';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -347,12 +347,12 @@ export class FrontendResultStore {
     }
 
     // Helper to resolve a port type from TypedPatch
-    const resolvePortType = (blockId: string, portName: string, dir: 'in' | 'out'): CanonicalType | undefined => {
+    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): CanonicalType | undefined => {
       if (!typedPatch?.portTypes) return undefined;
-      const idx = normalizedPatch.blockIndex.get(blockId as any);
+      const idx = normalizedPatch.blockIndex.get(blockId(blockIdStr));
       if (idx === undefined) return undefined;
-      const key = `${idx}:${portName}:${dir}`;
-      return typedPatch.portTypes.get(key as any);
+      const key = `${idx}:${portName}:${dir}` as PortKey;
+      return typedPatch.portTypes.get(key);
     };
 
     // Helper to build transform chain for an edge.

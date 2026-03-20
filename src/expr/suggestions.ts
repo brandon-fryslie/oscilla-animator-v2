@@ -19,7 +19,7 @@ import { BLOCK_DEFS_BY_TYPE } from '../blocks/registry';
 import { addressToString } from '../types/canonical-address';
 import { getOutputAddress } from '../graph/addressing';
 import { normalizeCanonicalName } from '../core/canonical-name';
-import type { PortId } from '../types';
+import { blockId, type PortId } from '../types';
 import { getExpressionConstants } from './constants';
 
 // =============================================================================
@@ -281,7 +281,7 @@ export class SuggestionProvider {
    */
   suggestBlockPorts(blockName: string): readonly PortSuggestion[] {
     // Find block by canonical name (normalized display name) or fall back to ID
-    let block = this.patch.blocks.get(blockName as any);
+    let block = this.patch.blocks.get(blockId(blockName));
     if (!block) {
       for (const b of this.patch.blocks.values()) {
         const canonical = b.displayName

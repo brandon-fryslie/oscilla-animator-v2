@@ -23,6 +23,7 @@ import { temporalityContinuous, temporalityDiscrete } from './temporality';
 import { DEFAULT_BINDING } from './binding';
 import { DEFAULT_PERSPECTIVE } from './perspective';
 import { DEFAULT_BRANCH } from './branch';
+import { domainTypeId, instanceId } from '../ids.js';
 
 // =============================================================================
 // CanonicalType
@@ -92,8 +93,8 @@ export function canonicalMany(
  * MUST NOT escape into backend/runtime — enforced by axis-validate.ts.
  */
 export const UNBOUND_INSTANCE: InstanceRef = {
-  domainTypeId: '__unbound__' as any, // DomainTypeId (avoiding circular import)
-  instanceId: '__unbound__' as any,   // InstanceId (avoiding circular import)
+  domainTypeId: domainTypeId('__unbound__'),
+  instanceId: instanceId('__unbound__'),
 };
 
 /**

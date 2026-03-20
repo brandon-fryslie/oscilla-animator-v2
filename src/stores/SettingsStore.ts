@@ -38,7 +38,7 @@ export class SettingsStore {
    * Registry of all settings tokens by namespace.
    * Map<namespace, token>
    */
-  private tokens = new Map<string, SettingsToken<any>>();
+  private tokens = new Map<string, SettingsToken<Record<string, unknown>>>();
 
   /**
    * Current settings values by namespace.
@@ -82,7 +82,7 @@ export class SettingsStore {
     }
 
     // Register token
-    this.tokens.set(token.namespace, token);
+    this.tokens.set(token.namespace, token as SettingsToken<Record<string, unknown>>);
 
     // Load from localStorage, merged with defaults
     const loaded = this.loadFromStorage(token);
@@ -156,7 +156,7 @@ export class SettingsStore {
    * Gets all registered tokens (for UI rendering).
    * Returns array sorted by ui.order.
    */
-  getRegisteredTokens(): Array<SettingsToken<any>> {
+  getRegisteredTokens(): Array<SettingsToken<Record<string, unknown>>> {
     return Array.from(this.tokens.values()).sort(
       (a, b) => a.ui.order - b.ui.order
     );

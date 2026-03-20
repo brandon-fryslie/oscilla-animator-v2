@@ -65,7 +65,7 @@ export const SettingsPanel: React.FC = observer(() => {
 /**
  * Single settings section for one namespace.
  */
-const SettingsSection: React.FC<{ token: SettingsToken<any> }> = observer(({ token }) => {
+const SettingsSection: React.FC<{ token: SettingsToken<Record<string, unknown>> }> = observer(({ token }) => {
   const settingsStore = useStore('settings');
   const values = settingsStore.get(token);
 

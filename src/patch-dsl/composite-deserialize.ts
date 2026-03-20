@@ -29,8 +29,9 @@ import { tokenize } from './lexer';
 import { parse } from './parser';
 import { expandTopLevelLocals } from './locals';
 import { DEFAULT_BLOCK_UI, getBlockDefinition } from '../blocks/registry';
-import type { Capability } from '../blocks/registry';
+import type { Capability, InputDef, OutputDef } from '../blocks/registry';
 import { toIdentifier } from './serialize';
+import { inferType, payloadVar } from '../core/inference-types';
 
 /**
  * A deferred internal edge collected during Phase 1 block processing.
@@ -203,19 +204,47 @@ export function deserializeCompositeFromHCL(hcl: string): CompositeDeserializeRe
     }
 
     // Build CompositeBlockDef (compute inputs/outputs from exposed ports)
-    const inputs: Record<string, any> = {};
+    const fallbackInferenceType = (portId: string) =>
+      inferType(payloadVar(`composite_${toIdentifier(portId)}_payload`), { kind: 'none' });
+
+    const inputs: Record<string, InputDef> = {};
     for (const exposedInput of exposedInputs) {
+      const internalBlock = internalBlocks.get(exposedInput.internalBlockId);
+      const internalDef = internalBlock ? getBlockDefinition(internalBlock.type) : undefined;
+      const internalInputType = internalDef?.inputs[exposedInput.internalPortId]?.type;
+      const resolvedType = exposedInput.type ?? internalInputType ?? fallbackInferenceType(exposedInput.externalId);
+      if (!exposedInput.type && !internalInputType) {
+        errors.push(
+          new PatchDslError(
+            `Unable to infer type for exposed input "${exposedInput.externalId}"`,
+            compositeHeader.pos,
+          ),
+        );
+      }
       inputs[exposedInput.externalId] = {
-        type: exposedInput.type,
+        type: resolvedType,
         defaultSource: exposedInput.defaultSource,
         uiHint: exposedInput.uiHint,
         label: exposedInput.externalLabel,
       };
     }
 
-    const outputs: Record<string, any> = {};
+    const outputs: Record<string, OutputDef> = {};
     for (const exposedOutput of exposedOutputs) {
+      const internalBlock = internalBlocks.get(exposedOutput.internalBlockId);
+      const internalDef = internalBlock ? getBlockDefinition(internalBlock.type) : undefined;
+      const internalOutputType = internalDef?.outputs[exposedOutput.internalPortId]?.type;
+      const resolvedType = internalOutputType ?? fallbackInferenceType(exposedOutput.externalId);
+      if (!internalOutputType) {
+        errors.push(
+          new PatchDslError(
+            `Unable to infer type for exposed output "${exposedOutput.externalId}"`,
+            compositeHeader.pos,
+          ),
+        );
+      }
       outputs[exposedOutput.externalId] = {
+        type: resolvedType,
         label: exposedOutput.externalLabel,
       };
     }

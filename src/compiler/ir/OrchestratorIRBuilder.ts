@@ -19,6 +19,7 @@ import type {
   ValueSlot,
   StateSlotId,
   InstanceId,
+  EventSlotId,
 } from './Indices';
 import type { TimeModelIR } from './schedule';
 import type {
@@ -144,7 +145,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
 
   getScalarSlots(): ReadonlyMap<number, ValueSlot>;
   getFieldSlots(): ReadonlyMap<number, ValueSlot>;
-  getEventSlots(): ReadonlyMap<ValueExprId, any>;
+  getEventSlots(): ReadonlyMap<ValueExprId, EventSlotId>;
   getEventSlotCount(): number;
   getSerializableTopologies(): readonly SerializableTopologyDef[];
 

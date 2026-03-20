@@ -4,8 +4,8 @@
  * Handles serialization, deserialization, and localStorage persistence of patches.
  */
 
-import type { Patch } from '../graph';
-import type { BlockId, EdgeRole, CombineMode } from '../types';
+import type { Patch, Block, InputPort, OutputPort } from '../graph';
+import type { BlockId, EdgeRole, BlockRole, CombineMode } from '../types';
 import { canonicalizeCombineMode } from '../types';
 import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from '../patch-dsl';
 import { resolveLocalStorageCapability } from './local-storage-capability';
@@ -99,7 +99,7 @@ export function serializePatch(patch: Patch, presetIndex: number): string {
 export function deserializePatch(json: string): { patch: Patch; presetIndex: number } | null {
   try {
     const data: SerializedPatch = JSON.parse(json);
-    const blocks = new Map<BlockId, any>();
+    const blocks = new Map<BlockId, Block>();
     for (const b of data.blocks) {
       // [LAW:no-silent-fallbacks] Persisted payloads must contain canonical
       // fields; legacy shape inference is rejected at decode time.
@@ -118,11 +118,14 @@ export function deserializePatch(json: string): { patch: Patch; presetIndex: num
       // [LAW:one-source-of-truth] Legacy serialized label is dropped at decode;
       // displayName remains the only canonical block-name field in memory.
       const { label: _legacyLabel, ...canonicalBlock } = b as typeof b & { label?: unknown };
-      blocks.set(b.id as BlockId, {
+      const hydratedBlock: Block = {
         ...canonicalBlock,
-        inputPorts: new Map(normalizedInputPorts.map(p => [p.id, p])),
-        outputPorts: new Map(b.outputPorts.map(p => [p.id, p])),
-      });
+        id: b.id as BlockId,
+        role: b.role as BlockRole,
+        inputPorts: new Map(normalizedInputPorts.map((p) => [p.id, p as InputPort])),
+        outputPorts: new Map(b.outputPorts.map((p) => [p.id, p as OutputPort])),
+      };
+      blocks.set(hydratedBlock.id, hydratedBlock);
     }
     const normalizedEdges = data.edges.map((e) => {
       if (typeof e.enabled !== 'boolean') {

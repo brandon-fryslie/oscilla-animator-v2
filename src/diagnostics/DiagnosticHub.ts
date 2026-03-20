@@ -22,6 +22,7 @@ import type { EventHub } from '../events/EventHub';
 import { createDiagnostic, type Diagnostic, type DiagnosticFilter } from './types';
 import { generateDiagnosticId } from './diagnosticId';
 import { runAuthoringValidators } from './validators/authoringValidators';
+import type { Patch } from '../graph';
 
 // =============================================================================
 // DiagnosticHub Class
@@ -75,7 +76,7 @@ export class DiagnosticHub {
   private unsubscribers: Array<() => void> = [];
 
   // Reference to patch (for authoring validators)
-  private patchGetter: () => any; // Will be set to () => rootStore.patch
+  private patchGetter: () => Patch; // Will be set to () => rootStore.patch
 
   // Callback to notify store of changes (for MobX reactivity)
   private onRevisionChange: (() => void) | null = null;
@@ -97,7 +98,7 @@ export class DiagnosticHub {
   constructor(
     events: EventHub,
     private readonly patchId: string,
-    patchGetter: () => any
+    patchGetter: () => Patch
   ) {
     this.patchGetter = patchGetter;
 

@@ -127,13 +127,8 @@ function getOutputRef(
 
 function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; stride: number } | undefined {
   if (!ref) return undefined;
-  if (!('id' in ref)) return undefined;
-  if (!('stride' in ref)) return undefined;
-
-  const id = (ref as any).id as ValueExprId;
-  const stride = (ref as any).stride;
-  if (typeof stride !== 'number') return undefined;
-  return { id, stride };
+  if (!isExprRef(ref)) return undefined;
+  return { id: ref.id, stride: ref.stride };
 }
 
 function isEventExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
@@ -185,7 +180,7 @@ function resolveShapeRefInfo(
   const shapeRefExpr = valueExprs[resolved as number];
   if (!shapeRefExpr || shapeRefExpr.kind !== 'shapeRef') return undefined;
 
-  const cpId = (shapeRefExpr as any).controlPointField as ValueExprId | undefined;
+  const cpId = shapeRefExpr.controlPointField;
   if (cpId === undefined) {
     return {};
   }

@@ -44,6 +44,6 @@ export const compilerFlagsSettings = defineSettings<CompilerFlagsSettings>('comp
     label: 'Compiler Flags',
     description: 'Configure severity for each compiler diagnostic code',
     order: 5,
-    fields: fields as any, // Dynamic fields from registry
+    fields,
   },
 });
