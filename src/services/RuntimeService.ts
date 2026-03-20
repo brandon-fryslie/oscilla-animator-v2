@@ -317,6 +317,9 @@ export class RuntimeService {
     const panX = viewport?.pan?.x ?? 0;
     const panY = viewport?.pan?.y ?? 0;
 
+    // [LAW:single-enforcer] RuntimeService owns initial install publication,
+    // so it must size the renderer surface before the first worker-side render.
+    renderer.resizeCanvas(renderWidth, renderHeight);
     renderer.render({
       shapeBank: {
         data: installContract.shapeBank.words,
@@ -693,13 +696,15 @@ export class RuntimeService {
       });
 
       // Start animation loop
-      this.animationState = createAnimationLoopState();
-      this.animationLoop = startAnimationLoop(
-        this.animationLoopDeps(),
-        this.animationState,
-        this.handleAnimationLoopError,
-      );
-      this.bindSpyReadbackTracking();
+      if (this.renderer && this.arena && this.rendererExecutionState === 'active') {
+        this.animationState = createAnimationLoopState();
+        this.animationLoop = startAnimationLoop(
+          this.animationLoopDeps(),
+          this.animationState,
+          this.handleAnimationLoopError,
+        );
+        this.bindSpyReadbackTracking();
+      }
 
       // [LAW:verifiable-goals] Browser matrix gates require explicit bootstrap
       // success/failure state instead of inferring readiness from page liveness.
