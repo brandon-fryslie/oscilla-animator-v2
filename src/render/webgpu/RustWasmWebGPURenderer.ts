@@ -64,6 +64,10 @@ export interface GpuFault {
 
 export type GpuFaultCallback = (fault: GpuFault) => void;
 
+interface WebGPURendererCreateOptions {
+  readonly onGpuFault: GpuFaultCallback;
+}
+
 export interface RuntimeEventBreadcrumb {
   readonly severity: 'error' | 'fatal';
   readonly code: string;
@@ -761,7 +765,7 @@ export class WebGPURenderer {
 
   static async create(
     canvas: HTMLCanvasElement,
-    options: { readonly onGpuFault?: GpuFaultCallback | null } = {},
+    options: WebGPURendererCreateOptions,
   ): Promise<WebGPURenderer> {
     assertWebGPUStartupContract(canvas);
     const offscreenCanvas = canvas.transferControlToOffscreen();
@@ -789,7 +793,7 @@ export class WebGPURenderer {
       sharedShapeBankWords,
       sharedSinkTableWords,
     );
-    renderer.setGpuFaultCallback(options.onGpuFault ?? null);
+    renderer.setGpuFaultCallback(options.onGpuFault);
     await renderer.bootstrap(
       offscreenCanvas,
       sharedInput,
@@ -1754,7 +1758,7 @@ export class WebGPURenderer {
 
 export async function createWebGPURenderer(
   canvas: HTMLCanvasElement,
-  options: { readonly onGpuFault?: GpuFaultCallback | null } = {},
+  options: WebGPURendererCreateOptions,
 ): Promise<WebGPURenderer> {
   // [LAW:no-silent-fallbacks] WebGPU renderer creation is hard-fail only.
   // No legacy renderer path is allowed once worker+Rust cutover is selected.

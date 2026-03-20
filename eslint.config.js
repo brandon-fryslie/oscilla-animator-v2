@@ -4,6 +4,7 @@ import noDefaultSourceInLower from './eslint-rules/no-default-source-in-lower.js
 import noBlockTypeCheckInLower from './eslint-rules/no-block-type-check-in-lower.js';
 import noNullishCoalescingDefaults from './eslint-rules/no-nullish-coalescing-defaults.js';
 import noHotPathAlloc from './eslint-rules/no-hot-path-alloc.js';
+import noNullableRuntimeContracts from './eslint-rules/no-nullable-runtime-contracts.js';
 
 export default tseslint.config(
   // Ignore build output
@@ -26,6 +27,27 @@ export default tseslint.config(
     },
     plugins: {
       '@typescript-eslint': tseslint.plugin,
+    },
+  },
+  {
+    files: [
+      'src/services/AnimationLoop.ts',
+      'src/services/RuntimeService.ts',
+    ],
+    languageOptions: {
+      parser: tseslint.parser,
+    },
+    plugins: {
+      oscilla: {
+        rules: {
+          'no-nullable-runtime-contracts': noNullableRuntimeContracts,
+        },
+      },
+    },
+    rules: {
+      // [LAW:single-enforcer] Runtime contract nullability is enforced by one
+      // lint boundary for the bootstrap/loop seam.
+      'oscilla/no-nullable-runtime-contracts': 'error',
     },
   },
   {
