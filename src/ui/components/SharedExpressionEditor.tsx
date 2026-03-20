@@ -218,15 +218,21 @@ export const SharedExpressionEditor = observer(function SharedExpressionEditor({
   }, [blockId, expressionEditor, patchStore]);
 
   useEffect(() => {
-    const commitOnKeypress = autoCompileOnKeypress || (liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0);
-    if (!commitOnKeypress) return;
+    if (!autoCompileOnKeypress) return;
     if (!isDirty) return;
 
+    const commitDelayMs = liveCommitDebounceMs !== undefined && liveCommitDebounceMs >= 0
+      ? liveCommitDebounceMs
+      : 0;
     const timer = window.setTimeout(() => {
       commitDraft(draftValue);
-    }, autoCompileOnKeypress ? 0 : liveCommitDebounceMs);
+    }, commitDelayMs);
     return () => window.clearTimeout(timer);
   }, [autoCompileOnKeypress, commitDraft, draftValue, isDirty, liveCommitDebounceMs]);
+
+  useEffect(() => {
+    expressionEditor.pruneDrafts(patch.blocks.keys());
+  }, [expressionEditor, patch.blocks]);
 
   useEffect(() => {
     let cancelled = false;

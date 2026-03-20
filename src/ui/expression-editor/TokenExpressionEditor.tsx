@@ -79,6 +79,52 @@ export interface TokenExpressionEditorHandle {
   refreshChips: () => void;
 }
 
+function sameDiagnostics(
+  left: readonly ExpressionInlineDiagnostic[],
+  right: readonly ExpressionInlineDiagnostic[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (
+      a.code !== b.code
+      || a.severity !== b.severity
+      || a.message !== b.message
+      || a.start !== b.start
+      || a.end !== b.end
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameSyntaxSpans(
+  left: readonly ExpressionSyntaxSpan[],
+  right: readonly ExpressionSyntaxSpan[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (a.start !== b.start || a.end !== b.end || a.className !== b.className) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // =============================================================================
 // Helper: Serialize contentEditable to plain text
 // =============================================================================
@@ -398,7 +444,8 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
     const lastRenderedValue = useRef(value);
-    const lastRenderSignature = useRef('');
+    const lastRenderedDiagnostics = useRef<readonly ExpressionInlineDiagnostic[]>(diagnostics);
+    const lastRenderedSyntaxSpans = useRef<readonly ExpressionSyntaxSpan[]>(syntaxSpans);
 
     // [LAW:one-source-of-truth] Connected refs are derived from canonical
     // output addresses built from the actual edge source endpoints.
@@ -436,7 +483,8 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
         const text = serializeToPlainText(editorRef.current);
         editorRef.current.innerHTML = buildInnerHTML(text, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
         lastRenderedValue.current = text;
-        lastRenderSignature.current = JSON.stringify({ text, diagnostics, syntaxSpans });
+        lastRenderedDiagnostics.current = diagnostics;
+        lastRenderedSyntaxSpans.current = syntaxSpans;
         requestAnimationFrame(() => {
           if (editorRef.current) {
             setCursorByPlainTextOffset(editorRef.current, cursorOff);
@@ -445,26 +493,26 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       },
     }), [addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);
 
-    const renderSignature = useMemo(
-      () => JSON.stringify({ text: value, diagnostics, syntaxSpans }),
-      [diagnostics, syntaxSpans, value],
-    );
-
     // Prop-driven updates (external value or inline decoration changes)
     useEffect(() => {
       if (!editorRef.current) return;
-      if (renderSignature !== lastRenderSignature.current || value !== lastRenderedValue.current) {
+      const shouldRefresh =
+        value !== lastRenderedValue.current
+        || !sameDiagnostics(diagnostics, lastRenderedDiagnostics.current)
+        || !sameSyntaxSpans(syntaxSpans, lastRenderedSyntaxSpans.current);
+      if (shouldRefresh) {
         const cursorOff = getCursorOffsetInPlainText(editorRef.current);
         editorRef.current.innerHTML = buildInnerHTML(value, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
         lastRenderedValue.current = value;
-        lastRenderSignature.current = renderSignature;
+        lastRenderedDiagnostics.current = diagnostics;
+        lastRenderedSyntaxSpans.current = syntaxSpans;
         requestAnimationFrame(() => {
           if (editorRef.current) {
             setCursorByPlainTextOffset(editorRef.current, cursorOff);
           }
         });
       }
-    }, [value, addressRegistry, connectedAddresses, diagnostics, renderSignature, syntaxSpans]);
+    }, [value, addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);
 
     // Handle input (user typing)
     const handleInput = useCallback(() => {
@@ -495,7 +543,8 @@ export const TokenExpressionEditor = forwardRef<TokenExpressionEditorHandle, Tok
       const plainText = serializeToPlainText(editorRef.current);
       editorRef.current.innerHTML = buildInnerHTML(plainText, addressRegistry, connectedAddresses, diagnostics, syntaxSpans);
       lastRenderedValue.current = plainText;
-      lastRenderSignature.current = JSON.stringify({ text: plainText, diagnostics, syntaxSpans });
+      lastRenderedDiagnostics.current = diagnostics;
+      lastRenderedSyntaxSpans.current = syntaxSpans;
 
       onBlur();
     }, [onBlur, addressRegistry, connectedAddresses, diagnostics, syntaxSpans]);

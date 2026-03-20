@@ -15,6 +15,10 @@ export interface RunBlockOpenBehaviorContext {
   readonly expressionEditor: ExpressionEditorStore;
 }
 
+function unreachableBehavior(behavior: never, message: string): never {
+  throw new Error(`${message}: ${JSON.stringify(behavior)}`);
+}
+
 export function hasBlockOpenBehavior(behavior: BlockOpenBehaviorDef): boolean {
   return behavior.kind !== 'noop';
 }
@@ -23,7 +27,10 @@ export function getBlockOpenBehaviorLabel(behavior: BlockOpenBehaviorDef): strin
   if (behavior.kind === 'open-expression-editor') {
     return 'Open Expression Editor';
   }
-  return 'Open';
+  if (behavior.kind === 'noop') {
+    return 'Open';
+  }
+  return unreachableBehavior(behavior, 'Unhandled BlockOpenBehaviorDef in getBlockOpenBehaviorLabel');
 }
 
 export function runBlockOpenBehavior(
@@ -44,7 +51,9 @@ export function runBlockOpenBehavior(
       return;
     }
     openExpressionEditorPanel(context.api, context.blockId);
+    return;
   }
+  return unreachableBehavior(behavior, 'Unhandled BlockOpenBehaviorDef in runBlockOpenBehavior');
 }
 
 export function getBlockParamEditor(
