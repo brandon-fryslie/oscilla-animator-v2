@@ -90,19 +90,19 @@ patch "Aurora Petal Showcase" {
 
       x0 = lattice.controlPoints.x - 0.5
       y0 = lattice.controlPoints.y - 0.5
-      lane = field_points.t
       r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
-      swirl = lane * 31.0 + phase_a_field * 1.5
-      arc = r * 10.0 + phase_b_field * 1.1
-      fold = 0.70 + 0.20 * cos(arc)
-      lift = 0.62 + 0.24 * sin(arc + lane * 8.0)
-      drift_x = 0.070 * sin(swirl + y0 * 13.0)
-      drift_y = 0.085 * cos(swirl * 0.92 - x0 * 15.0)
-      fan = 0.040 * sin(lane * 14.0 - phase_b_field * 1.8)
+      bend = r * 8.4 + phase_b_field * 1.2
+      veil = 0.76 + 0.16 * cos(bend)
+      plume = 0.72 + 0.14 * sin(bend + (x0 + y0) * 6.0)
+      curl_x = 0.080 * sin(y0 * 12.0 + phase_a_field * 1.4 + 0.6 * cos(x0 * 8.0 - phase_b_field))
+      curl_y = 0.092 * cos(x0 * 11.0 - phase_b_field * 1.1 + 0.5 * sin(y0 * 9.0 + phase_a_field))
+      drift = 0.034 * sin((x0 + y0) * 10.0 - phase_b_field * 0.9)
+      orbit_x = 0.020 * sin((x0 - y0) * 7.0 + phase_a_field * 1.7)
+      orbit_y = 0.024 * cos((x0 + y0) * 6.0 - phase_b_field * 1.5)
 
-      x = 0.5 + x0 * fold + drift_x + fan
-      y = 0.5 + y0 * lift + drift_y - 0.030 * cos(lane * 10.0 + phase_a_field * 1.3)
+      x = 0.5 + x0 * veil + curl_x + drift + orbit_x
+      y = 0.5 + y0 * plume + curl_y + orbit_y
 
       vec2(x, y)
     EXPR
