@@ -36,4 +36,20 @@ describe('ExpressionEditorStore', () => {
     expect(store.getPersistedValue(blockId, '')).toBe('clock.phaseA * 2');
     expect(store.getDraftValue(blockId, '')).toBe('clock.phaseA * 2');
   });
+
+  it('prunes drafts for blocks no longer in the patch', () => {
+    const store = new ExpressionEditorStore();
+    const keptBlockId = 'expr-1' as BlockId;
+    const removedBlockId = 'expr-2' as BlockId;
+
+    store.syncPersistedValue(keptBlockId, 'clock.phaseA');
+    store.syncPersistedValue(removedBlockId, 'clock.phaseB');
+    store.openForBlock(removedBlockId);
+
+    store.pruneDrafts([keptBlockId]);
+
+    expect(store.getDraftValue(keptBlockId, '')).toBe('clock.phaseA');
+    expect(store.getDraftValue(removedBlockId, '')).toBe('');
+    expect(store.activeBlockId).toBeNull();
+  });
 });

@@ -20,9 +20,12 @@ export const ExpressionEditorWorkbench = observer(function ExpressionEditorWorkb
   const expressionValue = String(block?.params?.expression ?? '');
   // [LAW:dataflow-not-control-flow] Keep hook order stable; render variants
   // are driven by data state instead of early-returning before later hooks run.
-  const workbenchState = patch && blockId && block
-    ? { kind: 'ready' as const, patch, blockId, block, expressionValue }
-    : { kind: 'empty' as const };
+  const workbenchState = useMemo(
+    () => patch && blockId && block
+      ? { kind: 'ready' as const, patch, blockId, block, expressionValue }
+      : { kind: 'empty' as const },
+    [block, blockId, expressionValue, patch],
+  );
 
   const expressionDiagnostics = useMemo(() => {
     if (!blockId) return [];

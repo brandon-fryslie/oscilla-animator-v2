@@ -63,4 +63,16 @@ export class ExpressionEditorStore {
   commitDraftValue(blockId: BlockId, persistedValue: string): void {
     this.drafts.set(blockId, { draftValue: persistedValue, persistedValue });
   }
+
+  pruneDrafts(validBlockIds: Iterable<BlockId>): void {
+    const validIds = new Set(validBlockIds);
+    for (const blockId of this.drafts.keys()) {
+      if (!validIds.has(blockId)) {
+        this.drafts.delete(blockId);
+      }
+    }
+    if (this.activeBlockId && !validIds.has(this.activeBlockId)) {
+      this.activeBlockId = null;
+    }
+  }
 }

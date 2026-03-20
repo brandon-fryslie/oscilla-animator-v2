@@ -231,7 +231,11 @@ export function lowerExpressionProgram(exprText: string): LoweredExpressionProgr
         );
       }
 
-      const rhsOffset = line.text.indexOf(rawRhs) + (rawRhs.length - rawRhs.trimStart().length);
+      const assignmentIndex = typeof match.index === 'number' ? match.index : 0;
+      const equalsIndex = line.text.indexOf('=', assignmentIndex);
+      const rawRhsIndex = line.text.indexOf(rawRhs, equalsIndex >= 0 ? equalsIndex + 1 : assignmentIndex);
+      const rhsBaseIndex = rawRhsIndex >= 0 ? rawRhsIndex : (equalsIndex >= 0 ? equalsIndex + 1 : assignmentIndex);
+      const rhsOffset = rhsBaseIndex + (rawRhs.length - rawRhs.trimStart().length);
       const expandedRhs = inlineVariables(rhs, env, line, rhsOffset);
 
       if (env.has(variable)) {

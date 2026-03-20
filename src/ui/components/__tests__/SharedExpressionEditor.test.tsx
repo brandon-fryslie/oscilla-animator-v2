@@ -15,6 +15,7 @@ const updateBlockParams = vi.fn();
 const expressionDrafts = new Map<BlockId, string>();
 const expressionPersistedValues = new Map<BlockId, string>();
 const openForBlock = vi.fn();
+const pruneDrafts = vi.fn();
 
 vi.mock('../../../compiler', () => ({
   compilePartialPatch: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('../../../stores', () => ({
         expressionDrafts.set(blockId, persistedValue);
         expressionPersistedValues.set(blockId, persistedValue);
       },
+      pruneDrafts,
     },
   }),
 }));
@@ -118,6 +120,7 @@ describe('SharedExpressionEditor', () => {
     diagnosticsLog.mockClear();
     updateBlockParams.mockClear();
     openForBlock.mockClear();
+    pruneDrafts.mockClear();
     expressionDrafts.clear();
     expressionPersistedValues.clear();
     compilePartialPatchMock.mockReset();
@@ -177,6 +180,7 @@ describe('SharedExpressionEditor', () => {
     await waitFor(() => {
       expect(updateBlockParams).toHaveBeenCalledWith(blockId, { expression: '1 + 2' });
     });
+    expect(pruneDrafts).toHaveBeenCalled();
   });
 
   it('renders fallback UI and logs diagnostics when registry construction fails', async () => {
