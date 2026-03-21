@@ -5,8 +5,9 @@ import {
   type OutputDef,
 } from '../../blocks/registry';
 import {
-  createAuthoringQuerySession,
   maySatisfyConnectionTypes,
+  queryAddConsumerBlocks,
+  queryAddSourceBlocks,
   queryConnectExistingSources,
   queryConnectTargetsForSource,
 } from '../../compiler/frontend/authoring-queries';
@@ -325,34 +326,45 @@ export function getCompatiblePortsForPort(
 
 export function getCompatibleBlockTypesForPort(
   patch: Patch,
-  frontend: FrontendResultStore,
+  _frontend: FrontendResultStore,
   blockId: BlockId,
   portId: PortId,
   isInput: boolean,
 ): CompatibleBlockTypeCandidate[] {
   if (!isInput) {
-    const targetType = resolvePortType(frontend, blockId, portId, 'output');
-    if (!targetType) return [];
+    const results = queryAddConsumerBlocks(
+      patch,
+      {
+        kind: 'addConsumerBlocks',
+        target: { blockId, portId },
+        candidates: getAllBlockDefs().map((blockDef) => ({
+          candidateId: blockDef.type,
+          blockType: blockDef.type,
+        })),
+      },
+      { mutationMode: 'addWriter' },
+    );
 
-    return getAllBlockDefs()
-      .flatMap((blockDef) =>
-        Object.entries(blockDef.inputs)
-          .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
-          .filter(([, inputDef]) => maySatisfyConnectionTypes(targetType, inputDef.type))
-          .map(([candidatePortId]) => ({
-            blockType: blockDef.type,
-            blockLabel: blockDef.label || blockDef.type,
-            portId: candidatePortId,
-            status: 'deferred' as const,
-          })),
+    return results.results
+      .filter((candidate) => isSuggested(candidate.status) && candidate.bestInputPortId)
+      .map((candidate) => {
+        const def = requireAnyBlockDef(candidate.blockType);
+        return {
+          blockType: candidate.blockType,
+          blockLabel: def.label || def.type,
+          portId: candidate.bestInputPortId!,
+          status: candidate.status,
+        };
+      })
+      .sort((a, b) =>
+        statusRank(a.status) - statusRank(b.status)
+        || a.blockLabel.localeCompare(b.blockLabel)
+        || a.blockType.localeCompare(b.blockType),
       );
   }
 
-  const session = createAuthoringQuerySession(
+  const results = queryAddSourceBlocks(
     patch,
-    { mutationMode: 'addWriter' },
-  );
-  const results = session.queryAddSourceBlocks(
     {
       kind: 'addSourceBlocks',
       target: { blockId, portId },
@@ -361,6 +373,7 @@ export function getCompatibleBlockTypesForPort(
         blockType: blockDef.type,
       })),
     },
+    { mutationMode: 'addWriter' },
   );
 
   return results.results
@@ -407,18 +420,18 @@ export function getValidDefaultSourceBlockTypes(
   blockId: BlockId,
   portId: PortId,
 ): DefaultSourceBlockTypeCandidate[] {
-  const session = createAuthoringQuerySession(
+  const results = queryAddSourceBlocks(
     patch,
-    { mutationMode: 'replaceWriter' },
-  );
-  const results = session.queryAddSourceBlocks({
+    {
       kind: 'addSourceBlocks',
       target: { blockId, portId },
       candidates: getAllBlockDefs().map((blockDef) => ({
         candidateId: blockDef.type,
         blockType: blockDef.type,
       })),
-    });
+    },
+    { mutationMode: 'replaceWriter' },
+  );
 
   return results.results
     .filter((candidate) => isSuggested(candidate.status))

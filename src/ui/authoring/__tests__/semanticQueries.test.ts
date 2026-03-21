@@ -84,6 +84,25 @@ describe('authoring semantic queries', () => {
     );
   });
 
+  it('derives output-side add-block suggestions from compiler-backed consumer queries', () => {
+    const frontend = new FrontendResultStore();
+
+    let constId!: BlockId;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      constId = b.addBlock('Const');
+    });
+
+    frontend.updateFromFrontendResult(compileFrontend(patch), 1);
+
+    const compatible = getCompatibleBlockTypesForPort(patch, frontend, constId, portId('out'), false);
+    expect(compatible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockType: 'Sin' }),
+      ]),
+    );
+  });
+
   it('derives lens candidates from the same resolved connection types', () => {
     const frontend = new FrontendResultStore();
 
@@ -182,7 +201,7 @@ describe('authoring semantic queries', () => {
       validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx', { frontend }).valid,
     ).toBe(false);
     expect(getHoverCompatiblePortsForPort(patch, frontend, constId, portId('out'), false)).toEqual([]);
-    expect(getCompatibleBlockTypesForPort(patch, frontend, constId, portId('out'), false)).toEqual([]);
+    expect(getCompatibleBlockTypesForPort(patch, frontend, constId, portId('out'), false).length).toBeGreaterThan(0);
     expect(getValidCombineModesForInput(patch, frontend, ellipseId, portId('rx'))).toEqual([]);
   });
 });
