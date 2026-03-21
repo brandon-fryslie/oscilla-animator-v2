@@ -353,19 +353,23 @@ export class FrontendResultStore {
       blocksById.set(block.id as string, block);
     }
 
+    type PortTypeLookup =
+      | { readonly found: true; readonly value: CanonicalType }
+      | { readonly found: false };
+
     // Helper to resolve a port type from TypedPatch
-    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): CanonicalType | null => {
-      if (!typedPatch?.portTypes) return null;
+    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): PortTypeLookup => {
+      if (!typedPatch?.portTypes) return { found: false };
       const idx = findNormalizedBlockIndex(normalizedPatch, blockIdStr);
-      if (idx < 0) return null;
+      if (idx < 0) return { found: false };
       for (const [portKey, portType] of typedPatch.portTypes) {
         const [blockIndexStr, keyPortName, keyDir] = portKey.split(':');
         if (Number(blockIndexStr) !== idx) continue;
         if (keyPortName !== portName) continue;
         if (keyDir !== dir) continue;
-        return portType;
+        return { found: true, value: portType };
       }
-      return null;
+      return { found: false };
     };
 
     // Helper to build transform chain for an edge.
@@ -425,7 +429,7 @@ export class FrontendResultStore {
         const outType = resolvePortType(nextBlockId, outPortId, 'out');
 
         // Determine if this is a lens or adapter based on block ID pattern
-        const isLens = (nextBlockId as string).startsWith('_lens_');
+        const isLens = nextBlockId.startsWith('_lens_');
 
         if (isLens) {
           chain.push({
@@ -435,11 +439,11 @@ export class FrontendResultStore {
               params: {},
             },
           });
-        } else if (inType && outType) {
+        } else if (inType.found && outType.found) {
           chain.push({
             kind: 'adapter',
-            from: inType,
-            to: outType,
+            from: inType.value,
+            to: outType.value,
             adapter: intermediateBlock.type,
           });
         }
@@ -472,8 +476,8 @@ export class FrontendResultStore {
             output: edge.fromPort,
             params: sourceBlock?.params,
           },
-          sourceType: sourceType ?? undefined,
-          targetType: targetType ?? undefined,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else if (edge.role === 'implicitCoerce') {
@@ -481,15 +485,15 @@ export class FrontendResultStore {
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
-          sourceType: sourceType ?? undefined,
-          targetType: targetType ?? undefined,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else if (edge.role === 'userWire') {
         map.set(targetAddrStr, {
           kind: 'userEdge',
-          sourceType: sourceType ?? undefined,
-          targetType: targetType ?? undefined,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else {

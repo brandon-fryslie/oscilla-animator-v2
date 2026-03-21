@@ -10,7 +10,7 @@
  */
 export type FieldControlType = 'toggle' | 'number' | 'select' | 'text' | 'slider';
 
-export type SettingsPrimitive = string | number | boolean | null;
+export type SettingsPrimitive = string | number | boolean;
 export type SettingsValue =
   | SettingsPrimitive
   | { readonly [key: string]: SettingsValue }

@@ -33,16 +33,30 @@ import {
   rendererRole,
 } from '../types';
 
+type HclNullValue = { readonly kind: 'hclNull' };
+interface HclObjectValue {
+  readonly [key: string]: HclJsValue;
+}
 type HclJsValue =
   | string
   | number
   | boolean
-  | null
-  | { readonly [key: string]: HclJsValue }
+  | HclNullValue
+  | HclObjectValue
   | readonly HclJsValue[];
 
-function isHclObject(value: HclJsValue): value is { readonly [key: string]: HclJsValue } {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+const HCL_NULL_VALUE: HclNullValue = { kind: 'hclNull' };
+
+function isHclNullValue(value: HclJsValue): value is HclNullValue {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Reflect.get(value, 'kind') === 'hclNull';
+}
+
+function isHclObject(value: HclJsValue): value is HclObjectValue {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && !isHclNullValue(value);
 }
 
 /**
@@ -405,9 +419,9 @@ function parseDefaultSource(
   if (!isHclObject(value)) {
     return defaultSourceConst(value);
   }
-  const blockTypeValue = value.blockType;
-  const outputValue = value.output;
-  const paramsValue = value.params;
+  const blockTypeValue = Reflect.get(value, 'blockType');
+  const outputValue = Reflect.get(value, 'output');
+  const paramsValue = Reflect.get(value, 'params');
   if (typeof blockTypeValue !== 'string' || typeof outputValue !== 'string') {
     warnings.push(
       new PatchDslWarning(
@@ -514,7 +528,7 @@ function convertHclValue(value: HclValue): HclJsValue {
     case 'number': return value.value;
     case 'string': return value.value;
     case 'bool': return value.value;
-    case 'null': return null;
+    case 'null': return HCL_NULL_VALUE;
     case 'reference': return value.parts.join('.');  // Convert to string
     case 'object': {
       const obj: Record<string, HclJsValue> = {};

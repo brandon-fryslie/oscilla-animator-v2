@@ -254,7 +254,7 @@ export class SettingsStore {
     level: SettingsStoreIssueLevel,
     message: string,
     namespace?: string,
-    detail?: Error | object | string | number | boolean | null
+    detail?: Error | object | string | number | boolean
   ): void {
     const issue: SettingsStoreIssue = {
       level,
@@ -267,8 +267,7 @@ export class SettingsStore {
   }
 }
 
-function formatIssueDetail(detail: Error | object | string | number | boolean | null): string {
-  if (detail === null) return 'null';
+function formatIssueDetail(detail: Error | object | string | number | boolean): string {
   if (detail instanceof Error) return detail.message;
   if (typeof detail === 'string') return detail;
   if (typeof detail === 'number' || typeof detail === 'boolean') return String(detail);

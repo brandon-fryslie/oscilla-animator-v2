@@ -1245,9 +1245,8 @@ type ConstEditorValue =
   | number
   | boolean
   | readonly number[]
-  | { readonly toHexString?: () => string }
-  | null;
-type RawConstEditorValue = string | number | boolean | object | readonly number[] | null;
+  | { readonly toHexString?: () => string };
+type RawConstEditorValue = string | number | boolean | object | readonly number[];
 
 function readVec2ConstEditorValue(value: ConstEditorValue): readonly [number, number] {
   if (!Array.isArray(value)) return [0, 0];
@@ -1354,7 +1353,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
 
   // Parse constValue based on payload type
   const parseConstValue = (raw: RawConstEditorValue): ConstEditorValue => {
-    if (raw === undefined || raw === null) {
+    if (raw === undefined) {
       // Return sensible defaults based on type
       switch (payloadType.kind) {
         case 'bool': return false;
@@ -1383,11 +1382,10 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     typeof rawConstValue === 'string'
     || typeof rawConstValue === 'number'
     || typeof rawConstValue === 'boolean'
-    || rawConstValue === null
     || Array.isArray(rawConstValue)
     || (typeof rawConstValue === 'object' && rawConstValue !== null)
       ? rawConstValue
-      : null;
+      : 0;
   const constValue = isConstBlock ? parseConstValue(normalizedRawConstValue) : 0;
 
   // [LAW:one-source-of-truth] Time-source handling is keyed by block capability, not type string aliasing.
