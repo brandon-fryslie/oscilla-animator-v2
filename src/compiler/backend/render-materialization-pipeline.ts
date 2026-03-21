@@ -127,9 +127,12 @@ function getOutputRef(
 
 type ExprValueRef =
   | { readonly kind: 'expr'; readonly id: ValueExprId; readonly stride: number }
+  // TODO: This code is wrong.  Figure out the right way to fix this
   | { readonly kind: 'missing' };
 
+// TODO: This code is wrong.  Figure out the right way to fix this
 function asExprValueRef(ref: ValueRefPacked): ExprValueRef {
+  // TODO: This code is wrong.  Figure out the right way to fix this
   if (!isExprRef(ref)) return { kind: 'missing' };
   return { kind: 'expr', id: ref.id, stride: ref.stride };
 }
@@ -184,6 +187,7 @@ function resolveShapeRefInfo(
   if (!shapeRefExpr || shapeRefExpr.kind !== 'shapeRef') return undefined;
 
   const cpId = shapeRefExpr.controlPointField;
+  // TODO: This code is wrong.  Figure out the right way to fix this
   if (cpId === undefined) {
     return {};
   }
@@ -246,19 +250,31 @@ function collectRenderTargets(
 
   for (const { block, index } of renderBlocks) {
     if (block.type === 'WebGPUType1Sink') {
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const positionRef = getOutputRef(index, '_position', blockOutputs);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const colorRef = getOutputRef(index, '_color', blockOutputs);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const shapeRef = getOutputRef(index, '_shape', blockOutputs);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const scaleRef = getOutputRef(index, '_scale', blockOutputs);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const rotationRef = getOutputRef(index, '_rotation', blockOutputs);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       if (!positionRef || !colorRef || !shapeRef) {
         continue;
       }
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const position = asExprValueRef(positionRef);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const color = asExprValueRef(colorRef);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const shape = asExprValueRef(shapeRef);
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const scale: ExprValueRef = scaleRef ? asExprValueRef(scaleRef) : { kind: 'missing' };
+      // TODO: This code is wrong.  Figure out the right way to fix this
       const rotation: ExprValueRef = rotationRef ? asExprValueRef(rotationRef) : { kind: 'missing' };
+      // TODO: This code is wrong.  Figure out the right way to fix this
       if (position.kind !== 'expr' || color.kind !== 'expr' || shape.kind !== 'expr') continue;
 
       if (!isFieldExtent(position.id, valueExprs)) continue;
@@ -273,22 +289,30 @@ function collectRenderTargets(
         instanceId,
         controlPoints: { id: position.id, stride: position.stride },
         color: { id: color.id, stride: color.stride },
+        // TODO: This code is wrong.  Figure out the right way to fix this
         scale: scale.kind === 'expr' ? { id: scale.id, stride: scale.stride } : undefined,
+        // TODO: This code is wrong.  Figure out the right way to fix this
         rotation: rotation.kind === 'expr' ? { id: rotation.id, stride: rotation.stride } : undefined,
         shape: { sourceExprId: shape.id },
       });
       continue;
     }
 
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const controlPointsRef = getInputRef(index, 'controlPoints', edges, blockOutputs);
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
 
     if (!controlPointsRef || !colorRef) {
       continue;
     }
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const controlPoints = asExprValueRef(controlPointsRef);
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const color = asExprValueRef(colorRef);
+    // TODO: This code is wrong.  Figure out the right way to fix this
     const scaleExpr: ExprValueRef = scaleRef ? asExprValueRef(scaleRef) : { kind: 'missing' };
     if (controlPoints.kind !== 'expr' || color.kind !== 'expr') continue;
 
@@ -310,6 +334,7 @@ function collectRenderTargets(
 
     const scale = scaleExpr.kind === 'expr'
       ? { id: scaleExpr.id, stride: scaleExpr.stride }
+      // TODO: This code is wrong.  Figure out the right way to fix this
       : undefined;
 
     const shapeFieldId = instanceDecl.shapeField;
@@ -614,6 +639,7 @@ function resolveShapeOutputs(args: {
           ),
         ),
       }
+    // TODO: This code is wrong.  Figure out the right way to fix this
     : undefined;
 
   return {
@@ -697,6 +723,7 @@ function buildRenderStepForTarget(args: {
         renderCustomSemantic(),
         `${target.renderBlockId}:rotation`,
       )
+    // TODO: This code is wrong.  Figure out the right way to fix this
     : undefined;
 
   if (!target.shape) {

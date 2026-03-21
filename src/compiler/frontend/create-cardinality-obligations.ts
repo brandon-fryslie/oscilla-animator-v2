@@ -173,6 +173,7 @@ function isElaborationOrigin(origin: EdgeOrigin): origin is Extract<EdgeOrigin, 
 
 function isCardinalityAdapterEdge(edge: Pick<DraftGraph['edges'][number], 'origin'>): boolean {
   if (!isElaborationOrigin(edge.origin)) return false;
+  // TODO: This code is wrong.  Figure out the right way to fix this
   return edge.origin.obligationId.startsWith('needsCardinalityAdapter:');
 }
 
