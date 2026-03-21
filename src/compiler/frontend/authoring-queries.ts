@@ -24,6 +24,9 @@ import {
 import { buildFrontendSemanticMaps } from './semantic-snapshot';
 import { getPortHint } from './type-facts';
 import type {
+  AddConsumerBlockInputResult,
+  AddConsumerBlockResult,
+  AddConsumerBlocksQuery,
   AddSourceBlockOutputResult,
   AddSourceBlockResult,
   AddSourceBlocksQuery,
@@ -35,11 +38,16 @@ import type {
   AuthoringQuery,
   AuthoringQueryMetrics,
   AuthoringQueryOptions,
+  AuthoringTargetBlock,
   AuthoringTargetInput,
+  AuthoringTargetOutput,
   ConnectExistingSourceResult,
   ConnectExistingSourcesQuery,
   ConnectTargetForSourceResult,
   ConnectTargetsForSourceQuery,
+  ReplaceBlockQuery,
+  ReplaceBlockResult,
+  ReplacementEdgePlan,
 } from './authoring-query-types';
 
 type QueryPrecheck = {
@@ -165,6 +173,21 @@ function buildHypotheticalBlock(patch: Patch, blockType: string, candidateId: st
   };
 }
 
+function buildReplacementBlock(targetBlock: Block, nextType: string): Block {
+  const builder = new PatchBuilder();
+  const tempId = builder.addBlock(nextType);
+  const template = builder.build().blocks.get(tempId)!;
+  return {
+    ...template,
+    id: targetBlock.id,
+    displayName: targetBlock.displayName,
+    domainId: targetBlock.domainId,
+    role: targetBlock.role,
+    inputPorts: cloneInputPortsWithOwnerIds(targetBlock.id, template),
+    outputPorts: new Map(template.outputPorts),
+  };
+}
+
 function createHypotheticalEdge(
   patchBlocks: ReadonlyMap<BlockId, Block>,
   from: Endpoint,
@@ -240,6 +263,30 @@ function addHypotheticalSourceBlock(
       target,
       { kind: 'port', blockId: block.id, slotId: outputPortId },
       `_aq_edge_${candidateId}_${outputPortId}`,
+      mode,
+    ),
+  };
+}
+
+function addHypotheticalConsumerBlock(
+  patch: Patch,
+  source: AuthoringTargetOutput,
+  blockType: string,
+  inputPortId: PortId,
+  candidateId: string,
+  mode: AuthoringMutationMode,
+): { readonly patch: Patch; readonly blockId: BlockId } {
+  const block = buildHypotheticalBlock(patch, blockType, candidateId);
+  const blocks = new Map(patch.blocks);
+  blocks.set(block.id, block);
+  const patchWithBlock: Patch = { blocks, edges: patch.edges };
+  return {
+    blockId: block.id,
+    patch: addHypotheticalWriter(
+      patchWithBlock,
+      { blockId: block.id, portId: inputPortId },
+      { kind: 'port', blockId: source.blockId, slotId: source.portId },
+      `_aq_edge_${candidateId}_${inputPortId}`,
       mode,
     ),
   };
@@ -495,6 +542,64 @@ function precheckSource(patch: Patch, source: SourceRef): QueryPrecheck {
   return { ok: true, block: sourceBlock };
 }
 
+function precheckOutputTarget(patch: Patch, target: AuthoringTargetOutput): QueryPrecheck {
+  const targetBlock = patch.blocks.get(target.blockId);
+  if (!targetBlock) {
+    return {
+      ok: false,
+      reasonKind: 'targetBlockMissing',
+      reason: `Target block ${target.blockId} not found`,
+    };
+  }
+
+  const targetDef = getAnyBlockDefinition(targetBlock.type);
+  const outputDef = targetDef?.outputs[target.portId];
+  if (!targetDef || !outputDef) {
+    return {
+      ok: false,
+      reasonKind: 'targetOutputMissing',
+      reason: `Target output ${target.blockId}.${target.portId} not found`,
+    };
+  }
+
+  if (outputDef.hidden) {
+    return {
+      ok: false,
+      reasonKind: 'targetOutputHidden',
+      reason: `Target output ${target.blockId}.${target.portId} is hidden`,
+    };
+  }
+
+  return { ok: true, block: targetBlock };
+}
+
+function precheckReplaceBlockTarget(patch: Patch, target: AuthoringTargetBlock): QueryPrecheck {
+  const block = patch.blocks.get(target.blockId);
+  if (!block) {
+    return {
+      ok: false,
+      reasonKind: 'targetBlockMissing',
+      reason: `Target block ${target.blockId} not found`,
+    };
+  }
+  const blockDef = getAnyBlockDefinition(block.type);
+  if (!blockDef) {
+    return {
+      ok: false,
+      reasonKind: 'targetBlockUnknownType',
+      reason: `Target block type ${block.type} is not registered`,
+    };
+  }
+  if (blockDef.capability === 'time') {
+    return {
+      ok: false,
+      reasonKind: 'targetBlockNotReplaceable',
+      reason: `Target block ${target.blockId} has non-replaceable capability`,
+    };
+  }
+  return { ok: true, block };
+}
+
 function baseCandidateResult(
   candidateId: string,
   reasonKind: string,
@@ -616,12 +721,36 @@ function outputRanking(status: AuthoringCandidateStatus): number {
   }
 }
 
+function isSuggested(status: AuthoringCandidateStatus): boolean {
+  return status === 'valid' || status === 'deferred';
+}
+
 function pickBestOutput(outputs: readonly AddSourceBlockOutputResult[]): AddSourceBlockOutputResult | undefined {
   return [...outputs].sort((a, b) => {
     const rankDiff = outputRanking(a.status) - outputRanking(b.status);
     if (rankDiff !== 0) return rankDiff;
     return String(a.outputPortId).localeCompare(String(b.outputPortId));
   })[0];
+}
+
+function pickBestInput(inputs: readonly AddConsumerBlockInputResult[]): AddConsumerBlockInputResult | undefined {
+  return [...inputs].sort((a, b) => {
+    const rankDiff = outputRanking(a.status) - outputRanking(b.status);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a.inputPortId).localeCompare(String(b.inputPortId));
+  })[0];
+}
+
+function visibleOutputs(def: { readonly outputs: Readonly<Record<string, OutputDef>> }): readonly [PortId, OutputDef][] {
+  return Object.entries(def.outputs)
+    .filter(([, outputDef]) => !outputDef.hidden)
+    .map(([outputPortId, outputDef]) => [outputPortId as PortId, outputDef]);
+}
+
+function visibleInputs(def: { readonly inputs: Readonly<Record<string, InputDef>> }): readonly [PortId, InputDef][] {
+  return Object.entries(def.inputs)
+    .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
+    .map(([inputPortId, inputDef]) => [inputPortId as PortId, inputDef]);
 }
 
 type TimingResult<T> = {
@@ -1130,6 +1259,520 @@ export function createAuthoringQuerySession(
   return new AuthoringQuerySession(patch, options);
 }
 
+function addConsumerBlocks(
+  patch: Patch,
+  query: AddConsumerBlocksQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<AddConsumerBlockResult> {
+  const timedBaseline = time(() => analyzeFrontend(patch, options.frontendOptions));
+  const baseline = timedBaseline.value;
+  const targetPrecheck = precheckOutputTarget(patch, query.target);
+  if (!targetPrecheck.ok) {
+    return {
+      queryKind: query.kind,
+      target: query.target,
+      mutationMode: options.mutationMode,
+      baselineStatus: 'blocked',
+      baselineReasonKind: targetPrecheck.reasonKind,
+      baselineReason: targetPrecheck.reason,
+      metrics: emptyMetrics(query.candidates.length),
+      results: query.candidates.map((candidate) => ({
+        kind: 'addConsumerBlocks',
+        blockType: candidate.blockType,
+        inputs: [],
+        ...baseCandidateResult(candidate.candidateId, targetPrecheck.reasonKind, targetPrecheck.reason),
+      })),
+    };
+  }
+
+  let exactEvaluationCount = 0;
+  let exactEvaluationMs = 0;
+  const results: AddConsumerBlockResult[] = query.candidates.map((candidate) => {
+    const blockDef = getAnyBlockDefinition(candidate.blockType);
+    if (!blockDef) {
+      return {
+        kind: 'addConsumerBlocks',
+        blockType: candidate.blockType,
+        inputs: [],
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'candidateBlockUnknown',
+          `Candidate block type ${candidate.blockType} not found`,
+        ),
+      };
+    }
+
+    const inputs = visibleInputs(blockDef);
+    if (inputs.length === 0) {
+      return {
+        kind: 'addConsumerBlocks',
+        blockType: candidate.blockType,
+        inputs: [],
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'candidateHasNoInputs',
+          `Candidate block type ${candidate.blockType} has no exposed inputs`,
+          'invalid',
+        ),
+      };
+    }
+
+    exactEvaluationCount += 1;
+    const inputResults: AddConsumerBlockInputResult[] = inputs.map(([inputPortId]) => {
+      const timed = time(() => {
+        const { patch: hypotheticalPatch, blockId } = addHypotheticalConsumerBlock(
+          patch,
+          query.target,
+          candidate.blockType,
+          inputPortId,
+          candidate.candidateId,
+          options.mutationMode,
+        );
+        return {
+          analysis: analyzeFrontend(hypotheticalPatch, options.frontendOptions),
+          blockId,
+        };
+      });
+      exactEvaluationMs += timed.durationMs;
+      return {
+        inputPortId,
+        ...resolveCandidateResult(
+          baseline,
+          timed.value.analysis,
+          { blockId: timed.value.blockId, portId: inputPortId },
+          { blockId: query.target.blockId, portId: query.target.portId },
+          candidate.candidateId,
+        ),
+      };
+    });
+
+    const bestInput = pickBestInput(inputResults);
+    return {
+      kind: 'addConsumerBlocks',
+      candidateId: candidate.candidateId,
+      blockType: candidate.blockType,
+      status: bestInput?.status ?? 'invalid',
+      reasonKind: bestInput?.reasonKind ?? 'candidateHasNoInputs',
+      reason: bestInput?.reason ?? `Candidate block type ${candidate.blockType} has no exposed inputs`,
+      diagnostics: bestInput?.diagnostics ?? [],
+      resolvedTargetType: bestInput?.resolvedTargetType,
+      resolvedSourceType: bestInput?.resolvedSourceType,
+      binding: bestInput?.binding,
+      controlSurface: bestInput?.controlSurface ?? [],
+      insertedArtifacts: bestInput?.insertedArtifacts ?? emptyInsertedArtifacts(),
+      inputs: inputResults,
+      bestInputPortId: bestInput?.inputPortId,
+    };
+  });
+
+  return {
+    queryKind: query.kind,
+    target: query.target,
+    mutationMode: options.mutationMode,
+    baselineStatus: 'ready',
+    metrics: buildMetrics(
+      timedBaseline.durationMs,
+      0,
+      query.candidates.length,
+      query.candidates.length,
+      exactEvaluationCount,
+      exactEvaluationMs,
+    ),
+    results,
+  };
+}
+
+type EdgeRewireSelection = {
+  readonly rewiredFrom: Endpoint;
+  readonly rewiredTo: Endpoint;
+  readonly status: AuthoringCandidateStatus;
+};
+
+function chooseBestOutputForEdgeTarget(
+  patch: Patch,
+  target: AuthoringTargetInput,
+  replacedBlockId: BlockId,
+  outputPortIds: readonly PortId[],
+  mode: AuthoringMutationMode,
+  preferredOutputPortId?: PortId,
+): EdgeRewireSelection | null {
+  const results = queryConnectExistingSources(
+    patch,
+    {
+      kind: 'connectExistingSources',
+      target,
+      candidates: outputPortIds.map((outputPortId) => ({
+        candidateId: String(outputPortId),
+        sourceBlockId: replacedBlockId,
+        sourcePortId: outputPortId,
+      })),
+    },
+    { mutationMode: mode },
+  ).results.filter((candidate) => isSuggested(candidate.status));
+
+  const ordered = [...results].sort((a, b) => {
+    const rankDiff = outputRanking(a.status) - outputRanking(b.status);
+    if (rankDiff !== 0) return rankDiff;
+    return String(a.sourcePortId).localeCompare(String(b.sourcePortId));
+  });
+  const preferred = preferredOutputPortId
+    ? ordered.find((candidate) => candidate.sourcePortId === preferredOutputPortId)
+    : undefined;
+  const best = preferred ?? ordered[0];
+  if (!best) return null;
+
+  return {
+    rewiredFrom: { kind: 'port', blockId: replacedBlockId, slotId: best.sourcePortId },
+    rewiredTo: { kind: 'port', blockId: target.blockId, slotId: target.portId },
+    status: best.status,
+  };
+}
+
+function chooseBestInputForEdgeSource(
+  patch: Patch,
+  source: AuthoringTargetOutput,
+  replacedBlockId: BlockId,
+  inputPortIds: readonly PortId[],
+  mode: AuthoringMutationMode,
+  preferredInputPortId?: PortId,
+): EdgeRewireSelection | null {
+  const results = inputPortIds
+    .map((inputPortId) => {
+      const result = queryConnectExistingSources(
+        patch,
+        {
+          kind: 'connectExistingSources',
+          target: { blockId: replacedBlockId, portId: inputPortId },
+          candidates: [
+            {
+              candidateId: `${source.blockId}:${source.portId}`,
+              sourceBlockId: source.blockId,
+              sourcePortId: source.portId,
+            },
+          ],
+        },
+        { mutationMode: mode },
+      ).results[0];
+      return { inputPortId, result };
+    })
+    .filter(({ result }) => isSuggested(result.status))
+    .sort((a, b) => {
+      const rankDiff = outputRanking(a.result.status) - outputRanking(b.result.status);
+      if (rankDiff !== 0) return rankDiff;
+      return String(a.inputPortId).localeCompare(String(b.inputPortId));
+    });
+
+  const preferred = preferredInputPortId
+    ? results.find((candidate) => candidate.inputPortId === preferredInputPortId)
+    : undefined;
+  const best = preferred ?? results[0];
+  if (!best) return null;
+
+  return {
+    rewiredFrom: { kind: 'port', blockId: source.blockId, slotId: source.portId },
+    rewiredTo: { kind: 'port', blockId: replacedBlockId, slotId: best.inputPortId },
+    status: best.result.status,
+  };
+}
+
+function chooseBestSelfEdgeMapping(
+  patch: Patch,
+  replacedBlockId: BlockId,
+  outputPortIds: readonly PortId[],
+  inputPortIds: readonly PortId[],
+  mode: AuthoringMutationMode,
+  preferredOutputPortId?: PortId,
+  preferredInputPortId?: PortId,
+): EdgeRewireSelection | null {
+  const candidates = inputPortIds
+    .map((inputPortId) => {
+      const results = queryConnectExistingSources(
+        patch,
+        {
+          kind: 'connectExistingSources',
+          target: { blockId: replacedBlockId, portId: inputPortId },
+          candidates: outputPortIds.map((outputPortId) => ({
+            candidateId: String(outputPortId),
+            sourceBlockId: replacedBlockId,
+            sourcePortId: outputPortId,
+          })),
+        },
+        { mutationMode: mode },
+      ).results
+        .filter((candidate) => isSuggested(candidate.status))
+        .sort((a, b) => {
+          const rankDiff = outputRanking(a.status) - outputRanking(b.status);
+          if (rankDiff !== 0) return rankDiff;
+          return String(a.sourcePortId).localeCompare(String(b.sourcePortId));
+        });
+      return { inputPortId, best: results[0] };
+    })
+    .filter((candidate): candidate is { inputPortId: PortId; best: ConnectExistingSourceResult } => !!candidate.best)
+    .sort((a, b) => {
+      const rankDiff = outputRanking(a.best.status) - outputRanking(b.best.status);
+      if (rankDiff !== 0) return rankDiff;
+      return String(a.inputPortId).localeCompare(String(b.inputPortId));
+    });
+
+  const preferred = (preferredInputPortId || preferredOutputPortId)
+    ? candidates.find((candidate) =>
+      (!preferredInputPortId || candidate.inputPortId === preferredInputPortId)
+      && (!preferredOutputPortId || candidate.best.sourcePortId === preferredOutputPortId))
+    : undefined;
+  const best = preferred ?? candidates[0];
+  if (!best) return null;
+
+  return {
+    rewiredFrom: { kind: 'port', blockId: replacedBlockId, slotId: best.best.sourcePortId },
+    rewiredTo: { kind: 'port', blockId: replacedBlockId, slotId: best.inputPortId },
+    status: best.best.status,
+  };
+}
+
+function withCandidateBlockType(patch: Patch, targetBlockId: BlockId, nextType: string): Patch {
+  const targetBlock = patch.blocks.get(targetBlockId);
+  if (!targetBlock) return patch;
+  const replacementBlock = buildReplacementBlock(targetBlock, nextType);
+  const blocks = new Map(patch.blocks);
+  blocks.set(targetBlockId, replacementBlock);
+  return { blocks, edges: patch.edges };
+}
+
+function rewireEdge(edge: Edge, from: Endpoint, to: Endpoint, blocks: ReadonlyMap<BlockId, Block>): Edge {
+  return {
+    ...edge,
+    from,
+    to,
+    alias: deriveEdgeAlias(from, blocks),
+  };
+}
+
+function replaceBlock(
+  patch: Patch,
+  query: ReplaceBlockQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<ReplaceBlockResult> {
+  const timedBaseline = time(() => analyzeFrontend(patch, options.frontendOptions));
+  const baseline = timedBaseline.value;
+  const targetPrecheck = precheckReplaceBlockTarget(patch, query.target);
+  if (!targetPrecheck.ok) {
+    return {
+      queryKind: query.kind,
+      target: query.target,
+      mutationMode: options.mutationMode,
+      baselineStatus: 'blocked',
+      baselineReasonKind: targetPrecheck.reasonKind,
+      baselineReason: targetPrecheck.reason,
+      metrics: emptyMetrics(query.candidates.length),
+      results: query.candidates.map((candidate) => ({
+        kind: 'replaceBlock',
+        blockType: candidate.blockType,
+        rewiredEdges: [],
+        ...baseCandidateResult(candidate.candidateId, targetPrecheck.reasonKind, targetPrecheck.reason),
+      })),
+    };
+  }
+
+  const targetBlock = patch.blocks.get(query.target.blockId)!;
+  const connectedEdges = patch.edges.filter(
+    (edge) => edge.from.blockId === query.target.blockId || edge.to.blockId === query.target.blockId,
+  );
+
+  let exactEvaluationCount = 0;
+  let exactEvaluationMs = 0;
+  const results: ReplaceBlockResult[] = query.candidates.map((candidate) => {
+    const candidateDef = getAnyBlockDefinition(candidate.blockType);
+    if (!candidateDef) {
+      return {
+        kind: 'replaceBlock',
+        blockType: candidate.blockType,
+        rewiredEdges: [],
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'candidateBlockUnknown',
+          `Candidate block type ${candidate.blockType} not found`,
+        ),
+      };
+    }
+
+    if (candidateDef.capability === 'time') {
+      return {
+        kind: 'replaceBlock',
+        blockType: candidate.blockType,
+        rewiredEdges: [],
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'candidateNotReplaceable',
+          `Candidate block type ${candidate.blockType} has non-replaceable capability`,
+          'invalid',
+        ),
+      };
+    }
+
+    if (candidate.blockType === targetBlock.type) {
+      return {
+        kind: 'replaceBlock',
+        blockType: candidate.blockType,
+        rewiredEdges: [],
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'sameTypeReplacement',
+          `Candidate block type ${candidate.blockType} is already applied`,
+          'invalid',
+        ),
+      };
+    }
+
+    const replacementPatch = withCandidateBlockType(patch, query.target.blockId, candidate.blockType);
+    const outputPortIds = visibleOutputs(candidateDef).map(([portId]) => portId);
+    const inputPortIds = visibleInputs(candidateDef).map(([portId]) => portId);
+
+    const mappedEdges: Array<{
+      readonly original: Edge;
+      readonly mapped: EdgeRewireSelection;
+    }> = [];
+
+    // [LAW:dataflow-not-control-flow] Every connected edge follows the same
+    // deterministic mapping pipeline; only selected ports vary as data.
+    for (const edge of connectedEdges) {
+      const fromIsReplaced = edge.from.blockId === query.target.blockId;
+      const toIsReplaced = edge.to.blockId === query.target.blockId;
+
+      const mapped = fromIsReplaced && toIsReplaced
+        ? chooseBestSelfEdgeMapping(
+            replacementPatch,
+            query.target.blockId,
+            outputPortIds,
+            inputPortIds,
+            options.mutationMode,
+            edge.from.slotId as PortId,
+            edge.to.slotId as PortId,
+          )
+        : fromIsReplaced
+          ? chooseBestOutputForEdgeTarget(
+              replacementPatch,
+              { blockId: edge.to.blockId as BlockId, portId: edge.to.slotId as PortId },
+              query.target.blockId,
+              outputPortIds,
+              options.mutationMode,
+              edge.from.slotId as PortId,
+            )
+          : toIsReplaced
+            ? chooseBestInputForEdgeSource(
+                replacementPatch,
+                { blockId: edge.from.blockId as BlockId, portId: edge.from.slotId as PortId },
+                query.target.blockId,
+                inputPortIds,
+                options.mutationMode,
+                edge.to.slotId as PortId,
+              )
+            : null;
+
+      if (!mapped) {
+        return {
+          kind: 'replaceBlock',
+          blockType: candidate.blockType,
+          rewiredEdges: [],
+          ...baseCandidateResult(
+            candidate.candidateId,
+            'noCompatibleRewire',
+            `No compatible rewiring found for edge ${edge.id} under candidate ${candidate.blockType}`,
+            'invalid',
+          ),
+        };
+      }
+
+      mappedEdges.push({ original: edge, mapped });
+    }
+
+    const remappedById = new Map(mappedEdges.map((entry) => [entry.original.id, entry.mapped]));
+    const candidateBlocks = replacementPatch.blocks;
+    const candidateEdges = patch.edges.map((edge) => {
+      const remapped = remappedById.get(edge.id);
+      return remapped
+        ? rewireEdge(edge, remapped.rewiredFrom, remapped.rewiredTo, candidateBlocks)
+        : edge;
+    });
+
+    const candidatePatch: Patch = {
+      blocks: candidateBlocks,
+      edges: candidateEdges,
+    };
+
+    exactEvaluationCount += 1;
+    const timed = time(() => analyzeFrontend(candidatePatch, options.frontendOptions));
+    exactEvaluationMs += timed.durationMs;
+    const candidateAnalysis = timed.value;
+
+    const diagnostics = diffDiagnostics(
+      baseline.frontendResult.errors,
+      candidateAnalysis.frontendResult.errors,
+    );
+    const insertedArtifacts = buildInsertedArtifacts(baseline, candidateAnalysis);
+    const blockingDiagnostics = diagnostics.filter((error) => error.severity === 'error');
+    const hasDeferredEdge = mappedEdges.some((entry) => entry.mapped.status === 'deferred');
+
+    const status: AuthoringCandidateStatus = blockingDiagnostics.length > 0
+      ? 'invalid'
+      : hasDeferredEdge
+        ? 'deferred'
+        : 'valid';
+    const reasonKind = status === 'invalid'
+      ? 'candidateDiagnostics'
+      : status === 'deferred'
+        ? 'unresolvedTypes'
+        : insertedArtifacts.adapterBlocks.length > 0
+          ? 'satisfiedViaAdapter'
+          : 'satisfied';
+    const reason = status === 'invalid'
+      ? (blockingDiagnostics[0]?.message ?? 'Candidate introduces blocking diagnostics')
+      : status === 'deferred'
+        ? 'Replacement remains admissible but depends on unresolved type facts'
+        : insertedArtifacts.adapterBlocks.length > 0
+          ? `Replacement is satisfiable through ${insertedArtifacts.adapterBlocks.length} adapter block(s)`
+          : 'Replacement is satisfiable';
+
+    const rewiredEdges: ReplacementEdgePlan[] = mappedEdges.map((entry) => ({
+      edgeId: entry.original.id,
+      from: entry.mapped.rewiredFrom,
+      to: entry.mapped.rewiredTo,
+      enabled: entry.original.enabled,
+      sortKey: entry.original.sortKey,
+      role: entry.original.role,
+      alias: deriveEdgeAlias(entry.mapped.rewiredFrom, candidateBlocks),
+    }));
+
+    return {
+      kind: 'replaceBlock',
+      candidateId: candidate.candidateId,
+      blockType: candidate.blockType,
+      status,
+      reasonKind,
+      reason,
+      diagnostics,
+      controlSurface: [],
+      insertedArtifacts,
+      rewiredEdges,
+    };
+  });
+
+  return {
+    queryKind: query.kind,
+    target: query.target,
+    mutationMode: options.mutationMode,
+    baselineStatus: 'ready',
+    metrics: buildMetrics(
+      timedBaseline.durationMs,
+      0,
+      query.candidates.length,
+      query.candidates.length,
+      exactEvaluationCount,
+      exactEvaluationMs,
+    ),
+    results,
+  };
+}
+
 export function runAuthoringQuery(
   patch: Patch,
   query: ConnectExistingSourcesQuery,
@@ -1147,9 +1790,25 @@ export function runAuthoringQuery(
 ): AuthoringBatchResult<AddSourceBlockResult>;
 export function runAuthoringQuery(
   patch: Patch,
+  query: AddConsumerBlocksQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<AddConsumerBlockResult>;
+export function runAuthoringQuery(
+  patch: Patch,
+  query: ReplaceBlockQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<ReplaceBlockResult>;
+export function runAuthoringQuery(
+  patch: Patch,
   query: AuthoringQuery,
   options: AuthoringQueryOptions,
-): AuthoringBatchResult<ConnectExistingSourceResult | ConnectTargetForSourceResult | AddSourceBlockResult> {
+): AuthoringBatchResult<
+  ConnectExistingSourceResult
+  | ConnectTargetForSourceResult
+  | AddSourceBlockResult
+  | AddConsumerBlockResult
+  | ReplaceBlockResult
+> {
   const session = createAuthoringQuerySession(patch, options);
   switch (query.kind) {
     case 'connectExistingSources':
@@ -1158,6 +1817,10 @@ export function runAuthoringQuery(
       return session.queryConnectTargetsForSource(query);
     case 'addSourceBlocks':
       return session.queryAddSourceBlocks(query);
+    case 'addConsumerBlocks':
+      return addConsumerBlocks(patch, query, options);
+    case 'replaceBlock':
+      return replaceBlock(patch, query, options);
   }
 }
 
@@ -1183,4 +1846,20 @@ export function queryAddSourceBlocks(
   options: AuthoringQueryOptions,
 ): AuthoringBatchResult<AddSourceBlockResult> {
   return createAuthoringQuerySession(patch, options).queryAddSourceBlocks(query);
+}
+
+export function queryAddConsumerBlocks(
+  patch: Patch,
+  query: AddConsumerBlocksQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<AddConsumerBlockResult> {
+  return addConsumerBlocks(patch, query, options);
+}
+
+export function queryReplaceBlock(
+  patch: Patch,
+  query: ReplaceBlockQuery,
+  options: AuthoringQueryOptions,
+): AuthoringBatchResult<ReplaceBlockResult> {
+  return replaceBlock(patch, query, options);
 }

@@ -6,9 +6,11 @@ import { buildPatch } from '../../../graph';
 import type { BlockId } from '../../../types';
 import {
   createAuthoringQuerySession,
+  queryAddConsumerBlocks,
   queryAddSourceBlocks,
   queryConnectExistingSources,
   queryConnectTargetsForSource,
+  queryReplaceBlock,
 } from '../authoring-queries';
 
 registerAllBlocks();
@@ -379,5 +381,72 @@ describe('authoring queries', () => {
     ).results[0];
 
     expect(result.status).toBe('blocked');
+  });
+
+  it('evaluates addConsumerBlocks over inputs and reports the best input', () => {
+    let constId!: BlockId;
+
+    const patch = buildPatch((b) => {
+      constId = b.addBlock('Const');
+    });
+
+    const result = queryAddConsumerBlocks(
+      patch,
+      {
+        kind: 'addConsumerBlocks',
+        target: { blockId: constId, portId: 'out' as any },
+        candidates: [{ candidateId: 'sin', blockType: 'Sin' }],
+      },
+      { mutationMode: 'addWriter' },
+    ).results[0];
+
+    expect(result.status).toBe('valid');
+    expect(result.bestInputPortId).toBe('input');
+    expect(result.inputs.length).toBeGreaterThan(0);
+  });
+
+  it('marks addConsumerBlocks candidates with no exposed inputs invalid', () => {
+    let constId!: BlockId;
+
+    const patch = buildPatch((b) => {
+      constId = b.addBlock('Const');
+    });
+
+    const result = queryAddConsumerBlocks(
+      patch,
+      {
+        kind: 'addConsumerBlocks',
+        target: { blockId: constId, portId: 'out' as any },
+        candidates: [{ candidateId: 'comment', blockType: 'Comment' }],
+      },
+      { mutationMode: 'addWriter' },
+    ).results[0];
+
+    expect(result.status).toBe('invalid');
+  });
+
+  it('returns block replacement rewiring plans from compiler-backed validation', () => {
+    let target!: BlockId;
+    const patch = buildPatch((b) => {
+      const source = b.addBlock('Const');
+      target = b.addBlock('Add');
+      const sink = b.addBlock('Sin');
+      b.wire(source, 'out', target, 'a');
+      b.wire(source, 'out', target, 'b');
+      b.wire(target, 'out', sink, 'input');
+    });
+
+    const result = queryReplaceBlock(
+      patch,
+      {
+        kind: 'replaceBlock',
+        target: { blockId: target },
+        candidates: [{ candidateId: 'subtract', blockType: 'Subtract' }],
+      },
+      { mutationMode: 'replaceWriter' },
+    ).results[0];
+
+    expect(result.status).toBe('valid');
+    expect(result.rewiredEdges).toHaveLength(3);
   });
 });

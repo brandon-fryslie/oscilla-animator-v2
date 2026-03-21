@@ -1,6 +1,7 @@
 import type { CanonicalType } from '../../core/canonical-types';
 import type { FrontendError, FrontendOptions } from './index';
-import type { BlockId, PortId } from '../../types';
+import type { BlockId, EdgeRole, PortId } from '../../types';
+import type { Endpoint } from '../../graph/Patch';
 import type {
   BindingControlDescriptor,
   InputBindingSummary,
@@ -12,6 +13,15 @@ export type AuthoringMutationMode = 'addWriter' | 'replaceWriter';
 export interface AuthoringTargetInput {
   readonly blockId: BlockId;
   readonly portId: PortId;
+}
+
+export interface AuthoringTargetOutput {
+  readonly blockId: BlockId;
+  readonly portId: PortId;
+}
+
+export interface AuthoringTargetBlock {
+  readonly blockId: BlockId;
 }
 
 export interface AuthoringQueryOptions {
@@ -51,10 +61,30 @@ export interface AddSourceBlocksQuery {
   }[];
 }
 
+export interface AddConsumerBlocksQuery {
+  readonly kind: 'addConsumerBlocks';
+  readonly target: AuthoringTargetOutput;
+  readonly candidates: readonly {
+    readonly candidateId: string;
+    readonly blockType: string;
+  }[];
+}
+
+export interface ReplaceBlockQuery {
+  readonly kind: 'replaceBlock';
+  readonly target: AuthoringTargetBlock;
+  readonly candidates: readonly {
+    readonly candidateId: string;
+    readonly blockType: string;
+  }[];
+}
+
 export type AuthoringQuery =
   | ConnectExistingSourcesQuery
   | ConnectTargetsForSourceQuery
-  | AddSourceBlocksQuery;
+  | AddSourceBlocksQuery
+  | AddConsumerBlocksQuery
+  | ReplaceBlockQuery;
 
 export interface AuthoringQueryMetrics {
   readonly baselineAnalysisMs: number;
@@ -108,9 +138,36 @@ export interface AddSourceBlockResult extends AuthoringCandidateResultBase {
   readonly bestOutputPortId?: PortId;
 }
 
+export interface AddConsumerBlockInputResult extends AuthoringCandidateResultBase {
+  readonly inputPortId: PortId;
+}
+
+export interface AddConsumerBlockResult extends AuthoringCandidateResultBase {
+  readonly kind: 'addConsumerBlocks';
+  readonly blockType: string;
+  readonly inputs: readonly AddConsumerBlockInputResult[];
+  readonly bestInputPortId?: PortId;
+}
+
+export interface ReplacementEdgePlan {
+  readonly edgeId: string;
+  readonly from: Endpoint;
+  readonly to: Endpoint;
+  readonly enabled: boolean;
+  readonly sortKey: number;
+  readonly role: EdgeRole;
+  readonly alias: string;
+}
+
+export interface ReplaceBlockResult extends AuthoringCandidateResultBase {
+  readonly kind: 'replaceBlock';
+  readonly blockType: string;
+  readonly rewiredEdges: readonly ReplacementEdgePlan[];
+}
+
 export interface AuthoringBatchResult<T> {
   readonly queryKind: AuthoringQuery['kind'];
-  readonly target?: AuthoringTargetInput;
+  readonly target?: AuthoringTargetInput | AuthoringTargetOutput | AuthoringTargetBlock;
   readonly source?: {
     readonly blockId: BlockId;
     readonly portId: PortId;
