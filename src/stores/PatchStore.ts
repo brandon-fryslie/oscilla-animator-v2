@@ -29,6 +29,7 @@ import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
 import { getBlockDefinition } from '../blocks/registry';
+import { getPreferredInlineSourceParam } from '../blocks/editable-config';
 import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
@@ -185,10 +186,25 @@ function defaultSourceToAuthoredSource(defaultSource: DefaultSource | undefined)
   });
 }
 
-function readConstSourceValue(source: AuthoredControlSource | null | undefined): unknown {
+function readInlineSourceValue(source: AuthoredControlSource | null | undefined): unknown {
   if (!source) return undefined;
-  if (source.blockType !== 'Const' || source.outputPortId !== 'out') return undefined;
-  return source.params.value;
+  return getPreferredInlineSourceParam(source.blockType, source.params)?.value;
+}
+
+function sameDefaultSourceIdentity(
+  left: DefaultSource | undefined,
+  right: DefaultSource | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.blockType === right.blockType && left.output === right.output;
+}
+
+function sameAuthoredSourceIdentity(
+  left: AuthoredControlSource | null | undefined,
+  right: AuthoredControlSource | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.blockType === right.blockType && left.outputPortId === right.outputPortId;
 }
 
 function buildAuthoredInputControl(blockId: BlockId, portId: string, source: AuthoredControlSource | null): AuthoredInputControl | undefined {
@@ -216,9 +232,9 @@ function migrateInputPortControl(
   const legacyParamValue = legacyParams[portId];
   const existingSource = port.authoredControl?.source ?? null;
   const legacyDefaultSource = port.defaultSource;
-  const seededSource = legacyDefaultSource?.blockType === 'Const'
+  const seededSource = legacyDefaultSource
     ? defaultSourceToAuthoredSource(legacyDefaultSource)
-    : inputDef.defaultSource?.blockType === 'Const'
+    : inputDef.defaultSource
       ? defaultSourceToAuthoredSource(inputDef.defaultSource)
       : inputDef.defaultValue !== undefined
         ? constSource(inputDef.defaultValue)
@@ -231,9 +247,7 @@ function migrateInputPortControl(
     port: {
       ...port,
       authoredControl: buildAuthoredInputControl(blockId, portId, nextSource),
-      ...(legacyDefaultSource && legacyDefaultSource.blockType === 'Const'
-        ? { defaultSource: undefined }
-        : {}),
+      defaultSource: undefined,
     },
     consumedParam: legacyParamValue !== undefined,
   };
@@ -546,7 +560,7 @@ export class PatchStore {
       const providedControlValue = params[inputId];
       const seededSource = providedControlValue !== undefined
         ? constSource(providedControlValue)
-        : inputDef.defaultSource && inputDef.defaultSource.blockType === 'Const'
+        : inputDef.defaultSource
           ? defaultSourceToAuthoredSource(inputDef.defaultSource)
           : inputDef.defaultValue !== undefined
             ? constSource(inputDef.defaultValue)
@@ -685,7 +699,7 @@ export class PatchStore {
     const changedEntries = Object.entries(params).filter(([key, newValue]) => {
       const inputDef = blockDef.inputs[key];
       if (inputDef && inputDef.exposedAsPort !== false) {
-        const currentSourceValue = readConstSourceValue(block.inputPorts.get(key)?.authoredControl?.source);
+        const currentSourceValue = readInlineSourceValue(block.inputPorts.get(key)?.authoredControl?.source);
         return currentSourceValue !== newValue;
       }
       return block.params[key] !== newValue;
@@ -734,7 +748,7 @@ export class PatchStore {
       for (const [key, newValue] of changedEntries) {
         const inputDef = blockDef.inputs[key];
         const oldValue = inputDef && inputDef.exposedAsPort !== false
-          ? readConstSourceValue(block.inputPorts.get(key)?.authoredControl?.source)
+          ? readInlineSourceValue(block.inputPorts.get(key)?.authoredControl?.source)
           : block.params[key];
         this.eventHub.emit({
           type: 'ParamChanged',
@@ -786,15 +800,6 @@ export class PatchStore {
         return;
       }
       case 'bindingSourceParam': {
-        if (
-          target.sourceBlockType === 'Const' &&
-          target.sourceOutputPortId === 'out' &&
-          target.paramId === 'value'
-        ) {
-          this.updateBlockParams(target.blockId, { [target.portId]: value });
-          return;
-        }
-
         const block = this._data.blocks.get(target.blockId);
         if (!block) {
           throw new Error(`Block ${target.blockId} not found`);
@@ -912,21 +917,17 @@ export class PatchStore {
       const updateKeys = Object.keys(updates);
       if (updateKeys.length !== 1 || updateKeys[0] !== 'defaultSource') return false;
       const existingSource = port.authoredControl?.source;
-      if (existingSource && updates.defaultSource.blockType === 'Const' && updates.defaultSource.output === 'out') {
-        return existingSource.blockType === 'Const' && existingSource.outputPortId === 'out';
-      }
+      const nextSource = defaultSourceToAuthoredSource(updates.defaultSource);
+      if (sameAuthoredSourceIdentity(existingSource, nextSource)) return true;
       // If port already has a legacy defaultSource, check same blockType/output (value-only change)
       if (port.defaultSource) {
-        return (
-          port.defaultSource.blockType === updates.defaultSource.blockType &&
-          port.defaultSource.output === updates.defaultSource.output
-        );
+        return sameDefaultSourceIdentity(port.defaultSource, updates.defaultSource);
       }
       // First-time: check registry default matches the update's blockType
       const blockDef = requireAnyBlockDef(block.type);
       const inputDef = blockDef.inputs[portId];
       if (!inputDef?.defaultSource) return false;
-      return inputDef.defaultSource.blockType === updates.defaultSource.blockType;
+      return sameDefaultSourceIdentity(inputDef.defaultSource, updates.defaultSource);
     })();
 
     if (isValueOnly) {
@@ -948,17 +949,16 @@ export class PatchStore {
     let updatedPort: InputPort = { ...port, ...normalizedUpdates };
     if (Object.prototype.hasOwnProperty.call(updates, 'defaultSource') && inputDef && inputDef.exposedAsPort !== false) {
       const nextDefault = updates.defaultSource;
-      const nextAuthoredSource = nextDefault && nextDefault.blockType === 'Const' && nextDefault.output === 'out'
+      const nextAuthoredSource = nextDefault
         ? defaultSourceToAuthoredSource(nextDefault)
         : null;
-      // [LAW:one-source-of-truth] Const-style control edits land on the port's
-      // authored control node, not back into block.params.
+      // [LAW:one-source-of-truth] Exposed-input source overrides live on the
+      // canonical authored binding source regardless of which block type emits
+      // the value; PatchStore does not split them across two fields.
       updatedPort = {
         ...updatedPort,
         authoredControl: buildAuthoredInputControl(blockId, portId, nextAuthoredSource),
-        defaultSource: nextDefault && nextDefault.blockType !== 'Const'
-          ? nextDefault
-          : undefined,
+        defaultSource: undefined,
       };
       delete nextParams[portId];
     }

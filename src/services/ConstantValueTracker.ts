@@ -13,6 +13,7 @@ import type { CanonicalType } from '../core/canonical-types';
 import { BOOL, CAMERA_PROJECTION, COLOR, FLOAT, VEC2, VEC3, canonicalType } from '../core/canonical-types';
 import { canonicalScalar } from '../core/canonical-types/canonical-type';
 import { EMPTY_SUBSTITUTION, finalizeInferenceType, isInferenceCanonicalizable } from '../core/inference-types';
+import { getPreferredInlineSourceParam } from '../blocks/editable-config';
 import { getAnyBlockDefinition } from '../blocks/registry';
 import { blockId as toBlockId } from '../types';
 
@@ -86,12 +87,12 @@ function resolveDefaultValue(
   if (!inputDef) return undefined;
 
   const authoredSource = block.inputPorts.get(inputPortId)?.authoredControl?.source;
-  const authoredValue = authoredSource?.blockType === 'Const' && authoredSource.outputPortId === 'out'
-    ? authoredSource.params.value
-    : undefined;
-  if (authoredValue !== undefined) {
+  const authoredParam = authoredSource
+    ? getPreferredInlineSourceParam(authoredSource.blockType, authoredSource.params)
+    : null;
+  if (authoredParam) {
     return {
-      value: authoredValue,
+      value: authoredParam.value,
       reason: 'default-value',
       description: `Authored input control value from ${block.type}.${inputPortId}`,
     };
@@ -192,34 +193,15 @@ function resolveOutputConstant(
 
   let resolved: ResolvedConstant | undefined;
 
-  // [LAW:one-source-of-truth] Constant value derivation dispatches on canonical
-  // block definitions/types, not legacy aliases.
-  if (block.type === 'Const' && outputPort === 'out') {
-    const value = (block.params as Record<string, unknown>).value;
-    if (value !== undefined) {
-      resolved = {
-        value,
-        reason: 'const-block',
-        description: 'Constant value from Const block',
-      };
-    }
-  }
-
-  if (!resolved && block.type === 'CameraProjectionConst' && outputPort === 'out') {
-    const mode = (block.params as Record<string, unknown>).value;
-    if (mode === 1) {
-      resolved = {
-        value: 'perspective',
-        reason: 'const-block',
-        description: 'Constant camera projection mode',
-      };
-    } else if (mode === 0 || mode === undefined) {
-      resolved = {
-        value: 'orthographic',
-        reason: 'const-block',
-        description: 'Constant camera projection mode',
-      };
-    }
+  const projectedConstant = outputPort === 'out' && 'constantValueFromConfig' in blockDef
+    ? blockDef.constantValueFromConfig?.(block.params as Readonly<Record<string, unknown>>)
+    : undefined;
+  if (projectedConstant !== undefined) {
+    resolved = {
+      value: projectedConstant,
+      reason: 'const-block',
+      description: `Constant value from ${block.type}`,
+    };
   }
 
   if (!resolved && outputPort === 'out') {

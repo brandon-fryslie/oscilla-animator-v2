@@ -2,6 +2,7 @@ import type { CanonicalType } from '../../core/canonical-types';
 import type { NormalizedPatch } from './normalize-indexing';
 import type { TypedPatch } from '../ir/patches';
 import { getAnyBlockDefinition } from '../../blocks/registry';
+import { getEditableConfigParams, getPreferredInlineSourceParam } from '../../blocks/editable-config';
 import type { BlockId, DefaultSource, PortId, TransformStep, UIControlHint } from '../../types';
 import { addressToString } from '../../types/canonical-address';
 import type { ControlMutationTarget } from '../../types/control-target';
@@ -86,25 +87,22 @@ function buildControlDescriptors(
   buildTarget: (paramId: string) => ControlMutationTarget,
   preferredValuePresentation?: { readonly label: string; readonly hint?: UIControlHint },
 ): BindingControlDescriptor[] {
-  const def = getAnyBlockDefinition(blockType);
-  if (!def) return [];
+  const preferredParam = preferredValuePresentation
+    ? getPreferredInlineSourceParam(blockType, params)
+    : null;
 
-  const descriptors: BindingControlDescriptor[] = [];
-  for (const [inputId, inputDef] of Object.entries(def.inputs)) {
-    if (inputDef.exposedAsPort !== false) continue;
-    const value = params[inputId] ?? inputDef.defaultValue;
-    if (value === undefined) continue;
-
-    const preferred = inputId === 'value' ? preferredValuePresentation : undefined;
-    descriptors.push({
-      id: inputId,
-      label: preferred?.label ?? inputDef.label ?? inputId,
-      value,
-      hint: preferred?.hint ?? inputDef.uiHint,
-      target: buildTarget(inputId),
-    });
-  }
-  return descriptors;
+  return getEditableConfigParams(blockType, params).map((param) => {
+    const preferred = preferredParam?.paramId === param.paramId
+      ? preferredValuePresentation
+      : undefined;
+    return {
+      id: param.paramId,
+      label: preferred?.label ?? param.label,
+      value: param.value,
+      hint: preferred?.hint ?? param.hint,
+      target: buildTarget(param.paramId),
+    };
+  });
 }
 
 function buildLensControlDescriptors(
@@ -408,7 +406,7 @@ function buildInputBindings(
                 sourceOutputPortId: rootEdge.fromPort as PortId,
                 paramId,
               }),
-              rootBlock.type === 'Const' ? defaultPresentation : undefined,
+              defaultPresentation,
             )
           : buildControlDescriptors(
               rootBlock.id as string,

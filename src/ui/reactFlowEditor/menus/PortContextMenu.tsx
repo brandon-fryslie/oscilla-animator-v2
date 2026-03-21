@@ -52,17 +52,6 @@ interface CompatibleBlockType {
   portId: string;
 }
 
-function randomSample<T>(array: T[], count: number): T[] {
-  if (array.length <= count) return array;
-
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled.slice(0, count);
-}
-
 /**
  * Get the next combine mode in the cycle.
  */
@@ -174,7 +163,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
       portId,
       isInput,
     );
-    const addBlockTypes = randomSample(compatibleBlockTypes, MAX_ADD_BLOCK);
+    const addBlockTypes = compatibleBlockTypes.slice(0, MAX_ADD_BLOCK);
 
     for (const blockType of addBlockTypes) {
       menuItems.push({

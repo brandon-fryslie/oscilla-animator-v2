@@ -46,10 +46,6 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
-import {
-  type PortTypeLookupFn,
-  type TypeValidationIssue,
-} from '../reactFlowEditor/typeValidation';
 import { validateSemanticConnection } from '../authoring/semanticQueries';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
@@ -249,20 +245,6 @@ export const GraphEditorCoreInner = observer(
         [diagnostics]
       );
 
-      const resolvedPortTypeLookup = useCallback<PortTypeLookupFn>(
-        (blockId, portId, direction) => {
-          const blocksById = adapter.blocks as ReadonlyMap<string, BlockLike>;
-          const block = blocksById.get(blockId);
-          if (!block) {
-            return undefined;
-          }
-          return direction === 'input'
-            ? block.inputPorts.get(portId)?.resolvedType
-            : block.outputPorts.get(portId)?.resolvedType;
-        },
-        [adapter]
-      );
-
       const projectGraphSnapshot = useCallback(
         (current: Node[]) => {
           const projected = reconcileNodesFromAdapter(
@@ -345,15 +327,6 @@ export const GraphEditorCoreInner = observer(
         [adapter, mergedFeatures, onPortContextMenu, selection, portHighlight, diagnostics, debug]
       );
 
-      const reportTypeValidationIssue = useCallback((issue: TypeValidationIssue): void => {
-        // [LAW:single-enforcer] GraphEditorCore is the UI boundary that forwards
-        // type-validation projection warnings into diagnostics.
-        diagnostics?.log({
-          level: issue.level,
-          message: issue.message,
-        });
-      }, [diagnostics]);
-
       // -------------------------------------------------------------------------
       // Event Handlers - Adapter Integration
       // -------------------------------------------------------------------------
@@ -435,14 +408,10 @@ export const GraphEditorCoreInner = observer(
             connection.sourceHandle || '',
             connection.target,
             connection.targetHandle || '',
-            {
-              resolvedPortTypeLookup,
-              issueReporter: reportTypeValidationIssue,
-            },
           );
           return result.valid;
         },
-        [patch, resolvedPortTypeLookup, reportTypeValidationIssue]
+        [patch]
       );
 
       // -------------------------------------------------------------------------

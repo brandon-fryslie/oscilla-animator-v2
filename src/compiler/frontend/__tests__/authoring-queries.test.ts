@@ -5,8 +5,10 @@ import { inferType, payloadVar, unitVar } from '../../../core/inference-types';
 import { buildPatch } from '../../../graph';
 import type { BlockId } from '../../../types';
 import {
+  createAuthoringQuerySession,
   queryAddSourceBlocks,
   queryConnectExistingSources,
+  queryConnectTargetsForSource,
 } from '../authoring-queries';
 
 registerAllBlocks();
@@ -239,6 +241,62 @@ describe('authoring queries', () => {
     expect(result.status).toBe('valid');
     expect(result.bestOutputPortId).toBe('out');
     expect(result.outputs).toHaveLength(1);
+  });
+
+  it('evaluates source-to-target batches with one baseline analysis and preserved order', () => {
+    let colorSourceId!: BlockId;
+    let colorSinkId!: BlockId;
+    let ellipseId!: BlockId;
+
+    const patch = buildPatch((b) => {
+      colorSourceId = b.addBlock('MakeColorOKLCH');
+      colorSinkId = b.addBlock('SplitColorOKLCH');
+      ellipseId = b.addBlock('Ellipse');
+    });
+
+    const result = queryConnectTargetsForSource(
+      patch,
+      {
+        kind: 'connectTargetsForSource',
+        source: { blockId: colorSourceId, portId: 'color' as any },
+        candidates: [
+          { candidateId: 'bad', targetBlockId: ellipseId, targetPortId: 'rx' as any },
+          { candidateId: 'good', targetBlockId: colorSinkId, targetPortId: 'color' as any },
+        ],
+      },
+      { mutationMode: 'addWriter' },
+    );
+
+    expect(result.results.map((candidate) => candidate.candidateId)).toEqual(['bad', 'good']);
+    expect(result.results.map((candidate) => candidate.status)).toEqual(['invalid', 'valid']);
+    expect(result.metrics.candidateCount).toBe(2);
+    expect(result.metrics.prefilteredCount).toBe(1);
+    expect(result.metrics.exactEvaluationCount).toBe(1);
+    expect(result.metrics.baselineAnalysisMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reuses one baseline analysis across exact queries in a session', () => {
+    let ellipseId!: BlockId;
+
+    const patch = buildPatch((b) => {
+      ellipseId = b.addBlock('Ellipse');
+      b.addBlock('Const');
+      b.addBlock('MakeColorOKLCH');
+    });
+
+    const session = createAuthoringQuerySession(patch, { mutationMode: 'addWriter' });
+    const result = session.queryAddSourceBlocks({
+      kind: 'addSourceBlocks',
+      target: { blockId: ellipseId, portId: 'rx' as any },
+      candidates: [
+        { candidateId: 'const', blockType: 'Const' },
+        { candidateId: 'color', blockType: 'MakeColorOKLCH' },
+      ],
+    });
+
+    expect(result.metrics.candidateCount).toBe(2);
+    expect(result.metrics.prefilteredCount).toBe(1);
+    expect(result.metrics.exactEvaluationCount).toBe(1);
   });
 
   it('accepts addSourceBlocks candidates that need adapters', () => {
