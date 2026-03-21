@@ -170,7 +170,7 @@ export interface BlockIRBuilder {
   // =========================================================================
 
   /** Get a single value expression by ID (for inspection). */
-  getValueExpr(id: ValueExprId): ValueExpr | null;
+  getValueExpr(id: ValueExprId): ValueExpr;
 
   /** Get all value expressions (read-only). Used for searching/inspecting IR during lowering. */
   getValueExprs(): readonly ValueExpr[];

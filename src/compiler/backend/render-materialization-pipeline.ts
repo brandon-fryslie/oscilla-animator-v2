@@ -125,10 +125,13 @@ function getOutputRef(
   return blockOutputs.get(blockIndex)?.get(portId);
 }
 
-function asExprValueRef(ref: ValueRefPacked | null): { id: ValueExprId; stride: number } | null {
-  if (!ref) return null;
-  if (!isExprRef(ref)) return null;
-  return { id: ref.id, stride: ref.stride };
+type ExprValueRef =
+  | { readonly kind: 'expr'; readonly id: ValueExprId; readonly stride: number }
+  | { readonly kind: 'missing' };
+
+function asExprValueRef(ref: ValueRefPacked): ExprValueRef {
+  if (!isExprRef(ref)) return { kind: 'missing' };
+  return { kind: 'expr', id: ref.id, stride: ref.stride };
 }
 
 function isEventExtent(id: ValueExprId, valueExprs: readonly ValueExpr[]): boolean {
@@ -243,15 +246,20 @@ function collectRenderTargets(
 
   for (const { block, index } of renderBlocks) {
     if (block.type === 'WebGPUType1Sink') {
-      const position = asExprValueRef(getOutputRef(index, '_position', blockOutputs) ?? null);
-      const color = asExprValueRef(getOutputRef(index, '_color', blockOutputs) ?? null);
-      const scale = asExprValueRef(getOutputRef(index, '_scale', blockOutputs) ?? null);
-      const rotation = asExprValueRef(getOutputRef(index, '_rotation', blockOutputs) ?? null);
-      const shape = asExprValueRef(getOutputRef(index, '_shape', blockOutputs) ?? null);
-
-      if (!position || !color || !shape) {
+      const positionRef = getOutputRef(index, '_position', blockOutputs);
+      const colorRef = getOutputRef(index, '_color', blockOutputs);
+      const shapeRef = getOutputRef(index, '_shape', blockOutputs);
+      const scaleRef = getOutputRef(index, '_scale', blockOutputs);
+      const rotationRef = getOutputRef(index, '_rotation', blockOutputs);
+      if (!positionRef || !colorRef || !shapeRef) {
         continue;
       }
+      const position = asExprValueRef(positionRef);
+      const color = asExprValueRef(colorRef);
+      const shape = asExprValueRef(shapeRef);
+      const scale: ExprValueRef = scaleRef ? asExprValueRef(scaleRef) : { kind: 'missing' };
+      const rotation: ExprValueRef = rotationRef ? asExprValueRef(rotationRef) : { kind: 'missing' };
+      if (position.kind !== 'expr' || color.kind !== 'expr' || shape.kind !== 'expr') continue;
 
       if (!isFieldExtent(position.id, valueExprs)) continue;
 
@@ -265,8 +273,8 @@ function collectRenderTargets(
         instanceId,
         controlPoints: { id: position.id, stride: position.stride },
         color: { id: color.id, stride: color.stride },
-        scale: scale ? { id: scale.id, stride: scale.stride } : undefined,
-        rotation: rotation ? { id: rotation.id, stride: rotation.stride } : undefined,
+        scale: scale.kind === 'expr' ? { id: scale.id, stride: scale.stride } : undefined,
+        rotation: rotation.kind === 'expr' ? { id: rotation.id, stride: rotation.stride } : undefined,
         shape: { sourceExprId: shape.id },
       });
       continue;
@@ -276,13 +284,13 @@ function collectRenderTargets(
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
 
-    const controlPoints = asExprValueRef(controlPointsRef ?? null);
-    const color = asExprValueRef(colorRef ?? null);
-    const scaleExpr = asExprValueRef(scaleRef ?? null);
-
-    if (!controlPoints || !color) {
+    if (!controlPointsRef || !colorRef) {
       continue;
     }
+    const controlPoints = asExprValueRef(controlPointsRef);
+    const color = asExprValueRef(colorRef);
+    const scaleExpr: ExprValueRef = scaleRef ? asExprValueRef(scaleRef) : { kind: 'missing' };
+    if (controlPoints.kind !== 'expr' || color.kind !== 'expr') continue;
 
     if (!isFieldExtent(controlPoints.id, valueExprs)) continue;
 
@@ -300,7 +308,7 @@ function collectRenderTargets(
       throw new Error(renderMissingShapeFieldMessage(instanceId));
     }
 
-    const scale = scaleExpr
+    const scale = scaleExpr.kind === 'expr'
       ? { id: scaleExpr.id, stride: scaleExpr.stride }
       : undefined;
 

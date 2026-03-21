@@ -20,7 +20,7 @@ interface MatrixRow {
   displayName: string;
   isHeader: boolean;
   isBus: boolean;
-  [key: string]: string | BlockId | boolean | null; // Dynamic columns for each target block
+  [key: string]: string | BlockId | boolean; // Dynamic columns for each target block
 }
 
 /**

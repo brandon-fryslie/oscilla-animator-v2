@@ -770,10 +770,7 @@ function lowerBlockInstance(
           if (card.kind !== 'many') continue;
 
           const rewrittenType = withInstance(ref.type, instance);
-          const expr = builder.getValueExpr(ref.id);
-          if (expr) {
-            (expr as { type: CanonicalType }).type = rewrittenType;
-          }
+          builder.setValueExprType(ref.id, rewrittenType);
 
           rewrittenOutputsById[portId] = {
             ...ref,
@@ -1328,7 +1325,6 @@ function buildProvenanceMaps(
 
     // Constant provenance: source output is const or construct
     const topExpr = builder.getValueExpr(sourceRef.id);
-    if (!topExpr) continue;
 
     if (topExpr.kind === 'construct') {
       constantProvenance.set(portKey, {
@@ -1398,10 +1394,7 @@ function repairUnresolvedOutputInstances(
         };
         outputs.set(portId, rewrittenRef);
 
-        const expr = builder.getValueExpr(ref.id);
-        if (expr) {
-          (expr as { type: CanonicalType }).type = rewrittenType;
-        }
+        builder.setValueExprType(ref.id, rewrittenType);
 
         if (ref.slot !== undefined) {
           const slotInfo = slotLayoutInputs.get(ref.slot as number);
