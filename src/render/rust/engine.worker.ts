@@ -147,6 +147,13 @@ async function handleRebuildGpuPipelines(
   if (message.passes.length === 0) {
     throw new Error('Rust worker rebuild contract violation: REBUILD_GPU_PIPELINES requires at least one pass');
   }
+  // [LAW:single-enforcer] Worker polling owns frame-pacing/readback drains;
+  // rebuild temporarily swaps engine ownership in WASM, so pause polling to
+  // keep pacing reads from racing that transition.
+  const pollingWasActive = runtimePollTimer !== null;
+  if (pollingWasActive) {
+    stopRuntimePolling();
+  }
   try {
     await rebuildRustRendererGpuPipelines(message.passes);
   } catch (error) {
@@ -155,6 +162,10 @@ async function handleRebuildGpuPipelines(
       return;
     }
     throw error;
+  } finally {
+    if (pollingWasActive) {
+      startRuntimePolling();
+    }
   }
   postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
 }
