@@ -6,6 +6,7 @@ import { hclDemos } from '../../demo';
 import { EventHub } from '../../events/EventHub';
 import { deserializePatchFromHCL } from '../../patch-dsl';
 import { stripKernelRegistry } from '../compile-worker-serialization';
+import { validateCompiledGpuPassBundle } from '../compiled-gpu-pass-validation';
 
 const REPRESENTATIVE_DEMOS = [
   'simple.hcl',
@@ -28,6 +29,25 @@ describe('compile worker payload clone safety', () => {
   it('frontend and backend payloads are structured-clone safe for representative demos', () => {
     const failures: string[] = [];
     const demoFiles = selectRepresentativeDemos(hclDemos.map((demo) => demo.filename));
+    const passBundle = {
+      schemaVersion: 1 as const,
+      passes: [
+        {
+          passId: 'simulation',
+          stage: 'compute' as const,
+          entryPoint: 'compute_main',
+          wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+        },
+      ],
+    };
+    const passValidation = validateCompiledGpuPassBundle(passBundle);
+
+    if (passValidation.kind !== 'ok') {
+      throw new Error(
+        'Representative clone-safety test fixture is invalid: ' +
+          passValidation.errors.map((error) => error.message).join('; '),
+      );
+    }
 
     for (const filename of demoFiles) {
       const hcl = hclDemos.find((demo) => demo.filename === filename)?.hcl;
@@ -67,24 +87,12 @@ describe('compile worker payload clone safety', () => {
           frontendResult,
           backendResult: {
             kind: 'ok' as const,
-            program: serializableProgram,
+            program: {
+              ...serializableProgram,
+              generatedGpuArtifactManifest: passValidation.manifest,
+            },
             compiledGpuBundle: {
-              schemaVersion: 1 as const,
-              passes: [
-                {
-                  passId: 'simulation',
-                  stage: 'compute' as const,
-                  entryPoint: 'compute_main',
-                  wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
-                },
-              ],
-              passSignatures: [
-                {
-                  passId: 'simulation',
-                  stage: 'compute' as const,
-                  entryPoint: 'compute_main',
-                },
-              ],
+              ...passValidation.bundle,
               runtimeInstall,
             },
             warnings: backendResult.warnings,

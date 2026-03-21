@@ -12,11 +12,15 @@ import type {
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
+  SerializableCompiledProgramIR,
+  SerializableGpuReadyCompiledProgramIR,
 } from './compile-worker-protocol';
 import { validateCompiledGpuPassBundle } from './compiled-gpu-pass-validation';
 import { stripKernelRegistry } from './compile-worker-serialization';
 import type { CompileError } from '../compiler/types';
-import type { GeneratedGpuArtifactManifestIR } from '../compiler/ir/program';
+import type {
+  GeneratedGpuArtifactManifestIR,
+} from '../compiler/ir/program';
 import { buildCompiledRuntimeInstallContract } from '../compiler/backend/compiled-runtime-install-contract';
 
 function attachPreNagaWarnings(
@@ -52,9 +56,9 @@ function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuPassBundle
 }
 
 function withGpuManifest(
-  program: ReturnType<typeof stripKernelRegistry>,
+  program: SerializableCompiledProgramIR,
   manifest: GeneratedGpuArtifactManifestIR,
-): ReturnType<typeof stripKernelRegistry> {
+): SerializableGpuReadyCompiledProgramIR {
   return {
     ...program,
     generatedGpuArtifactManifest: manifest,
@@ -85,15 +89,6 @@ async function toBackendResult(
 ): Promise<CompileWorkerBackendResult> {
   if (result.kind !== 'ok') {
     return toBackendError(result.errors);
-  }
-  if (!result.program.generatedComputeProgram) {
-    return toBackendError(attachPreNagaWarnings(
-      [{
-        code: 'IRValidationFailed',
-        message: 'Compiled program is missing generatedComputeProgram metadata',
-      }],
-      result.warnings,
-    ));
   }
   const fluidBundle = maybeBuildFluidGpuBundle(frontendResult.normalizedPatch, result.program);
   const nonFluidBundleResult = fluidBundle
