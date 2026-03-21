@@ -33,6 +33,18 @@ import {
   rendererRole,
 } from '../types';
 
+type HclJsValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { readonly [key: string]: HclJsValue }
+  | readonly HclJsValue[];
+
+function isHclObject(value: HclJsValue): value is { readonly [key: string]: HclJsValue } {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * A deferred inline edge collected during Phase 1 block processing.
  * Resolved in Phase 2 after all blocks are registered.
@@ -265,7 +277,7 @@ function processBlock(
 
   // Extract domain
   const domainIdAttr = hclBlock.attributes.domain;
-  const domainId = domainIdAttr ? convertHclValue(domainIdAttr) as string : null;
+  const domainId = domainIdAttr ? parseStringValue(convertHclValue(domainIdAttr), '') : null;
 
   // Build ports from registry defaults
   const blockDef = getBlockDefinition(type);
@@ -309,7 +321,11 @@ function processBlock(
                 combineMode: canonicalizeCombineMode(convertHclValue(combineModeAttr) as CombineMode),
               }
             : {}),
-          ...(defaultSourceAttr ? { defaultSource: parseDefaultSource(convertHclValue(defaultSourceAttr)) } : {}),
+          ...(defaultSourceAttr
+            ? {
+                defaultSource: parseDefaultSource(convertHclValue(defaultSourceAttr), warnings, child.pos),
+              }
+            : {}),
         };
         inputPorts.set(portId, newPort);
       } else {
@@ -330,11 +346,11 @@ function processBlock(
       } else if (!sourceAddressAttr) {
         warnings.push(new PatchDslWarning(`Lens block missing sourceAddress: "${lensType}"`, child.pos));
       } else {
-        const portId = convertHclValue(portAttr) as string;
-        const sourceAddress = convertHclValue(sourceAddressAttr) as string;
+        const portId = parseStringValue(convertHclValue(portAttr), '');
+        const sourceAddress = parseStringValue(convertHclValue(sourceAddressAttr), '');
 
         // Extract lens params (exclude reserved attributes)
-        const lensParams: Record<string, unknown> = {};
+        const lensParams: Record<string, HclJsValue> = {};
         for (const [key, value] of Object.entries(child.attributes)) {
           if (key !== 'port' && key !== 'sourceAddress') {
             lensParams[key] = convertHclValue(value);
@@ -377,26 +393,57 @@ function processBlock(
   return block;
 }
 
-function isDefaultSource(value: unknown): value is DefaultSource {
-  if (typeof value !== 'object' || value === null) return false;
-  if (!('blockType' in value) || !('output' in value)) return false;
-  const candidate = value as { blockType: unknown; output: unknown; params?: unknown };
-  if (typeof candidate.blockType !== 'string' || typeof candidate.output !== 'string') return false;
-  if (candidate.params === undefined) return true;
-  return typeof candidate.params === 'object' && candidate.params !== null && !Array.isArray(candidate.params);
+function parseStringValue(value: HclJsValue, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
 }
 
-function parseDefaultSource(value: unknown): DefaultSource {
-  if (isDefaultSource(value)) return value;
-  return defaultSourceConst(value);
+function parseDefaultSource(
+  value: HclJsValue,
+  warnings: PatchDslWarning[],
+  pos: Position,
+): DefaultSource {
+  if (!isHclObject(value)) {
+    return defaultSourceConst(value);
+  }
+  const blockTypeValue = value.blockType;
+  const outputValue = value.output;
+  const paramsValue = value.params;
+  if (typeof blockTypeValue !== 'string' || typeof outputValue !== 'string') {
+    warnings.push(
+      new PatchDslWarning(
+        'Invalid defaultSource object; expected { blockType: string, output: string, params?: object }',
+        pos,
+      ),
+    );
+    return defaultSourceConst(value);
+  }
+  if (paramsValue === undefined) {
+    return {
+      blockType: blockTypeValue,
+      output: outputValue,
+    };
+  }
+  if (!isHclObject(paramsValue)) {
+    warnings.push(
+      new PatchDslWarning(
+        'Invalid defaultSource.params; expected object when provided',
+        pos,
+      ),
+    );
+    return defaultSourceConst(value);
+  }
+  return {
+    blockType: blockTypeValue,
+    output: outputValue,
+    params: { ...paramsValue },
+  };
 }
 
-function parseBlockRole(value: unknown, warnings: PatchDslWarning[], pos: Position): BlockRole {
+function parseBlockRole(value: HclJsValue, warnings: PatchDslWarning[], pos: Position): BlockRole {
   if (typeof value !== 'string') {
     warnings.push(new PatchDslWarning(`Invalid role value "${String(value)}", using "user"`, pos));
     return userRole();
   }
-
   switch (value) {
     case 'user':
       return userRole();
@@ -462,7 +509,7 @@ function formatHclValue(value: HclValue): string {
  * @param value - HCL value node
  * @returns JavaScript value
  */
-function convertHclValue(value: HclValue): unknown {
+function convertHclValue(value: HclValue): HclJsValue {
   switch (value.kind) {
     case 'number': return value.value;
     case 'string': return value.value;
@@ -470,7 +517,7 @@ function convertHclValue(value: HclValue): unknown {
     case 'null': return null;
     case 'reference': return value.parts.join('.');  // Convert to string
     case 'object': {
-      const obj: Record<string, unknown> = {};
+      const obj: Record<string, HclJsValue> = {};
       for (const [k, v] of Object.entries(value.entries)) {
         obj[k] = convertHclValue(v);
       }

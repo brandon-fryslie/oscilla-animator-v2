@@ -10,6 +10,13 @@
  */
 export type FieldControlType = 'toggle' | 'number' | 'select' | 'text' | 'slider';
 
+export type SettingsPrimitive = string | number | boolean | null;
+export type SettingsValue =
+  | SettingsPrimitive
+  | { readonly [key: string]: SettingsValue }
+  | readonly SettingsValue[];
+export type SettingsShape = Record<string, SettingsValue>;
+
 /**
  * UI hint for rendering a single settings field.
  */
@@ -21,7 +28,7 @@ export interface FieldUIHint {
   /** Control type to render */
   control: FieldControlType;
   /** Options for select control */
-  options?: Array<{ label: string; value: unknown }>;
+  options?: Array<{ label: string; value: SettingsValue }>;
   /** Min value for number/slider */
   min?: number;
   /** Max value for number/slider */
@@ -34,7 +41,7 @@ export interface FieldUIHint {
  * UI configuration for all fields in a settings namespace.
  * Maps field keys to their UI hints.
  */
-export interface SettingsUIConfig<T extends Record<string, unknown>> {
+export interface SettingsUIConfig<T extends SettingsShape> {
   /** Display label for this settings section */
   label: string;
   /** Optional description for the section */
@@ -53,7 +60,7 @@ export interface SettingsUIConfig<T extends Record<string, unknown>> {
  *
  * Brand prevents accidental cross-token usage.
  */
-export interface SettingsToken<T extends Record<string, unknown>> {
+export interface SettingsToken<T extends SettingsShape> {
   readonly namespace: string;
   readonly defaults: Readonly<T>;
   readonly ui: SettingsUIConfig<T>;

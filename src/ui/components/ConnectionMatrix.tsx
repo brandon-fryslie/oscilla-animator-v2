@@ -18,15 +18,15 @@ interface MatrixRow {
   id: string;
   blockId: BlockId;
   displayName: string;
-  isHeader?: boolean;
-  isBus?: boolean;
-  [key: string]: string | BlockId | boolean | undefined; // Dynamic columns for each target block
+  isHeader: boolean;
+  isBus: boolean;
+  [key: string]: string | BlockId | boolean | null; // Dynamic columns for each target block
 }
 
 /**
  * Find edges between two blocks.
  */
-function findEdges(sourceId: BlockId, targetId: BlockId, edges: readonly Edge[]): readonly Edge[] {
+function findEdges(sourceId: string, targetId: string, edges: readonly Edge[]): readonly Edge[] {
   return edges.filter(e =>
     e.from.blockId === sourceId && e.to.blockId === targetId
   );
@@ -122,8 +122,9 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
                 textDecoration: 'underline',
               }}
               onClick={() => {
-                if (params.row.blockId) {
-                  selection.selectBlock(params.row.blockId);
+                if (typeof params.row.blockId === 'string') {
+                  const selected = allVisible.find((candidate) => candidate.id === params.row.blockId);
+                  if (selected) selection.selectBlock(selected.id);
                 }
               }}
             >
@@ -150,7 +151,7 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
             return null;
           }
 
-          const sourceId = params.row.blockId as BlockId;
+          const sourceId = typeof params.row.blockId === 'string' ? params.row.blockId : '';
           const targetId = block.id;
 
           // Self-reference shows =
@@ -216,6 +217,7 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
         id: block.id,
         blockId: block.id,
         displayName: getBlockDisplayName(block),
+        isHeader: false,
         isBus: false,
       };
 
@@ -232,9 +234,10 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
       // Add section header
       matrixRows.push({
         id: '__buses_header__',
-        blockId: '' as BlockId,
+        blockId: busBlocks[0].id,
         displayName: 'BUSES',
         isHeader: true,
+        isBus: false,
       });
 
       for (const block of busBlocks) {
@@ -242,6 +245,7 @@ export const ConnectionMatrix = observer(function ConnectionMatrix() {
           id: block.id,
           blockId: block.id,
           displayName: getBlockDisplayName(block),
+          isHeader: false,
           isBus: true,
         };
 

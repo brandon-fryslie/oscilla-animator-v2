@@ -1240,6 +1240,30 @@ interface PortDefaultSourceEditorProps {
   inputDef?: InputDef;  // For accessing uiHint
 }
 
+type ConstEditorValue =
+  | string
+  | number
+  | boolean
+  | readonly number[]
+  | { readonly toHexString?: () => string }
+  | null;
+type RawConstEditorValue = string | number | boolean | object | readonly number[] | null;
+
+function readVec2ConstEditorValue(value: ConstEditorValue): readonly [number, number] {
+  if (!Array.isArray(value)) return [0, 0];
+  const x = typeof value[0] === 'number' ? value[0] : 0;
+  const y = typeof value[1] === 'number' ? value[1] : 0;
+  return [x, y];
+}
+
+function readColorConstEditorValue(value: ConstEditorValue): string {
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object' || value === null) return '#000000';
+  const toHexString = Reflect.get(value, 'toHexString');
+  if (typeof toHexString === 'function') return String(toHexString.call(value));
+  return '#000000';
+}
+
 const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   blockId,
   portId,
@@ -1329,7 +1353,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   const payloadType = portType.payload;
 
   // Parse constValue based on payload type
-  const parseConstValue = (raw: unknown): unknown => {
+  const parseConstValue = (raw: RawConstEditorValue): ConstEditorValue => {
     if (raw === undefined || raw === null) {
       // Return sensible defaults based on type
       switch (payloadType.kind) {
@@ -1354,25 +1378,17 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     return raw;
   };
 
-  const constValue = isConstBlock ? parseConstValue(currentParams.value) : 0;
-  const readVec2 = (value: unknown): readonly [number, number] => {
-    if (!Array.isArray(value)) return [0, 0];
-    const x = typeof value[0] === 'number' ? value[0] : 0;
-    const y = typeof value[1] === 'number' ? value[1] : 0;
-    return [x, y];
-  };
-  const readColor = (value: unknown): string => {
-    if (typeof value === 'string') return value;
-    if (
-      typeof value === 'object'
-      && value !== null
-      && 'toHexString' in value
-      && typeof value.toHexString === 'function'
-    ) {
-      return value.toHexString();
-    }
-    return '#000000';
-  };
+  const rawConstValue = currentParams.value;
+  const normalizedRawConstValue: RawConstEditorValue =
+    typeof rawConstValue === 'string'
+    || typeof rawConstValue === 'number'
+    || typeof rawConstValue === 'boolean'
+    || rawConstValue === null
+    || Array.isArray(rawConstValue)
+    || (typeof rawConstValue === 'object' && rawConstValue !== null)
+      ? rawConstValue
+      : null;
+  const constValue = isConstBlock ? parseConstValue(normalizedRawConstValue) : 0;
 
   // [LAW:one-source-of-truth] Time-source handling is keyed by block capability, not type string aliasing.
   const isTimeRootBlock = currentBlockDef?.capability === 'time';
@@ -1440,23 +1456,23 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <SliderWithInput
                   label="X"
-                  value={readVec2(constValue)[0]}
+                  value={readVec2ConstEditorValue(constValue)[0]}
                   min={cfg.min}
                   max={cfg.max}
                   step={cfg.step}
                   onChange={(v) => {
-                    const cur = readVec2(constValue);
+                    const cur = readVec2ConstEditorValue(constValue);
                     handleParamChange('value', [v, cur[1] ?? 0]);
                   }}
                 />
                 <SliderWithInput
                   label="Y"
-                  value={readVec2(constValue)[1]}
+                  value={readVec2ConstEditorValue(constValue)[1]}
                   min={cfg.min}
                   max={cfg.max}
                   step={cfg.step}
                   onChange={(v) => {
-                    const cur = readVec2(constValue);
+                    const cur = readVec2ConstEditorValue(constValue);
                     handleParamChange('value', [cur[0] ?? 0, v]);
                   }}
                 />
@@ -1466,7 +1482,7 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
           {payloadType.kind === 'color' && (
             <MuiColorInput
               value={
-                readColor(constValue)
+                readColorConstEditorValue(constValue)
               }
               onChange={(value) => handleParamChange('value', value)}
             />

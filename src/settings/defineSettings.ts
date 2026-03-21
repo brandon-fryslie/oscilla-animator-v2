@@ -13,7 +13,7 @@
  * This ensures one-way dependencies: features → settings system (not reverse).
  */
 
-import type { SettingsToken, SettingsUIConfig } from './types';
+import type { SettingsShape, SettingsToken, SettingsUIConfig } from './types';
 
 /**
  * Creates a settings token with namespace, defaults, and UI config.
@@ -41,7 +41,7 @@ import type { SettingsToken, SettingsUIConfig } from './types';
  * });
  * ```
  */
-export function defineSettings<T extends Record<string, unknown>>(
+export function defineSettings<T extends SettingsShape>(
   namespace: string,
   config: {
     defaults: T;

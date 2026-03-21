@@ -125,9 +125,9 @@ function getOutputRef(
   return blockOutputs.get(blockIndex)?.get(portId);
 }
 
-function asExprValueRef(ref: ValueRefPacked | undefined): { id: ValueExprId; stride: number } | undefined {
-  if (!ref) return undefined;
-  if (!isExprRef(ref)) return undefined;
+function asExprValueRef(ref: ValueRefPacked | null): { id: ValueExprId; stride: number } | null {
+  if (!ref) return null;
+  if (!isExprRef(ref)) return null;
   return { id: ref.id, stride: ref.stride };
 }
 
@@ -243,11 +243,11 @@ function collectRenderTargets(
 
   for (const { block, index } of renderBlocks) {
     if (block.type === 'WebGPUType1Sink') {
-      const position = asExprValueRef(getOutputRef(index, '_position', blockOutputs));
-      const color = asExprValueRef(getOutputRef(index, '_color', blockOutputs));
-      const scale = asExprValueRef(getOutputRef(index, '_scale', blockOutputs));
-      const rotation = asExprValueRef(getOutputRef(index, '_rotation', blockOutputs));
-      const shape = asExprValueRef(getOutputRef(index, '_shape', blockOutputs));
+      const position = asExprValueRef(getOutputRef(index, '_position', blockOutputs) ?? null);
+      const color = asExprValueRef(getOutputRef(index, '_color', blockOutputs) ?? null);
+      const scale = asExprValueRef(getOutputRef(index, '_scale', blockOutputs) ?? null);
+      const rotation = asExprValueRef(getOutputRef(index, '_rotation', blockOutputs) ?? null);
+      const shape = asExprValueRef(getOutputRef(index, '_shape', blockOutputs) ?? null);
 
       if (!position || !color || !shape) {
         continue;
@@ -276,9 +276,9 @@ function collectRenderTargets(
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
 
-    const controlPoints = asExprValueRef(controlPointsRef);
-    const color = asExprValueRef(colorRef);
-    const scaleExpr = asExprValueRef(scaleRef);
+    const controlPoints = asExprValueRef(controlPointsRef ?? null);
+    const color = asExprValueRef(colorRef ?? null);
+    const scaleExpr = asExprValueRef(scaleRef ?? null);
 
     if (!controlPoints || !color) {
       continue;

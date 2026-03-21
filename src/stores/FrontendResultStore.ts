@@ -17,8 +17,8 @@ import { makeAutoObservable } from 'mobx';
 import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
-import type { TypedPatch, PortKey } from '../compiler/ir/patches';
-import { blockId, type BlockId, type DefaultSource, type PortId, type TransformStep } from '../types';
+import type { TypedPatch } from '../compiler/ir/patches';
+import { type BlockId, type DefaultSource, type PortId, type TransformStep } from '../types';
 import { addressToString } from '../types/canonical-address';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -118,6 +118,13 @@ function outputAddressKey(blockId: string, portId: string): string {
     canonicalName: blockCanonicalName(blockId),
     portId: portId as PortId,
   });
+}
+
+function findNormalizedBlockIndex(normalizedPatch: NormalizedPatch, blockIdStr: string): number {
+  for (const [candidateBlockId, candidateIndex] of normalizedPatch.blockIndex) {
+    if (candidateBlockId === blockIdStr) return candidateIndex;
+  }
+  return -1;
 }
 
 // =============================================================================
@@ -347,12 +354,18 @@ export class FrontendResultStore {
     }
 
     // Helper to resolve a port type from TypedPatch
-    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): CanonicalType | undefined => {
-      if (!typedPatch?.portTypes) return undefined;
-      const idx = normalizedPatch.blockIndex.get(blockId(blockIdStr));
-      if (idx === undefined) return undefined;
-      const key = `${idx}:${portName}:${dir}` as PortKey;
-      return typedPatch.portTypes.get(key);
+    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): CanonicalType | null => {
+      if (!typedPatch?.portTypes) return null;
+      const idx = findNormalizedBlockIndex(normalizedPatch, blockIdStr);
+      if (idx < 0) return null;
+      for (const [portKey, portType] of typedPatch.portTypes) {
+        const [blockIndexStr, keyPortName, keyDir] = portKey.split(':');
+        if (Number(blockIndexStr) !== idx) continue;
+        if (keyPortName !== portName) continue;
+        if (keyDir !== dir) continue;
+        return portType;
+      }
+      return null;
     };
 
     // Helper to build transform chain for an edge.
@@ -459,8 +472,8 @@ export class FrontendResultStore {
             output: edge.fromPort,
             params: sourceBlock?.params,
           },
-          sourceType,
-          targetType,
+          sourceType: sourceType ?? undefined,
+          targetType: targetType ?? undefined,
           chain,
         });
       } else if (edge.role === 'implicitCoerce') {
@@ -468,15 +481,15 @@ export class FrontendResultStore {
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
-          sourceType,
-          targetType,
+          sourceType: sourceType ?? undefined,
+          targetType: targetType ?? undefined,
           chain,
         });
       } else if (edge.role === 'userWire') {
         map.set(targetAddrStr, {
           kind: 'userEdge',
-          sourceType,
-          targetType,
+          sourceType: sourceType ?? undefined,
+          targetType: targetType ?? undefined,
           chain,
         });
       } else {
