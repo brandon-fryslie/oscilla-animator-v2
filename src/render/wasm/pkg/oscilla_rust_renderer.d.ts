@@ -17,8 +17,6 @@ export function rebuild_gpu_pipelines(passes: any): Promise<void>;
 
 export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
 
-export function resize_surface(width: number, height: number): void;
-
 export function resume_engine(): void;
 
 export function take_frame_pacing_packet(): any;
@@ -39,7 +37,6 @@ export interface InitOutput {
     readonly pause_engine: () => [number, number];
     readonly rebuild_gpu_pipelines: (a: any) => any;
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];
