@@ -770,6 +770,7 @@ function lowerBlockInstance(
           if (card.kind !== 'many') continue;
 
           const rewrittenType = withInstance(ref.type, instance);
+          // TODO: This code is wrong.  Figure out the right way to fix this
           builder.setValueExprType(ref.id, rewrittenType);
 
           rewrittenOutputsById[portId] = {
@@ -1394,6 +1395,7 @@ function repairUnresolvedOutputInstances(
         };
         outputs.set(portId, rewrittenRef);
 
+        // TODO: This code is wrong.  Figure out the right way to fix this
         builder.setValueExprType(ref.id, rewrittenType);
 
         if (ref.slot !== undefined) {

@@ -27,6 +27,7 @@ import type { ConstraintOrigin } from '../payload-unit/solve';
 import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
 import { isSubdomainOf } from '../../../core/domain-registry';
 
+// TODO: This code is wrong.  Figure out the right way to fix this
 function isCardinalityVarAxis(
   axis: Axis<CardinalityValue, CardinalityVarId>,
 ): axis is CardinalityVarAxis {
@@ -502,7 +503,12 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
         // many(var) — leave resolved as a sentinel; will check in phase 5
         facts.resolved = {
           kind: 'many',
-          instance: { domainTypeId: domainTypeId('__var__'), instanceId: instanceId(resolved.id) },
+          instance: {
+            // TODO: This code is wrong.  Figure out the right way to fix this
+            domainTypeId: domainTypeId('__var__'),
+            // TODO: This code is wrong.  Figure out the right way to fix this
+            instanceId: instanceId(resolved.id),
+          },
         };
       }
       continue;
@@ -602,7 +608,12 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
             } else {
               facts.resolved = {
                 kind: 'many',
-                instance: { domainTypeId: domainTypeId('__var__'), instanceId: instanceId(resolvedTerm.id) },
+                instance: {
+                  // TODO: This code is wrong.  Figure out the right way to fix this
+                  domainTypeId: domainTypeId('__var__'),
+                  // TODO: This code is wrong.  Figure out the right way to fix this
+                  instanceId: instanceId(resolvedTerm.id),
+                },
               };
             }
             // Also add forcedMany terms so further zips can unify
@@ -634,8 +645,10 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     let finalResolved = facts.resolved;
     if (finalResolved.kind === 'many') {
       const inst = finalResolved.instance;
+      // TODO: This code is wrong.  Figure out the right way to fix this
       if ((inst.domainTypeId as string) === '__var__') {
         // Check if instance var was resolved
+        // TODO: This code is wrong.  Figure out the right way to fix this
         const varId = inst.instanceId as unknown as InstanceVarId;
         const resolvedRef = resolvedInstanceVars.get(varId);
         if (resolvedRef) {
@@ -646,6 +659,7 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
           // Keep cardinality as many with UNBOUND_INSTANCE; backend repair pass rewrites it when context exists.
           const allowsDeferredInstance = members.some((port) => {
             const axis = baseCardinalityAxis.get(port);
+            // TODO: This code is wrong.  Figure out the right way to fix this
             if (!axis || !isCardinalityVarAxis(axis)) return false;
             const cardAxis = axis;
             const hasDeclaredPolicy = cardAxis.relation !== undefined
