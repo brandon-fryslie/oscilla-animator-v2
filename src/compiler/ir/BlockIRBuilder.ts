@@ -16,6 +16,8 @@ import type {
   DomainTypeId,
   InstanceId,
 } from './Indices';
+import type { ValueExpr } from './value-expr';
+import type { CameraDeclIR } from './program';
 import type { AbstractTopologyDef, PathTopologyDefInput, TopologyId } from '../../shapes/types';
 import type {
   PureFn,
@@ -168,14 +170,14 @@ export interface BlockIRBuilder {
   // =========================================================================
 
   /** Get a single value expression by ID (for inspection). */
-  getValueExpr(id: ValueExprId): any;
+  getValueExpr(id: ValueExprId): ValueExpr;
 
   /** Get all value expressions (read-only). Used for searching/inspecting IR during lowering. */
-  getValueExprs(): readonly any[];
+  getValueExprs(): readonly ValueExpr[];
 
   // =========================================================================
   // Render Globals (blocks can declare camera/render settings)
   // =========================================================================
 
-  addRenderGlobal(decl: any): void;
+  addRenderGlobal(decl: CameraDeclIR): void;
 }

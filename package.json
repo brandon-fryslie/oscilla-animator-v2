@@ -18,7 +18,7 @@
     "ci:webgpu-readiness": "node scripts/webgpu-ci-readiness-gate.mjs",
     "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
     "bench": "vitest bench",
-    "lint": "eslint src/blocks/ src/runtime/ValueExprMaterializer.ts src/runtime/ValueExprEventEvaluator.ts src/runtime/ContinuityApply.ts src/compiler/compile.ts src/runtime/OpcodeInterpreter.ts src/render/RenderBufferArena.ts src/services/AnimationLoop.ts src/services/RuntimeService.ts",
+    "lint": "eslint src",
     "build:naga-shim": "scripts/build-naga-shim.sh",
     "build:rust-renderer": "scripts/build-rust-renderer.sh",
     "test:native-webgpu-gates": "scripts/run-native-webgpu-gates.sh",

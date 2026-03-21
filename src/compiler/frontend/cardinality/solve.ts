@@ -20,10 +20,19 @@ import type { CardinalityValue, InstanceRef } from '../../../core/canonical-type
 import { isAxisVar, isAxisInst, type Axis, UNBOUND_INSTANCE } from '../../../core/canonical-types';
 import type { CardinalityVarId } from '../../../core/ids';
 import type { InstanceVarId } from '../../../core/ids';
+import { domainTypeId, instanceId } from '../../../core/ids';
+import type { CardinalityVarAxis } from '../../../core/canonical-types/cardinality';
 import type { DraftPortKey } from '../type-facts';
 import type { ConstraintOrigin } from '../payload-unit/solve';
 import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
 import { isSubdomainOf } from '../../../core/domain-registry';
+
+// TODO: This code is wrong.  Figure out the right way to fix this
+function isCardinalityVarAxis(
+  axis: Axis<CardinalityValue, CardinalityVarId>,
+): axis is CardinalityVarAxis {
+  return axis.kind === 'var';
+}
 
 // =============================================================================
 // InstanceTerm (solver-internal)
@@ -492,7 +501,15 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
         facts.resolved = { kind: 'many', instance: resolved.ref };
       } else {
         // many(var) — leave resolved as a sentinel; will check in phase 5
-        facts.resolved = { kind: 'many', instance: { domainTypeId: '__var__' as any, instanceId: resolved.id as any } };
+        facts.resolved = {
+          kind: 'many',
+          instance: {
+            // TODO: This code is wrong.  Figure out the right way to fix this
+            domainTypeId: domainTypeId('__var__'),
+            // TODO: This code is wrong.  Figure out the right way to fix this
+            instanceId: instanceId(resolved.id),
+          },
+        };
       }
       continue;
     }
@@ -589,7 +606,15 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
             if (resolvedTerm.kind === 'inst') {
               facts.resolved = { kind: 'many', instance: resolvedTerm.ref };
             } else {
-              facts.resolved = { kind: 'many', instance: { domainTypeId: '__var__' as any, instanceId: resolvedTerm.id as any } };
+              facts.resolved = {
+                kind: 'many',
+                instance: {
+                  // TODO: This code is wrong.  Figure out the right way to fix this
+                  domainTypeId: domainTypeId('__var__'),
+                  // TODO: This code is wrong.  Figure out the right way to fix this
+                  instanceId: instanceId(resolvedTerm.id),
+                },
+              };
             }
             // Also add forcedMany terms so further zips can unify
             facts.forcedManyTerms.push(manyGroup.forcedManyTerms[0]);
@@ -620,8 +645,10 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     let finalResolved = facts.resolved;
     if (finalResolved.kind === 'many') {
       const inst = finalResolved.instance;
+      // TODO: This code is wrong.  Figure out the right way to fix this
       if ((inst.domainTypeId as string) === '__var__') {
         // Check if instance var was resolved
+        // TODO: This code is wrong.  Figure out the right way to fix this
         const varId = inst.instanceId as unknown as InstanceVarId;
         const resolvedRef = resolvedInstanceVars.get(varId);
         if (resolvedRef) {
@@ -632,8 +659,9 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
           // Keep cardinality as many with UNBOUND_INSTANCE; backend repair pass rewrites it when context exists.
           const allowsDeferredInstance = members.some((port) => {
             const axis = baseCardinalityAxis.get(port);
-            if (!axis || !isAxisVar(axis)) return false;
-            const cardAxis = axis as any;
+            // TODO: This code is wrong.  Figure out the right way to fix this
+            if (!axis || !isCardinalityVarAxis(axis)) return false;
+            const cardAxis = axis;
             const hasDeclaredPolicy = cardAxis.relation !== undefined
               || cardAxis.acceptance !== undefined
               || cardAxis.instanceBinding !== undefined;

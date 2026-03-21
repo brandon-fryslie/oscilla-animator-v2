@@ -12,7 +12,7 @@
  * // [LAW:single-enforcer] This is the only place that creates cardinality adapter obligations.
  */
 
-import type { DraftGraph } from './draft-graph';
+import type { DraftGraph, EdgeOrigin } from './draft-graph';
 import type { Obligation, ObligationId } from './obligations';
 import type { CardinalitySolveError } from './cardinality/solve';
 import { draftPortKey } from './type-facts';
@@ -167,10 +167,14 @@ export function createCardinalityAdapterObligations(
  * Only skip THESE edges to prevent infinite loops — other elaboration edges
  * (e.g., from default-source policy) are valid boundary candidates.
  */
-function isCardinalityAdapterEdge(edge: { origin: unknown }): boolean {
-  if (typeof edge.origin !== 'object' || (edge.origin as any)?.kind !== 'elaboration') return false;
-  const oblId = (edge.origin as any)?.obligationId as string | undefined;
-  return oblId !== undefined && oblId.startsWith('needsCardinalityAdapter:');
+function isElaborationOrigin(origin: EdgeOrigin): origin is Extract<EdgeOrigin, { kind: 'elaboration' }> {
+  return typeof origin === 'object' && origin.kind === 'elaboration';
+}
+
+function isCardinalityAdapterEdge(edge: Pick<DraftGraph['edges'][number], 'origin'>): boolean {
+  if (!isElaborationOrigin(edge.origin)) return false;
+  // TODO: This code is wrong.  Figure out the right way to fix this
+  return edge.origin.obligationId.startsWith('needsCardinalityAdapter:');
 }
 
 function addCandidate(

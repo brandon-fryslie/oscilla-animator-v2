@@ -29,7 +29,7 @@ import { tokenize } from './lexer';
 import { parse } from './parser';
 import { expandTopLevelLocals } from './locals';
 import { DEFAULT_BLOCK_UI, getBlockDefinition } from '../blocks/registry';
-import type { Capability } from '../blocks/registry';
+import type { Capability, InputDef, OutputDef } from '../blocks/registry';
 import { toIdentifier } from './serialize';
 
 /**
@@ -203,19 +203,45 @@ export function deserializeCompositeFromHCL(hcl: string): CompositeDeserializeRe
     }
 
     // Build CompositeBlockDef (compute inputs/outputs from exposed ports)
-    const inputs: Record<string, any> = {};
+    const inputs: Record<string, InputDef> = {};
     for (const exposedInput of exposedInputs) {
+      const internalBlock = internalBlocks.get(exposedInput.internalBlockId);
+      const internalDef = internalBlock ? getBlockDefinition(internalBlock.type) : undefined;
+      const internalInputType = internalDef?.inputs[exposedInput.internalPortId]?.type;
+      const resolvedType = exposedInput.type ?? internalInputType;
+      if (!resolvedType) {
+        errors.push(
+          new PatchDslError(
+            `Unable to infer type for exposed input "${exposedInput.externalId}"`,
+            compositeHeader.pos,
+          ),
+        );
+        continue;
+      }
       inputs[exposedInput.externalId] = {
-        type: exposedInput.type,
+        type: resolvedType,
         defaultSource: exposedInput.defaultSource,
         uiHint: exposedInput.uiHint,
         label: exposedInput.externalLabel,
       };
     }
 
-    const outputs: Record<string, any> = {};
+    const outputs: Record<string, OutputDef> = {};
     for (const exposedOutput of exposedOutputs) {
+      const internalBlock = internalBlocks.get(exposedOutput.internalBlockId);
+      const internalDef = internalBlock ? getBlockDefinition(internalBlock.type) : undefined;
+      const internalOutputType = internalDef?.outputs[exposedOutput.internalPortId]?.type;
+      if (!internalOutputType) {
+        errors.push(
+          new PatchDslError(
+            `Unable to infer type for exposed output "${exposedOutput.externalId}"`,
+            compositeHeader.pos,
+          ),
+        );
+        continue;
+      }
       outputs[exposedOutput.externalId] = {
+        type: internalOutputType,
         label: exposedOutput.externalLabel,
       };
     }

@@ -549,7 +549,7 @@ export const DebugMiniView: React.FC = observer(() => {
     const status = debug.status;
 
     if (activeEdgeId && status) {
-      const unmapped = status.unmappedEdges.find((e: any) => e.edgeId === activeEdgeId);
+      const unmapped = status.unmappedEdges.find((e) => e.edgeId === activeEdgeId);
       if (unmapped) {
         return React.createElement('div', { style: { ...debugMiniViewStyles.container, maxHeight: '300px' } },
           React.createElement('div', { style: { ...debugMiniViewStyles.header, color: '#ff6b6b' } },

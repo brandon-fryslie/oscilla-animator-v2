@@ -8,7 +8,7 @@
  * Uses simple JSON comparison for nested structures.
  */
 
-import type { Patch, Block, Edge, Endpoint } from '../graph/Patch';
+import type { Patch, Block, Edge, Endpoint, InputPort, OutputPort } from '../graph/Patch';
 
 /**
  * Deep equality check for patches.
@@ -76,7 +76,10 @@ function endpointsEqual(a: Endpoint, b: Endpoint): boolean {
 /**
  * Deep equality check for port maps.
  */
-function portsEqual(a: ReadonlyMap<string, any>, b: ReadonlyMap<string, any>): boolean {
+function portsEqual(
+  a: ReadonlyMap<string, InputPort | OutputPort>,
+  b: ReadonlyMap<string, InputPort | OutputPort>,
+): boolean {
   if (a.size !== b.size) return false;
   for (const [id, portA] of a) {
     const portB = b.get(id);

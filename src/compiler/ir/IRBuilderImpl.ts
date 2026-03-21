@@ -753,8 +753,18 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.slotLayoutInputs;
   }
 
-  getValueExpr(id: ValueExprId): ValueExpr | undefined {
-    return this.valueExprs[id];
+  getValueExpr(id: ValueExprId): ValueExpr {
+    const expr = this.valueExprs[id];
+    if (!expr) {
+      throw new Error(`IRBuilder: invalid ValueExprId ${id}`);
+    }
+    return expr;
+  }
+
+  setValueExprType(id: ValueExprId, type: CanonicalType): void {
+    const expr = this.getValueExpr(id);
+    const mutableExpr: ValueExpr & { type: CanonicalType } = expr;
+    mutableExpr.type = type;
   }
 
   getValueExprs(): readonly ValueExpr[] {
