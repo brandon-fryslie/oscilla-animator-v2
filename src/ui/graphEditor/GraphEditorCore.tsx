@@ -52,6 +52,7 @@ import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import type { DebugStore } from '../../stores/DebugStore';
+import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 import type { Patch } from '../../graph/Patch';
 import { blockId } from '../../types';
 import './GraphEditorCore.css';
@@ -97,6 +98,7 @@ export interface GraphEditorCoreProps {
   portHighlight?: PortHighlightStore | null;
   diagnostics?: DiagnosticsStore | null;
   debug?: DebugStore | null;
+  frontend?: FrontendResultStore | null;
 
   /** Optional patch (for connection validation - needed by validateConnection) */
   patch?: Patch | null;
@@ -181,6 +183,7 @@ export const GraphEditorCoreInner = observer(
         portHighlight = null,
         diagnostics = null,
         debug = null,
+        frontend = null,
         patch = null,
         nodeTypes: customNodeTypes,
         onEditorReady,
@@ -408,10 +411,11 @@ export const GraphEditorCoreInner = observer(
             connection.sourceHandle || '',
             connection.target,
             connection.targetHandle || '',
+            { frontend: frontend ?? undefined },
           );
           return result.valid;
         },
-        [patch]
+        [frontend, patch]
       );
 
       // -------------------------------------------------------------------------

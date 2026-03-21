@@ -57,9 +57,8 @@ function buildReplacementPlanForType(
   const block = patch.blocks.get(blockId);
   if (!block) return null;
   if (block.type === nextType) return null;
-  if (block.type === 'InfiniteTimeRoot' || nextType === 'InfiniteTimeRoot') return null;
-
   const candidateDef = requireAnyBlockDef(nextType);
+  if (block.role?.kind === 'timeRoot' || candidateDef.capability === 'time') return null;
   const replacementPatch = withReplacementType(patch, blockId, nextType);
   const connectedEdges = patch.edges.filter(
     (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
@@ -144,7 +143,7 @@ export function isCompatibleBlockReplacement(patch: Patch, blockId: BlockId, nex
 
 export function findCompatibleReplacementPlans(patch: Patch, blockId: BlockId): CompatibleReplacementPlan[] {
   const block = patch.blocks.get(blockId);
-  if (!block || block.type === 'InfiniteTimeRoot') {
+  if (!block || block.role?.kind === 'timeRoot') {
     return [];
   }
 

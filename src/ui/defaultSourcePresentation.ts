@@ -1,3 +1,4 @@
+import { getAnyBlockDefinition } from '../blocks/registry';
 import type { DefaultSource } from '../types';
 
 // [LAW:one-source-of-truth] UI formatting/classification for DefaultSource lives
@@ -12,25 +13,39 @@ function formatDefaultLiteralValue(value: unknown): string {
 }
 
 export function isTimeDefaultSource(source: DefaultSource): boolean {
-  return source.blockType === 'InfiniteTimeRoot';
+  return getAnyBlockDefinition(source.blockType)?.capability === 'time';
 }
 
-type ConstLiteralDefaultSource = DefaultSource & {
-  readonly blockType: 'Const';
-  readonly params: {
-    readonly value: unknown;
-  };
-};
+function getInlineLiteralParam(source: DefaultSource | null | undefined) {
+  if (!source) return null;
+  const blockDef = getAnyBlockDefinition(source.blockType);
+  if (!blockDef) return null;
 
-export function isConstLiteralDefaultSource(
-  source: DefaultSource | null | undefined
-): source is ConstLiteralDefaultSource {
-  return Boolean(source && source.blockType === 'Const' && source.params?.value !== undefined);
+  const editableInputs = Object.entries(blockDef.inputs)
+    .filter(([, inputDef]) => inputDef.exposedAsPort === false)
+    .map(([paramId, inputDef]) => ({
+      paramId,
+      label: inputDef.label ?? paramId,
+      hint: inputDef.uiHint,
+    }));
+  if (editableInputs.length !== 1) return null;
+
+  const [editableInput] = editableInputs;
+  if (!(editableInput.paramId in (source.params ?? {}))) return null;
+  return {
+    ...editableInput,
+    value: source.params?.[editableInput.paramId],
+  };
+}
+
+export function isConstLiteralDefaultSource(source: DefaultSource | null | undefined): boolean {
+  return getInlineLiteralParam(source) !== null;
 }
 
 export function formatDefaultSourceReference(source: DefaultSource): string {
-  if (isConstLiteralDefaultSource(source)) {
-    return formatDefaultLiteralValue(source.params.value);
+  const inlineLiteralParam = getInlineLiteralParam(source);
+  if (inlineLiteralParam) {
+    return formatDefaultLiteralValue(inlineLiteralParam.value);
   }
   return `${source.blockType}.${source.output}`;
 }

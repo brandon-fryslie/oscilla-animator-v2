@@ -15,8 +15,7 @@ import type {
   AuthoringMutationMode,
 } from '../../compiler/frontend/authoring-query-types';
 import { validateCombineMode } from '../../compiler/backend/combine-utils';
-import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
-import { isPayloadVar } from '../../core/inference-types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
 import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 import type { BlockId, CombineMode, PortId } from '../../types';
 import { COMBINE_MODE_CATEGORY } from '../../types';
@@ -25,7 +24,7 @@ import {
   findCompatibleLenses,
   type LensTypeInfo,
 } from '../reactFlowEditor/lensUtils';
-import type { ConnectionValidationResult, PortTypeLookupFn } from '../reactFlowEditor/typeValidation';
+import type { ConnectionValidationResult } from '../reactFlowEditor/typeValidation';
 
 export interface CompatiblePortCandidate {
   readonly blockId: BlockId;
@@ -77,44 +76,17 @@ function getVisibleOutputs(blockType: string): readonly OutputDef[] {
   return Object.values(def.outputs).filter((output) => !output.hidden);
 }
 
-function getStaticPortType(
-  patch: Patch,
-  blockId: BlockId,
-  portId: PortId,
-  direction: 'input' | 'output',
-): InferenceCanonicalType | undefined {
-  const block = patch.blocks.get(blockId);
-  if (!block) return undefined;
-
-  const blockDef = requireAnyBlockDef(block.type);
-  const portDef = direction === 'input'
-    ? blockDef.inputs[portId]
-    : blockDef.outputs[portId];
-  return portDef?.type;
-}
-
 function resolvePortType(
-  patch: Patch,
   frontend: FrontendResultStore | null | undefined,
   blockId: BlockId,
   portId: PortId,
   direction: 'input' | 'output',
 ): InferenceCanonicalType | undefined {
-  const resolved = frontend?.getResolvedPortTypeByIds(
+  return frontend?.getResolvedPortTypeByIds(
     blockId,
     portId,
     direction === 'input' ? 'in' : 'out',
   );
-  return resolved ?? getStaticPortType(patch, blockId, portId, direction);
-}
-
-export function createResolvedPortTypeLookup(frontend: FrontendResultStore): PortTypeLookupFn {
-  return (blockIdValue, portIdValue, direction) =>
-    frontend.getResolvedPortTypeByIds(
-      blockIdValue as BlockId,
-      portIdValue as PortId,
-      direction === 'input' ? 'in' : 'out',
-    );
 }
 
 export function validateSemanticConnection(
@@ -129,30 +101,33 @@ export function validateSemanticConnection(
     readonly exact?: boolean;
   },
 ): ConnectionValidationResult {
-  const frontend = options?.frontend;
-  const sourceType = resolvePortType(
-    patch,
-    frontend,
-    sourceBlockId as BlockId,
-    sourcePortId as PortId,
-    'output',
-  );
-  const targetType = resolvePortType(
-    patch,
-    frontend,
-    targetBlockId as BlockId,
-    targetPortId as PortId,
-    'input',
-  );
-  const admissible = maySatisfyConnectionTypes(sourceType, targetType);
-  if (!admissible) {
-    return {
-      valid: false,
-      reason: `Connection is statically incompatible`,
-    };
-  }
-
   if (!options?.exact) {
+    const frontend = options?.frontend;
+    const sourceType = resolvePortType(
+      frontend,
+      sourceBlockId as BlockId,
+      sourcePortId as PortId,
+      'output',
+    );
+    const targetType = resolvePortType(
+      frontend,
+      targetBlockId as BlockId,
+      targetPortId as PortId,
+      'input',
+    );
+    // [LAW:one-source-of-truth] Cheap validation must use frontend-resolved semantics or fail closed.
+    if (!sourceType || !targetType) {
+      return {
+        valid: false,
+        reason: 'Frontend-resolved port types unavailable',
+      };
+    }
+    if (!maySatisfyConnectionTypes(sourceType, targetType)) {
+      return {
+        valid: false,
+        reason: 'Connection is statically incompatible',
+      };
+    }
     return { valid: true };
   }
 
@@ -188,7 +163,7 @@ export function getHoverCompatiblePortsForPort(
   portId: PortId,
   isInput: boolean,
 ): CompatiblePortCandidate[] {
-  const sourceType = resolvePortType(patch, frontend, blockId, portId, isInput ? 'input' : 'output');
+  const sourceType = resolvePortType(frontend, blockId, portId, isInput ? 'input' : 'output');
   if (!sourceType) return [];
 
   if (isInput) {
@@ -198,13 +173,21 @@ export function getHoverCompatiblePortsForPort(
         const otherBlockDef = requireAnyBlockDef(otherBlock.type);
         return Object.entries(otherBlockDef.outputs)
           .filter(([, outputDef]) => !outputDef.hidden)
-          .map(([otherPortId, outputDef]) => ({
+          .map(([otherPortId, outputDef]) => {
+            const candidateType = resolvePortType(
+              frontend,
+              otherBlockId,
+              otherPortId as PortId,
+              'output',
+            );
+            return {
             blockId: otherBlockId,
             portId: otherPortId as PortId,
             blockLabel: otherBlock.displayName || otherBlockDef.label || otherBlock.type,
             portLabel: outputDef.label || otherPortId,
-            status: maySatisfyConnectionTypes(outputDef.type, sourceType) ? 'deferred' : 'invalid' as AuthoringCandidateStatus,
-          }))
+            status: maySatisfyConnectionTypes(candidateType, sourceType) ? 'deferred' : 'invalid' as AuthoringCandidateStatus,
+          };
+          })
           .filter((candidate) => candidate.status !== 'invalid');
       })
       .sort((a, b) =>
@@ -220,13 +203,21 @@ export function getHoverCompatiblePortsForPort(
       const otherBlockDef = requireAnyBlockDef(otherBlock.type);
       return Object.entries(otherBlockDef.inputs)
         .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
-        .map(([otherPortId, inputDef]) => ({
+        .map(([otherPortId, inputDef]) => {
+          const candidateType = resolvePortType(
+            frontend,
+            otherBlockId,
+            otherPortId as PortId,
+            'input',
+          );
+          return {
           blockId: otherBlockId,
           portId: otherPortId as PortId,
           blockLabel: otherBlock.displayName || otherBlockDef.label || otherBlock.type,
           portLabel: inputDef.label || otherPortId,
-          status: maySatisfyConnectionTypes(sourceType, inputDef.type) ? 'deferred' : 'invalid' as AuthoringCandidateStatus,
-        }))
+          status: maySatisfyConnectionTypes(sourceType, candidateType) ? 'deferred' : 'invalid' as AuthoringCandidateStatus,
+        };
+        })
         .filter((candidate) => candidate.status !== 'invalid');
     })
     .sort((a, b) =>
@@ -340,21 +331,14 @@ export function getCompatibleBlockTypesForPort(
   isInput: boolean,
 ): CompatibleBlockTypeCandidate[] {
   if (!isInput) {
-    const targetType = resolvePortType(patch, frontend, blockId, portId, 'output');
+    const targetType = resolvePortType(frontend, blockId, portId, 'output');
     if (!targetType) return [];
 
     return getAllBlockDefs()
       .flatMap((blockDef) =>
         Object.entries(blockDef.inputs)
           .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
-          .filter(([, inputDef]) => {
-            const candidateType = inputDef.type;
-            const sourcePayload = targetType.payload;
-            const targetPayload = candidateType.payload;
-            return isPayloadVar(sourcePayload)
-              || isPayloadVar(targetPayload)
-              || sourcePayload.kind === targetPayload.kind;
-          })
+          .filter(([, inputDef]) => maySatisfyConnectionTypes(targetType, inputDef.type))
           .map(([candidatePortId]) => ({
             blockType: blockDef.type,
             blockLabel: blockDef.label || blockDef.type,
@@ -398,22 +382,23 @@ export function getCompatibleBlockTypesForPort(
 }
 
 export function getValidCombineModesForType(type: InferenceCanonicalType | undefined): CombineMode[] {
-  if (!type) return ['last'];
+  if (!type) return [];
 
-  const payloadType: InferencePayloadType = type.payload;
-  const payloadKind = isPayloadVar(payloadType) ? 'float' : payloadType.kind;
+  const payloadType = type.payload;
+  if (payloadType.kind === 'var') return [];
+  const payloadKind = payloadType.kind;
   return (Object.entries(COMBINE_MODE_CATEGORY) as [CombineMode, string][])
     .filter(([mode]) => validateCombineMode(mode, 'one', payloadKind).valid)
     .map(([mode]) => mode);
 }
 
 export function getValidCombineModesForInput(
-  patch: Patch,
+  _patch: Patch,
   frontend: FrontendResultStore,
   blockId: BlockId,
   portId: PortId,
 ): CombineMode[] {
-  const type = resolvePortType(patch, frontend, blockId, portId, 'input');
+  const type = resolvePortType(frontend, blockId, portId, 'input');
   return getValidCombineModesForType(type);
 }
 
@@ -458,8 +443,8 @@ export function getCompatibleLensesForConnection(
   targetBlockId: BlockId,
   targetPortId: PortId,
 ): LensTypeInfo[] {
-  const sourceType = resolvePortType(patch, frontend, sourceBlockId, sourcePortId, 'output');
-  const targetType = resolvePortType(patch, frontend, targetBlockId, targetPortId, 'input');
+  const sourceType = resolvePortType(frontend, sourceBlockId, sourcePortId, 'output');
+  const targetType = resolvePortType(frontend, targetBlockId, targetPortId, 'input');
   if (!sourceType || !targetType) return [];
   return findCompatibleLenses(sourceType, targetType);
 }

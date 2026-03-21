@@ -15,11 +15,14 @@ describe('PortHighlightStore', () => {
     const sessionSpy = vi.spyOn(authoringQueries, 'createAuthoringQuerySession');
 
     let ellipseId!: BlockId;
+    let otherEllipseId!: BlockId;
     let constId!: BlockId;
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
       ellipseId = b.addBlock('Ellipse');
+      otherEllipseId = b.addBlock('Ellipse');
       constId = b.addBlock('Const');
+      b.wire(constId, 'out', ellipseId, 'rx');
     });
 
     frontend.updateFromFrontendResult(compileFrontend(patch), 1);
@@ -28,7 +31,7 @@ describe('PortHighlightStore', () => {
     const highlight = new PortHighlightStore(patchStore, frontend);
     highlight.setHoveredPort(constId, portId('out'), 'output');
 
-    expect(highlight.compatiblePorts.has(`${ellipseId}:rx`)).toBe(true);
+    expect(highlight.compatiblePorts.has(`${otherEllipseId}:rx`)).toBe(true);
     expect(sessionSpy).not.toHaveBeenCalled();
   });
 });
