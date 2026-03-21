@@ -296,7 +296,7 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
               patchStore.updateInputPortCombineMode(block.id, portRef.portId as PortId, value as CombineMode);
             }}
             options={getValidCombineModesForType(
-              frontend.getResolvedPortTypeByIds(block.id, portRef.portId as PortId, 'in') ?? portDef.type,
+              frontend.getResolvedPortTypeByIds(block.id, portRef.portId as PortId, 'in'),
             ).map(mode => ({
               value: mode,
               label: formatCombineMode(mode)

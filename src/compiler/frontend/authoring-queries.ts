@@ -339,18 +339,6 @@ function outputAddressKey(blockId: string, portId: string): string {
   });
 }
 
-function getDeclaredInputType(patch: Patch, target: TargetRef): InferenceCanonicalType | undefined {
-  const block = patch.blocks.get(target.blockId as BlockId);
-  const blockDef = block ? getAnyBlockDefinition(block.type) : undefined;
-  return blockDef?.inputs[target.portId]?.type;
-}
-
-function getDeclaredOutputType(patch: Patch, source: SourceRef): InferenceCanonicalType | undefined {
-  const block = patch.blocks.get(source.blockId as BlockId);
-  const blockDef = block ? getAnyBlockDefinition(block.type) : undefined;
-  return blockDef?.outputs[source.portId]?.type;
-}
-
 function isConcretePayload(type: InferenceCanonicalType): boolean {
   return !isPayloadVar(type.payload);
 }
@@ -412,7 +400,7 @@ export function maySatisfyConnectionTypes(
   sourceType: InferenceCanonicalType | CanonicalType | undefined,
   targetType: InferenceCanonicalType | CanonicalType | undefined,
 ): boolean {
-  if (!sourceType || !targetType) return true;
+  if (!sourceType || !targetType) return false;
   if (safeIsAssignable(sourceType, targetType)) return true;
   if (safeFindAdapterChain(sourceType, targetType)) return true;
   return !typesContradict(sourceType, targetType);
@@ -526,22 +514,18 @@ function baseCandidateResult(
 
 function pickEffectivePortType(
   analysis: FrontendAnalysis,
-  patch: Patch,
   ref: SourceRef | TargetRef,
   dir: 'in' | 'out',
 ): InferenceCanonicalType | CanonicalType | undefined {
   const hint = getPortHint(analysis.fixpointResult.facts, ref.blockId, ref.portId, dir);
   if (hint.canonical) return hint.canonical;
   if (hint.inference) return hint.inference;
-  return dir === 'in'
-    ? getDeclaredInputType(patch, ref as TargetRef)
-    : getDeclaredOutputType(patch, ref as SourceRef);
+  return undefined;
 }
 
 function resolveCandidateResult(
   baseline: FrontendAnalysis,
   candidate: FrontendAnalysis,
-  patch: Patch,
   target: TargetRef,
   source: SourceRef,
   candidateId: string,
@@ -609,8 +593,8 @@ function resolveCandidateResult(
     reasonKind,
     reason,
     diagnostics,
-    resolvedTargetType: pickEffectivePortType(candidate, patch, target, 'in') as CanonicalType | undefined,
-    resolvedSourceType: pickEffectivePortType(candidate, patch, source, 'out') as CanonicalType | undefined,
+    resolvedTargetType: pickEffectivePortType(candidate, target, 'in') as CanonicalType | undefined,
+    resolvedSourceType: pickEffectivePortType(candidate, source, 'out') as CanonicalType | undefined,
     binding,
     controlSurface: binding?.controls ?? [],
     insertedArtifacts,
@@ -694,11 +678,11 @@ export class AuthoringQuerySession {
   }
 
   private getTargetType(target: TargetRef): InferenceCanonicalType | CanonicalType | undefined {
-    return pickEffectivePortType(this.baseline, this.patch, target, 'in');
+    return pickEffectivePortType(this.baseline, target, 'in');
   }
 
   private getSourceType(source: SourceRef): InferenceCanonicalType | CanonicalType | undefined {
-    return pickEffectivePortType(this.baseline, this.patch, source, 'out');
+    return pickEffectivePortType(this.baseline, source, 'out');
   }
 
   mayConnect(source: SourceRef, target: TargetRef): boolean {
@@ -726,6 +710,27 @@ export class AuthoringQuerySession {
     }
 
     const targetType = this.getTargetType(query.target);
+    if (!targetType) {
+      return {
+        queryKind: query.kind,
+        target: query.target,
+        mutationMode: this.options.mutationMode,
+        baselineStatus: 'blocked',
+        baselineReasonKind: 'targetTypeUnavailable',
+        baselineReason: `Frontend-resolved type unavailable for ${query.target.blockId}.${query.target.portId}`,
+        metrics: emptyMetrics(query.candidates.length),
+        results: query.candidates.map((candidate) => ({
+          kind: 'connectExistingSources',
+          sourceBlockId: candidate.sourceBlockId,
+          sourcePortId: candidate.sourcePortId,
+          ...baseCandidateResult(
+            candidate.candidateId,
+            'targetTypeUnavailable',
+            `Frontend-resolved type unavailable for ${query.target.blockId}.${query.target.portId}`,
+          ),
+        })),
+      };
+    }
     const timedPrefilter = time(() => query.candidates.map((candidate): PrefilterCandidate<typeof candidate> => {
       const sourcePrecheck = precheckSource(this.patch, {
         blockId: candidate.sourceBlockId,
@@ -738,6 +743,9 @@ export class AuthoringQuerySession {
         blockId: candidate.sourceBlockId,
         portId: candidate.sourcePortId,
       });
+      if (!sourceType) {
+        return { candidate, accepted: false };
+      }
       return {
         candidate,
         accepted: maySatisfyConnectionTypes(sourceType, targetType),
@@ -748,15 +756,21 @@ export class AuthoringQuerySession {
     let exactEvaluationMs = 0;
     const results = timedPrefilter.value.map(({ candidate, accepted }): ConnectExistingSourceResult => {
       if (!accepted) {
+        const sourceType = this.getSourceType({
+          blockId: candidate.sourceBlockId,
+          portId: candidate.sourcePortId,
+        });
         return {
           kind: 'connectExistingSources',
           sourceBlockId: candidate.sourceBlockId,
           sourcePortId: candidate.sourcePortId,
           ...baseCandidateResult(
             candidate.candidateId,
-            'prefilterRejected',
-            `Candidate ${candidate.sourceBlockId}.${candidate.sourcePortId} is provably incompatible with ${query.target.blockId}.${query.target.portId}`,
-            'invalid',
+            sourceType ? 'prefilterRejected' : 'sourceTypeUnavailable',
+            sourceType
+              ? `Candidate ${candidate.sourceBlockId}.${candidate.sourcePortId} is provably incompatible with ${query.target.blockId}.${query.target.portId}`
+              : `Frontend-resolved type unavailable for ${candidate.sourceBlockId}.${candidate.sourcePortId}`,
+            sourceType ? 'invalid' : 'blocked',
           ),
         };
       }
@@ -780,7 +794,6 @@ export class AuthoringQuerySession {
         ...resolveCandidateResult(
           this.baseline,
           timed.value,
-          this.patch,
           { blockId: query.target.blockId, portId: query.target.portId },
           { blockId: candidate.sourceBlockId, portId: candidate.sourcePortId },
           candidate.candidateId,
@@ -826,6 +839,27 @@ export class AuthoringQuerySession {
     }
 
     const sourceType = this.getSourceType(query.source);
+    if (!sourceType) {
+      return {
+        queryKind: query.kind,
+        source: query.source,
+        mutationMode: this.options.mutationMode,
+        baselineStatus: 'blocked',
+        baselineReasonKind: 'sourceTypeUnavailable',
+        baselineReason: `Frontend-resolved type unavailable for ${query.source.blockId}.${query.source.portId}`,
+        metrics: emptyMetrics(query.candidates.length),
+        results: query.candidates.map((candidate) => ({
+          kind: 'connectTargetsForSource',
+          targetBlockId: candidate.targetBlockId,
+          targetPortId: candidate.targetPortId,
+          ...baseCandidateResult(
+            candidate.candidateId,
+            'sourceTypeUnavailable',
+            `Frontend-resolved type unavailable for ${query.source.blockId}.${query.source.portId}`,
+          ),
+        })),
+      };
+    }
     const timedPrefilter = time(() => query.candidates.map((candidate): PrefilterCandidate<typeof candidate> => {
       const targetPrecheck = precheckTarget(this.patch, {
         blockId: candidate.targetBlockId,
@@ -838,6 +872,9 @@ export class AuthoringQuerySession {
         blockId: candidate.targetBlockId,
         portId: candidate.targetPortId,
       });
+      if (!targetType) {
+        return { candidate, accepted: false };
+      }
       return {
         candidate,
         accepted: maySatisfyConnectionTypes(sourceType, targetType),
@@ -848,15 +885,21 @@ export class AuthoringQuerySession {
     let exactEvaluationMs = 0;
     const results = timedPrefilter.value.map(({ candidate, accepted }): ConnectTargetForSourceResult => {
       if (!accepted) {
+        const targetType = this.getTargetType({
+          blockId: candidate.targetBlockId,
+          portId: candidate.targetPortId,
+        });
         return {
           kind: 'connectTargetsForSource',
           targetBlockId: candidate.targetBlockId,
           targetPortId: candidate.targetPortId,
           ...baseCandidateResult(
             candidate.candidateId,
-            'prefilterRejected',
-            `Candidate ${query.source.blockId}.${query.source.portId} is provably incompatible with ${candidate.targetBlockId}.${candidate.targetPortId}`,
-            'invalid',
+            targetType ? 'prefilterRejected' : 'targetTypeUnavailable',
+            targetType
+              ? `Candidate ${query.source.blockId}.${query.source.portId} is provably incompatible with ${candidate.targetBlockId}.${candidate.targetPortId}`
+              : `Frontend-resolved type unavailable for ${candidate.targetBlockId}.${candidate.targetPortId}`,
+            targetType ? 'invalid' : 'blocked',
           ),
         };
       }
@@ -880,7 +923,6 @@ export class AuthoringQuerySession {
         ...resolveCandidateResult(
           this.baseline,
           timed.value,
-          this.patch,
           { blockId: candidate.targetBlockId, portId: candidate.targetPortId },
           { blockId: query.source.blockId, portId: query.source.portId },
           candidate.candidateId,
@@ -926,6 +968,27 @@ export class AuthoringQuerySession {
     }
 
     const targetType = this.getTargetType(query.target);
+    if (!targetType) {
+      return {
+        queryKind: query.kind,
+        target: query.target,
+        mutationMode: this.options.mutationMode,
+        baselineStatus: 'blocked',
+        baselineReasonKind: 'targetTypeUnavailable',
+        baselineReason: `Frontend-resolved type unavailable for ${query.target.blockId}.${query.target.portId}`,
+        metrics: emptyMetrics(query.candidates.length),
+        results: query.candidates.map((candidate) => ({
+          kind: 'addSourceBlocks',
+          blockType: candidate.blockType,
+          outputs: [],
+          ...baseCandidateResult(
+            candidate.candidateId,
+            'targetTypeUnavailable',
+            `Frontend-resolved type unavailable for ${query.target.blockId}.${query.target.portId}`,
+          ),
+        })),
+      };
+    }
     const timedPrefilter = time(() => query.candidates.map((candidate): PrefilterCandidate<typeof candidate> => {
       const block = this.registryIndex.blocks.get(candidate.blockType);
       if (!block) return { candidate, accepted: false };
@@ -1016,7 +1079,6 @@ export class AuthoringQuerySession {
           ...resolveCandidateResult(
             this.baseline,
             timed.value.analysis,
-            this.patch,
             { blockId: query.target.blockId, portId: query.target.portId },
             { blockId: timed.value.blockId, portId: outputPortId },
             candidate.candidateId,

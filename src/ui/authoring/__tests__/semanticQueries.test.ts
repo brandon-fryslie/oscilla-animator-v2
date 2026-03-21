@@ -44,10 +44,14 @@ describe('authoring semantic queries', () => {
     const sessionSpy = vi.spyOn(authoringQueries, 'createAuthoringQuerySession');
 
     let ellipseId!: BlockId;
+    let otherEllipseId!: BlockId;
     let constId!: BlockId;
     const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
       ellipseId = b.addBlock('Ellipse');
+      otherEllipseId = b.addBlock('Ellipse');
       constId = b.addBlock('Const');
+      b.wire(constId, 'out', ellipseId, 'rx');
     });
 
     frontend.updateFromFrontendResult(compileFrontend(patch), 1);
@@ -55,7 +59,7 @@ describe('authoring semantic queries', () => {
     const compatible = getHoverCompatiblePortsForPort(patch, frontend, constId, portId('out'), false);
     expect(compatible).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ blockId: ellipseId, portId: 'rx' }),
+        expect.objectContaining({ blockId: otherEllipseId, portId: 'rx' }),
       ]),
     );
     expect(sessionSpy).not.toHaveBeenCalled();
@@ -139,8 +143,33 @@ describe('authoring semantic queries', () => {
   });
 
   it('keeps drag validation cheap unless exact validation is requested', () => {
+    const frontend = new FrontendResultStore();
     const exactSpy = vi.spyOn(authoringQueries, 'queryConnectExistingSources');
 
+    let ellipseId!: BlockId;
+    let otherEllipseId!: BlockId;
+    let constId!: BlockId;
+    const patch = buildPatch((b) => {
+      b.addBlock('InfiniteTimeRoot');
+      ellipseId = b.addBlock('Ellipse');
+      otherEllipseId = b.addBlock('Ellipse');
+      constId = b.addBlock('Const');
+      b.wire(constId, 'out', ellipseId, 'rx');
+    });
+    frontend.updateFromFrontendResult(compileFrontend(patch), 1);
+
+    expect(
+      validateSemanticConnection(patch, constId, 'out', otherEllipseId, 'rx', { frontend }).valid,
+    ).toBe(true);
+    expect(exactSpy).not.toHaveBeenCalled();
+
+    expect(
+      validateSemanticConnection(patch, constId, 'out', otherEllipseId, 'rx', { exact: true }).valid,
+    ).toBe(true);
+    expect(exactSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when frontend-resolved types are unavailable on the cheap path', () => {
     let ellipseId!: BlockId;
     let constId!: BlockId;
     const patch = buildPatch((b) => {
@@ -148,14 +177,12 @@ describe('authoring semantic queries', () => {
       constId = b.addBlock('Const');
     });
 
+    const frontend = new FrontendResultStore();
     expect(
-      validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx').valid,
-    ).toBe(true);
-    expect(exactSpy).not.toHaveBeenCalled();
-
-    expect(
-      validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx', { exact: true }).valid,
-    ).toBe(true);
-    expect(exactSpy).toHaveBeenCalledTimes(1);
+      validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx', { frontend }).valid,
+    ).toBe(false);
+    expect(getHoverCompatiblePortsForPort(patch, frontend, constId, portId('out'), false)).toEqual([]);
+    expect(getCompatibleBlockTypesForPort(patch, frontend, constId, portId('out'), false)).toEqual([]);
+    expect(getValidCombineModesForInput(patch, frontend, ellipseId, portId('rx'))).toEqual([]);
   });
 });
