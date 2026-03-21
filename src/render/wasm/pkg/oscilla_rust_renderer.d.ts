@@ -7,7 +7,7 @@ export function attach_shared_shape_bank(shared_shape_bank: SharedArrayBuffer): 
 
 export function attach_shared_sink_table(shared_sink_table: SharedArrayBuffer): void;
 
-export function init_engine(canvas: OffscreenCanvas, max_particles: number, max_shapes: number, debug_readback_hz: number): Promise<void>;
+export function init_engine(canvas: OffscreenCanvas, max_particles: number, max_shapes: number, debug_readback_hz: number, initial_width: number, initial_height: number): Promise<void>;
 
 export function inject_poison_alloc(): void;
 
@@ -16,8 +16,6 @@ export function pause_engine(): void;
 export function rebuild_gpu_pipelines(passes: any): Promise<void>;
 
 export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
-
-export function resize_surface(width: number, height: number): void;
 
 export function resume_engine(): void;
 
@@ -34,12 +32,11 @@ export interface InitOutput {
     readonly attach_shared_input: (a: any) => [number, number];
     readonly attach_shared_shape_bank: (a: any) => [number, number];
     readonly attach_shared_sink_table: (a: any) => [number, number];
-    readonly init_engine: (a: any, b: number, c: number, d: number) => any;
+    readonly init_engine: (a: any, b: number, c: number, d: number, e: number, f: number) => any;
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
     readonly rebuild_gpu_pipelines: (a: any) => any;
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly resize_surface: (a: number, b: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];

@@ -31,6 +31,8 @@ export interface RustRendererBootstrapMessage {
   readonly sharedShapeBank: SharedArrayBuffer;
   readonly sharedSinkTable: SharedArrayBuffer;
   readonly config: RustRendererBootstrapConfig;
+  readonly initialWidth: number;
+  readonly initialHeight: number;
 }
 
 export interface RustRendererShutdownMessage {
@@ -47,12 +49,6 @@ export interface RustRendererGpuPass {
 export interface RustRendererRebuildGpuPipelinesMessage {
   readonly type: 'REBUILD_GPU_PIPELINES';
   readonly passes: readonly RustRendererGpuPass[];
-}
-
-export interface RustRendererResizeCanvasMessage {
-  readonly type: 'RESIZE_CANVAS';
-  readonly width: number;
-  readonly height: number;
 }
 
 export interface RustRendererPauseMessage {
@@ -78,7 +74,6 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
   | RustRendererRebuildGpuPipelinesMessage
-  | RustRendererResizeCanvasMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
   | RustRendererInjectPoisonAllocMessage

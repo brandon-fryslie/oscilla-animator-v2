@@ -73,7 +73,6 @@ function makeRenderer() {
     lastEvent: { tag: 'tick' },
   };
   return {
-    resizeCanvas: vi.fn<(width: number, height: number) => void>(),
     setViewportFrame: vi.fn<(payload: unknown) => void>(),
     getLifecycleState: vi.fn<() => string>(() => 'running'),
     getLatestRuntimeTelemetry: vi.fn(() => telemetry),
