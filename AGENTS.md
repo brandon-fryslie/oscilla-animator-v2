@@ -20,25 +20,25 @@
 This repository is configured for agent-native issue tracking with `lit`.
 
 Session bootstrap (every session / after compaction):
-1. Run `lit quickstart`.
+1. Run `lit quickstart --refresh`.
+2. Run `lit workspace`.
+3. If remotes are configured, run `lit sync pull` (uses upstream remote when configured, otherwise the single configured remote; debug override: `LINKS_DEBUG_DOLT_SYNC_BRANCH`).
 
 Work acquisition:
 1. Use the issue ID already assigned in context when present.
 2. Check current ready work with `lit ready`.
-3. Create a new issue only for an independent app work item that needs its own tracking.
-4. Do not create a new issue for small tweaks, doc wording changes, prompt edits, minor cleanups, or a few-line changes. Fold that work into an existing issue when one already owns it, or commit it directly without opening a ticket.
-5. Mark work in progress with `lit update <issue-id> --status in_progress` (or `lit start ...`) only when an issue already exists for the work.
-6. Record work start with `lit comment add <issue-id> --body "Starting: <plan>"` only when an issue already exists for the work.
+3. Create or claim an issue only when the work needs tracking. Do not create tickets for trivial drive-by edits like one-line doc fixes that will be resolved immediately.
+4. For tracked work, mark it in progress with `lit update <issue-id> --status in_progress` (or `lit start ...`).
+5. For tracked work, record work start with `lit comment add <issue-id> --body "Starting: <plan>"`.
 
 Execution:
-- Prefer `--json` on reads and writes.
 - Keep structure current with `lit parent` / `lit dep` / `lit label` / `lit comment`.
 
 Closeout:
-1. Add implementation summary comments as work progresses and when the PR reaches reviewable shape.
-2. You MUST create a git commit for the work before starting the next issue: `git add -A && git commit -m "<summary>"`.
-3. Do not close the issue at local implementation or commit time. Keep it open through review/checks and move it to `Status: Ready to Merge` when that workflow is satisfied.
-4. Work is complete only after the change is merged into `master`; close the issue then with `lit close <issue-id> --reason "<merge summary>"`.
+1. For tracked work, add completion summary: `lit comment add <issue-id> --body "Done: <summary>"`.
+2. For tracked work, close completed issue: `lit close <issue-id> --reason "<completion reason>"`.
+3. You MUST create a git commit for the completed work: `git add -A && git commit -m "<summary>"`.
+4. Work is NOT complete until the commit exists. Do NOT start the next issue before committing.
 
 Traceability:
 - `git push` triggers hook-driven `lit sync push` attempts (warn-only on failure).
