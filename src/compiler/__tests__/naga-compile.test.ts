@@ -79,36 +79,6 @@ describe('compileProgramWithNaga', () => {
     expect(compiled.wgsl).toContain(`const MAX_ACTIVE_LANES: u32 = ${expected}u;`);
   });
 
-  it('fails when compiled program payload is missing lowering artifact', async () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const malformed = {
-      ...result.program,
-      nagaLoweringProgram: undefined,
-    };
-    const compiled = await compileProgramWithNaga(malformed as unknown as typeof result.program);
-    expect(compiled.kind).toBe('error');
-    if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.message.includes('Missing nagaLoweringProgram'))).toBe(true);
-  });
-
-  it('fails when compiled program payload is missing compute metadata', async () => {
-    const result = compile(buildSimplePatch());
-    expect(result.kind).toBe('ok');
-    if (result.kind !== 'ok') return;
-
-    const malformed = {
-      ...result.program,
-      generatedComputeProgram: undefined,
-    };
-    const compiled = await compileProgramWithNaga(malformed as unknown as typeof result.program);
-    expect(compiled.kind).toBe('error');
-    if (compiled.kind !== 'error') return;
-    expect(compiled.errors.some((error) => error.message.includes('Missing generatedComputeProgram metadata'))).toBe(true);
-  });
-
   it('maps statement validation failures to source block IDs', async () => {
     const result = compile(buildSimplePatch());
     expect(result.kind).toBe('ok');

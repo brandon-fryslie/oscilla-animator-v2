@@ -53,33 +53,7 @@ function toCompileErrors(
 export async function compileProgramWithNaga(
   program: CompiledProgramIR,
 ): Promise<NagaCompilationOutcome> {
-  // [LAW:single-enforcer] Naga compile boundary validates malformed payloads
-  // from untyped callers before crossing into the Naga bridge.
-  const unsafeProgram = program as Partial<Pick<CompiledProgramIR, 'nagaLoweringProgram' | 'generatedComputeProgram'>>;
-  const lowering = unsafeProgram.nagaLoweringProgram;
-  if (!lowering) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          code: 'IRValidationFailed',
-          message: 'Missing nagaLoweringProgram on compiled IR',
-        },
-      ],
-    };
-  }
-  const generatedComputeProgram = unsafeProgram.generatedComputeProgram;
-  if (!generatedComputeProgram) {
-    return {
-      kind: 'error',
-      errors: [
-        {
-          code: 'IRValidationFailed',
-          message: 'Missing generatedComputeProgram metadata on compiled IR',
-        },
-      ],
-    };
-  }
+  const { nagaLoweringProgram: lowering, generatedComputeProgram } = program;
   const maxActiveLanes = parseMaxActiveLanes(generatedComputeProgram.maxActiveLanes);
   if (!maxActiveLanes) {
     return {
