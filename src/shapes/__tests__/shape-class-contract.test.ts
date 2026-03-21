@@ -8,11 +8,15 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ShapeClass, TopologyMode } from '../types';
+import { ShapeClass, TopologyMode, TopologyType } from '../types';
 
 describe('ShapeClass enum', () => {
   it('Type1Rigid has u32-compatible ABI value 1', () => {
     expect(ShapeClass.Type1Rigid).toBe(1);
+  });
+
+  it('Type2Parametric has u32-compatible ABI value 2', () => {
+    expect(ShapeClass.Type2Parametric).toBe(2);
   });
 
   it('Type5TextHybrid has u32-compatible ABI value 5', () => {
@@ -23,7 +27,7 @@ describe('ShapeClass enum', () => {
     const defined = Object.values(ShapeClass).filter(
       (v): v is number => typeof v === 'number',
     );
-    expect(defined.sort()).toEqual([1, 5]);
+    expect(defined.sort()).toEqual([1, 2, 5]);
   });
 
   it('enum values are distinct positive integers', () => {
@@ -73,6 +77,35 @@ describe('ShapeClass → ShapeBankHeaderWord.Kind ABI consistency', () => {
     for (const v of Object.values(TopologyMode)) {
       if (typeof v !== 'number') continue;
       expect(v >>> 0).toBe(v);
+    }
+  });
+
+  it('TopologyType values fit in u32', () => {
+    for (const v of Object.values(TopologyType)) {
+      if (typeof v !== 'number') continue;
+      expect(v >>> 0).toBe(v);
+    }
+  });
+});
+
+describe('TopologyType enum', () => {
+  it('NonIndexed has ABI value 0', () => {
+    expect(TopologyType.NonIndexed).toBe(0);
+  });
+
+  it('Indexed has ABI value 1', () => {
+    expect(TopologyType.Indexed).toBe(1);
+  });
+
+  it('enum values are distinct non-negative integers', () => {
+    const values = Object.values(TopologyType).filter(
+      (v): v is number => typeof v === 'number',
+    );
+    const unique = new Set(values);
+    expect(unique.size).toBe(values.length);
+    for (const v of values) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(Number.isInteger(v)).toBe(true);
     }
   });
 });
