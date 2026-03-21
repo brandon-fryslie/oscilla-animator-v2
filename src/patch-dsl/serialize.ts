@@ -13,7 +13,14 @@
  * - Quote param keys that aren't valid identifiers
  */
 
-import type { Patch, Block, Edge, InputPort, LensAttachment } from '../graph/Patch';
+import type {
+  Patch,
+  Block,
+  Edge,
+  InputPort,
+  LensAttachment,
+  AuthoredControlSource,
+} from '../graph/Patch';
 import type { BlockId } from '../types';
 import { normalizeCanonicalName } from '../core/canonical-name';
 import { emitKey, emitValue } from './hcl-emit-utils';
@@ -145,11 +152,10 @@ function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number, 
     output += `${ind}  domain = "${block.domainId}"\n`;
   }
 
-  // Emit port overrides (combineMode, defaultSource)
+  // Emit port-owned authored control and combineMode overrides.
   const sortedInputPorts = Array.from(block.inputPorts.entries()).sort(([a], [b]) => a.localeCompare(b));
   for (const [portId, port] of sortedInputPorts) {
-    // Emit port block if combineMode is not default or defaultSource is set
-    if (port.combineMode !== 'last' || port.defaultSource) {
+    if (port.combineMode !== 'last' || port.authoredControl?.source) {
       output += emitPortOverride(portId, port, indent + 1);
     }
 
@@ -169,7 +175,7 @@ function emitBlock(block: Block, nameMap: Map<BlockId, string>, indent: number, 
 }
 
 /**
- * Emit port override block (combineMode, defaultSource).
+ * Emit port override block (combineMode, authored source).
  *
  * @param portId - The port ID
  * @param port - The input port
@@ -184,19 +190,20 @@ function emitPortOverride(portId: string, port: InputPort, indent: number): stri
     output += `${ind}  combineMode = "${port.combineMode}"\n`;
   }
 
-  if (port.defaultSource) {
-    // DefaultSource can be a reference or a constant value
-    if (typeof port.defaultSource === 'object' && 'kind' in port.defaultSource) {
-      // It's a structured default source (e.g., { kind: 'const', value: ... })
-      output += `${ind}  defaultSource = ${emitValue(port.defaultSource)}\n`;
-    } else {
-      // It's a simple value
-      output += `${ind}  defaultSource = ${emitValue(port.defaultSource)}\n`;
-    }
+  if (port.authoredControl?.source) {
+    output += `${ind}  defaultSource = ${emitAuthoredSource(port.authoredControl.source)}\n`;
   }
 
   output += `${ind}}\n`;
   return output;
+}
+
+function emitAuthoredSource(source: AuthoredControlSource): string {
+  return emitValue({
+    blockType: source.blockType,
+    output: source.outputPortId,
+    ...(Object.keys(source.params).length > 0 ? { params: source.params } : {}),
+  });
 }
 
 /**

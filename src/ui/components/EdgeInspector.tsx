@@ -15,18 +15,17 @@ import { useStores } from '../../stores';
 import { colors } from '../theme';
 import { formatValueType } from './typeFormatters';
 import type { Edge, Patch } from '../../graph/Patch';
-import type { BlockId } from '../../types';
+import type { BlockId, PortId } from '../../types';
 import type { CanonicalType } from '../../core/canonical-types';
 import type { TransformStep } from '../../types';
 import type { PortProvenance } from '../../stores/FrontendResultStore';
-import { requireAnyBlockDef } from '../../blocks/registry';
 import {
-  findCompatibleLenses,
   getLensLabel,
   getLensDefaultParams,
   lensTargetsConnection,
   type LensTypeInfo,
 } from '../reactFlowEditor/lensUtils';
+import { getCompatibleLensesForConnection } from '../authoring/semanticQueries';
 import { useDebugMiniView } from '../debug-viz/useDebugMiniView';
 import { DebugEdgeValueDisplay } from '../debug-viz/DebugMiniView';
 import { LensParamControls } from './LensParamControls';
@@ -237,7 +236,7 @@ interface LensManagementSectionProps {
 }
 
 const LensManagementSection = observer(function LensManagementSection({ edge, patch }: LensManagementSectionProps) {
-  const { patch: patchStore } = useStores();
+  const { patch: patchStore, frontend } = useStores();
   const [showLensDropdown, setShowLensDropdown] = useState(false);
 
   const targetBlock = patch.blocks.get(edge.to.blockId as BlockId);
@@ -258,17 +257,16 @@ const LensManagementSection = observer(function LensManagementSection({ edge, pa
   }, [targetPort?.lenses, edge.from.blockId, edge.from.slotId, sourceBlock?.displayName]);
 
   // Find compatible lenses based on static block def types
-  const compatibleLenses = useMemo((): LensTypeInfo[] => {
-    const sourceBlock = patch.blocks.get(edge.from.blockId as BlockId);
-    const targetBlockDef = targetBlock ? requireAnyBlockDef(targetBlock.type) : null;
-    const sourceBlockDef = sourceBlock ? requireAnyBlockDef(sourceBlock.type) : null;
-
-    const sourceOutput = sourceBlockDef?.outputs[edge.from.slotId];
-    const targetInput = targetBlockDef?.inputs[edge.to.slotId];
-
-    if (!sourceOutput?.type || !targetInput?.type) return [];
-    return findCompatibleLenses(sourceOutput.type, targetInput.type);
-  }, [edge, patch, targetBlock]);
+  const compatibleLenses = useMemo((): LensTypeInfo[] => (
+    getCompatibleLensesForConnection(
+      patch,
+      frontend,
+      edge.from.blockId as BlockId,
+      edge.from.slotId as PortId,
+      edge.to.blockId as BlockId,
+      edge.to.slotId as PortId,
+    )
+  ), [edge, frontend, patch]);
 
   const handleAddLens = useCallback((lensType: string) => {
     const params = getLensDefaultParams(lensType);

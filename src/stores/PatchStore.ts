@@ -11,19 +11,32 @@
  */
 
 import { makeObservable, observable, computed, action, reaction } from 'mobx';
-import type { Block, Edge, Endpoint, Patch, BlockType, InputPort, OutputPort, LensAttachment } from '../graph/Patch';
+import type {
+  Block,
+  Edge,
+  Endpoint,
+  Patch,
+  BlockType,
+  InputPort,
+  OutputPort,
+  LensAttachment,
+  AuthoredControlSource,
+  AuthoredInputControl,
+} from '../graph/Patch';
 import type { BlockId, BlockRole, CombineMode, DefaultSource, EdgeRole, PortId } from '../types';
 import { canonicalizeCombineMode } from '../types';
 import { emptyPatchData, type PatchData } from './internal';
 import type { EventHub } from '../events/EventHub';
 import { requireAnyBlockDef } from '../blocks/registry';
 import { getBlockDefinition } from '../blocks/registry';
+import { getPreferredInlineSourceParam } from '../blocks/editable-config';
 import { normalizeCanonicalName, detectCanonicalNameCollisions } from '../core/canonical-name';
 import { exportPatchAsHCL, importPatchFromHCL, savePatchToStorage } from '../services/PatchPersistence';
 import { derivedLensParamKey } from '../graph/lens-block-id';
 import { deriveEdgeAlias } from '../graph/edge-alias';
 import { nextLensAttachmentId } from '../graph/lens-id';
 import type { PatchDslError } from '../patch-dsl';
+import type { ControlMutationTarget } from '../types/control-target';
 
 /**
  * Opaque type for immutable patch access.
@@ -129,9 +142,152 @@ function cloneDefaultSource(defaultSource: DefaultSource | undefined): DefaultSo
   });
 }
 
+function cloneAuthoredControlSource(source: AuthoredControlSource | null | undefined): AuthoredControlSource | null | undefined {
+  if (source === undefined || source === null) return source;
+  return Object.freeze({
+    ...source,
+    params: Object.freeze({ ...source.params }),
+  });
+}
+
+function cloneAuthoredInputControl(control: AuthoredInputControl | undefined): AuthoredInputControl | undefined {
+  if (!control) return undefined;
+  return Object.freeze({
+    ...control,
+    source: cloneAuthoredControlSource(control.source) ?? null,
+  });
+}
+
+function constSource(value: unknown): AuthoredControlSource {
+  return Object.freeze({
+    id: 'source',
+    blockType: 'Const',
+    outputPortId: 'out',
+    params: Object.freeze({ value }),
+  });
+}
+
+function sourceToDefaultSource(source: AuthoredControlSource | null | undefined): DefaultSource | undefined {
+  if (!source) return undefined;
+  return Object.freeze({
+    blockType: source.blockType,
+    output: source.outputPortId,
+    ...(Object.keys(source.params).length > 0 ? { params: Object.freeze({ ...source.params }) } : {}),
+  });
+}
+
+function defaultSourceToAuthoredSource(defaultSource: DefaultSource | undefined): AuthoredControlSource | null {
+  if (!defaultSource) return null;
+  return Object.freeze({
+    id: 'source',
+    blockType: defaultSource.blockType,
+    outputPortId: defaultSource.output,
+    params: Object.freeze({ ...(defaultSource.params ?? {}) }),
+  });
+}
+
+function readInlineSourceValue(source: AuthoredControlSource | null | undefined): unknown {
+  if (!source) return undefined;
+  return getPreferredInlineSourceParam(source.blockType, source.params)?.value;
+}
+
+function sameDefaultSourceIdentity(
+  left: DefaultSource | undefined,
+  right: DefaultSource | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.blockType === right.blockType && left.output === right.output;
+}
+
+function sameAuthoredSourceIdentity(
+  left: AuthoredControlSource | null | undefined,
+  right: AuthoredControlSource | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return left.blockType === right.blockType && left.outputPortId === right.outputPortId;
+}
+
+function buildAuthoredInputControl(blockId: BlockId, portId: string, source: AuthoredControlSource | null): AuthoredInputControl | undefined {
+  return source
+    ? Object.freeze({
+        ownerId: `${blockId}:${portId}` as `${BlockId}:${PortId}`,
+        source,
+      })
+    : undefined;
+}
+
+function migrateInputPortControl(
+  blockId: BlockId,
+  blockType: string,
+  portId: string,
+  port: InputPort,
+  legacyParams: Readonly<Record<string, unknown>>,
+): { port: InputPort; consumedParam: boolean } {
+  const blockDef = getBlockDefinition(blockType);
+  const inputDef = blockDef?.inputs[portId];
+  if (!inputDef || inputDef.exposedAsPort === false) {
+    return { port, consumedParam: false };
+  }
+
+  const legacyParamValue = legacyParams[portId];
+  const existingSource = port.authoredControl?.source ?? null;
+  const legacyDefaultSource = port.defaultSource;
+  const seededSource = legacyDefaultSource
+    ? defaultSourceToAuthoredSource(legacyDefaultSource)
+    : inputDef.defaultSource
+      ? defaultSourceToAuthoredSource(inputDef.defaultSource)
+      : inputDef.defaultValue !== undefined
+        ? constSource(inputDef.defaultValue)
+        : null;
+  const nextSource = legacyParamValue !== undefined
+    ? constSource(legacyParamValue)
+    : existingSource ?? seededSource;
+
+  return {
+    port: {
+      ...port,
+      authoredControl: buildAuthoredInputControl(blockId, portId, nextSource),
+      defaultSource: undefined,
+    },
+    consumedParam: legacyParamValue !== undefined,
+  };
+}
+
+function migrateBlockControlState(block: Block): Block {
+  const blockDef = getBlockDefinition(block.type);
+  if (!blockDef) return block;
+
+  const migratedParams: Record<string, unknown> = {};
+  const migratedInputPorts = new Map<string, InputPort>();
+  const consumedPortParams = new Set<string>();
+
+  for (const [portId, port] of block.inputPorts) {
+    const migrated = migrateInputPortControl(block.id, block.type, portId, port, block.params);
+    migratedInputPorts.set(portId, migrated.port);
+    if (migrated.consumedParam) {
+      consumedPortParams.add(portId);
+    }
+  }
+
+  for (const [key, value] of Object.entries(block.params)) {
+    const inputDef = blockDef.inputs[key];
+    if (inputDef?.exposedAsPort !== false && consumedPortParams.has(key)) {
+      continue;
+    }
+    migratedParams[key] = value;
+  }
+
+  return {
+    ...block,
+    params: migratedParams,
+    inputPorts: migratedInputPorts.size > 0 ? migratedInputPorts : block.inputPorts,
+  };
+}
+
 function cloneInputPort(inputPort: InputPort): InputPort {
   return Object.freeze({
     ...inputPort,
+    authoredControl: cloneAuthoredInputControl(inputPort.authoredControl),
     defaultSource: cloneDefaultSource(inputPort.defaultSource),
     ...(inputPort.lenses ? { lenses: Object.freeze(inputPort.lenses.map(cloneLensAttachment)) } : {}),
   });
@@ -187,7 +343,7 @@ function clonePatchData(patch: Patch): PatchData {
   return {
     // [LAW:one-source-of-truth] PatchStore owns canonical block objects; load/read
     // boundaries must clone external patch values instead of sharing mutable references.
-    blocks: new Map(Array.from(patch.blocks.entries(), ([blockId, block]) => [blockId, cloneBlockSnapshot(block)])),
+    blocks: new Map(Array.from(patch.blocks.entries(), ([blockId, block]) => [blockId, cloneBlockSnapshot(migrateBlockControlState(block))])),
     edges: patch.edges.map(cloneEdgeSnapshot),
   };
 }
@@ -232,6 +388,7 @@ export class PatchStore {
       addBlock: action,
       removeBlock: action,
       updateBlockParams: action,
+      updateControlValue: action,
       updateBlockDisplayName: action,
       updateInputPort: action,
       updateInputPortCombineMode: action,
@@ -400,11 +557,33 @@ export class PatchStore {
         }
         continue;
       }
-      inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+      const providedControlValue = params[inputId];
+      const seededSource = providedControlValue !== undefined
+        ? constSource(providedControlValue)
+        : inputDef.defaultSource
+          ? defaultSourceToAuthoredSource(inputDef.defaultSource)
+          : inputDef.defaultValue !== undefined
+            ? constSource(inputDef.defaultValue)
+            : null;
+      inputPorts.set(inputId, {
+        id: inputId,
+        combineMode: 'last',
+        ...(seededSource
+          ? {
+              authoredControl: buildAuthoredInputControl(id, inputId, seededSource),
+            }
+          : {}),
+      });
     }
 
-    // Merge config defaults with provided params (provided params take precedence)
-    const mergedParams = { ...configDefaults, ...params };
+    // [LAW:one-source-of-truth] Exposed-input authored values are partitioned
+    // onto the owning input port at creation instead of remaining in block.params.
+    const mergedParams = { ...configDefaults };
+    for (const [key, value] of Object.entries(params)) {
+      const inputDef = blockDef.inputs[key];
+      if (inputDef && inputDef.exposedAsPort !== false) continue;
+      mergedParams[key] = value;
+    }
 
     // Create output ports from registry
     const outputPorts = new Map<string, OutputPort>();
@@ -516,50 +695,61 @@ export class PatchStore {
       throw new Error(`Block not found: ${id}`);
     }
 
-    const changedEntries = Object.entries(params).filter(([key, newValue]) => block.params[key] !== newValue);
+    const blockDef = requireAnyBlockDef(block.type);
+    const changedEntries = Object.entries(params).filter(([key, newValue]) => {
+      const inputDef = blockDef.inputs[key];
+      if (inputDef && inputDef.exposedAsPort !== false) {
+        const currentSourceValue = readInlineSourceValue(block.inputPorts.get(key)?.authoredControl?.source);
+        return currentSourceValue !== newValue;
+      }
+      return block.params[key] !== newValue;
+    });
     if (changedEntries.length === 0) {
       return;
     }
 
-    // [LAW:one-source-of-truth] Track fast-path candidates from canonical block.params
-    // keys regardless of whether the key originated from config or exposed-port UI.
+    // [LAW:one-source-of-truth] Fast-path value tracking keys remain stable even
+    // after exposed-input values move from block.params onto authored controls.
     for (const [key, newValue] of changedEntries) {
       this._pendingValueChanges.set(`${id}:${key}`, newValue);
     }
 
     const mergedParams = { ...block.params };
+    const updatedInputPorts: Map<string, InputPort> = new Map(block.inputPorts);
+    let portsChanged = false;
     for (const [key, newValue] of changedEntries) {
+      const inputDef = blockDef.inputs[key];
+      if (inputDef && inputDef.exposedAsPort !== false) {
+        const existingPort = updatedInputPorts.get(key) ?? { id: key, combineMode: 'last' as const };
+        const nextSource = newValue === undefined ? null : constSource(newValue);
+        portsChanged = true;
+        updatedInputPorts.set(key, {
+          ...existingPort,
+          authoredControl: buildAuthoredInputControl(id, key, nextSource),
+        });
+        continue;
+      }
       if (newValue === undefined) {
         delete mergedParams[key];
       } else {
         mergedParams[key] = newValue;
       }
     }
-    const blockDef = requireAnyBlockDef(block.type);
-    let updatedInputPorts: Map<string, InputPort> = new Map(block.inputPorts);
-    let portsChanged = false;
 
-    // [LAW:single-enforcer] Keep per-port defaultSource metadata synchronized from
-    // canonical params at the PatchStore mutation boundary.
-    for (const [key, newValue] of changedEntries) {
-      const inputDef = blockDef.inputs[key];
-      if (!inputDef || inputDef.exposedAsPort === false) continue;
-      const existingPort = updatedInputPorts.get(key) ?? { id: key, combineMode: 'last' as const };
-      const syncedDefaultSource = newValue === undefined
-        ? undefined
-        : { blockType: 'Const', output: 'out', params: { value: newValue } };
-      if (existingPort.defaultSource === syncedDefaultSource) continue;
-      portsChanged = true;
-      updatedInputPorts.set(key, {
-        ...existingPort,
-        defaultSource: syncedDefaultSource,
-      });
+    // Remove any legacy exposed-port shadow params that may still be present.
+    for (const [key, inputDef] of Object.entries(blockDef.inputs)) {
+      if (inputDef.exposedAsPort !== false) {
+        delete mergedParams[key];
+      }
     }
 
     // Emit ParamChanged events before updating (capture old values)
     if (this.eventHub && this.getPatchRevision) {
       for (const [key, newValue] of changedEntries) {
-        const oldValue = block.params[key];
+        const inputDef = blockDef.inputs[key];
+        const oldValue = inputDef && inputDef.exposedAsPort !== false
+          ? readInlineSourceValue(block.inputPorts.get(key)?.authoredControl?.source)
+          : block.params[key];
         this.eventHub.emit({
           type: 'ParamChanged',
           patchId: this.patchId,
@@ -590,6 +780,50 @@ export class PatchStore {
         blockId: id,
         changeType: 'param',
       });
+    }
+  }
+
+  /**
+   * Update a semantic control target through the PatchStore mutation boundary.
+   *
+   * // [LAW:one-source-of-truth] Control edits route through one semantic API
+   * // instead of each UI surface guessing the storage shape it happens to hit.
+   */
+  updateControlValue(target: ControlMutationTarget, value: unknown): void {
+    switch (target.kind) {
+      case 'blockParam': {
+        this.updateBlockParams(target.blockId, { [target.paramId]: value });
+        return;
+      }
+      case 'bindingLensParam': {
+        this.updateLensParams(target.blockId, target.portId, target.lensId, { [target.paramId]: value });
+        return;
+      }
+      case 'bindingSourceParam': {
+        const block = this._data.blocks.get(target.blockId);
+        if (!block) {
+          throw new Error(`Block ${target.blockId} not found`);
+        }
+        const blockDef = requireAnyBlockDef(block.type);
+        const inputDef = blockDef.inputs[target.portId];
+        const effectiveDefault = sourceToDefaultSource(block.inputPorts.get(target.portId)?.authoredControl?.source)
+          ?? block.inputPorts.get(target.portId)?.defaultSource
+          ?? inputDef?.defaultSource
+          ?? {
+            blockType: target.sourceBlockType,
+            output: target.sourceOutputPortId,
+          };
+        const nextDefault: DefaultSource = {
+          blockType: target.sourceBlockType,
+          output: target.sourceOutputPortId,
+          params: {
+            ...(effectiveDefault.params ?? {}),
+            [target.paramId]: value,
+          },
+        };
+        this.updateInputPort(target.blockId, target.portId, { defaultSource: nextDefault });
+        return;
+      }
     }
   }
 
@@ -682,18 +916,18 @@ export class PatchStore {
       if (!updates.defaultSource) return false;
       const updateKeys = Object.keys(updates);
       if (updateKeys.length !== 1 || updateKeys[0] !== 'defaultSource') return false;
-      // If port already has a defaultSource, check same blockType/output (value-only change)
+      const existingSource = port.authoredControl?.source;
+      const nextSource = defaultSourceToAuthoredSource(updates.defaultSource);
+      if (sameAuthoredSourceIdentity(existingSource, nextSource)) return true;
+      // If port already has a legacy defaultSource, check same blockType/output (value-only change)
       if (port.defaultSource) {
-        return (
-          port.defaultSource.blockType === updates.defaultSource.blockType &&
-          port.defaultSource.output === updates.defaultSource.output
-        );
+        return sameDefaultSourceIdentity(port.defaultSource, updates.defaultSource);
       }
       // First-time: check registry default matches the update's blockType
       const blockDef = requireAnyBlockDef(block.type);
       const inputDef = blockDef.inputs[portId];
       if (!inputDef?.defaultSource) return false;
-      return inputDef.defaultSource.blockType === updates.defaultSource.blockType;
+      return sameDefaultSourceIdentity(inputDef.defaultSource, updates.defaultSource);
     })();
 
     if (isValueOnly) {
@@ -709,23 +943,27 @@ export class PatchStore {
       ? { ...updates, combineMode: canonicalizeCombineMode(updates.combineMode as CombineMode) }
       : updates;
 
-    // Update port
-    const updatedPort: InputPort = { ...port, ...normalizedUpdates };
-    const updatedInputPorts = new Map(block.inputPorts);
-    updatedInputPorts.set(portId, updatedPort);
-
     const blockDef = requireAnyBlockDef(block.type);
     const inputDef = blockDef.inputs[portId];
     const nextParams = { ...block.params };
-    if (Object.prototype.hasOwnProperty.call(updates, 'defaultSource') && inputDef?.exposedAsPort !== false) {
+    let updatedPort: InputPort = { ...port, ...normalizedUpdates };
+    if (Object.prototype.hasOwnProperty.call(updates, 'defaultSource') && inputDef && inputDef.exposedAsPort !== false) {
       const nextDefault = updates.defaultSource;
-      if (nextDefault && nextDefault.blockType === 'Const' && nextDefault.output === 'out' && nextDefault.params?.value !== undefined) {
-        // [LAW:one-source-of-truth] Canonical source for user-editable values is block.params.
-        nextParams[portId] = nextDefault.params.value;
-      } else {
-        delete nextParams[portId];
-      }
+      const nextAuthoredSource = nextDefault
+        ? defaultSourceToAuthoredSource(nextDefault)
+        : null;
+      // [LAW:one-source-of-truth] Exposed-input source overrides live on the
+      // canonical authored binding source regardless of which block type emits
+      // the value; PatchStore does not split them across two fields.
+      updatedPort = {
+        ...updatedPort,
+        authoredControl: buildAuthoredInputControl(blockId, portId, nextAuthoredSource),
+        defaultSource: undefined,
+      };
+      delete nextParams[portId];
     }
+    const updatedInputPorts = new Map(block.inputPorts);
+    updatedInputPorts.set(portId, updatedPort);
 
     // Update block with new ports map
     this._data.blocks.set(blockId, {
@@ -793,7 +1031,9 @@ export class PatchStore {
     }
 
     const instancePort = targetBlock.inputPorts.get(targetPortId);
-    const effectiveDefault = instancePort?.defaultSource ?? inputDef.defaultSource;
+    const effectiveDefault = sourceToDefaultSource(instancePort?.authoredControl?.source)
+      ?? instancePort?.defaultSource
+      ?? inputDef.defaultSource;
     if (!effectiveDefault) {
       const message = `Cannot materialize ${targetBlockId}.${targetPortId}: no default source is configured`;
       this.reportIssue('warn', message);

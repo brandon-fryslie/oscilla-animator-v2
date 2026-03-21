@@ -451,6 +451,15 @@ export interface BlockDef {
   readonly lower: (args: LowerArgs) => LowerResult;
 
   /**
+   * Optional projection for source blocks that can expose a constant debug value
+   * directly from block-local config.
+   *
+   * // [LAW:one-source-of-truth] Source-value projection lives on the canonical
+   * // block definition instead of being re-declared by downstream consumers.
+   */
+  readonly constantValueFromConfig?: (config: Readonly<Record<string, unknown>>) => unknown;
+
+  /**
    * Phase 1 lowering function for stateful blocks in feedback loops.
    *
    * This function generates ONLY the outputs (reading from state) without requiring

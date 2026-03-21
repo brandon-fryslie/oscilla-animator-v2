@@ -10,12 +10,10 @@ import { Autocomplete, TextField } from '@mui/material';
 import type { BlockId, PortId } from '../../types';
 import type { Patch } from '../../graph/Patch';
 import { requireAnyBlockDef } from '../../blocks/registry';
-import {
-  validateConnection,
-  formatTypeForDisplay,
-  type PortTypeLookupFn,
-} from '../reactFlowEditor/typeValidation';
+import { formatTypeForDisplay } from '../reactFlowEditor/typeValidation';
 import { colors } from '../theme';
+import { useStores } from '../../stores';
+import { getCompatiblePortsForPort } from '../authoring/semanticQueries';
 
 /**
  * Represents a selectable port option in the picker.
@@ -40,8 +38,6 @@ interface ConnectionPickerProps {
   direction: 'input' | 'output';
   /** Current patch to search for compatible ports */
   patch: Patch;
-  /** Optional compiler-resolved type lookup (preferred over static block-def types) */
-  resolvedPortTypeLookup?: PortTypeLookupFn;
   /** Callback when a port is selected */
   onSelect: (sourceBlockId: BlockId, sourcePortId: PortId) => void;
   /** Callback when picker is cancelled */
@@ -56,88 +52,44 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
   targetPortId,
   direction,
   patch,
-  resolvedPortTypeLookup,
   onSelect,
   onCancel,
 }: ConnectionPickerProps) {
+  const { frontend } = useStores();
+
   // Build list of compatible ports
   const portOptions = useMemo(() => {
-    const options: PortOption[] = [];
+    return getCompatiblePortsForPort(
+      patch,
+      frontend,
+      targetBlockId,
+      targetPortId,
+      direction === 'input',
+    )
+      .map((candidate): PortOption => {
+        const block = patch.blocks.get(candidate.blockId)!;
+        const blockDef = requireAnyBlockDef(block.type);
+        const searchDirection = direction === 'input' ? 'output' : 'input';
+        const portDef = searchDirection === 'input'
+          ? blockDef.inputs[candidate.portId]
+          : blockDef.outputs[candidate.portId];
 
-    // Determine which direction to search
-    // If target is INPUT, we search for OUTPUT ports
-    // If target is OUTPUT, we search for INPUT ports
-    const searchDirection = direction === 'input' ? 'output' : 'input';
-
-    for (const [blockId, block] of patch.blocks) {
-      const blockDef = requireAnyBlockDef(block.type);
-
-      const portsToCheck = searchDirection === 'input' ? blockDef.inputs : blockDef.outputs;
-
-      for (const [portId, port] of Object.entries(portsToCheck)) {
-        // portId comes from Object.entries
-
-        // Skip if this port is already connected
-        const isConnected =
-          searchDirection === 'input'
-            ? patch.edges.some((e) => e.to.blockId === blockId && e.to.slotId === portId)
-            : patch.edges.some((e) => e.from.blockId === blockId && e.from.slotId === portId);
-
-        if (isConnected) continue;
-
-        // Check type compatibility
-        let validationResult;
-        if (direction === 'input') {
-          // Target is INPUT, source is OUTPUT
-          validationResult = validateConnection(
-            blockId,
-            portId,
-            targetBlockId,
-            targetPortId,
-            patch,
-            resolvedPortTypeLookup,
-          );
-        } else {
-          // Target is OUTPUT, source is INPUT
-          validationResult = validateConnection(
-            targetBlockId,
-            targetPortId,
-            blockId,
-            portId,
-            patch,
-            resolvedPortTypeLookup,
-          );
-        }
-
-        const isCompatible = validationResult.valid;
-
-        options.push({
-          blockId,
-          blockName: block.displayName || blockDef.label,
-          portId: portId as PortId,
-          portLabel: port.label || portId,
-          typeDisplay: formatTypeForDisplay(port.type),
-          isCompatible,
-        });
-      }
-    }
-
-    // Sort: compatible first, then by block name
-    return options.sort((a, b) => {
-      if (a.isCompatible !== b.isCompatible) {
-        return a.isCompatible ? -1 : 1;
-      }
-      return a.blockName.localeCompare(b.blockName);
-    });
-  }, [patch, targetBlockId, targetPortId, direction, resolvedPortTypeLookup]);
-
-  // Only show compatible options
-  const compatibleOptions = portOptions.filter((opt) => opt.isCompatible);
+        return {
+          blockId: candidate.blockId,
+          blockName: candidate.blockLabel,
+          portId: candidate.portId,
+          portLabel: candidate.portLabel,
+          typeDisplay: portDef?.type ? formatTypeForDisplay(portDef.type) : '',
+          isCompatible: true,
+        };
+      })
+      .sort((a, b) => a.blockName.localeCompare(b.blockName));
+  }, [patch, frontend, targetBlockId, targetPortId, direction]);
 
   return (
     <div style={{ marginTop: '8px' }}>
       <Autocomplete
-        options={compatibleOptions}
+        options={portOptions}
         groupBy={(option) => option.blockName}
         getOptionLabel={(option) => `${option.portLabel} (${option.typeDisplay})`}
         renderInput={(params) => (

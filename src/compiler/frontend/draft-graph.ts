@@ -12,7 +12,6 @@
  */
 
 import type { BlockId, PortId, DefaultSource, BlockRole } from '../../types';
-import { defaultSourceConst } from '../../types';
 import type { Block, Edge, Patch } from '../../graph/Patch';
 import { getBlockDefinition, type InputDef } from '../../blocks/registry';
 import type { Obligation, ObligationId } from './obligations';
@@ -54,10 +53,10 @@ export type DraftEdgeRole =
 export interface DraftBlock {
   readonly id: string;
   readonly type: string;
-  /** Config-only params (exposedAsPort: false). Exposed port values live in portDefaults. */
+  /** Config-only params (exposedAsPort: false). Exposed input control lives on the port/authored state. */
   readonly params: Readonly<Record<string, unknown>>;
-  /** Per-instance default source overrides for exposed ports (from Patch params or InputPort.defaultSource). */
-  // [LAW:single-enforcer] buildDraftGraph is the single boundary that partitions user params into config vs port defaults.
+  /** Per-instance default source overrides for exposed ports (from authored control or legacy port defaultSource). */
+  // [LAW:single-enforcer] buildDraftGraph is the single boundary that bridges authored input control into frontend defaults.
   readonly portDefaults: Readonly<Record<string, DefaultSource>>;
   readonly origin: BlockOrigin;
   /** Display name (for diagnostics and UI bridge) */
@@ -159,7 +158,8 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
   const diagnostics: BuildDiagnostic[] = [];
 
   // Convert blocks — partition params into config vs portDefaults
-  // [LAW:single-enforcer] This is the one place that separates user params from port defaults.
+  // [LAW:single-enforcer] This is the one place that separates config params
+  // from exposed-input control state for frontend normalization.
   for (const [_blockId, block] of patch.blocks) {
     const origin: BlockOrigin = classifyBlockOrigin(block);
     const blockDef = getBlockDefinition(block.type);
@@ -168,8 +168,8 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
     const portDefaults: Record<string, DefaultSource> = {};
 
     if (blockDef) {
-      // Partition user-provided params into fallback writers while preserving
-      // canonical params on the block.
+      // Preserve config params only; exposed-input authored values are now
+      // owned on the input port instead of in block.params.
       for (const [key, val] of Object.entries(block.params)) {
         const inputDef = blockDef.inputs[key];
         if (!inputDef) {
@@ -177,13 +177,8 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
           diagnostics.push({ kind: 'UnknownParam', blockId: block.id, portName: key });
           continue;
         }
-        // [LAW:one-source-of-truth] Keep all user params in DraftBlock.params;
-        // fallback writer synthesis for exposed ports is derived from this map.
+        if (inputDef.exposedAsPort !== false) continue;
         filteredParams[key] = val;
-        if (inputDef.exposedAsPort !== false) {
-          // Exposed port — derive a Const fallback source from canonical params
-          portDefaults[key] = defaultSourceConst(val);
-        }
       }
 
       // Apply config defaults for config-only inputs not already in params.
@@ -199,13 +194,19 @@ export function buildDraftGraph(patch: Patch): BuildDraftGraphResult {
         }
       }
 
-      // Check InputPort.defaultSource overrides (from setPortDefault) — these take priority
+      // Check InputPort authored control/defaultSource overrides — these take priority
       for (const [portId, inputPort] of block.inputPorts) {
+        const authoredSource = inputPort.authoredControl?.source;
+        if (authoredSource) {
+          portDefaults[portId] = {
+            blockType: authoredSource.blockType,
+            output: authoredSource.outputPortId,
+            params: { ...authoredSource.params },
+          };
+          continue;
+        }
         if (inputPort.defaultSource) {
           portDefaults[portId] = inputPort.defaultSource;
-          if (inputPort.defaultSource.blockType === 'Const' && inputPort.defaultSource.output === 'out' && inputPort.defaultSource.params?.value !== undefined) {
-            filteredParams[portId] = inputPort.defaultSource.params.value;
-          }
         }
       }
     } else {

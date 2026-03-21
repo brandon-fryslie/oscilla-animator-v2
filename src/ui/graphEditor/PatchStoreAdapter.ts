@@ -243,9 +243,16 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
         ds = this.frontendStore.getDefaultSourceByIds(blockId, id);
       }
 
-      // If no snapshot data, fall back to instance override or registry default
+      // If no snapshot data, fall back to authored control, instance override,
+      // or registry seed.
       if (!ds) {
-        ds = port.defaultSource
+        ds = port.authoredControl?.source
+          ? {
+              blockType: port.authoredControl.source.blockType,
+              output: port.authoredControl.source.outputPortId,
+              params: { ...port.authoredControl.source.params },
+            }
+          : port.defaultSource
           ?? (blockDef?.inputs[id] as InputDef & { defaultSource?: DefaultSource } | undefined)?.defaultSource;
       }
 
@@ -259,14 +266,19 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
       const provenance = blockId && hasSnapshot
         ? this.frontendStore.getPortProvenanceByIds(blockId, id, 'in')
         : undefined;
+      const binding = blockId && hasSnapshot
+        ? this.frontendStore.getInputBindingByIds(blockId, id)
+        : undefined;
 
       portMap.set(id, {
         id: port.id,
         combineMode: port.combineMode,
+        authoredControl: port.authoredControl,
         defaultSource: ds,
         lenses: port.lenses,
         resolvedType,
         provenance,
+        binding,
       });
     }
 

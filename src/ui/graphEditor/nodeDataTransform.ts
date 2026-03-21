@@ -9,8 +9,9 @@
  */
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
-import type { BlockLike, EdgeLike, GraphDataAdapter } from './types';
+import type { BlockLike, EdgeLike, GraphDataAdapter, ParamData } from './types';
 import type { DefaultSource, UIControlHint } from '../../types';
+import type { BlockId } from '../../types';
 import type { LensAttachment } from '../../graph/Patch';
 import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
 import { FLOAT, canonicalType } from '../../core/canonical-types';
@@ -47,22 +48,6 @@ export interface PortData {
   lenses?: readonly LensAttachment[];
   resolvedType?: InferenceCanonicalType;
   provenance?: PortProvenance;
-}
-
-/**
- * Parameter data for ReactFlow rendering
- */
-export interface ParamData {
-  id: string;
-  label: string;
-  value: unknown;
-  hint?: UIControlHint;
-}
-
-function tryReadConstDefaultValue(defaultSource: DefaultSource | undefined): unknown {
-  if (!defaultSource) return undefined;
-  if (defaultSource.blockType !== 'Const' || defaultSource.output !== 'out') return undefined;
-  return defaultSource.params?.value;
 }
 
 /**
@@ -214,24 +199,31 @@ export function createNodeFromBlockLike(
     );
   }
 
-  // Build controllable params from one canonical source (block.params), with
-  // deterministic defaults derived at projection time for missing entries.
-  // [LAW:one-source-of-truth] Node controls read/edit canonical params only.
+  // Build inline controls from frontend-derived binding semantics for exposed
+  // inputs, plus direct block config for config-only inputs.
+  // [LAW:one-source-of-truth] Binding controls come from the frontend semantic
+  // snapshot; config controls write directly to the owning block params.
   const paramsById = new Map<string, ParamData>();
   for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
     const isExposedPort = inputDef.exposedAsPort !== false;
     const isConnected = inputConnections.has(inputId);
-    if (isExposedPort && isConnected) continue;
+    if (isExposedPort) {
+      if (isConnected) continue;
 
-    const portState = block.inputPorts.get(inputId);
-    const effectiveDefaultSource = portState?.defaultSource
-      ?? (inputDef as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+      const bindingControls = block.inputPorts.get(inputId)?.binding?.controls ?? [];
+      for (const control of bindingControls) {
+        paramsById.set(`${inputId}:${control.id}`, {
+          id: `${inputId}:${control.id}`,
+          label: control.label,
+          value: control.value,
+          hint: control.hint,
+          target: control.target,
+        });
+      }
+      continue;
+    }
 
-    const fromParam = block.params[inputId];
-    const fromConstDefault = tryReadConstDefaultValue(effectiveDefaultSource);
-    const fromDefinitionDefault = inputDef.defaultValue;
-    const value = fromParam ?? fromConstDefault ?? fromDefinitionDefault;
-
+    const value = block.params[inputId] ?? inputDef.defaultValue;
     if (value === undefined) continue;
 
     paramsById.set(inputId, {
@@ -239,6 +231,11 @@ export function createNodeFromBlockLike(
       label: inputDef.label || inputId,
       value,
       hint: inputDef.uiHint,
+      target: {
+        kind: 'blockParam',
+        blockId: block.id as BlockId,
+        paramId: inputId,
+      },
     });
   }
 
@@ -251,6 +248,11 @@ export function createNodeFromBlockLike(
       id: paramId,
       label: paramId,
       value,
+      target: {
+        kind: 'blockParam',
+        blockId: block.id as BlockId,
+        paramId,
+      },
     });
   }
   const params = Array.from(paramsById.values());

@@ -46,16 +46,13 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
-import {
-  validateConnection,
-  type PortTypeLookupFn,
-  type TypeValidationIssue,
-} from '../reactFlowEditor/typeValidation';
+import { validateSemanticConnection } from '../authoring/semanticQueries';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import type { DebugStore } from '../../stores/DebugStore';
+import type { FrontendResultStore } from '../../stores/FrontendResultStore';
 import type { Patch } from '../../graph/Patch';
 import { blockId } from '../../types';
 import './GraphEditorCore.css';
@@ -101,6 +98,7 @@ export interface GraphEditorCoreProps {
   portHighlight?: PortHighlightStore | null;
   diagnostics?: DiagnosticsStore | null;
   debug?: DebugStore | null;
+  frontend?: FrontendResultStore | null;
 
   /** Optional patch (for connection validation - needed by validateConnection) */
   patch?: Patch | null;
@@ -185,6 +183,7 @@ export const GraphEditorCoreInner = observer(
         portHighlight = null,
         diagnostics = null,
         debug = null,
+        frontend = null,
         patch = null,
         nodeTypes: customNodeTypes,
         onEditorReady,
@@ -247,20 +246,6 @@ export const GraphEditorCoreInner = observer(
           });
         },
         [diagnostics]
-      );
-
-      const resolvedPortTypeLookup = useCallback<PortTypeLookupFn>(
-        (blockId, portId, direction) => {
-          const blocksById = adapter.blocks as ReadonlyMap<string, BlockLike>;
-          const block = blocksById.get(blockId);
-          if (!block) {
-            return undefined;
-          }
-          return direction === 'input'
-            ? block.inputPorts.get(portId)?.resolvedType
-            : block.outputPorts.get(portId)?.resolvedType;
-        },
-        [adapter]
       );
 
       const projectGraphSnapshot = useCallback(
@@ -345,15 +330,6 @@ export const GraphEditorCoreInner = observer(
         [adapter, mergedFeatures, onPortContextMenu, selection, portHighlight, diagnostics, debug]
       );
 
-      const reportTypeValidationIssue = useCallback((issue: TypeValidationIssue): void => {
-        // [LAW:single-enforcer] GraphEditorCore is the UI boundary that forwards
-        // type-validation projection warnings into diagnostics.
-        diagnostics?.log({
-          level: issue.level,
-          message: issue.message,
-        });
-      }, [diagnostics]);
-
       // -------------------------------------------------------------------------
       // Event Handlers - Adapter Integration
       // -------------------------------------------------------------------------
@@ -429,18 +405,17 @@ export const GraphEditorCoreInner = observer(
           if (!connection.source || !connection.target) return false;
           if (!patch) return true; // No patch - skip validation
 
-          const result = validateConnection(
+          const result = validateSemanticConnection(
+            patch,
             connection.source,
             connection.sourceHandle || '',
             connection.target,
             connection.targetHandle || '',
-            patch,
-            resolvedPortTypeLookup,
-            reportTypeValidationIssue,
+            { frontend: frontend ?? undefined },
           );
           return result.valid;
         },
-        [patch, resolvedPortTypeLookup, reportTypeValidationIssue]
+        [frontend, patch]
       );
 
       // -------------------------------------------------------------------------

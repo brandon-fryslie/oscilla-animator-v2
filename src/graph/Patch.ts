@@ -122,6 +122,35 @@ export interface LensAttachment {
 }
 
 // =============================================================================
+// Authored Control State
+// =============================================================================
+
+/**
+ * Canonical authored source owned by an exposed input port.
+ *
+ * // [LAW:one-source-of-truth] Exposed-input authored values have one typed
+ * owner on the port instead of being inferred from block.params.
+ */
+export interface AuthoredControlSource {
+  readonly id: 'source';
+  readonly blockType: string;
+  readonly outputPortId: string;
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Canonical authored control state for an exposed input port.
+ *
+ * NOTE:
+ * - CTRL-AUTH-02 migrates source ownership here.
+ * - CTRL-AUTH-04 will migrate lens ownership into this structure.
+ */
+export interface AuthoredInputControl {
+  readonly ownerId: `${BlockId}:${PortId}`;
+  readonly source: AuthoredControlSource | null;
+}
+
+// =============================================================================
 // Port Types
 // =============================================================================
 
@@ -138,6 +167,8 @@ export interface LensAttachment {
 export interface InputPort {
   /** Port ID (slotId from registry) */
   readonly id: string;
+  /** Canonical authored control ownership for this input port. */
+  readonly authoredControl?: AuthoredInputControl;
   /** Per-instance default source override (undefined = use registry default) */
   readonly defaultSource?: DefaultSource;
   /**
@@ -341,8 +372,35 @@ export class PatchBuilder {
         }
         continue;
       }
-      // Don't set combineMode - defaults to 'last' when undefined
-      inputPorts.set(inputId, { id: inputId, combineMode: 'last' });
+      const authoredSource = inputDef.defaultSource
+        ? {
+            id: 'source' as const,
+            blockType: inputDef.defaultSource.blockType,
+            outputPortId: inputDef.defaultSource.output,
+            params: Object.freeze({ ...(inputDef.defaultSource.params ?? {}) }),
+          }
+        : inputDef.defaultValue !== undefined
+          ? {
+              id: 'source' as const,
+              blockType: 'Const',
+              outputPortId: 'out',
+              params: Object.freeze({ value: inputDef.defaultValue }),
+            }
+          : null;
+      // [LAW:single-enforcer] PatchBuilder applies block-definition control
+      // seeds once at creation instead of making downstream readers infer them.
+      inputPorts.set(inputId, {
+        id: inputId,
+        combineMode: 'last',
+        ...(authoredSource
+          ? {
+              authoredControl: {
+                ownerId: `${id}:${inputId as PortId}` as `${BlockId}:${PortId}`,
+                source: authoredSource,
+              },
+            }
+          : {}),
+      });
     }
 
     // Create output ports from registry
@@ -395,11 +453,15 @@ export class PatchBuilder {
 
     const newPort = {
       ...port,
-      defaultSource: {
-        blockType: 'Const' as const,
-        output: 'out',
-        params: { value }
-      }
+      authoredControl: {
+        ownerId: `${blockId}:${portId as PortId}` as `${BlockId}:${PortId}`,
+        source: {
+          id: 'source' as const,
+          blockType: 'Const',
+          outputPortId: 'out',
+          params: Object.freeze({ value }),
+        },
+      },
     };
     const newPorts = new Map(block.inputPorts);
     newPorts.set(portId, newPort);

@@ -36,6 +36,14 @@ describe('Frontend Pipeline Integration', () => {
     // Verify hasDefaultSource returns true
     expect(store.hasDefaultSource(rxAddr)).toBe(true);
     expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(true);
+
+    const binding = store.getInputBindingByIds(ellipseId!, 'rx');
+    expect(binding?.kind).toBe('resolved');
+    expect(binding?.sourceKind).toBe('defaultSource');
+    expect(binding?.controls).toHaveLength(1);
+    expect(binding?.controls[0]?.label).toBe('Radius X');
+    expect(binding?.controls[0]?.value).toBe(0.02);
+    expect(binding?.controls[0]?.target.kind).toBe('bindingSourceParam');
   });
 
   it('connected port has userEdge provenance in snapshot', () => {
@@ -64,6 +72,12 @@ describe('Frontend Pipeline Integration', () => {
     // Verify hasDefaultSource returns false (connected, not default)
     expect(store.hasDefaultSource(rxAddr)).toBe(false);
     expect(store.hasDefaultSourceByIds(ellipseId!, 'rx')).toBe(false);
+
+    const binding = store.getInputBindingByIds(ellipseId!, 'rx');
+    expect(binding?.kind).toBe('resolved');
+    expect(binding?.sourceKind).toBe('userEdge');
+    expect(binding?.sourceBlockType).toBe('Const');
+    expect(binding?.controls[0]?.target.kind).toBe('blockParam');
   });
 
   it('resolves types from frontend for both inputs and outputs', () => {

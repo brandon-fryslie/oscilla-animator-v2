@@ -9,7 +9,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Checkbox, FormControlLabel, Select, MenuItem, Typography, Box, type SelectChangeEvent } from '@mui/material';
-import type { BlockId, UIControlHint } from '../../types';
+import type { UIControlHint } from '../../types';
+import type { ControlMutationTarget } from '../../types/control-target';
 import { useStores } from '../../stores';
 import { SliderWithInput } from '../components/common';
 
@@ -17,18 +18,17 @@ import { SliderWithInput } from '../components/common';
  * Props for parameter control components.
  */
 export interface ParameterControlProps {
-  blockId: BlockId;
-  paramId: string;
   label: string;
   value: unknown;
   hint?: UIControlHint;
+  target: ControlMutationTarget;
 }
 
 /**
  * Float parameter control with slider.
  * Debounces updates to avoid excessive PatchStore writes.
  */
-export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value, hint }) => {
+export const FloatControl: React.FC<ParameterControlProps> = ({ label, value, hint, target }) => {
   const { patch } = useStores();
   const numValue = typeof value === 'number' ? value : 0;
 
@@ -62,9 +62,9 @@ export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId
     }
 
     updateTimerRef.current = window.setTimeout(() => {
-      patch.updateBlockParams(blockId, { [paramId]: val });
+      patch.updateControlValue(target, val);
     }, 16);
-  }, [blockId, paramId, patch]);
+  }, [patch, target]);
 
   return (
     <Box sx={{ mb: 0.5 }} onPointerDown={(e) => e.stopPropagation()} className="nodrag">
@@ -88,13 +88,13 @@ export const FloatControl: React.FC<ParameterControlProps> = ({ blockId, paramId
  * Boolean parameter control with checkbox.
  * Updates immediately (no debouncing needed for binary values).
  */
-export const BoolControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value }) => {
+export const BoolControl: React.FC<ParameterControlProps> = ({ label, value, target }) => {
   const { patch } = useStores();
   const boolValue = Boolean(value);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    patch.updateBlockParams(blockId, { [paramId]: e.target.checked });
-  }, [blockId, paramId, patch]);
+    patch.updateControlValue(target, e.target.checked);
+  }, [patch, target]);
 
   return (
     <FormControlLabel
@@ -118,7 +118,7 @@ export const BoolControl: React.FC<ParameterControlProps> = ({ blockId, paramId,
  * Enum parameter control with dropdown select.
  * Updates immediately on selection change.
  */
-export const EnumControl: React.FC<ParameterControlProps> = ({ blockId, paramId, label, value, hint }) => {
+export const EnumControl: React.FC<ParameterControlProps> = ({ label, value, hint, target }) => {
   const { patch } = useStores();
   const stringValue = String(value ?? '');
 
@@ -126,8 +126,8 @@ export const EnumControl: React.FC<ParameterControlProps> = ({ blockId, paramId,
   const options = hint && hint.kind === 'select' ? hint.options : [];
 
   const handleChange = useCallback((e: SelectChangeEvent<string>) => {
-    patch.updateBlockParams(blockId, { [paramId]: e.target.value });
-  }, [blockId, paramId, patch]);
+    patch.updateControlValue(target, e.target.value);
+  }, [patch, target]);
 
   if (options.length === 0) {
     return (
