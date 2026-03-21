@@ -15,6 +15,7 @@
  */
 
 import type { Patch } from '../../graph';
+import type { Vec2 } from '../../core/types';
 import type { Diagnostic, DiagnosticAction } from '../types';
 import { generateDiagnosticId } from '../diagnosticId';
 import { validateDisplayNameUniqueness } from '../../core/canonical-name';
@@ -361,6 +362,22 @@ function validateOutputUsage(patch: Patch, patchRevision: number): Diagnostic[] 
 // Const Block Value Representation Validator
 // =============================================================================
 
+function hasNumericProperty(value: object, property: string): boolean {
+  return typeof Reflect.get(value, property) === 'number';
+}
+
+function isVec2Value(value: object): value is Vec2 {
+  return hasNumericProperty(value, 'x') && hasNumericProperty(value, 'y');
+}
+
+function isOklchColorValue(value: object): boolean {
+  if (!hasNumericProperty(value, 'h')) return false;
+  if (!hasNumericProperty(value, 'c')) return false;
+  if (!hasNumericProperty(value, 'l')) return false;
+  if (!('a' in value)) return true;
+  return hasNumericProperty(value, 'a');
+}
+
 /**
  * Validates that Const block values match their resolved payload type.
  *
@@ -384,7 +401,9 @@ function validateConstValueRepresentation(patch: Patch, patchRevision: number): 
   for (const block of patch.blocks.values()) {
     if (block.type !== 'Const') continue;
 
-    const payloadType = block.params?.payloadType as string | undefined;
+    const payloadType = typeof block.params?.payloadType === 'string'
+      ? block.params.payloadType
+      : '';
     const rawValue = block.params?.value;
 
     // Skip validation if type not yet resolved
@@ -422,24 +441,19 @@ function validateConstValueRepresentation(patch: Patch, patchRevision: number): 
             isValid = typeof parsed === 'object' && parsed !== null &&
               typeof parsed.x === 'number' && typeof parsed.y === 'number';
           } else if (typeof rawValue === 'object' && rawValue !== null) {
-            const obj = rawValue as any;
-            isValid = typeof obj.x === 'number' && typeof obj.y === 'number';
+            isValid = isVec2Value(rawValue);
           }
           if (!isValid) errorMsg = `Value must be {x: number, y: number}`;
           break;
         }
         case 'color': {
-          // Accept hex strings or objects with r,g,b,a properties
+          // [LAW:one-source-of-truth] Canonical color payload values are OKLCH.
           if (typeof rawValue === 'string') {
-            // Simple check: hex format #RRGGBB or #RRGGBBAA
-            isValid = /^#[0-9A-F]{6}([0-9A-F]{2})?$/i.test(rawValue);
+            isValid = /^oklch\([^)]*\)$/i.test(rawValue.trim());
           } else if (typeof rawValue === 'object' && rawValue !== null) {
-            const obj = rawValue as any;
-            isValid = typeof obj.r === 'number' && typeof obj.g === 'number' &&
-              typeof obj.b === 'number' &&
-              (obj.a === undefined || typeof obj.a === 'number');
+            isValid = isOklchColorValue(rawValue);
           }
-          if (!isValid) errorMsg = `Value must be hex color (#RRGGBB) or {r,g,b,a} object`;
+          if (!isValid) errorMsg = `Value must be oklch(...) or {h,c,l,a?}`;
           break;
         }
         case 'shape': {

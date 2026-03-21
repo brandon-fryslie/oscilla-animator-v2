@@ -15,7 +15,7 @@
  */
 
 import { makeAutoObservable, reaction, observable } from 'mobx';
-import type { SettingsToken } from '../settings/types';
+import type { SettingsShape, SettingsToken } from '../settings/types';
 import {
   resolveLocalStorageCapability,
   type LocalStorageCapability,
@@ -30,7 +30,7 @@ export interface SettingsStoreIssue {
   readonly level: SettingsStoreIssueLevel;
   readonly message: string;
   readonly namespace?: string;
-  readonly detail?: unknown;
+  readonly detail?: string;
 }
 
 export class SettingsStore {
@@ -38,13 +38,13 @@ export class SettingsStore {
    * Registry of all settings tokens by namespace.
    * Map<namespace, token>
    */
-  private tokens = new Map<string, SettingsToken<any>>();
+  private tokens = new Map<string, SettingsToken<SettingsShape>>();
 
   /**
    * Current settings values by namespace.
    * Map<namespace, observable values object>
    */
-  private values = new Map<string, Record<string, unknown>>();
+  private values = new Map<string, SettingsShape>();
 
   /**
    * Disposers for auto-persist reactions, one per namespace.
@@ -75,7 +75,7 @@ export class SettingsStore {
    *
    * @param token - Settings token to register
    */
-  register<T extends Record<string, unknown>>(token: SettingsToken<T>): void {
+  register<T extends SettingsShape>(token: SettingsToken<T>): void {
     // Already registered - idempotent
     if (this.tokens.has(token.namespace)) {
       return;
@@ -102,7 +102,7 @@ export class SettingsStore {
    * @param token - Settings token
    * @returns Observable values object typed as T
    */
-  get<T extends Record<string, unknown>>(token: SettingsToken<T>): T {
+  get<T extends SettingsShape>(token: SettingsToken<T>): T {
     const values = this.values.get(token.namespace);
     if (!values) {
       throw new Error(
@@ -119,7 +119,7 @@ export class SettingsStore {
    * @param token - Settings token
    * @param partial - Partial values to update
    */
-  update<T extends Record<string, unknown>>(
+  update<T extends SettingsShape>(
     token: SettingsToken<T>,
     partial: Partial<T>
   ): void {
@@ -139,7 +139,7 @@ export class SettingsStore {
    *
    * @param token - Settings token
    */
-  reset<T extends Record<string, unknown>>(token: SettingsToken<T>): void {
+  reset<T extends SettingsShape>(token: SettingsToken<T>): void {
     const values = this.values.get(token.namespace);
     if (!values) {
       throw new Error(
@@ -156,7 +156,7 @@ export class SettingsStore {
    * Gets all registered tokens (for UI rendering).
    * Returns array sorted by ui.order.
    */
-  getRegisteredTokens(): Array<SettingsToken<any>> {
+  getRegisteredTokens(): Array<SettingsToken<SettingsShape>> {
     return Array.from(this.tokens.values()).sort(
       (a, b) => a.ui.order - b.ui.order
     );
@@ -167,9 +167,9 @@ export class SettingsStore {
    * Returns merged defaults + stored values.
    * Returns defaults if localStorage is empty or corrupt.
    */
-  private loadFromStorage<T extends Record<string, unknown>>(
+  private loadFromStorage<T extends SettingsShape>(
     token: SettingsToken<T>
-  ): Record<string, unknown> {
+  ): SettingsShape {
     if (!this.storage) {
       return { ...token.defaults };
     }
@@ -183,11 +183,12 @@ export class SettingsStore {
       return { ...token.defaults, ...stored };
     } catch (err) {
       // Corrupt data - use defaults
+      const issueDetail = err instanceof Error ? err : String(err);
       this.reportIssue(
         'warn',
         `Failed to load settings, using defaults`,
         token.namespace,
-        err
+        issueDetail
       );
       return { ...token.defaults };
     }
@@ -199,11 +200,11 @@ export class SettingsStore {
    * - Extra keys are dropped
    * - Returns a clean object with only valid keys
    */
-  private validateSchema<T extends Record<string, unknown>>(
-    loaded: Record<string, unknown>,
+  private validateSchema<T extends SettingsShape>(
+    loaded: SettingsShape,
     defaults: T
-  ): Record<string, unknown> {
-    const validated: Record<string, unknown> = {};
+  ): SettingsShape {
+    const validated: SettingsShape = {};
 
     // Copy only keys that exist in defaults
     for (const key of Object.keys(defaults)) {
@@ -230,7 +231,8 @@ export class SettingsStore {
           const key = `${STORAGE_PREFIX}${namespace}`;
           this.storage.setItem(key, serialized);
         } catch (err) {
-          this.reportIssue('warn', 'Failed to persist settings', namespace, err);
+          const issueDetail = err instanceof Error ? err : String(err);
+          this.reportIssue('warn', 'Failed to persist settings', namespace, issueDetail);
         }
       },
       { delay: PERSIST_DEBOUNCE_MS }
@@ -252,10 +254,26 @@ export class SettingsStore {
     level: SettingsStoreIssueLevel,
     message: string,
     namespace?: string,
-    detail?: unknown
+    detail?: Error | object | string | number | boolean
   ): void {
-    const issue: SettingsStoreIssue = { level, message, namespace, detail };
+    const issue: SettingsStoreIssue = {
+      level,
+      message,
+      namespace,
+      detail: detail === undefined ? undefined : formatIssueDetail(detail),
+    };
     this.lastIssue = issue;
     this.issueReporter?.(issue);
+  }
+}
+
+function formatIssueDetail(detail: Error | object | string | number | boolean): string {
+  if (detail instanceof Error) return detail.message;
+  if (typeof detail === 'string') return detail;
+  if (typeof detail === 'number' || typeof detail === 'boolean') return String(detail);
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
   }
 }

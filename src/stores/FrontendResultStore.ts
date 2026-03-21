@@ -18,7 +18,7 @@ import type { CanonicalType } from '../core/canonical-types';
 import type { FrontendResult, CycleSummary, FrontendError } from '../compiler/frontend';
 import type { NormalizedPatch } from '../compiler/frontend/normalize-indexing';
 import type { TypedPatch } from '../compiler/ir/patches';
-import type { BlockId, DefaultSource, PortId, TransformStep } from '../types';
+import { type BlockId, type DefaultSource, type PortId, type TransformStep } from '../types';
 import { addressToString } from '../types/canonical-address';
 import { normalizeCanonicalName } from '../core/canonical-name';
 
@@ -118,6 +118,13 @@ function outputAddressKey(blockId: string, portId: string): string {
     canonicalName: blockCanonicalName(blockId),
     portId: portId as PortId,
   });
+}
+
+function findNormalizedBlockIndex(normalizedPatch: NormalizedPatch, blockIdStr: string): number {
+  for (const [candidateBlockId, candidateIndex] of normalizedPatch.blockIndex) {
+    if (candidateBlockId === blockIdStr) return candidateIndex;
+  }
+  return -1;
 }
 
 // =============================================================================
@@ -346,13 +353,23 @@ export class FrontendResultStore {
       blocksById.set(block.id as string, block);
     }
 
+    type PortTypeLookup =
+      | { readonly found: true; readonly value: CanonicalType }
+      | { readonly found: false };
+
     // Helper to resolve a port type from TypedPatch
-    const resolvePortType = (blockId: string, portName: string, dir: 'in' | 'out'): CanonicalType | undefined => {
-      if (!typedPatch?.portTypes) return undefined;
-      const idx = normalizedPatch.blockIndex.get(blockId as any);
-      if (idx === undefined) return undefined;
-      const key = `${idx}:${portName}:${dir}`;
-      return typedPatch.portTypes.get(key as any);
+    const resolvePortType = (blockIdStr: string, portName: string, dir: 'in' | 'out'): PortTypeLookup => {
+      if (!typedPatch?.portTypes) return { found: false };
+      const idx = findNormalizedBlockIndex(normalizedPatch, blockIdStr);
+      if (idx < 0) return { found: false };
+      for (const [portKey, portType] of typedPatch.portTypes) {
+        const [blockIndexStr, keyPortName, keyDir] = portKey.split(':');
+        if (Number(blockIndexStr) !== idx) continue;
+        if (keyPortName !== portName) continue;
+        if (keyDir !== dir) continue;
+        return { found: true, value: portType };
+      }
+      return { found: false };
     };
 
     // Helper to build transform chain for an edge.
@@ -412,7 +429,7 @@ export class FrontendResultStore {
         const outType = resolvePortType(nextBlockId, outPortId, 'out');
 
         // Determine if this is a lens or adapter based on block ID pattern
-        const isLens = (nextBlockId as string).startsWith('_lens_');
+        const isLens = nextBlockId.startsWith('_lens_');
 
         if (isLens) {
           chain.push({
@@ -422,11 +439,11 @@ export class FrontendResultStore {
               params: {},
             },
           });
-        } else if (inType && outType) {
+        } else if (inType.found && outType.found) {
           chain.push({
             kind: 'adapter',
-            from: inType,
-            to: outType,
+            from: inType.value,
+            to: outType.value,
             adapter: intermediateBlock.type,
           });
         }
@@ -459,8 +476,8 @@ export class FrontendResultStore {
             output: edge.fromPort,
             params: sourceBlock?.params,
           },
-          sourceType,
-          targetType,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else if (edge.role === 'implicitCoerce') {
@@ -468,15 +485,15 @@ export class FrontendResultStore {
         map.set(targetAddrStr, {
           kind: 'adapter',
           adapterType: sourceBlock?.type ?? 'Adapter',
-          sourceType,
-          targetType,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else if (edge.role === 'userWire') {
         map.set(targetAddrStr, {
           kind: 'userEdge',
-          sourceType,
-          targetType,
+          sourceType: sourceType.found ? sourceType.value : undefined,
+          targetType: targetType.found ? targetType.value : undefined,
           chain,
         });
       } else {

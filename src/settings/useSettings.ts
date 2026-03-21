@@ -20,7 +20,7 @@
 import { useCallback, useRef } from 'react';
 import { runInAction } from 'mobx';
 import { useStore } from '../stores';
-import type { SettingsToken } from './types';
+import type { SettingsShape, SettingsToken } from './types';
 
 /**
  * Hook to access settings for a specific token.
@@ -30,7 +30,7 @@ import type { SettingsToken } from './types';
  *   - values: Observable settings object (typed as T)
  *   - update: Function to apply partial updates
  */
-export function useSettings<T extends Record<string, unknown>>(
+export function useSettings<T extends SettingsShape>(
   token: SettingsToken<T>
 ): [T, (partial: Partial<T>) => void] {
   const settingsStore = useStore('settings');

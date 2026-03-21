@@ -125,7 +125,7 @@ function renderScalarFull(value: number, props: FloatRendererProps): React.React
   }
 
   // Check for out-of-range warnings (phase should be 0-1)
-  if (props.unit.kind === 'angle' && (props.unit as any).unit === 'turns') {
+  if (props.unit.kind === 'angle' && props.unit.unit === 'turns') {
     if (value < 0 || value > 1) {
       children.push(
         React.createElement('div', { key: 'warn', style: styles.warnBadge }, '⚠ Out of range [0, 1]')

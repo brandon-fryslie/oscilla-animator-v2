@@ -22,8 +22,42 @@ import { normalizeCanonicalName } from '../core/canonical-name';
 import { deriveEdgeAlias } from '../graph/edge-alias';
 import { getBlockDefinition } from '../blocks/registry';
 import { toIdentifier } from './serialize';
-import type { BlockId, CombineMode } from '../types';
-import { canonicalizeCombineMode } from '../types';
+import type { BlockId, BlockRole, CombineMode, DefaultSource } from '../types';
+import {
+  canonicalizeCombineMode,
+  defaultSourceConst,
+  userRole,
+  timeRootRole,
+  busRole,
+  domainRole,
+  rendererRole,
+} from '../types';
+
+type HclNullValue = { readonly kind: 'hclNull' };
+interface HclObjectValue {
+  readonly [key: string]: HclJsValue;
+}
+type HclJsValue =
+  | string
+  | number
+  | boolean
+  | HclNullValue
+  | HclObjectValue
+  | readonly HclJsValue[];
+
+const HCL_NULL_VALUE: HclNullValue = { kind: 'hclNull' };
+
+function isHclNullValue(value: HclJsValue): value is HclNullValue {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Reflect.get(value, 'kind') === 'hclNull';
+}
+
+function isHclObject(value: HclJsValue): value is HclObjectValue {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && !isHclNullValue(value);
+}
 
 /**
  * A deferred inline edge collected during Phase 1 block processing.
@@ -253,11 +287,11 @@ function processBlock(
 
   // Extract role
   const roleAttr = hclBlock.attributes.role;
-  const role = roleAttr ? { kind: convertHclValue(roleAttr) as string, meta: {} } : { kind: 'user', meta: {} };
+  const role = parseBlockRole(roleAttr ? convertHclValue(roleAttr) : 'user', warnings, hclBlock.pos);
 
   // Extract domain
   const domainIdAttr = hclBlock.attributes.domain;
-  const domainId = domainIdAttr ? convertHclValue(domainIdAttr) as string : null;
+  const domainId = domainIdAttr ? parseStringValue(convertHclValue(domainIdAttr), '') : null;
 
   // Build ports from registry defaults
   const blockDef = getBlockDefinition(type);
@@ -301,7 +335,11 @@ function processBlock(
                 combineMode: canonicalizeCombineMode(convertHclValue(combineModeAttr) as CombineMode),
               }
             : {}),
-          ...(defaultSourceAttr ? { defaultSource: convertHclValue(defaultSourceAttr) as any } : {}),
+          ...(defaultSourceAttr
+            ? {
+                defaultSource: parseDefaultSource(convertHclValue(defaultSourceAttr), warnings, child.pos),
+              }
+            : {}),
         };
         inputPorts.set(portId, newPort);
       } else {
@@ -322,11 +360,11 @@ function processBlock(
       } else if (!sourceAddressAttr) {
         warnings.push(new PatchDslWarning(`Lens block missing sourceAddress: "${lensType}"`, child.pos));
       } else {
-        const portId = convertHclValue(portAttr) as string;
-        const sourceAddress = convertHclValue(sourceAddressAttr) as string;
+        const portId = parseStringValue(convertHclValue(portAttr), '');
+        const sourceAddress = parseStringValue(convertHclValue(sourceAddressAttr), '');
 
         // Extract lens params (exclude reserved attributes)
-        const lensParams: Record<string, unknown> = {};
+        const lensParams: Record<string, HclJsValue> = {};
         for (const [key, value] of Object.entries(child.attributes)) {
           if (key !== 'port' && key !== 'sourceAddress') {
             lensParams[key] = convertHclValue(value);
@@ -361,12 +399,80 @@ function processBlock(
     params,
     displayName: finalDisplayName,
     domainId,
-    role: role as any,
+    role,
     inputPorts,
     outputPorts,
   };
 
   return block;
+}
+
+function parseStringValue(value: HclJsValue, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function parseDefaultSource(
+  value: HclJsValue,
+  warnings: PatchDslWarning[],
+  pos: Position,
+): DefaultSource {
+  if (!isHclObject(value)) {
+    return defaultSourceConst(value);
+  }
+  const blockTypeValue = Reflect.get(value, 'blockType');
+  const outputValue = Reflect.get(value, 'output');
+  const paramsValue = Reflect.get(value, 'params');
+  if (typeof blockTypeValue !== 'string' || typeof outputValue !== 'string') {
+    warnings.push(
+      new PatchDslWarning(
+        'Invalid defaultSource object; expected { blockType: string, output: string, params?: object }',
+        pos,
+      ),
+    );
+    return defaultSourceConst(value);
+  }
+  if (paramsValue === undefined) {
+    return {
+      blockType: blockTypeValue,
+      output: outputValue,
+    };
+  }
+  if (!isHclObject(paramsValue)) {
+    warnings.push(
+      new PatchDslWarning(
+        'Invalid defaultSource.params; expected object when provided',
+        pos,
+      ),
+    );
+    return defaultSourceConst(value);
+  }
+  return {
+    blockType: blockTypeValue,
+    output: outputValue,
+    params: { ...paramsValue },
+  };
+}
+
+function parseBlockRole(value: HclJsValue, warnings: PatchDslWarning[], pos: Position): BlockRole {
+  if (typeof value !== 'string') {
+    warnings.push(new PatchDslWarning(`Invalid role value "${String(value)}", using "user"`, pos));
+    return userRole();
+  }
+  switch (value) {
+    case 'user':
+      return userRole();
+    case 'timeRoot':
+      return timeRootRole();
+    case 'bus':
+      return busRole();
+    case 'domain':
+      return domainRole();
+    case 'renderer':
+      return rendererRole();
+    default:
+      warnings.push(new PatchDslWarning(`Unknown role "${value}", using "user"`, pos));
+      return userRole();
+  }
 }
 
 /**
@@ -417,15 +523,15 @@ function formatHclValue(value: HclValue): string {
  * @param value - HCL value node
  * @returns JavaScript value
  */
-function convertHclValue(value: HclValue): unknown {
+function convertHclValue(value: HclValue): HclJsValue {
   switch (value.kind) {
     case 'number': return value.value;
     case 'string': return value.value;
     case 'bool': return value.value;
-    case 'null': return null;
+    case 'null': return HCL_NULL_VALUE;
     case 'reference': return value.parts.join('.');  // Convert to string
     case 'object': {
-      const obj: Record<string, unknown> = {};
+      const obj: Record<string, HclJsValue> = {};
       for (const [k, v] of Object.entries(value.entries)) {
         obj[k] = convertHclValue(v);
       }

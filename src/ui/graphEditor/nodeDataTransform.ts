@@ -19,6 +19,7 @@ import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValid
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { lensTargetsConnection } from '../reactFlowEditor/lensUtils';
 import type { PortProvenance } from '../../stores/FrontendResultStore';
+import type { Diagnostic } from '../../diagnostics/types';
 
 /**
  * Connection info for a port
@@ -287,7 +288,7 @@ export function createNodeFromBlockLike(
 export function createEdgeFromEdgeLike(
   edge: EdgeLike,
   blocks?: ReadonlyMap<string, BlockLike>,
-  diagnosticsGetter?: (edge: EdgeLike) => any[]
+  diagnosticsGetter?: (edge: EdgeLike) => Diagnostic[]
 ): ReactFlowEdge<OscillaEdgeData> | null {
   // Look up lenses from target port
   const sourceBlock = blocks?.get(edge.sourceBlockId);
@@ -340,7 +341,7 @@ export function reconcileNodesFromAdapter(
   adapter: GraphDataAdapter,
   currentNodes: Node[],
   getBlockPosition: (blockId: string) => { x: number; y: number } | undefined,
-  diagnosticsGetter?: (edge: EdgeLike) => any[],
+  diagnosticsGetter?: (edge: EdgeLike) => Diagnostic[],
   onProjectionIssue?: (issue: { kind: 'missingBlockDef'; blockId: string; blockType: string }) => void,
 ): { nodes: Node[]; edges: ReactFlowEdge[]; droppedInvalidEdgeIds: readonly string[] } {
   // Build map of existing nodes by ID for fast lookup

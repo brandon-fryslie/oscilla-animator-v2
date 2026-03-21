@@ -17,6 +17,7 @@ import {
 import { type CompositeBlockDef, isCompositeBlockDef } from '../../blocks/composite-types';
 import { useEditor } from '../editorCommon';
 import { resolveLocalStorageCapability } from '../../services/local-storage-capability';
+import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import './BlockLibrary.css';
 
 // Type aliases for clarity
@@ -32,7 +33,7 @@ const SEARCH_DEBOUNCE_MS = 150;
 /**
  * Load collapsed categories from localStorage.
  */
-function loadCollapsedCategories(diagnostics: any): Set<BlockCategory> {
+function loadCollapsedCategories(diagnostics: Pick<DiagnosticsStore, 'log'>): Set<BlockCategory> {
   try {
     // [LAW:single-enforcer] localStorage capability detection is centralized.
     const storage = resolveLocalStorageCapability();
@@ -54,7 +55,7 @@ function loadCollapsedCategories(diagnostics: any): Set<BlockCategory> {
 /**
  * Save collapsed categories to localStorage.
  */
-function saveCollapsedCategories(collapsed: Set<BlockCategory>, diagnostics: any): void {
+function saveCollapsedCategories(collapsed: Set<BlockCategory>, diagnostics: Pick<DiagnosticsStore, 'log'>): void {
   try {
     // [LAW:single-enforcer] localStorage capability detection is centralized.
     const storage = resolveLocalStorageCapability();

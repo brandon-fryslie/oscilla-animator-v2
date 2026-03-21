@@ -1721,7 +1721,6 @@ function bindMaterializeScope(args: {
 
 // [LAW:dataflow-not-control-flow] Kernel lowering stays data-driven via one
 // dispatch function; per-kind variability lives in expression values.
-// eslint-disable-next-line complexity,sonarjs/cognitive-complexity
 function emitKernelExprComponentF32(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;
@@ -1827,7 +1826,6 @@ function emitEventExprComponentF32(args: {
 
 // [LAW:dataflow-not-control-flow] Materialization resolves through one
 // deterministic expression path; complexity is localized to this boundary.
-// eslint-disable-next-line max-lines-per-function,complexity,sonarjs/cognitive-complexity
 function emitMaterializeExprComponentF32(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;

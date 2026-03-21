@@ -14,10 +14,10 @@ import {
   getDefaultDiagnosticFlags,
   type DiagnosticSeverityOverride,
 } from '../../compiler/diagnostic-flags';
-import type { FieldUIHint } from '../types';
+import type { FieldUIHint, SettingsShape } from '../types';
 
 // Build interface type: one field per flag code
-export type CompilerFlagsSettings = Record<string, DiagnosticSeverityOverride> & Record<string, unknown>;
+export type CompilerFlagsSettings = Record<string, DiagnosticSeverityOverride> & SettingsShape;
 
 // Build defaults from the flag registry (single source of truth)
 const defaults: CompilerFlagsSettings = getDefaultDiagnosticFlags();
@@ -44,6 +44,6 @@ export const compilerFlagsSettings = defineSettings<CompilerFlagsSettings>('comp
     label: 'Compiler Flags',
     description: 'Configure severity for each compiler diagnostic code',
     order: 5,
-    fields: fields as any, // Dynamic fields from registry
+    fields,
   },
 });

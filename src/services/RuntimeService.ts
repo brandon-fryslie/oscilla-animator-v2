@@ -94,6 +94,7 @@ interface CompilerServices {
 }
 
 type RuntimeCanvasState =
+  // TODO: This code is wrong.  Figure out the right way to fix this
   | { readonly kind: 'missing' }
   | { readonly kind: 'ready'; readonly canvas: HTMLCanvasElement };
 

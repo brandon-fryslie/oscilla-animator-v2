@@ -5,8 +5,9 @@
  */
 
 import { defineSettings } from '../defineSettings';
+import type { SettingsShape } from '../types';
 
-export interface DebugSettings extends Record<string, unknown> {
+export interface DebugSettings extends SettingsShape {
   enabled: boolean;
   traceCardinalitySolver: boolean;
 }

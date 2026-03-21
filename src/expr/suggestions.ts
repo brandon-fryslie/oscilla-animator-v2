@@ -281,7 +281,7 @@ export class SuggestionProvider {
    */
   suggestBlockPorts(blockName: string): readonly PortSuggestion[] {
     // Find block by canonical name (normalized display name) or fall back to ID
-    let block = this.patch.blocks.get(blockName as any);
+    let block = Array.from(this.patch.blocks.values()).find((candidate) => candidate.id === blockName);
     if (!block) {
       for (const b of this.patch.blocks.values()) {
         const canonical = b.displayName
