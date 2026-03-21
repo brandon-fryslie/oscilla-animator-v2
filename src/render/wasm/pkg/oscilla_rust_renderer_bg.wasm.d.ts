@@ -9,6 +9,7 @@ export const inject_poison_alloc: () => [number, number];
 export const pause_engine: () => [number, number];
 export const rebuild_gpu_pipelines: (a: any) => any;
 export const rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+export const resize_surface: (a: number, b: number) => [number, number];
 export const resume_engine: () => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const take_readback_snapshot: () => [number, number, number];
