@@ -85,4 +85,27 @@ describe('round-trip edge cases', () => {
     expect(edges[0].enabled).toBe(true);
     expect(edges[1].enabled).toBe(true);
   });
+
+  it('round-trips authored input sources through supported defaultSource syntax', () => {
+    const patch = buildPatch((b) => {
+      const add = b.addBlock('Add', { displayName: 'add' });
+      b.setPortDefault(add, 'a', 0.25);
+    });
+
+    const hcl = serializePatchToHCL(patch, { name: 'AuthoredSource' });
+
+    expect(hcl).toContain('defaultSource = { blockType = "Const", output = "out", params = { value = 0.25 } }');
+    expect(hcl).not.toContain('source "Const"');
+
+    const result = deserializePatchFromHCL(hcl);
+    expect(result.errors).toEqual([]);
+
+    const block = Array.from(result.patch.blocks.values())[0];
+    const aPort = block.inputPorts.get('a');
+    expect(aPort?.defaultSource).toEqual({
+      blockType: 'Const',
+      output: 'out',
+      params: { value: 0.25 },
+    });
+  });
 });

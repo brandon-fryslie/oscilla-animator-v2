@@ -38,6 +38,10 @@ export function register(): void {
     outputs: {
       out: { label: 'Output', type: canonicalType(CAMERA_PROJECTION, undefined, { cardinality: CAMERA_PROJECTION_CONST_CARD }) },
     },
+    constantValueFromConfig: (config) => {
+      const rawValue = config.value;
+      return rawValue === 1 ? 'perspective' : 'orthographic';
+    },
     lower: ({ ctx, config }) => {
       const rawValue = requireConfigInt(config!, 'value', 0, 1);
       const sigId = ctx.b.constant(cameraProjectionConst(rawValue === 1 ? 'perspective' : 'orthographic'), canonicalType(CAMERA_PROJECTION));

@@ -346,6 +346,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           portHighlight={portHighlight}
           diagnostics={diagnostics}
           debug={debug}
+          frontend={frontend}
           patch={patchStore.patch}
           onNodeContextMenu={handleNodeContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}

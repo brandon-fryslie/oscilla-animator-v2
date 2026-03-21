@@ -15,7 +15,6 @@ import './BlockInspector.css';
 import type { Block, Patch, Edge } from '../../graph/Patch';
 import type { BlockId, PortId, DefaultSource, UIControlHint, PortEndpointRef } from '../../types';
 import type { CombineMode } from '../../types';
-import type { InferenceCanonicalType } from '../../core/inference-types';
 import {
   formatDefaultSourceLabel,
   isConstLiteralDefaultSource,
@@ -30,132 +29,36 @@ import {
   ColorInput as MuiColorInput,
   SliderWithInput,
 } from './common';
-import { validateCombineMode } from '../../compiler/backend/combine-utils';
 import { ConnectionPicker } from './ConnectionPicker';
 import { DisplayNameEditor } from './DisplayNameEditor';
-import { compilationInspector } from '../../services/CompilationInspectorService';
 import { EdgeInspector } from './EdgeInspector';
 import { SharedExpressionEditor } from './SharedExpressionEditor';
 import { getBlockParamEditor } from '../block-ui';
+import type { BindingControlDescriptor } from '../../stores/FrontendResultStore';
+import {
+  getValidCombineModesForType,
+  getValidDefaultSourceBlockTypes,
+} from '../authoring/semanticQueries';
 
 // =============================================================================
 // Helper Functions
 // =============================================================================
 
-/**
- * Generate the deterministic ID for a derived default source block.
- * Must match the pattern in pass1-default-sources.ts
- */
-function getDerivedDefaultSourceId(blockId: BlockId, portId: string): BlockId {
-  return `_ds_${blockId}_${portId}` as BlockId;
-}
-
-/**
- * Check if two one-cardinality types are compatible for wiring.
- * Payload types must match. Payload-generic blocks use BlockPayloadMetadata.
- */
-function areTypesCompatible(sourceType: InferenceCanonicalType | undefined, targetType: InferenceCanonicalType | undefined): boolean {
-  if (!sourceType || !targetType) return false;
-  return sourceType.payload.kind === targetType.payload.kind;
-}
-
-/**
- * Derive slider config {min, max, step} from a CanonicalType's payload + unit.
- * Unit-aware: phase01 → [0,1), radians → [-π,π], ms → [0,10000], etc.
- */
-interface SliderConfig { min: number; max: number; step: number }
-
-function sliderConfigForType(type: InferenceCanonicalType | undefined): SliderConfig {
-  if (!type) return { min: 0, max: 1, step: 0.01 };
-
-  const unit = type.unit;
-  const payload = type.payload;
-
-  if (unit.kind !== 'var') {
-    switch (unit.kind) {
-      case 'angle':
-        switch (unit.unit) {
-          case 'turns': return { min: 0, max: 1, step: 0.01 };
-          case 'radians': return { min: -Math.PI, max: Math.PI, step: 0.01 };
-          case 'degrees': return { min: -180, max: 360, step: 1 };
-        }
-        break;
-      case 'time':
-        switch (unit.unit) {
-          case 'ms': return { min: 0, max: 10000, step: 1 };
-          case 'seconds': return { min: 0, max: 10, step: 0.01 };
-        }
-        break;
-      case 'none': return { min: 0, max: 1, step: 0.01 };
-      case 'count': return { min: 0, max: 10000, step: 1 };
-      case 'color': return { min: 0, max: 1, step: 0.01 };
-      case 'space':
-        switch (unit.unit) {
-          case 'ndc': return { min: -1, max: 1, step: 0.01 };
-          case 'world': return { min: -100, max: 100, step: 0.1 };
-          case 'view': return { min: -1, max: 1, step: 0.01 };
-        }
-        break;
-    }
-  }
-
-  switch (payload.kind) {
-    case 'int': return { min: 0, max: 100, step: 1 };
-    case 'bool': return { min: 0, max: 1, step: 1 };
-    case 'float':
-    default:
-      return { min: 0, max: 1, step: 0.01 };
-  }
-}
-
-/**
- * Get slider config for a port, with uiHint overrides.
- * uiHint fields override individual derived values (partial override supported).
- */
-function getSliderConfig(inputDef: InputDef | undefined, portType: InferenceCanonicalType | undefined): SliderConfig {
-  const derived = sliderConfigForType(portType);
-  const hint = inputDef?.uiHint;
-  if (!hint) return derived;
-
+function authoredControlToDefaultSource(block: Block, portId: string): DefaultSource | undefined {
+  const source = block.inputPorts.get(portId)?.authoredControl?.source;
+  if (!source) return undefined;
   return {
-    min: ('min' in hint && hint.min !== undefined) ? hint.min : derived.min,
-    max: ('max' in hint && hint.max !== undefined) ? hint.max : derived.max,
-    step: ('step' in hint && hint.step !== undefined) ? hint.step : derived.step,
+    blockType: source.blockType,
+    output: source.outputPortId,
+    params: { ...source.params },
   };
 }
 
-/**
- * Get valid block types for use as default sources.
- * A valid default source block:
- * - Must NOT be stateful (capability !== 'state')
- * - Must have at least one output
- * - Must have at least one output compatible with the target port type
- */
-function getValidDefaultSourceBlockTypes(portType: InferenceCanonicalType): { blockType: string; label: string; outputs: readonly OutputDef[] }[] {
-  const validBlocks: { blockType: string; label: string; outputs: readonly OutputDef[] }[] = [];
-
-  for (const [blockType, def] of BLOCK_DEFS_BY_TYPE.entries()) {
-    // Skip stateful blocks
-    if (def.capability === 'state') continue;
-
-    // Must have at least one output
-    if (Object.keys(def.outputs).length === 0) continue;
-
-    // Must have at least one type-compatible output
-    const hasCompatibleOutput = Object.values(def.outputs).some(output => areTypesCompatible(output.type, portType));
-    if (!hasCompatibleOutput) continue;
-
-    validBlocks.push({
-      blockType: def.type,
-      label: def.label || "",
-      outputs: Object.values(def.outputs),
-    });
-  }
-
-  // Sort by label for easier selection
-  return validBlocks.sort((a, b) => a.label.localeCompare(b.label));
+function effectiveInputDefaultSource(block: Block, portId: string, inputDef: InputDef | undefined): DefaultSource | undefined {
+  return authoredControlToDefaultSource(block, portId)
+    ?? block.inputPorts.get(portId)?.defaultSource
+    ?? inputDef?.defaultSource;
 }
-
 
 // =============================================================================
 // Main Inspector Component
@@ -257,16 +160,6 @@ function TimeRootBlock() {
  * Get valid combine modes for a payload type.
  * Filters modes based on type compatibility.
  */
-function getValidCombineModes(payload: string): CombineMode[] {
-  const allModes: CombineMode[] = ['last', 'first', 'sum', 'average', 'max', 'min', 'mul', 'layer', 'or', 'and'];
-
-  return allModes.filter(mode => {
-    // For one-cardinality world (most common for ports)
-    const result = validateCombineMode(mode, 'one', payload);
-    return result.valid;
-  });
-}
-
 /**
  * Format combine mode for display.
  */
@@ -303,15 +196,6 @@ interface PortInspectorStandaloneProps {
 const PortInspectorStandalone = observer(function PortInspectorStandalone({ portRef, block, blockDef, patch }: PortInspectorStandaloneProps) {
   const { selection, patch: patchStore, frontend } = useStores();
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
-  const resolvedPortTypeLookup = useCallback(
-    (blockIdValue: string, portIdValue: string, direction: 'input' | 'output') =>
-      frontend.getResolvedPortTypeByIds(
-        blockIdValue as BlockId,
-        portIdValue as PortId,
-        direction === 'input' ? 'in' : 'out',
-      ),
-    [frontend],
-  );
 
   const inputDef = blockDef.inputs[portRef.portId];
   const outputDef = blockDef.outputs[portRef.portId];
@@ -335,7 +219,10 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
   // Get effective default source (port override or registry default)
   const instancePort = block.inputPorts.get(portRef.portId);
   const effectiveDefaultSource = isInput && inputDef
-    ? (instancePort?.defaultSource ?? inputDef.defaultSource)
+    ? effectiveInputDefaultSource(block, portRef.portId, inputDef)
+    : undefined;
+  const binding = isInput
+    ? frontend.getInputBindingByIds(block.id, portRef.portId as PortId)
     : undefined;
 
   const handleViewBlock = useCallback(() => {
@@ -408,7 +295,9 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
             onChange={(value) => {
               patchStore.updateInputPortCombineMode(block.id, portRef.portId as PortId, value as CombineMode);
             }}
-            options={getValidCombineModes(portDef.type.payload.kind).map(mode => ({
+            options={getValidCombineModesForType(
+              frontend.getResolvedPortTypeByIds(block.id, portRef.portId as PortId, 'in'),
+            ).map(mode => ({
               value: mode,
               label: formatCombineMode(mode)
             }))}
@@ -422,12 +311,13 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
         <PortDefaultSourceEditor
           blockId={block.id}
           portId={portRef.portId}
-          portType={inputDef.type!}
           currentDefaultSource={effectiveDefaultSource}
           registryDefaultSource={inputDef.defaultSource}
           isConnected={isConnected}
-          inputDef={inputDef}
         />
+      )}
+      {binding && binding.controls.length > 0 && (
+        <BindingControlsSection controls={binding.controls} />
       )}
 
       <div style={{ marginBottom: '16px' }}>
@@ -463,7 +353,6 @@ const PortInspectorStandalone = observer(function PortInspectorStandalone({ port
             targetPortId={portRef.portId as PortId}
             direction={isInput ? 'input' : 'output'}
             patch={patch}
-            resolvedPortTypeLookup={resolvedPortTypeLookup}
             onSelect={handleConnect}
             onCancel={() => setShowConnectionPicker(false)}
           />
@@ -814,8 +703,11 @@ interface PortItemProps {
 }
 
 const PortItem = function PortItem({ port, portId, blockId, isConnected, connectedEdge, patch, onClick }: PortItemProps) {
-  const { selection } = useStores();
-  const hasDefaultSource = port.defaultSource !== undefined;
+  const { selection, frontend } = useStores();
+  const block = patch.blocks.get(blockId);
+  const currentDefaultSource = block ? effectiveInputDefaultSource(block, portId, port) : port.defaultSource;
+  const hasDefaultSource = currentDefaultSource !== undefined;
+  const bindingControls = frontend.getInputBindingByIds(blockId, portId as PortId)?.controls ?? [];
 
   const handleSourceClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -823,13 +715,6 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
       selection.selectBlock(connectedEdge.from.blockId as BlockId);
     }
   }, [connectedEdge]);
-
-  // Find the derived default source block if it exists
-  const derivedBlockId = hasDefaultSource && !isConnected
-    ? getDerivedDefaultSourceId(blockId, portId)
-    : null;
-
-  const derivedBlock = derivedBlockId ? patch.blocks.get(derivedBlockId) : undefined;
 
   return (
     <li
@@ -874,18 +759,17 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
           color: colors.textSecondary
         }}>
           <span style={{ color: colors.textMuted }}>(not connected)</span>
-          {isConstLiteralDefaultSource(port.defaultSource) && derivedBlock ? (
+          {currentDefaultSource && isConstLiteralDefaultSource(currentDefaultSource) && bindingControls[0] ? (
             <DefaultSourceEditor
-              derivedBlockId={derivedBlockId!}
-              value={derivedBlock.params.value}
+              control={bindingControls[0]}
               portLabel={port.label || ""}
             />
           ) : (
             <div style={{
-              fontStyle: isTimeDefaultSource(port.defaultSource!) ? 'italic' : 'normal',
-              color: isTimeDefaultSource(port.defaultSource!) ? colors.primary : colors.textSecondary
+              fontStyle: currentDefaultSource && isTimeDefaultSource(currentDefaultSource) ? 'italic' : 'normal',
+              color: currentDefaultSource && isTimeDefaultSource(currentDefaultSource) ? colors.primary : colors.textSecondary
             }}>
-              Default: {formatDefaultSourceLabel(port.defaultSource!)}
+              Default: {currentDefaultSource ? formatDefaultSourceLabel(currentDefaultSource) : 'None'}
             </div>
           )}
         </div>
@@ -908,17 +792,16 @@ const PortItem = function PortItem({ port, portId, blockId, isConnected, connect
 // =============================================================================
 
 interface DefaultSourceEditorProps {
-  derivedBlockId: BlockId;
-  value: unknown;
+  control: BindingControlDescriptor;
   portLabel: string;
 }
 
 const DefaultSourceEditor = function DefaultSourceEditor({
-  derivedBlockId,
-  value,
+  control,
   portLabel
 }: DefaultSourceEditorProps) {
   const { patch: patchStore } = useStores();
+  const value = control.value;
   const [localValue, setLocalValue] = useState(String(value));
 
   // Sync local value when prop changes
@@ -931,16 +814,16 @@ const DefaultSourceEditor = function DefaultSourceEditor({
 
     if (typeof value === 'number') {
       if (!isNaN(parsed as number) && parsed !== value) {
-        patchStore.updateBlockParams(derivedBlockId, { value: parsed });
+        patchStore.updateControlValue(control.target, parsed);
       } else if (isNaN(parsed as number)) {
         setLocalValue(String(value));
       }
     } else {
       if (parsed !== value) {
-        patchStore.updateBlockParams(derivedBlockId, { value: parsed });
+        patchStore.updateControlValue(control.target, parsed);
       }
     }
-  }, [localValue, value, derivedBlockId]);
+  }, [control.target, localValue, patchStore, value]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1081,7 +964,7 @@ const backButtonStyle: React.CSSProperties = {
 
 
 function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspectorProps) {
-  const { selection } = useStores();
+  const { selection, frontend } = useStores();
   // Find port definition
   const inputPort = typeInfo.inputs[portRef.portId];
   const outputPort = typeInfo.outputs[portRef.portId];
@@ -1110,7 +993,10 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
   // Get effective default source (port override or registry default)
   const instancePort = block.inputPorts.get(portRef.portId);
   const effectiveDefaultSource = isInput && inputPort
-    ? (instancePort?.defaultSource ?? inputPort.defaultSource)
+    ? effectiveInputDefaultSource(block, portRef.portId, inputPort)
+    : undefined;
+  const binding = isInput
+    ? frontend.getInputBindingByIds(block.id, portRef.portId as PortId)
     : undefined;
 
   return (
@@ -1156,12 +1042,13 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
             <PortDefaultSourceEditor
               blockId={block.id}
               portId={portRef.portId}
-              portType={inputPort.type!}
               currentDefaultSource={effectiveDefaultSource}
               registryDefaultSource={inputPort.defaultSource}
               isConnected={isConnected}
-              inputDef={inputPort}
             />
+          )}
+          {binding && binding.controls.length > 0 && (
+            <BindingControlsSection controls={binding.controls} />
           )}
         </>
       )}
@@ -1233,60 +1120,24 @@ function PortInspector({ portRef, block, typeInfo, patch, onBack }: PortInspecto
 interface PortDefaultSourceEditorProps {
   blockId: BlockId;
   portId: string;
-  portType: InferenceCanonicalType;
   currentDefaultSource: DefaultSource;
   registryDefaultSource?: DefaultSource;
   isConnected?: boolean;
-  inputDef?: InputDef;  // For accessing uiHint
-}
-
-type ConstEditorValue =
-  | string
-  | number
-  | boolean
-  | readonly number[]
-  | { readonly toHexString?: () => string };
-type RawConstEditorValue = string | number | boolean | object | readonly number[];
-
-function readVec2ConstEditorValue(value: ConstEditorValue): readonly [number, number] {
-  if (!Array.isArray(value)) return [0, 0];
-  const x = typeof value[0] === 'number' ? value[0] : 0;
-  const y = typeof value[1] === 'number' ? value[1] : 0;
-  return [x, y];
-}
-
-function readColorConstEditorValue(value: ConstEditorValue): string {
-  if (typeof value === 'string') return value;
-  if (typeof value !== 'object' || value === null) return '#000000';
-  const toHexString = Reflect.get(value, 'toHexString');
-  if (typeof toHexString === 'function') return String(toHexString.call(value));
-  return '#000000';
 }
 
 const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
   blockId,
   portId,
-  portType,
   currentDefaultSource,
   registryDefaultSource,
   isConnected,
-  inputDef,
 }: PortDefaultSourceEditorProps) {
   const { patch: patchStore } = useStores();
-  const validBlockTypes = getValidDefaultSourceBlockTypes(portType);
 
-  // Resolved type from compilation (preferred for slider config over static portType)
-  const resolvedType = useMemo(() => {
-    const resolved = compilationInspector.getResolvedPortType(blockId, portId, 'in');
-    return resolved as InferenceCanonicalType | undefined;
-  }, [blockId, portId]);
-
-  // Use resolved type for slider config, fall back to static port type
-  const sliderType = useMemo(() => {
-    // [LAW:dataflow-not-control-flow] Inspector controls always render;
-    // unresolved compiler data is represented as fallback type data.
-    return resolvedType ?? portType;
-  }, [resolvedType, portType]);
+  const validBlockTypes = useMemo(
+    () => getValidDefaultSourceBlockTypes(patchStore.patch, blockId, portId as PortId),
+    [patchStore.patch, blockId, portId],
+  );
 
   // Current selection
   const currentBlockType = currentDefaultSource.blockType;
@@ -1321,18 +1172,6 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     patchStore.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
   }, [blockId, portId, currentDefaultSource]);
 
-  const handleParamChange = useCallback((paramKey: string, value: unknown) => {
-    const newDefaultSource: DefaultSource = {
-      ...currentDefaultSource,
-      params: {
-        ...currentParams,
-        [paramKey]: value,
-      },
-    };
-
-    patchStore.updateInputPort(blockId, portId, { defaultSource: newDefaultSource });
-  }, [blockId, portId, currentDefaultSource, currentParams]);
-
   const handleReset = useCallback(() => {
     if (registryDefaultSource) {
       // Reset to registry default by removing the override
@@ -1346,47 +1185,6 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
     currentOutputPort !== registryDefaultSource.output ||
     JSON.stringify(currentParams) !== JSON.stringify(registryDefaultSource.params || {})
   );
-
-  // Special handling for Const block - show direct slider for value param
-  const isConstBlock = currentBlockType === 'Const';
-  const payloadType = portType.payload;
-
-  // Parse constValue based on payload type
-  const parseConstValue = (raw: RawConstEditorValue): ConstEditorValue => {
-    if (raw === undefined) {
-      // Return sensible defaults based on type
-      switch (payloadType.kind) {
-        case 'bool': return false;
-        case 'int': return 0;
-        case 'float': return 0;
-        case 'vec2': return [0, 0];
-        case 'color': return [0, 0, 0, 1];
-        default: return 0;
-      }
-    }
-
-    // If it's a string, try to parse it as JSON (for complex types)
-    if (typeof raw === 'string') {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        return raw; // Return raw if parse fails
-      }
-    }
-
-    return raw;
-  };
-
-  const rawConstValue = currentParams.value;
-  const normalizedRawConstValue: RawConstEditorValue =
-    typeof rawConstValue === 'string'
-    || typeof rawConstValue === 'number'
-    || typeof rawConstValue === 'boolean'
-    || Array.isArray(rawConstValue)
-    || (typeof rawConstValue === 'object' && rawConstValue !== null)
-      ? rawConstValue
-      : 0;
-  const constValue = isConstBlock ? parseConstValue(normalizedRawConstValue) : 0;
 
   // [LAW:one-source-of-truth] Time-source handling is keyed by block capability, not type string aliasing.
   const isTimeRootBlock = currentBlockDef?.capability === 'time';
@@ -1426,86 +1224,6 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         />
       </div>
 
-      {/* Const Block - Type-Aware Value Editor */}
-      {isConstBlock && (
-        <div style={{ marginBottom: '12px' }}>
-          {(payloadType.kind === 'float' || payloadType.kind === 'int') && (() => {
-            const cfg = getSliderConfig(inputDef, sliderType);
-            return (
-              <SliderWithInput
-                label="Value"
-                value={constValue as number}
-                onChange={(value) => handleParamChange('value', value)}
-                min={cfg.min}
-                max={cfg.max}
-                step={cfg.step}
-              />
-            );
-          })()}
-          {payloadType.kind === 'bool' && (
-            <MuiCheckboxInput
-              checked={!!constValue}
-              onChange={(value) => handleParamChange('value', value)}
-            />
-          )}
-          {payloadType.kind === 'vec2' && (() => {
-            const cfg = getSliderConfig(inputDef, sliderType);
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <SliderWithInput
-                  label="X"
-                  value={readVec2ConstEditorValue(constValue)[0]}
-                  min={cfg.min}
-                  max={cfg.max}
-                  step={cfg.step}
-                  onChange={(v) => {
-                    const cur = readVec2ConstEditorValue(constValue);
-                    handleParamChange('value', [v, cur[1] ?? 0]);
-                  }}
-                />
-                <SliderWithInput
-                  label="Y"
-                  value={readVec2ConstEditorValue(constValue)[1]}
-                  min={cfg.min}
-                  max={cfg.max}
-                  step={cfg.step}
-                  onChange={(v) => {
-                    const cur = readVec2ConstEditorValue(constValue);
-                    handleParamChange('value', [cur[0] ?? 0, v]);
-                  }}
-                />
-              </div>
-            );
-          })()}
-          {payloadType.kind === 'color' && (
-            <MuiColorInput
-              value={
-                readColorConstEditorValue(constValue)
-              }
-              onChange={(value) => handleParamChange('value', value)}
-            />
-          )}
-          {payloadType.kind === 'cameraProjection' && (
-            <div style={{ padding: '8px', backgroundColor: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textSecondary }}>
-              ⚙️ Camera projection values are configured via projection properties
-            </div>
-          )}
-          {payloadType.kind !== 'float' && payloadType.kind !== 'int' && payloadType.kind !== 'bool' && payloadType.kind !== 'vec2' && payloadType.kind !== 'color' && payloadType.kind !== 'cameraProjection' && (() => {
-            const cfg = getSliderConfig(inputDef, sliderType);
-            return (
-              <SliderWithInput
-                label="Value"
-                value={constValue as number}
-                onChange={(value) => handleParamChange('value', value)}
-                min={cfg.min}
-                max={cfg.max}
-                step={cfg.step}
-              />
-            );
-          })()}
-        </div>
-      )}
-
       {/* Time source block - Output Selector */}
       {isTimeRootBlock && (
         <div style={{ marginBottom: '12px' }}>
@@ -1521,8 +1239,8 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
         </div>
       )}
 
-      {/* Other Blocks - Output Port Selector and Params */}
-      {!isConstBlock && !isTimeRootBlock && (
+      {/* Other Blocks - Output Port Selector */}
+      {!isTimeRootBlock && (
         <>
           {/* Output Port Selector */}
           {currentBlockDef && Object.keys(currentBlockDef.outputs).length > 1 && (
@@ -1538,35 +1256,43 @@ const PortDefaultSourceEditor = observer(function PortDefaultSourceEditor({
               />
             </div>
           )}
-
-          {/* Params Editor - for blocks with inputs */}
-          {currentBlockDef && currentBlockDef.inputs && Object.keys(currentBlockDef.inputs).length > 0 && (
-            <div>
-              <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
-                Parameters
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {Object.entries(currentBlockDef.inputs).map(([inputId, input]) => {
-                  const paramValue = currentParams[inputId] ?? input.defaultValue;
-                  return (
-                    <DefaultSourceParamField
-                      key={inputId}
-                      paramKey={inputId}
-                      paramLabel={input.label || ""}
-                      value={paramValue}
-                      uiHint={input.uiHint}
-                      onChange={(value) => handleParamChange(inputId, value)}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
   );
 });
+
+function BindingControlsSection({ controls }: { controls: readonly BindingControlDescriptor[] }) {
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <label style={{ fontSize: '12px', color: colors.textSecondary, display: 'block', marginBottom: '4px' }}>
+        Binding Controls
+      </label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {controls.map((control) => (
+          <SemanticControlField key={control.id} control={control} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SemanticControlField({ control }: { control: BindingControlDescriptor }) {
+  const { patch } = useStores();
+  const handleChange = useCallback((value: unknown) => {
+    patch.updateControlValue(control.target, value);
+  }, [control.target, patch]);
+
+  return (
+    <DefaultSourceParamField
+      paramKey={control.id}
+      paramLabel={control.label}
+      value={control.value}
+      uiHint={control.hint}
+      onChange={handleChange}
+    />
+  );
+}
 
 // =============================================================================
 // Default Source Param Field

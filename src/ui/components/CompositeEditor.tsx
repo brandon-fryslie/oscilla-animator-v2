@@ -525,6 +525,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
             portHighlight={null}
             diagnostics={null}
             debug={null}
+            frontend={null}
             patch={null}
             onNodeContextMenu={handleNodeContextMenu}
             onEdgeContextMenu={handleEdgeContextMenu}

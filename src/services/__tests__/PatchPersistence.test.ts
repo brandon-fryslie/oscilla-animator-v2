@@ -9,6 +9,7 @@ import {
   savePatchToStorage,
   serializePatch,
   setPatchPersistenceIssueReporter,
+  STORAGE_KEY,
 } from '../PatchPersistence';
 
 function createEmptyPatch(): Patch {
@@ -112,7 +113,7 @@ describe('PatchPersistence issue reporting', () => {
 
     clearPatchFromStorage();
 
-    expect(removeItem).toHaveBeenCalledWith('oscilla-v2-patch-v11');
+    expect(removeItem).toHaveBeenCalledWith(STORAGE_KEY);
   });
 
   it('records clear failures as warn issues', () => {

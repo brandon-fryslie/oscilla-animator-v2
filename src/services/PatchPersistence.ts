@@ -10,7 +10,7 @@ import { canonicalizeCombineMode } from '../types';
 import { serializePatchToHCL, deserializePatchFromHCL, type PatchDslError } from '../patch-dsl';
 import { resolveLocalStorageCapability } from './local-storage-capability';
 
-export const STORAGE_KEY = 'oscilla-v2-patch-v11'; // Bumped for required edge alias persistence.
+export const STORAGE_KEY = 'oscilla-v2-patch-v12'; // Bumped for authored input control persistence.
 const MAX_PERSISTENCE_ISSUES = 128;
 
 export type PatchPersistenceIssueLevel = 'warn' | 'error';
@@ -55,7 +55,7 @@ export interface SerializedPatch {
     displayName: string;
     domainId: string | null;
     role: { kind: string; meta: Record<string, unknown> };
-    inputPorts: Array<{ id: string; defaultSource?: unknown; combineMode: string }>;
+    inputPorts: Array<{ id: string; authoredControl?: unknown; defaultSource?: unknown; combineMode: string }>;
     outputPorts: Array<{ id: string }>;
   }>;
   edges: Array<{

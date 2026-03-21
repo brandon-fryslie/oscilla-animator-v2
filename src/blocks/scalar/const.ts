@@ -64,6 +64,7 @@ export function register(): void {
       // Payload is polymorphic (payloadVar) - resolved by pass1 constraint solver
       out: { label: 'Output', type: inferType(payloadVar('const_payload'), unitVar('const_out'), { cardinality: CONST_OUT_CARD }) },
     },
+    constantValueFromConfig: (config) => config.value,
     lower: ({ ctx, config }) => {
       // Get resolved payload type from ctx.outTypes (populated from pass1 portTypes)
       const outType = ctx.outTypes[0];
