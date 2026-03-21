@@ -87,6 +87,17 @@ export function rebuild_pipeline(simulation_wgsl, assembly_wgsl, uber_shader_wgs
     }
 }
 
+/**
+ * @param {number} width
+ * @param {number} height
+ */
+export function resize_surface(width, height) {
+    const ret = wasm.resize_surface(width, height);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
 export function resume_engine() {
     const ret = wasm.resume_engine();
     if (ret[1]) {
@@ -1219,7 +1230,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 26, function: Function { arguments: [F64], shim_idx: 27, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 24, function: Function { arguments: [F64], shim_idx: 25, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h5931e681d5dee89c, wasm_bindgen__convert__closures_____invoke__h226acc91fc00b34c);
             return ret;
         },
