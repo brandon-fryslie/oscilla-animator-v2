@@ -191,23 +191,19 @@ function emitPortOverride(portId: string, port: InputPort, indent: number): stri
   }
 
   if (port.authoredControl?.source) {
-    output += emitAuthoredSource(port.authoredControl.source, indent + 1);
+    output += `${ind}  defaultSource = ${emitAuthoredSource(port.authoredControl.source)}\n`;
   }
 
   output += `${ind}}\n`;
   return output;
 }
 
-function emitAuthoredSource(source: AuthoredControlSource, indent: number): string {
-  const ind = '  '.repeat(indent);
-  let output = `${ind}source "${source.blockType}" {\n`;
-  output += `${ind}  output = ${emitValue(source.outputPortId)}\n`;
-  const paramKeys = Object.keys(source.params).sort();
-  for (const key of paramKeys) {
-    output += `${ind}  ${emitKey(key)} = ${emitValue(source.params[key])}\n`;
-  }
-  output += `${ind}}\n`;
-  return output;
+function emitAuthoredSource(source: AuthoredControlSource): string {
+  return emitValue({
+    blockType: source.blockType,
+    output: source.outputPortId,
+    ...(Object.keys(source.params).length > 0 ? { params: source.params } : {}),
+  });
 }
 
 /**
