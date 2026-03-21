@@ -28,6 +28,8 @@ import {
 } from '../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../shapes/types';
 import type { PathTopologyDef, TopologyDef } from '../../shapes/types';
+import type { ParametricTemplatePayload } from '../../shapes/parametric-templates';
+import { packParametricShapeBankRecord } from '../../shapes/parametric-templates';
 
 export interface CompiledDrawPrepInstallArtifact {
   readonly words: Uint32Array;
@@ -133,15 +135,26 @@ function buildCanonicalTopologyHeaders(
   }
 
   const topologies = shapeRefSteps.map(({ expr }) => getProgramTopology(program, expr.topologyId));
-  const totalWords = shapeRefSteps.length * SHAPE_BANK_HEADER_WORDS;
+
+  // [LAW:dataflow-not-control-flow] Compute total word count in a single pass.
+  // Type 1 records are fixed-size (SHAPE_BANK_HEADER_WORDS).
+  // Type 2 records are variable-size (header + template payload + optional indices).
+  const recordSizes = shapeRefSteps.map(({ expr }) => {
+    if (expr.parametricTemplate) {
+      const tmpl = expr.parametricTemplate;
+      return SHAPE_BANK_HEADER_WORDS + tmpl.templateValues.length + tmpl.indices.length;
+    }
+    return SHAPE_BANK_HEADER_WORDS;
+  });
+  const totalWords = recordSizes.reduce((sum, n) => sum + n, 0);
   const shapeBankWords = new Uint32Array(totalWords);
+  // Sidecar keyed by word offset — allocate full size for sparse O(1) lookup.
   const topologyIdByHandle = new Uint32Array(totalWords);
 
   let wordOffset = 0;
   for (let stepIdx = 0; stepIdx < shapeRefSteps.length; stepIdx++) {
     const { target, expr } = shapeRefSteps[stepIdx]!;
     const topology = topologies[stepIdx]!;
-    const isPath = isPathTopology(topology);
 
     // Resolve CP arena addressing from compile-time address table.
     // GPU simulation compute writes CP field values at this address;
@@ -149,7 +162,7 @@ function buildCanonicalTopologyHeaders(
     let cpArenaBaseOffset = 0;
     let cpArenaLaneStride = 0;
     let cpArenaComponentStride = 0;
-    if (isPath && expr.controlPointField != null) {
+    if (expr.controlPointField != null) {
       const slot = program.runtimeAddressTable.fieldExprToSlot.get(
         expr.controlPointField as number,
       );
@@ -164,40 +177,56 @@ function buildCanonicalTopologyHeaders(
       }
     }
 
-    // [RECOVER-04] Fan triangulation: the vertex shader generates triangle fans
-    // from @builtin(vertex_index). For closed paths with N control points, the
-    // fan produces (N-2) triangles × 3 vertices each. For open paths, vertices
-    // are consumed sequentially (triangle list from CPs).
-    const cpCount = isPath ? topology.totalControlPoints : 0;
-    const vertexCount = isPath && topology.closed && cpCount >= 3
-      ? (cpCount - 2) * 3
-      : cpCount;
-    const indexCount = isPath && topology.closed && cpCount >= 3
-      ? (cpCount - 2) * 3
-      : 0;
-    // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly
-    // from compile-time topology metadata (bit0 = closed path).
-    const flags = isPath && topology.closed ? 1 : 0;
+    if (expr.parametricTemplate) {
+      // -- Type 2 Parametric: pack header + template payload --
+      // [LAW:one-source-of-truth] packParametricShapeBankRecord is the single
+      // producer of Type 2 ShapeBank records.
+      const packed = packParametricShapeBankRecord(
+        expr.parametricTemplate,
+        cpArenaBaseOffset,
+        cpArenaLaneStride,
+        cpArenaComponentStride,
+      );
+      shapeBankWords.set(packed, wordOffset);
+    } else {
+      // -- Type 1 Rigid: write 16-word header --
+      const isPath = isPathTopology(topology);
 
-    // [RECOVER-07] Write header directly into the output buffer.
-    // No allocShapeBankWords, no writeShapeBankHeader, no ShapeBankState mutation.
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.Kind] = ShapeClass.Type1Rigid >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.TopologyMode] =
-      (isPath ? TopologyMode.Path : TopologyMode.NonPath) >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.Flags] = flags >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.MaterialClass] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.IndexCount] = indexCount >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstIndex] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.BaseVertex] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.VertexCount] = vertexCount >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstVertex] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockOffset] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockWords] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaBaseOffset] = cpArenaBaseOffset >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMinPacked] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMaxPacked] = 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaLaneStride] = cpArenaLaneStride >>> 0;
-    shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaComponentStride] = cpArenaComponentStride >>> 0;
+      // [RECOVER-04] Fan triangulation: the vertex shader generates triangle fans
+      // from @builtin(vertex_index). For closed paths with N control points, the
+      // fan produces (N-2) triangles × 3 vertices each. For open paths, vertices
+      // are consumed sequentially (triangle list from CPs).
+      const cpCount = isPath ? topology.totalControlPoints : 0;
+      const vertexCount = isPath && topology.closed && cpCount >= 3
+        ? (cpCount - 2) * 3
+        : cpCount;
+      const indexCount = isPath && topology.closed && cpCount >= 3
+        ? (cpCount - 2) * 3
+        : 0;
+      // [LAW:one-source-of-truth] ShapeBank header flags are encoded directly
+      // from compile-time topology metadata (bit0 = closed path).
+      const flags = isPath && topology.closed ? 1 : 0;
+
+      // [RECOVER-07] Write header directly into the output buffer.
+      // No allocShapeBankWords, no writeShapeBankHeader, no ShapeBankState mutation.
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.Kind] = ShapeClass.Type1Rigid >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.TopologyMode] =
+        (isPath ? TopologyMode.Path : TopologyMode.NonPath) >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.Flags] = flags >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.MaterialClass] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.IndexCount] = indexCount >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstIndex] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.BaseVertex] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.VertexCount] = vertexCount >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.FirstVertex] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockOffset] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.ParamBlockWords] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaBaseOffset] = cpArenaBaseOffset >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMinPacked] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.BoundsMaxPacked] = 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaLaneStride] = cpArenaLaneStride >>> 0;
+      shapeBankWords[wordOffset + ShapeBankHeaderWord.CpArenaComponentStride] = cpArenaComponentStride >>> 0;
+    }
 
     // Map the materialize step's target slot to this word offset.
     shapeWordOffsetBySlot.set(target, wordOffset);
@@ -205,7 +234,7 @@ function buildCanonicalTopologyHeaders(
     // Record sidecar metadata (same contract as ShapeBankState sidecar).
     topologyIdByHandle[wordOffset] = (expr.topologyId as number) >>> 0;
 
-    wordOffset += SHAPE_BANK_HEADER_WORDS;
+    wordOffset += recordSizes[stepIdx]!;
   }
 
   return {
