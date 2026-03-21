@@ -449,4 +449,40 @@ describe('authoring queries', () => {
     expect(result.status).toBe('valid');
     expect(result.rewiredEdges).toHaveLength(3);
   });
+
+  it('uses capability-based replacement constraints for target and candidates', () => {
+    let target!: BlockId;
+    const patch = buildPatch((b) => {
+      target = b.addBlock('InfiniteTimeRoot');
+      b.addBlock('Const');
+    });
+
+    const blockedTarget = queryReplaceBlock(
+      patch,
+      {
+        kind: 'replaceBlock',
+        target: { blockId: target },
+        candidates: [{ candidateId: 'const', blockType: 'Const' }],
+      },
+      { mutationMode: 'replaceWriter' },
+    );
+    expect(blockedTarget.baselineStatus).toBe('blocked');
+    expect(blockedTarget.results[0].status).toBe('blocked');
+
+    let addId!: BlockId;
+    const patch2 = buildPatch((b) => {
+      addId = b.addBlock('Add');
+      b.addBlock('Const');
+    });
+    const invalidTimeCandidate = queryReplaceBlock(
+      patch2,
+      {
+        kind: 'replaceBlock',
+        target: { blockId: addId },
+        candidates: [{ candidateId: 'time', blockType: 'InfiniteTimeRoot' }],
+      },
+      { mutationMode: 'replaceWriter' },
+    ).results[0];
+    expect(invalidTimeCandidate.status).toBe('invalid');
+  });
 });

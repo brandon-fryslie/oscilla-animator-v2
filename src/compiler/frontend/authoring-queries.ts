@@ -706,6 +706,62 @@ function resolveCandidateResult(
   };
 }
 
+function connectExistingSourcesWithBaseline(
+  baseline: FrontendAnalysis,
+  patch: Patch,
+  query: ConnectExistingSourcesQuery,
+  options: AuthoringQueryOptions,
+): ConnectExistingSourceResult[] {
+  const targetPrecheck = precheckTarget(patch, query.target);
+  if (!targetPrecheck.ok) {
+    return query.candidates.map((candidate) => ({
+      kind: 'connectExistingSources',
+      sourceBlockId: candidate.sourceBlockId,
+      sourcePortId: candidate.sourcePortId,
+      ...baseCandidateResult(candidate.candidateId, targetPrecheck.reasonKind, targetPrecheck.reason),
+    }));
+  }
+
+  return query.candidates.map((candidate) => {
+    const sourceBlock = patch.blocks.get(candidate.sourceBlockId);
+    const sourceDef = sourceBlock ? getAnyBlockDefinition(sourceBlock.type) : undefined;
+    const sourceOutput = sourceDef?.outputs[candidate.sourcePortId];
+    if (!sourceBlock || !sourceOutput) {
+      return {
+        kind: 'connectExistingSources' as const,
+        sourceBlockId: candidate.sourceBlockId,
+        sourcePortId: candidate.sourcePortId,
+        ...baseCandidateResult(
+          candidate.candidateId,
+          'sourceOutputMissing',
+          `Source output ${candidate.sourceBlockId}.${candidate.sourcePortId} not found`,
+        ),
+      };
+    }
+
+    const hypotheticalPatch = addHypotheticalWriter(
+      patch,
+      query.target,
+      { kind: 'port', blockId: candidate.sourceBlockId, slotId: candidate.sourcePortId },
+      `_aq_edge_${candidate.candidateId}`,
+      options.mutationMode,
+    );
+    const candidateAnalysis = analyzeFrontend(hypotheticalPatch, options.frontendOptions);
+    return {
+      kind: 'connectExistingSources' as const,
+      sourceBlockId: candidate.sourceBlockId,
+      sourcePortId: candidate.sourcePortId,
+      ...resolveCandidateResult(
+        baseline,
+        candidateAnalysis,
+        query.target,
+        { blockId: candidate.sourceBlockId, portId: candidate.sourcePortId },
+        candidate.candidateId,
+      ),
+    };
+  });
+}
+
 function outputRanking(status: AuthoringCandidateStatus): number {
   switch (status) {
     case 'valid':
@@ -1389,14 +1445,17 @@ type EdgeRewireSelection = {
 };
 
 function chooseBestOutputForEdgeTarget(
+  baseline: FrontendAnalysis,
   patch: Patch,
   target: AuthoringTargetInput,
   replacedBlockId: BlockId,
   outputPortIds: readonly PortId[],
   mode: AuthoringMutationMode,
   preferredOutputPortId?: PortId,
+  frontendOptions?: AuthoringQueryOptions['frontendOptions'],
 ): EdgeRewireSelection | null {
-  const results = queryConnectExistingSources(
+  const results = connectExistingSourcesWithBaseline(
+    baseline,
     patch,
     {
       kind: 'connectExistingSources',
@@ -1407,8 +1466,8 @@ function chooseBestOutputForEdgeTarget(
         sourcePortId: outputPortId,
       })),
     },
-    { mutationMode: mode },
-  ).results.filter((candidate) => isSuggested(candidate.status));
+    { mutationMode: mode, frontendOptions },
+  ).filter((candidate) => isSuggested(candidate.status));
 
   const ordered = [...results].sort((a, b) => {
     const rankDiff = outputRanking(a.status) - outputRanking(b.status);
@@ -1429,16 +1488,19 @@ function chooseBestOutputForEdgeTarget(
 }
 
 function chooseBestInputForEdgeSource(
+  baseline: FrontendAnalysis,
   patch: Patch,
   source: AuthoringTargetOutput,
   replacedBlockId: BlockId,
   inputPortIds: readonly PortId[],
   mode: AuthoringMutationMode,
   preferredInputPortId?: PortId,
+  frontendOptions?: AuthoringQueryOptions['frontendOptions'],
 ): EdgeRewireSelection | null {
   const results = inputPortIds
     .map((inputPortId) => {
-      const result = queryConnectExistingSources(
+      const result = connectExistingSourcesWithBaseline(
+        baseline,
         patch,
         {
           kind: 'connectExistingSources',
@@ -1451,8 +1513,8 @@ function chooseBestInputForEdgeSource(
             },
           ],
         },
-        { mutationMode: mode },
-      ).results[0];
+        { mutationMode: mode, frontendOptions },
+      )[0];
       return { inputPortId, result };
     })
     .filter(({ result }) => isSuggested(result.status))
@@ -1476,6 +1538,7 @@ function chooseBestInputForEdgeSource(
 }
 
 function chooseBestSelfEdgeMapping(
+  baseline: FrontendAnalysis,
   patch: Patch,
   replacedBlockId: BlockId,
   outputPortIds: readonly PortId[],
@@ -1483,10 +1546,12 @@ function chooseBestSelfEdgeMapping(
   mode: AuthoringMutationMode,
   preferredOutputPortId?: PortId,
   preferredInputPortId?: PortId,
+  frontendOptions?: AuthoringQueryOptions['frontendOptions'],
 ): EdgeRewireSelection | null {
   const candidates = inputPortIds
     .map((inputPortId) => {
-      const results = queryConnectExistingSources(
+      const results = connectExistingSourcesWithBaseline(
+        baseline,
         patch,
         {
           kind: 'connectExistingSources',
@@ -1497,8 +1562,8 @@ function chooseBestSelfEdgeMapping(
             sourcePortId: outputPortId,
           })),
         },
-        { mutationMode: mode },
-      ).results
+        { mutationMode: mode, frontendOptions },
+      )
         .filter((candidate) => isSuggested(candidate.status))
         .sort((a, b) => {
           const rankDiff = outputRanking(a.status) - outputRanking(b.status);
@@ -1624,6 +1689,7 @@ function replaceBlock(
     }
 
     const replacementPatch = withCandidateBlockType(patch, query.target.blockId, candidate.blockType);
+    const replacementBaseline = analyzeFrontend(replacementPatch, options.frontendOptions);
     const outputPortIds = visibleOutputs(candidateDef).map(([portId]) => portId);
     const inputPortIds = visibleInputs(candidateDef).map(([portId]) => portId);
 
@@ -1640,6 +1706,7 @@ function replaceBlock(
 
       const mapped = fromIsReplaced && toIsReplaced
         ? chooseBestSelfEdgeMapping(
+            replacementBaseline,
             replacementPatch,
             query.target.blockId,
             outputPortIds,
@@ -1647,24 +1714,29 @@ function replaceBlock(
             options.mutationMode,
             edge.from.slotId as PortId,
             edge.to.slotId as PortId,
+            options.frontendOptions,
           )
         : fromIsReplaced
           ? chooseBestOutputForEdgeTarget(
+              replacementBaseline,
               replacementPatch,
               { blockId: edge.to.blockId as BlockId, portId: edge.to.slotId as PortId },
               query.target.blockId,
               outputPortIds,
               options.mutationMode,
               edge.from.slotId as PortId,
+              options.frontendOptions,
             )
           : toIsReplaced
             ? chooseBestInputForEdgeSource(
+                replacementBaseline,
                 replacementPatch,
                 { blockId: edge.from.blockId as BlockId, portId: edge.from.slotId as PortId },
                 query.target.blockId,
                 inputPortIds,
                 options.mutationMode,
                 edge.to.slotId as PortId,
+                options.frontendOptions,
               )
             : null;
 
