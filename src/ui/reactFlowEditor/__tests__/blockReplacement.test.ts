@@ -29,6 +29,27 @@ describe('blockReplacement helpers', () => {
     expect(types).toContain('Multiply');
   });
 
+  it('produces rewired edges that no longer reference the old slots', () => {
+    let target = '' as BlockId;
+    const patch = buildPatch((b) => {
+      const source = b.addBlock('Const');
+      target = b.addBlock('Add');
+      const sink = b.addBlock('Sin');
+
+      b.wire(source, 'out', target, 'a');
+      b.wire(target, 'out', sink, 'input');
+    });
+
+    const compatible = findCompatibleReplacementPlans(patch, target);
+    const planWithRemappedInput = compatible.find((plan) =>
+      plan.rewiredEdges.some((edge) => edge.to.blockId === target && edge.to.slotId !== 'a'),
+    );
+
+    expect(planWithRemappedInput).toBeDefined();
+    expect(planWithRemappedInput?.rewiredEdges.some((edge) => edge.to.blockId === target && edge.to.slotId !== 'a')).toBe(true);
+    expect(planWithRemappedInput?.rewiredEdges.some((edge) => edge.from.blockId === target)).toBe(true);
+  });
+
   it('rejects incompatible replacement types', () => {
     let target = '' as BlockId;
     const patch = buildPatch((b) => {
