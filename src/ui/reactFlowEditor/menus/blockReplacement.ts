@@ -1,7 +1,7 @@
 import type { BlockId, Patch } from '../../../types';
 import type { Endpoint } from '../../../graph/Patch';
 import { getBlockCategories, getBlockTypesByCategory, requireAnyBlockDef } from '../../../blocks/registry';
-import { validateConnection } from '../typeValidation';
+import { validateSemanticConnection } from '../../authoring/semanticQueries';
 
 export interface ReplacementEdgePlan {
   from: Endpoint;
@@ -36,12 +36,13 @@ function canConnect(
   patch: Patch,
 ): boolean {
   try {
-    return validateConnection(
+    return validateSemanticConnection(
+      patch,
       sourceBlockId,
       sourcePortId,
       targetBlockId,
       targetPortId,
-      patch,
+      { mutationMode: 'replaceWriter' },
     ).valid;
   } catch {
     return false;

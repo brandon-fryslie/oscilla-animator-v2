@@ -12,10 +12,9 @@
 
 import { makeObservable, observable, computed, action } from 'mobx';
 import type { BlockId, PortId, PortEndpointRef } from '../types';
-import { validateConnection } from '../ui/reactFlowEditor/typeValidation';
-import { requireAnyBlockDef } from '../blocks/registry';
 import type { PatchStore } from './PatchStore';
 import type { FrontendResultStore } from './FrontendResultStore';
+import { getCompatiblePortsForPort } from '../ui/authoring/semanticQueries';
 
 export class PortHighlightStore {
   // Observable state - hover tracking only
@@ -23,7 +22,7 @@ export class PortHighlightStore {
 
   constructor(
     private patchStore: PatchStore,
-    private readonly frontendStore?: FrontendResultStore,
+    private readonly frontendStore: FrontendResultStore,
   ) {
     makeObservable(this, {
       hoveredPort: observable,
@@ -50,51 +49,15 @@ export class PortHighlightStore {
     const patch = this.patchStore.patch;
     if (!patch) return new Set();
 
-    const compatible = new Set<string>();
     const { blockId: hoveredBlockId, portId: hoveredPortId, direction: hoveredDirection } = this.hoveredPort;
-
-    // Iterate all blocks and check each port
-    for (const [blockId, block] of patch.blocks) {
-      const blockDef = requireAnyBlockDef(block.type);
-
-      // Check opposite direction ports
-      const portsToCheck = hoveredDirection === 'output' ? blockDef.inputs : blockDef.outputs;
-      const targetDirection = hoveredDirection === 'output' ? 'input' : 'output';
-
-      for (const [portId, port] of Object.entries(portsToCheck)) {
-        // Check type compatibility
-        let isCompatible = false;
-        if (hoveredDirection === 'output') {
-          // Hovering OUTPUT, checking INPUT
-          const result = validateConnection(
-            hoveredBlockId,
-            hoveredPortId,
-            blockId,
-            portId as PortId,
-            patch,
-            this.resolvePortType,
-          );
-          isCompatible = result.valid;
-        } else {
-          // Hovering INPUT, checking OUTPUT
-          const result = validateConnection(
-            blockId,
-            portId as PortId,
-            hoveredBlockId,
-            hoveredPortId,
-            patch,
-            this.resolvePortType,
-          );
-          isCompatible = result.valid;
-        }
-
-        if (isCompatible) {
-          compatible.add(`${blockId}:${portId}`);
-        }
-      }
-    }
-
-    return compatible;
+    const compatible = getCompatiblePortsForPort(
+      patch,
+      this.frontendStore,
+      hoveredBlockId,
+      hoveredPortId,
+      hoveredDirection === 'input',
+    );
+    return new Set(compatible.map((port) => `${port.blockId}:${port.portId}`));
   }
 
   // =============================================================================
@@ -135,18 +98,4 @@ export class PortHighlightStore {
     // Compatible port
     return this.isPortCompatible(blockId, portId);
   }
-
-  private readonly resolvePortType = (
-    blockId: string,
-    portId: string,
-    direction: 'input' | 'output',
-  ) => {
-    if (!this.frontendStore) return undefined;
-    return this.frontendStore.getResolvedPortTypeByIds(
-      blockId as BlockId,
-      portId as PortId,
-      direction === 'input' ? 'in' : 'out',
-    );
-  };
-
 }

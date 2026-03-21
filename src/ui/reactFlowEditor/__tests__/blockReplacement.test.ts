@@ -26,7 +26,7 @@ describe('blockReplacement helpers', () => {
     const types = compatible.map((item) => item.blockType);
 
     expect(types).toContain('Subtract');
-    expect(types).toContain('Sin');
+    expect(types).toContain('Multiply');
   });
 
   it('produces rewired edges that no longer reference the old slots', () => {
@@ -41,11 +41,11 @@ describe('blockReplacement helpers', () => {
     });
 
     const compatible = findCompatibleReplacementPlans(patch, target);
-    const sinPlan = compatible.find((item) => item.blockType === 'Sin');
+    const alphaMultiplyPlan = compatible.find((item) => item.blockType === 'AlphaMultiply');
 
-    expect(sinPlan).toBeDefined();
-    expect(sinPlan?.rewiredEdges.some((edge) => edge.to.blockId === target && edge.to.slotId === 'input')).toBe(true);
-    expect(sinPlan?.rewiredEdges.some((edge) => edge.from.blockId === target && edge.from.slotId === 'result')).toBe(true);
+    expect(alphaMultiplyPlan).toBeDefined();
+    expect(alphaMultiplyPlan?.rewiredEdges.some((edge) => edge.to.blockId === target && edge.to.slotId === 'alpha')).toBe(true);
+    expect(alphaMultiplyPlan?.rewiredEdges.some((edge) => edge.from.blockId === target && edge.from.slotId === 'out')).toBe(true);
   });
 
   it('rejects incompatible replacement types', () => {

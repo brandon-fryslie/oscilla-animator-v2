@@ -95,6 +95,15 @@ export interface FrontendResult {
   readonly unreachableBlockIds: readonly string[];
 }
 
+export interface FrontendAnalysis {
+  readonly frontendResult: FrontendResult;
+  readonly expandedPatch: Patch;
+  readonly draftGraph: DraftGraph;
+  readonly filteredDraftGraph: DraftGraph;
+  readonly fixpointResult: ReturnType<typeof finalizeNormalizationFixpoint>;
+  readonly typeResolved: TypeResolvedPatch;
+}
+
 // =============================================================================
 // Main Frontend Entry Point
 // =============================================================================
@@ -118,7 +127,7 @@ export interface FrontendOptions {
   readonly diagnosticOverrides?: Readonly<Record<string, DiagnosticSeverityOverride>>;
 }
 
-export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendResult {
+export function analyzeFrontend(patch: Patch, options?: FrontendOptions): FrontendAnalysis {
   const errors: FrontendError[] = [];
   const overrides = options?.diagnosticOverrides ?? {};
 
@@ -258,7 +267,7 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
     fixpointResult.strict !== null &&
     !cycleSummary.hasIllegalCycles;
 
-  return {
+  const frontendResult: FrontendResult = {
     typedPatch,
     cycleSummary,
     errors,
@@ -267,6 +276,19 @@ export function compileFrontend(patch: Patch, options?: FrontendOptions): Fronte
     expansionProvenance: expansion.provenance,
     unreachableBlockIds,
   };
+
+  return {
+    frontendResult,
+    expandedPatch,
+    draftGraph,
+    filteredDraftGraph,
+    fixpointResult,
+    typeResolved,
+  };
+}
+
+export function compileFrontend(patch: Patch, options?: FrontendOptions): FrontendResult {
+  return analyzeFrontend(patch, options).frontendResult;
 }
 
 // =============================================================================
