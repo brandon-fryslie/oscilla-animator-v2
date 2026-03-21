@@ -35,10 +35,12 @@ export function attach_shared_sink_table(shared_sink_table) {
  * @param {number} max_particles
  * @param {number} max_shapes
  * @param {number} debug_readback_hz
+ * @param {number} initial_width
+ * @param {number} initial_height
  * @returns {Promise<void>}
  */
-export function init_engine(canvas, max_particles, max_shapes, debug_readback_hz) {
-    const ret = wasm.init_engine(canvas, max_particles, max_shapes, debug_readback_hz);
+export function init_engine(canvas, max_particles, max_shapes, debug_readback_hz, initial_width, initial_height) {
+    const ret = wasm.init_engine(canvas, max_particles, max_shapes, debug_readback_hz, initial_width, initial_height);
     return ret;
 }
 
@@ -80,17 +82,6 @@ export function rebuild_pipeline(simulation_wgsl, assembly_wgsl, uber_shader_wgs
     const ptr2 = passStringToWasm0(uber_shader_wgsl, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len2 = WASM_VECTOR_LEN;
     const ret = wasm.rebuild_pipeline(ptr0, len0, ptr1, len1, ptr2, len2, particle_count, shape_count);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
-/**
- * @param {number} width
- * @param {number} height
- */
-export function resize_surface(width, height) {
-    const ret = wasm.resize_surface(width, height);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -1228,7 +1219,7 @@ function __wbg_get_imports() {
             arg0.writeBuffer(arg1, arg2, arg3, arg4, arg5);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 24, function: Function { arguments: [F64], shim_idx: 25, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 26, function: Function { arguments: [F64], shim_idx: 27, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h5931e681d5dee89c, wasm_bindgen__convert__closures_____invoke__h226acc91fc00b34c);
             return ret;
         },

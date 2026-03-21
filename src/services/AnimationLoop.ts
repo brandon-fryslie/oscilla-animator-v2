@@ -457,7 +457,6 @@ export function executeAnimationFrame(
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
-    renderer.resizeCanvas(renderWidth, renderHeight);
     // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
     // animation loop publishes viewport/time there and does not dual-publish to
     // any secondary runtime worker seam.
