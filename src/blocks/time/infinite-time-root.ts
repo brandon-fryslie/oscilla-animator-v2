@@ -9,6 +9,7 @@ import { canonicalType, canonicalEvent, unitTurns, contractWrap01, payloadStride
 import { FLOAT, COLOR } from '../../core/canonical-types';
 import { defaultSourceConst } from '../../types';
 import { SYSTEM_PALETTE_SLOT } from '../../compiler/ir/Indices';
+import { resolveInputConstantFloat } from '../lower-utils';
 
 export function register(): void {
   registerBlock({
@@ -21,8 +22,8 @@ export function register(): void {
     gpuVerified: true,
     loweringPurity: 'impure',
     inputs: {
-      periodAMs: { type: canonicalType(FLOAT), defaultValue: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
-      periodBMs: { type: canonicalType(FLOAT), defaultValue: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 10000, step: 100 } },
+      periodAMs: { type: canonicalType(FLOAT), defaultValue: 1000, defaultSource: defaultSourceConst(1000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 20000, step: 100 } },
+      periodBMs: { type: canonicalType(FLOAT), defaultValue: 2000, defaultSource: defaultSourceConst(2000), exposedAsPort: true, uiHint: { kind: 'slider', min: 100, max: 20000, step: 100 } },
     },
     outputs: {
       tMs: { label: 'Time (ms)', type: canonicalType(FLOAT) },
@@ -34,7 +35,7 @@ export function register(): void {
       palette: { label: 'Palette', type: canonicalType(COLOR) },
       energy: { label: 'Energy', type: canonicalType(FLOAT) },
     },
-    lower: ({ ctx, config }): import('../registry').LowerResult => {
+    lower: ({ ctx, inputsById }): import('../registry').LowerResult => {
       // Time root lowers like any other block and emits time model as effect data.
       const tMs = ctx.b.time('tMs', canonicalType(FLOAT));
       const dt = ctx.b.time('dt', canonicalType(FLOAT));
@@ -44,8 +45,13 @@ export function register(): void {
       const palette = ctx.b.time('palette', canonicalType(COLOR));
       const energy = ctx.b.time('energy', canonicalType(FLOAT));
 
-      const periodAMs = typeof config.periodAMs === 'number' ? config.periodAMs : 1000;
-      const periodBMs = typeof config.periodBMs === 'number' ? config.periodBMs : 2000;
+      // [LAW:one-source-of-truth] Period values flow through ports, not config.
+      const periodAInput = inputsById.periodAMs;
+      if (!periodAInput) throw new Error('InfiniteTimeRoot: periodAMs input not wired');
+      const periodBInput = inputsById.periodBMs;
+      if (!periodBInput) throw new Error('InfiniteTimeRoot: periodBMs input not wired');
+      const periodAMs = resolveInputConstantFloat(ctx, periodAInput, 'periodAMs', { min: 1 });
+      const periodBMs = resolveInputConstantFloat(ctx, periodBInput, 'periodBMs', { min: 1 });
   
       // Palette uses the canonical reserved slot declared by the IR index contract.
       const paletteSlot = SYSTEM_PALETTE_SLOT;
