@@ -4,26 +4,28 @@ Status: accepted contract for `lit-b90e7a20-4db23d94`
 
 ## Purpose
 
-Freeze one canonical authored representation for control-bearing author intent before the follow-on migration issues land.
+Freeze one canonical PatchStore-owned representation for block input semantics before the follow-on migration issues land.
 
-The current runtime spreads authored control state across:
+The current runtime spreads input semantics across:
 
-- `block.params` for exposed-port literal values
-- `inputPort.defaultSource` for fallback/default authoring
+- `block.params` for some exposed-input literal values
+- `inputPort.defaultSource` for some fallback/default authoring
 - `inputPort.lenses` for ordered per-port transforms
-- UI/compiler projection code that re-derives "controls" by inspecting those fields together
+- UI/compiler code that re-derives "controls" by inspecting those fields together
+
+That split is wrong. Controls are projections of canonical input semantics. They are not the source of those semantics.
 
 This document defines the steady-state replacement and the exact migration invariants.
 
-// [LAW:one-source-of-truth] This document names one canonical authored-control representation and forbids parallel steady-state ownership paths.
-// [LAW:single-enforcer] PatchStore remains the only mutable boundary for authored-control state.
-// [LAW:one-type-per-behavior] Const/default-source/lens authoring are represented as one typed authored-control node model, not bespoke side channels.
+// [LAW:one-source-of-truth] This document names one canonical input-binding representation and forbids parallel steady-state ownership paths.
+// [LAW:single-enforcer] PatchStore remains the only mutable boundary for input-binding state.
+// [LAW:one-type-per-behavior] Literal values, default-like sources, and lens chains are one input-binding model with different projections, not separate storage systems.
 
 ## Scope
 
 In scope:
 
-- PatchStore-owned authored control data
+- PatchStore-owned block input semantics
 - patch persistence and Patch DSL import/export
 - compiler/frontend normalization inputs
 - editor adapter and UI control projection
@@ -38,61 +40,66 @@ Out of scope:
 
 ## Canonical Model
 
-Steady-state authored control data lives on the owning input port and nowhere else.
+Steady-state semantic state for any graph-backed block input lives in one PatchStore-owned input-binding structure on the owning input port.
 
 ```ts
-type ControlOwnerId = `${BlockId}:${PortId}`;
-type ControlNodeId = 'source' | `lens:${string}`;
+type InputBindingOwnerId = `${BlockId}:${PortId}`;
+type InputBindingNodeId = 'source' | `lens:${string}`;
 
-interface AuthoredControlNode {
-  readonly id: ControlNodeId;
+interface InputBindingSourceNode {
+  readonly id: 'source';
   readonly blockType: BlockType;
   readonly outputPortId: PortId;
   readonly params: Readonly<Record<string, unknown>>;
 }
 
 type LensTarget =
-  | { readonly kind: 'authored-source' }
+  | { readonly kind: 'inline-source' }
   | { readonly kind: 'incoming-edge'; readonly sourceAddress: string };
 
-interface AuthoredLensNode extends AuthoredControlNode {
+interface InputBindingLensNode {
   readonly id: `lens:${string}`;
+  readonly blockType: BlockType;
+  readonly outputPortId: PortId;
+  readonly params: Readonly<Record<string, unknown>>;
   readonly target: LensTarget;
 }
 
-interface AuthoredInputControl {
-  readonly ownerId: ControlOwnerId;
-  readonly source: AuthoredControlNode | null;
-  readonly lenses: readonly AuthoredLensNode[];
+interface InputBinding {
+  readonly ownerId: InputBindingOwnerId;
+  readonly source: InputBindingSourceNode | null;
+  readonly lenses: readonly InputBindingLensNode[];
 }
 
 interface InputPort {
   readonly id: PortId;
   readonly combineMode: CombineMode;
-  readonly authoredControl?: AuthoredInputControl;
+  readonly inputBinding?: InputBinding;
 }
 ```
 
 Interpretation:
 
-- Every exposed input port may own one `AuthoredInputControl`.
-- `source` is the authored fallback/default producer for that port. It is explicit structure, not a hidden param/default bag.
+- Every exposed input port may own one `InputBinding`.
+- `source` is the canonical inline/derived producer for that input when the binding is not represented by a separate visible source block and visible user edge.
 - `lenses` is an ordered list owned by the same input port.
-- Each lens is explicit authored structure and declares what upstream value it transforms:
-  - `authored-source` means the port's inline fallback/default source
-  - `incoming-edge` means a real graph edge identified by the upstream source address
+- A visible graph edge remains an ordinary patch edge. It is not duplicated into a second value bag.
+- A compact inline literal editor, a default-like source UI, and a lens editor are all projections of the same canonical input-binding model.
 
-// [LAW:locality-or-seam] Port-owned control state changes remain local to the owning input port instead of cascading through unrelated block metadata.
-// [LAW:dataflow-not-control-flow] Normalization/compiler/UI always read the same authored-control structure in the same order; optionality is encoded as `null` and empty arrays.
+// [LAW:locality-or-seam] Input-binding changes remain local to the owning input port instead of cascading through unrelated block metadata.
+// [LAW:dataflow-not-control-flow] Compiler and UI always read the same binding structure; optionality is encoded as `null`, empty arrays, and ordinary patch edges.
 
 ## Ownership Rules
 
 ### Block Fields That Remain
 
-`Block.params` remains only for true block-instance metadata/config:
+`Block.params` remains only for true block-instance config that is not represented as graph-backed input binding state.
 
-- inputs with `exposedAsPort === false`
-- block-specific non-control config that is not represented as graph authoring
+Examples:
+
+- `Const.value`
+- expression text or mode values for blocks whose semantics are not modeled as incoming bindings
+- other non-graph config aligned to the block instance rather than to an incoming bound input
 
 `displayName`, `domainId`, `role`, `inputPorts`, and `outputPorts` remain block metadata or topology.
 
@@ -100,54 +107,56 @@ Interpretation:
 
 The following instance-level fields are not allowed to remain authoritative after the migration:
 
-- exposed input values mirrored in `block.params`
+- exposed-input values mirrored in `block.params`
 - `inputPort.defaultSource`
 - `inputPort.lenses`
 
-Registry metadata may still describe authoring seeds, but registry metadata is not instance state and is never read as a steady-state substitute for `InputPort.authoredControl`.
+Registry metadata may still describe creation seeds, but registry metadata is not instance state and is never read as a steady-state substitute for `InputPort.inputBinding`.
 
 ### Authoring Seeds
 
-`InputDef.defaultSource` and `InputDef.defaultValue` may remain only as creation/import seeds:
+`InputDef.defaultSource` and `InputDef.defaultValue` may remain only as block-creation seeds:
 
-- `PatchStore.addBlock()` may consume them once to initialize `inputPort.authoredControl`
-- HCL/JSON import migration may consume them once when upgrading old patches
-- editor/compiler/UI reads must not consult them as fallback instance state after initialization
+- `PatchStore.addBlock()` may consume them once to initialize `inputPort.inputBinding`
+- parser/import may consume them once while constructing canonical in-memory state from stable user-facing syntax
+- editor/compiler/runtime reads must not consult them as fallback instance state after initialization
 
 // [LAW:single-enforcer] Seed application happens at one boundary only: PatchStore creation/import.
 
 ## Structural Semantics
 
-### Source Nodes
+### Inline Source Nodes
 
-`AuthoredInputControl.source` is an authored block-like node with:
-
-- `blockType`
-- `outputPortId`
-- `params`
+`InputBinding.source` represents the canonical inline or derived source for an input when that source is not represented by a separately materialized visible block and edge.
 
 Examples:
 
 - a literal knob value is `blockType: 'Const', outputPortId: 'out', params: { value: 0.5 }`
-- a time fallback is an authored source node whose `blockType` has time capability
-- a non-const default producer such as `Ellipse.shape` is represented by that source block type plus params and output port
+- a time-like default is a source node whose `blockType` has time capability
+- a non-const derived source such as `Ellipse.shape` is represented by that source block type plus params and output port
 
-The source node is explicit even when the editor presents it as a compact inline control rather than as a visible graph block.
+This source is semantic graph state. A compact control is only one way to render it.
 
 ### Lens Nodes
 
-Lens nodes are explicit authored-control nodes, not metadata hanging off a port.
+Lens nodes are explicit input-binding nodes, not metadata hanging off a port.
 
 Rules:
 
-- lens order is array order in `AuthoredInputControl.lenses`
+- lens order is array order in `InputBinding.lenses`
 - `lens.id` stays stable once created
-- `lens.target.kind === 'authored-source'` means the lens transforms the port's inline source node
+- `lens.target.kind === 'inline-source'` means the lens transforms the port's inline source node
 - `lens.target.kind === 'incoming-edge'` means the lens transforms the matching upstream connection selected by `sourceAddress`
 
 `sortKey` is not needed in steady state because order is represented structurally by array position. If persistence needs explicit ordering during migration, it must derive array order once and then delete `sortKey`.
 
-// [LAW:one-type-per-behavior] Lens blocks and source blocks share one authored node shape; role differences are data, not separate storage systems.
+### Materialization
+
+Materializing an inline source as a visible graph block and edge, or dematerializing that visible representation back into an inline source, is a projection change over one semantic binding.
+
+It is not an ownership transfer between two semantic models.
+
+// [LAW:one-type-per-behavior] Inline source nodes, materialized source blocks, and lens chains are one binding model with different presentations and lowering forms.
 
 ## Stable Identity And Address Contract
 
@@ -155,8 +164,8 @@ Internal canonical identity is block-id based, not display-name based.
 
 Stable IDs:
 
-- control owner: `${blockId}:${portId}`
-- source node id: `source`
+- binding owner: `${blockId}:${portId}`
+- inline source node id: `source`
 - lens node id: `lens:${legacyLensId}`
 
 Stable addresses exposed to later control-surface work:
@@ -168,12 +177,12 @@ Stable addresses exposed to later control-surface work:
 Migration rules:
 
 - existing lens ids generated by `nextLensAttachmentId()` are preserved byte-for-byte
-- the current derived default-source pseudo-block id `_ds_${blockId}_${portId}` is not preserved as a canonical identity; it is replaced by the stable source address above
+- the current derived default-source pseudo-block id `_ds_${blockId}_${portId}` is not preserved as a canonical identity
 - any code that currently keys fast-path updates by `{blockId}:{portId}` or derived lens ids must cut over to the new owner/node ids without inventing a second handle system
 
 The current user-facing canonical-address helpers may continue to project friendly strings, but patch mutation, persistence, and control publication must use the IDs above as the authoritative handles.
 
-// [LAW:one-source-of-truth] Stable control handles derive from owner and node ids once; display-name projections are derived views only.
+// [LAW:one-source-of-truth] Stable control handles derive from one binding identity system; display-name projections are derived views only.
 
 ## Composite Rule
 
@@ -181,16 +190,16 @@ Only exposed input ports surface controls outside a composite boundary.
 
 Implications:
 
-- internal composite block ports may own authored controls, but those controls remain internal
-- composite publication projects authored controls only for `exposedInputs`
-- `ExposedInputPort` must not duplicate control values in `defaultSource` or a second params bag
+- internal composite block ports may own canonical input bindings, but those bindings remain internal
+- composite publication projects controls only for `exposedInputs`
+- `ExposedInputPort` must not duplicate binding semantics in `defaultSource` or a second params bag
 - if an exposed input forwards an internal port, the exposed input is the published control seam and the internal port remains implementation detail
 
 Steady-state composite behavior:
 
-- composite definition storage keeps one authoritative authored-control owner per semantic input
+- composite definition storage keeps one authoritative binding owner per semantic input
 - editor/UI lists controls only for exposed inputs
-- compile/expansion carries the authored control through the exposed input seam without publishing internal-only controls
+- compile/expansion carries the canonical binding through the exposed input seam without publishing internal-only controls
 
 // [LAW:one-way-deps] Composite internals feed the published exposed-input seam; the UI must not crawl back inward and invent hidden controls.
 
@@ -198,51 +207,52 @@ Steady-state composite behavior:
 
 | Current field/path | Steady-state replacement | Notes |
 | --- | --- | --- |
-| `block.params[inputId]` for `exposedAsPort !== false` | `inputPort.authoredControl.source.params.value` when the source node is `Const` | Exposed-port literals stop living in `block.params`. |
-| `block.params[*]` for config-only inputs | `block.params[*]` | These remain canonical config. |
-| `inputPort.defaultSource` | `inputPort.authoredControl.source` | Same semantics, explicit node shape. |
-| `inputPort.lenses[]` | `inputPort.authoredControl.lenses[]` | Preserve per-port ownership and order. |
-| `LensAttachment.sortKey` | array order in `authoredControl.lenses` | Derived once, then deleted. |
+| `block.params[inputId]` for graph-backed exposed inputs | `inputPort.inputBinding.source.params.value` when the inline source node is `Const` | Exposed-input literals stop living in `block.params`. |
+| `block.params[*]` for true non-graph config | `block.params[*]` | These remain canonical config. |
+| `inputPort.defaultSource` | `inputPort.inputBinding.source` | Default-like source authoring becomes canonical input-binding source state. |
+| `inputPort.lenses[]` | `inputPort.inputBinding.lenses[]` | Preserve per-port ownership and order. |
+| `LensAttachment.sortKey` | array order in `inputBinding.lenses` | Derived once, then deleted. |
 | `derivedDefaultSourceBlockId()` | `control:${blockId}:${portId}:source` | Pseudo block ids stop being identity. |
-| `derivedLensParamKey(portId, lensId, paramId)` | `control:${blockId}:${portId}:lens:${legacyLensId}:param:${paramId}` | Fast-path keys follow authored node identity. |
-| `PatchStore.updateBlockParams()` for exposed inputs | new authored-control mutation APIs on PatchStore | `updateBlockParams()` becomes config-only. |
-| `PatchStore.updateInputPort(... defaultSource ...)` | `PatchStore.updateInputControlSource(...)` | No silent mirroring back to params. |
-| `PatchStore.addLens/removeLens/updateLensParams` | same operations against `inputPort.authoredControl.lenses` | API names may stay; ownership path changes. |
-| `materializeInputDefaultSource()/dematerializeInputDefaultSource()` | projection helpers over `authoredControl.source` | They no longer move ownership between two models. |
-| Patch JSON `inputPorts[].defaultSource` | Patch JSON `inputPorts[].authoredControl.source` | Storage key/version bump required. |
-| Patch JSON `inputPorts[].lenses` | Patch JSON `inputPorts[].authoredControl.lenses` | Preserve ids and order. |
-| HCL `port.defaultSource = ...` | HCL nested authored source structure | DSL must serialize the canonical structure directly. |
-| HCL top-level `lens "..." { port=..., sourceAddress=... }` | HCL nested lens list inside the owning `port` block | Lens ownership becomes explicit in syntax too. |
-| `PatchStoreAdapter` fallback to registry `defaultSource` | adapter reads `inputPort.authoredControl` only | Registry defaults are creation seeds, not runtime instance state. |
-| `nodeDataTransform()` control reconstruction from params/defaults | direct projection from `inputPort.authoredControl` | No heuristic merge of params + defaults. |
-| `FrontendResultStore` synthesized `DefaultSource` from normalized default wire | provenance derived from authored source node identity | The compiler stops inventing a parallel default-source descriptor. |
-| `CompositeEditorStore` copying `exposed.defaultSource` | exposed-input publication references the canonical authored owner | No duplicated composite control state. |
+| `derivedLensParamKey(portId, lensId, paramId)` | `control:${blockId}:${portId}:lens:${legacyLensId}:param:${paramId}` | Fast-path keys follow binding node identity. |
+| `PatchStore.updateBlockParams()` for graph-backed exposed inputs | input-binding mutation APIs on PatchStore | `updateBlockParams()` becomes true-config-only. |
+| `PatchStore.updateInputPort(... defaultSource ...)` | binding-source mutation API on PatchStore | No silent mirroring back to params. |
+| `PatchStore.addLens/removeLens/updateLensParams` | same operations against `inputPort.inputBinding.lenses` | API names may stay; ownership path changes. |
+| `materializeInputDefaultSource()/dematerializeInputDefaultSource()` | projection helpers over `inputBinding.source` and ordinary patch edges | They no longer move ownership between two semantic models. |
+| Patch JSON `inputPorts[].defaultSource` | Patch JSON `inputPorts[].inputBinding.source` | Storage shape cuts over to canonical binding state. |
+| Patch JSON `inputPorts[].lenses` | Patch JSON `inputPorts[].inputBinding.lenses` | Preserve ids and order. |
+| Existing HCL inline assignment for an exposed input | unchanged HCL syntax, parsed into canonical `inputBinding.source = Const(...)` | HCL remains user-facing syntax, not object-shape syntax. |
+| Existing HCL `port.defaultSource = ...` syntax | unchanged HCL syntax, parsed into canonical `inputBinding.source` | Parser/serializer map stable syntax to canonical binding state. |
+| Existing HCL lens syntax | unchanged HCL syntax, parsed into canonical `inputBinding.lenses` | Lens ownership becomes canonical in memory even if surface syntax stays stable. |
+| `PatchStoreAdapter` fallback to registry `defaultSource` | adapter reads canonical binding state plus ordinary patch edges only | Registry defaults are creation seeds, not runtime instance state. |
+| `nodeDataTransform()` control reconstruction from params/defaults | direct projection from canonical binding state and true config | No heuristic merge of params, defaults, and port metadata. |
+| `FrontendResultStore` synthesized `DefaultSource` identity | provenance derived from binding owner/node identity | No second default-source identity system. |
+| `CompositeEditorStore` copying `exposed.defaultSource` | exposed-input publication references the canonical binding owner | No duplicated composite control state. |
 
 ## Mutation Boundary Contract
 
-PatchStore is the sole mutable owner of authored-control state.
+PatchStore is the sole mutable owner of canonical input-binding state.
 
 Required steady-state PatchStore API split:
 
-- `updateBlockParams(blockId, params)` only accepts config-only keys
-- `setInputControlSource(blockId, portId, source | null)`
-- `updateInputControlSourceParams(blockId, portId, params)`
-- `addInputControlLens(blockId, portId, lens)`
-- `removeInputControlLens(blockId, portId, lensId)`
-- `updateInputControlLensParams(blockId, portId, lensId, params)`
-- `reorderInputControlLenses(blockId, portId, nextOrder)`
+- `updateBlockParams(blockId, params)` only accepts true config-only keys
+- `setInputBindingSource(blockId, portId, source | null)`
+- `updateInputBindingSourceParams(blockId, portId, params)`
+- `addInputBindingLens(blockId, portId, lens)`
+- `removeInputBindingLens(blockId, portId, lensId)`
+- `updateInputBindingLensParams(blockId, portId, lensId, params)`
+- `reorderInputBindingLenses(blockId, portId, nextOrder)`
 
 Mutation invariants:
 
-- authored control edits never mirror back into `block.params`
-- authored control edits never write `inputPort.defaultSource` or `inputPort.lenses`
-- block creation/import is the only place allowed to synthesize authored control from block-definition seeds or legacy data
+- graph-backed input edits never mirror back into `block.params`
+- graph-backed input edits never write `inputPort.defaultSource` or `inputPort.lenses`
+- block creation/import is the only place allowed to synthesize canonical binding state from block-definition seeds or stable user-facing syntax
 
 // [LAW:single-enforcer] Cross-cutting migration and validation happen at PatchStore, not duplicated across UI/compiler callsites.
 
 ## Persistence Contract
 
-Patch JSON and HCL must persist the canonical authored-control structure 1:1.
+Patch JSON must persist the canonical input-binding structure 1:1.
 
 Required JSON shape:
 
@@ -250,7 +260,7 @@ Required JSON shape:
 inputPorts: Array<{
   id: string;
   combineMode: string;
-  authoredControl?: {
+  inputBinding?: {
     ownerId: string;
     source: { id: 'source'; blockType: string; outputPortId: string; params: Record<string, unknown> } | null;
     lenses: Array<{
@@ -258,7 +268,7 @@ inputPorts: Array<{
       blockType: string;
       outputPortId: string;
       params: Record<string, unknown>;
-      target: { kind: 'authored-source' } | { kind: 'incoming-edge'; sourceAddress: string };
+      target: { kind: 'inline-source' } | { kind: 'incoming-edge'; sourceAddress: string };
     }>;
   };
 }>
@@ -266,96 +276,75 @@ inputPorts: Array<{
 
 Required HCL semantics:
 
-- block inline attributes contain config-only params only
-- each owning input port serializes one canonical authored-control block
-- authored source and authored lenses are nested under the owning `port` block so ownership is visible in syntax
-
-Concrete HCL shape:
-
-```hcl
-block "Rotate2D" "spin" {
-  port "angle" {
-    source "Const" {
-      output = "out"
-      value = 0.125
-    }
-
-    lens "Clamp" {
-      id = "lens:clamp_ab12"
-      target = "authored-source"
-    }
-
-    lens "StepQuantize" {
-      id = "lens:step_cd34"
-      target = "incoming-edge"
-      sourceAddress = "v1:blocks.clock.outputs.phaseA"
-      steps = 16
-    }
-  }
-}
-```
+- HCL remains a stable user-facing language rather than a dump of runtime object shape
+- inline block attributes continue to express either true config or exposed-input literal bindings depending on the block definition
+- `port` and lens syntax continue to express user intent, but parser/serializer map that syntax to canonical input-binding state
+- parser and serializer must agree on one semantic model even when the surface syntax stays compact
 
 Required parser/serializer rules:
 
-- `source "<BlockType>" {}` maps 1:1 to `authoredControl.source`
-- `lens "<BlockType>" { id, target, sourceAddress?, ...params }` maps 1:1 to `authoredControl.lenses[*]`
-- legacy `defaultSource = ...` and top-level `lens { port = ... }` syntax is import-only during the migration window and is not emitted after cutover
+- existing HCL syntax for exposed-input inline literals maps to canonical `inputBinding.source`
+- existing HCL syntax for explicit source/default authoring maps to canonical `inputBinding.source`
+- existing HCL lens syntax maps to canonical `inputBinding.lenses`
+- serializer emits stable user-facing syntax; it does not expose JS object layout choices
+- there is no compatibility requirement for external legacy saved patches beyond checked-in repository fixtures, so the repo must migrate its own fixtures instead of keeping parser/runtime fallback logic
 
-No serializer or parser may reconstruct authored control by guessing from `block.params`, `defaultSource`, and `lenses` after the cutover.
+No serializer or parser may reconstruct runtime semantics by guessing from multiple legacy fields after the cutover.
 
 ## Compiler Contract
 
-Compiler/frontend normalization consumes authored control directly.
+Compiler/frontend normalization consumes canonical binding state directly.
 
 Required behavior:
 
-- default-source planning reads `inputPort.authoredControl.source`, not `inputPort.defaultSource`
-- lens expansion reads `inputPort.authoredControl.lenses`, not `inputPort.lenses`
-- normalization may still lower authored control to explicit graph blocks/edges, but that lowering is a derived compiler view, not the authored store
-- provenance in `FrontendResultStore` must point back to authored control owner/node ids, not synthesize a second default-source identity system
+- graph-backed input planning reads `inputPort.inputBinding` plus ordinary patch edges
+- true non-graph config reads `block.params`
+- normalization may lower canonical binding state to explicit graph blocks and edges, but that lowering is a derived compiler view, not the authored store
+- provenance in `FrontendResultStore` must point back to binding owner/node ids, not synthesize a second default-source identity system
 
-This keeps the authored model explicit while still allowing the compiler to operate on ordinary blocks/edges after expansion.
+This keeps the semantic model explicit while still allowing the compiler to operate on ordinary blocks and edges after lowering.
 
 ## Editor Adapter And UI Projection Contract
 
-Editor adapters and node/control projections read authored controls directly.
+Editor adapters and node/control projections read canonical input bindings and true config directly.
 
 Steady-state rules:
 
-- control enumeration starts from exposed input ports and their `authoredControl`
-- a disconnected exposed input with `authoredControl.source = Const` renders as a compact inline value editor
-- a connected input with authored lenses renders those lenses from `authoredControl.lenses`
-- no UI code falls back to `block.params[inputId]` for exposed controls
+- controls are projections of canonical binding state or true config state
+- control enumeration starts from block inputs and block config, not from UI-local heuristics
+- a disconnected exposed input with `inputBinding.source = Const` may render as a compact inline value editor
+- a connected input with lenses renders those lenses from `inputBinding.lenses`
+- no UI code falls back to `block.params[inputId]` for graph-backed inputs
 - no UI code falls back to registry `defaultSource` as if it were current instance state
 
-The adapter may still derive display-friendly summaries, but those summaries are derived from canonical authored-control data only.
+The adapter may still derive display-friendly summaries, but those summaries are derived from canonical binding state and true config only.
 
 ## Cutover Plan By Issue
 
 ### CTRL-AUTH-02
 
-- add `inputPort.authoredControl` to PatchStore data types
-- migrate existing exposed-input literal ownership out of `block.params`
-- make PatchStore mutation APIs authored-control aware
-- keep one import-only upgrader from legacy fields into the new structure
+- add `inputPort.inputBinding` to PatchStore data types
+- classify block fields into true config vs graph-backed input binding state
+- migrate exposed-input literal ownership out of `block.params`
+- make PatchStore mutation APIs binding-aware and config-only where appropriate
 
 ### CTRL-AUTH-03
 
-- replace `inputPort.defaultSource` reads/writes with `authoredControl.source`
-- rewrite materialize/dematerialize helpers as projection helpers over the canonical source node
-- delete instance-level `defaultSource` steady-state ownership
+- replace `inputPort.defaultSource` ownership with canonical `inputBinding.source`
+- rewrite materialize/dematerialize helpers as projection helpers over one semantic binding
+- keep visible source blocks/edges and inline source projections semantically aligned
 
 ### CTRL-AUTH-04
 
-- replace `inputPort.lenses` reads/writes with `authoredControl.lenses`
+- replace `inputPort.lenses` ownership with canonical `inputBinding.lenses`
 - preserve lens ids and per-port order
-- move lens params and fast-path keys onto authored lens node ids
+- move lens params and fast-path keys onto canonical binding lens node ids
 
 ### CTRL-AUTH-05
 
-- cut JSON/HCL persistence to the canonical structure
-- cut compiler/frontend normalization to authored control inputs
-- cut `PatchStoreAdapter`, `nodeDataTransform`, `FrontendResultStore`, and composite publication to authored control reads only
+- cut JSON and HCL persistence to canonical binding state
+- cut compiler/frontend normalization to canonical binding inputs
+- cut `PatchStoreAdapter`, `nodeDataTransform`, `FrontendResultStore`, and composite publication to canonical binding reads only
 - delete legacy field readers/writers and any heuristic reconstruction paths
 
 ## Deletion Plan
@@ -364,39 +353,41 @@ The following must be deleted by the end of the epic, not left dormant:
 
 - instance-level `inputPort.defaultSource`
 - instance-level `inputPort.lenses`
-- exposed-input mirrors inside `block.params`
+- graph-backed input mirrors inside `block.params`
 - PatchStore synchronization logic between `block.params` and `defaultSource`
 - default-source pseudo-block identity helpers as authoritative handles
 - UI/editor fallback logic that merges `block.params`, instance defaultSource, and registry defaults to decide what a control is
-- persistence/DSL support that treats legacy fields as steady-state authored state
+- persistence or DSL support that treats legacy runtime fields as steady-state authored state
 
-The only allowed temporary legacy code is a narrow one-way import upgrader at the PatchStore/persistence boundary. That upgrader is removed once all persisted data and tests are migrated in `CTRL-AUTH-05`.
+There is no requirement to preserve runtime or parser fallback behavior for external legacy saved patches. Checked-in repository fixtures are migrated as part of this epic instead.
 
-// [LAW:no-mode-explosion] The migration allows one narrow import upgrader only; it does not create a permanent dual-mode runtime.
+// [LAW:no-mode-explosion] The migration removes dual-mode runtime behavior instead of institutionalizing it.
 
 ## Invariants
 
-1. One exposed input port has at most one authored source node.
+1. One exposed input port has at most one canonical inline source node.
 2. One exposed input port owns exactly one ordered lens list.
-3. `block.params` never stores exposed-input control values in steady state.
-4. Compiler, persistence, editor adapter, and UI all read the same authored-control structure.
-5. Control publication surfaces only exposed ports across composite boundaries.
-6. Lens ids survive migration unchanged.
-7. Control owner/node ids are deterministic functions of block id, port id, and preserved lens id.
-8. Materialized graph blocks/edges derived from authored controls are projections, not ownership transfers.
+3. `block.params` never stores graph-backed input values in steady state.
+4. Compiler, persistence, editor adapter, and UI all read the same canonical binding structure for graph-backed inputs.
+5. Controls are projections of canonical binding state or true config state; they are never the source of semantic truth.
+6. Control publication surfaces only exposed ports across composite boundaries.
+7. Lens ids survive migration unchanged.
+8. Binding owner/node ids are deterministic functions of block id, port id, and preserved lens id.
+9. Materialized graph blocks and edges derived from canonical bindings are projections, not ownership transfers.
 
 ## Non-Goals
 
-- preserving the old HCL surface syntax if it obscures canonical ownership
+- preserving JS-object-shaped HCL syntax
 - keeping `defaultSource` or `lenses` as convenience mirrors
-- supporting both legacy and canonical authored-control models in normal runtime behavior
+- supporting both legacy and canonical runtime models in normal behavior
 - publishing internal composite controls that are not exposed at the boundary
 
 ## Verification Checklist
 
 This contract is complete only if all of the following remain true:
 
-- one authoritative authored-control structure is named in this document
+- one authoritative canonical binding structure is named in this document
 - the document explicitly forbids steady-state parallel ownership in `block.params`, `defaultSource`, and `lenses`
 - the migration matrix covers PatchStore, persistence, compiler, editor adapter, UI projection, and composites
+- the document makes clear that controls are projections of semantic state rather than the source of values
 - stable ids/addresses and deletion steps are explicit enough to implement the follow-on issues without guessing

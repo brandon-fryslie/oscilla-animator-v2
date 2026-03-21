@@ -47,10 +47,10 @@ import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import {
-  validateConnection,
   type PortTypeLookupFn,
   type TypeValidationIssue,
 } from '../reactFlowEditor/typeValidation';
+import { validateSemanticConnection } from '../authoring/semanticQueries';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
@@ -429,14 +429,16 @@ export const GraphEditorCoreInner = observer(
           if (!connection.source || !connection.target) return false;
           if (!patch) return true; // No patch - skip validation
 
-          const result = validateConnection(
+          const result = validateSemanticConnection(
+            patch,
             connection.source,
             connection.sourceHandle || '',
             connection.target,
             connection.targetHandle || '',
-            patch,
-            resolvedPortTypeLookup,
-            reportTypeValidationIssue,
+            {
+              resolvedPortTypeLookup,
+              issueReporter: reportTypeValidationIssue,
+            },
           );
           return result.valid;
         },

@@ -11,9 +11,10 @@
  */
 
 import type { CombineMode, DefaultSource } from '../../types';
-import type { LensAttachment } from '../../graph/Patch';
+import type { AuthoredInputControl, LensAttachment } from '../../graph/Patch';
 import type { InferenceCanonicalType } from '../../core/inference-types';
-import type { PortProvenance } from '../../stores/FrontendResultStore';
+import type { InputBindingSummary, PortProvenance } from '../../stores/FrontendResultStore';
+import type { ControlMutationTarget } from '../../types/control-target';
 
 // =============================================================================
 // Common Shape Types
@@ -25,10 +26,12 @@ import type { PortProvenance } from '../../stores/FrontendResultStore';
 export interface InputPortLike {
   readonly id: string;
   readonly combineMode: CombineMode;
+  readonly authoredControl?: AuthoredInputControl;
   readonly defaultSource?: DefaultSource;
   readonly lenses?: readonly LensAttachment[];
   readonly resolvedType?: InferenceCanonicalType;
   readonly provenance?: PortProvenance;
+  readonly binding?: InputBindingSummary;
 }
 
 /**
@@ -217,4 +220,12 @@ export interface GraphDataAdapter<BlockIdT = string> {
    * @param mode - New combine mode
    */
   updateInputPortCombineMode?(blockId: BlockIdT, portId: string, mode: CombineMode): void;
+}
+
+export interface ParamData {
+  readonly id: string;
+  readonly label: string;
+  readonly value: unknown;
+  readonly hint?: import('../../types').UIControlHint;
+  readonly target: ControlMutationTarget;
 }

@@ -24,32 +24,24 @@ import {
   VisibilityOff as UnexposeIcon,
 } from '@mui/icons-material';
 import type { BlockId, PortId, CombineMode } from '../../../types';
-import { COMBINE_MODE_CATEGORY } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
-import { validateConnection, type PortTypeLookupFn } from '../typeValidation';
-import { requireAnyBlockDef, getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
-import { isPayloadVar, type InferencePayloadType } from '../../../core/inference-types';
+import { requireAnyBlockDef } from '../../../blocks/registry';
 import {
   getLensLabel,
-  findCompatibleLenses,
   getLensDefaultParams,
   groupLensMenuOptions,
 } from '../lensUtils';
 import { internalBlockId } from '../../../blocks/composite-types';
+import {
+  getCompatibleBlockTypesForPort,
+  getCompatibleLensesForConnection,
+  getCompatiblePortsForPort,
+  getValidCombineModesForInput,
+} from '../../authoring/semanticQueries';
 
 /** Maximum number of "add block" suggestions to show */
 const MAX_ADD_BLOCK = 3;
-
-/**
- * Compatible port info for quick connect menu items.
- */
-interface CompatiblePort {
-  blockId: BlockId;
-  portId: PortId;
-  blockLabel: string;
-  portLabel: string;
-}
 
 /**
  * Compatible block type for "add block" menu items.
@@ -57,75 +49,9 @@ interface CompatiblePort {
 interface CompatibleBlockType {
   blockType: string;
   blockLabel: string;
-  portId: string;  // The port to connect to
+  portId: string;
 }
 
-/**
- * Find compatible ports for quick connect.
- * For input ports: finds output ports that can connect to this input.
- * For output ports: finds input ports that can receive from this output.
- */
-function findCompatiblePorts(
-  patch: ReturnType<typeof useStores>['patch']['patch'],
-  blockId: BlockId,
-  portId: PortId,
-  isInput: boolean,
-  resolvedPortTypeLookup?: PortTypeLookupFn,
-): CompatiblePort[] {
-  const compatible: CompatiblePort[] = [];
-
-  for (const [otherBlockId, otherBlock] of patch.blocks) {
-    // Skip self
-    if (otherBlockId === blockId) continue;
-
-    const otherBlockDef = requireAnyBlockDef(otherBlock.type);
-    const portsToCheck = isInput ? otherBlockDef.outputs : otherBlockDef.inputs;
-
-    for (const [otherPortId, portDef] of Object.entries(portsToCheck)) {
-      // Skip ports that aren't exposed
-      if ('exposedAsPort' in portDef && portDef.exposedAsPort === false) continue;
-
-      // Check type compatibility
-      let result;
-      if (isInput) {
-        // We want to connect otherBlock.output -> this.input
-        result = validateConnection(
-          otherBlockId,
-          otherPortId as PortId,
-          blockId,
-          portId,
-          patch,
-          resolvedPortTypeLookup,
-        );
-      } else {
-        // We want to connect this.output -> otherBlock.input
-        result = validateConnection(
-          blockId,
-          portId,
-          otherBlockId,
-          otherPortId as PortId,
-          patch,
-          resolvedPortTypeLookup,
-        );
-      }
-
-      if (result.valid) {
-        compatible.push({
-          blockId: otherBlockId,
-          portId: otherPortId as PortId,
-          blockLabel: otherBlock.displayName || otherBlockDef.label || otherBlock.type,
-          portLabel: portDef.label || otherPortId,
-        });
-      }
-    }
-  }
-
-  return compatible;
-}
-
-/**
- * Get a random sample from an array.
- */
 function randomSample<T>(array: T[], count: number): T[] {
   if (array.length <= count) return array;
 
@@ -135,83 +61,6 @@ function randomSample<T>(array: T[], count: number): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled.slice(0, count);
-}
-
-/**
- * Find compatible block types that could be added and connected to this port.
- * For input ports: finds blocks with compatible outputs.
- * For output ports: finds blocks with compatible inputs.
- */
-function findCompatibleBlockTypes(
-  patch: ReturnType<typeof useStores>['patch']['patch'],
-  blockId: BlockId,
-  portId: PortId,
-  isInput: boolean
-): CompatibleBlockType[] {
-  const compatible: CompatibleBlockType[] = [];
-  const thisBlock = patch.blocks.get(blockId);
-  if (!thisBlock) return compatible;
-
-  const thisBlockDef = requireAnyBlockDef(thisBlock.type);
-  const thisPortDef = isInput
-    ? thisBlockDef.inputs[portId]
-    : thisBlockDef.outputs[portId];
-
-  if (!thisPortDef) return compatible;
-
-  // Get all block types from registry
-  const categories = getBlockCategories();
-  for (const category of categories) {
-    const blockTypes = getBlockTypesByCategory(category);
-    for (const blockDef of blockTypes) {
-      // Skip time blocks (hidden from library)
-      if (blockDef.capability === 'time') continue;
-
-      // Check if any port is compatible
-      const portsToCheck = isInput ? blockDef.outputs : blockDef.inputs;
-
-      for (const [candidatePortId, candidatePortDef] of Object.entries(portsToCheck)) {
-        // Skip ports that aren't exposed
-        if ('exposedAsPort' in candidatePortDef && candidatePortDef.exposedAsPort === false) continue;
-
-        // For compatibility checking, we need the types
-        // Since we don't have a real block instance, do a simple payload type check
-        const thisPayload = thisPortDef.type.payload;
-        const candidatePayload = candidatePortDef.type.payload;
-
-        // Simple compatibility: same payload type
-        // Full validation would require type inference, but this is good enough for suggestions
-        if (thisPayload === candidatePayload) {
-          compatible.push({
-            blockType: blockDef.type,
-            blockLabel: blockDef.label || blockDef.type,
-            portId: candidatePortId,
-          });
-          break; // One match per block type is enough
-        }
-      }
-    }
-  }
-
-  return compatible;
-}
-
-/**
- * Get valid combine modes for a given payload type.
- */
-function getValidCombineModes(payloadType: InferencePayloadType): CombineMode[] {
-  const payloadKind = isPayloadVar(payloadType) ? 'float' : payloadType.kind;
-  const isNumeric = ['float', 'int', 'vec2', 'vec3', 'color'].includes(payloadKind);
-  const isBoolean = payloadKind === 'bool';
-
-  return (Object.entries(COMBINE_MODE_CATEGORY) as [CombineMode, string][])
-    .filter(([_, category]) => {
-      if (category === 'any') return true;
-      if (category === 'numeric' && isNumeric) return true;
-      if (category === 'boolean' && isBoolean) return true;
-      return false;
-    })
-    .map(([mode]) => mode);
 }
 
 /**
@@ -239,15 +88,6 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
   onClose,
 }) => {
   const { patch, layout, selection, compositeEditor, frontend } = useStores();
-  const resolvedPortTypeLookup = useMemo<PortTypeLookupFn>(
-    () => (blockIdValue, portIdValue, direction) =>
-      frontend.getResolvedPortTypeByIds(
-        blockIdValue as BlockId,
-        portIdValue as PortId,
-        direction === 'input' ? 'in' : 'out',
-      ),
-    [frontend],
-  );
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
@@ -259,12 +99,12 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
     // ==========================================================================
     // Section 1: Connect to... (submenu of all compatible ports)
     // ==========================================================================
-    const compatiblePorts = findCompatiblePorts(
+    const compatiblePorts = getCompatiblePortsForPort(
       patch.patch,
+      frontend,
       blockId,
       portId,
       isInput,
-      resolvedPortTypeLookup,
     );
 
     if (compatiblePorts.length > 0) {
@@ -302,8 +142,12 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
       const inputPort = block.inputPorts.get(portId);
       const inputDef = blockDef.inputs[portId];
       if (inputDef) {
-        const payloadType = inputDef.type.payload;
-        const validModes = getValidCombineModes(payloadType);
+        const validModes = getValidCombineModesForInput(
+          patch.patch,
+          frontend,
+          blockId,
+          portId,
+        );
         const currentMode = inputPort?.combineMode ?? 'last';
 
         if (validModes.length > 1) {
@@ -323,7 +167,13 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
     // ==========================================================================
     // Section 3: Add Block
     // ==========================================================================
-    const compatibleBlockTypes = findCompatibleBlockTypes(patch.patch, blockId, portId, isInput);
+    const compatibleBlockTypes: CompatibleBlockType[] = getCompatibleBlockTypesForPort(
+      patch.patch,
+      frontend,
+      blockId,
+      portId,
+      isInput,
+    );
     const addBlockTypes = randomSample(compatibleBlockTypes, MAX_ADD_BLOCK);
 
     for (const blockType of addBlockTypes) {
@@ -389,52 +239,47 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
       );
 
       if (incomingEdge) {
-        const sourceBlock = patch.blocks.get(incomingEdge.from.blockId as BlockId);
-        if (sourceBlock) {
-          const sourceBlockDef = requireAnyBlockDef(sourceBlock.type);
-          const sourceOutput = sourceBlockDef.outputs[incomingEdge.from.slotId];
-          const sourceType = sourceOutput?.type;
-          const targetInput = blockDef.inputs[portId];
-          const targetType = targetInput?.type;
+        const compatibleLenses = getCompatibleLensesForConnection(
+          patch.patch,
+          frontend,
+          incomingEdge.from.blockId as BlockId,
+          incomingEdge.from.slotId as PortId,
+          blockId,
+          portId,
+        );
+        const grouped = groupLensMenuOptions(compatibleLenses);
+        const describeLens = (label: string, description: string): string =>
+          description.trim().length > 0 ? `${label} - ${description}` : label;
 
-          if (sourceType && targetType) {
-            // Find compatible lenses
-            const compatibleLenses = findCompatibleLenses(sourceType, targetType);
-            const grouped = groupLensMenuOptions(compatibleLenses);
-            const describeLens = (label: string, description: string): string =>
-              description.trim().length > 0 ? `${label} - ${description}` : label;
+        const addLens = (lensType: string): void => {
+          const params = getLensDefaultParams(lensType);
+          const sourceAddress = `v1:blocks.${incomingEdge.from.blockId}.outputs.${incomingEdge.from.slotId}`;
+          patch.addLens(blockId, portId, lensType, sourceAddress, params);
+        };
 
-            const addLens = (lensType: string): void => {
-              const params = getLensDefaultParams(lensType);
-              const sourceAddress = `v1:blocks.${incomingEdge.from.blockId}.outputs.${incomingEdge.from.slotId}`;
-              patch.addLens(blockId, portId, lensType, sourceAddress, params);
-            };
+        if (grouped.common.length > 0 || grouped.others.length > 0) {
+          for (const lens of grouped.common) {
+            menuItems.push({
+              label: `Insert Lens: ${describeLens(lens.label, lens.description)}`,
+              icon: <LensIcon fontSize="small" />,
+              action: () => addLens(lens.blockType),
+            });
+          }
 
-            if (grouped.common.length > 0 || grouped.others.length > 0) {
-              for (const lens of grouped.common) {
-                menuItems.push({
-                  label: `Insert Lens: ${describeLens(lens.label, lens.description)}`,
-                  icon: <LensIcon fontSize="small" />,
-                  action: () => addLens(lens.blockType),
-                });
-              }
-
-              if (grouped.others.length > 0) {
-                const overflowChildren: ContextMenuItem[] = grouped.others.map((lens) => ({
-                  label: lens.blockType.startsWith('Adapter_')
-                    ? `[Adapter] ${describeLens(lens.label, lens.description)}`
-                    : `[Lens] ${describeLens(lens.label, lens.description)}`,
-                  icon: <LensIcon fontSize="small" />,
-                  action: () => addLens(lens.blockType),
-                }));
-                menuItems.push({
-                  label: 'Insert Lens: More...',
-                  icon: <LensIcon fontSize="small" />,
-                  action: () => {},
-                  children: overflowChildren,
-                });
-              }
-            }
+          if (grouped.others.length > 0) {
+            const overflowChildren: ContextMenuItem[] = grouped.others.map((lens) => ({
+              label: lens.blockType.startsWith('Adapter_')
+                ? `[Adapter] ${describeLens(lens.label, lens.description)}`
+                : `[Lens] ${describeLens(lens.label, lens.description)}`,
+              icon: <LensIcon fontSize="small" />,
+              action: () => addLens(lens.blockType),
+            }));
+            menuItems.push({
+              label: 'Insert Lens: More...',
+              icon: <LensIcon fontSize="small" />,
+              action: () => {},
+              children: overflowChildren,
+            });
           }
         }
       }
@@ -567,7 +412,7 @@ export const PortContextMenu: React.FC<PortContextMenuProps> = ({
     }
 
     return menuItems;
-  }, [blockId, portId, isInput, patch, layout, selection, compositeEditor, resolvedPortTypeLookup]);
+  }, [blockId, portId, isInput, patch, layout, selection, compositeEditor, frontend]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };

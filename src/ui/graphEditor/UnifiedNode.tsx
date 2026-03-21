@@ -520,11 +520,10 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           {data.params.map((param) => (
             <ParameterControl
               key={param.id}
-              blockId={data.blockId as BlockId}
-              paramId={param.id}
               label={param.label}
               value={param.value}
               hint={param.hint}
+              target={param.target}
             />
           ))}
         </div>

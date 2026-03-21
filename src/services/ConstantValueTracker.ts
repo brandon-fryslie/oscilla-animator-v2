@@ -85,12 +85,15 @@ function resolveDefaultValue(
   const inputDef = blockDef.inputs[inputPortId];
   if (!inputDef) return undefined;
 
-  const paramDefault = (block.params as Record<string, unknown>)[inputPortId];
-  if (paramDefault !== undefined) {
+  const authoredSource = block.inputPorts.get(inputPortId)?.authoredControl?.source;
+  const authoredValue = authoredSource?.blockType === 'Const' && authoredSource.outputPortId === 'out'
+    ? authoredSource.params.value
+    : undefined;
+  if (authoredValue !== undefined) {
     return {
-      value: paramDefault,
+      value: authoredValue,
       reason: 'default-value',
-      description: `Param value from ${block.type}.${inputPortId}`,
+      description: `Authored input control value from ${block.type}.${inputPortId}`,
     };
   }
 
