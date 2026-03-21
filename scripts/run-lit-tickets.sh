@@ -21,7 +21,18 @@ MAX_ATTEMPTS=3
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
-    --max-attempts) MAX_ATTEMPTS="$2"; shift 2 ;;
+    --max-attempts)
+      if [[ $# -lt 2 ]] || [[ -z "${2:-}" ]]; then
+        echo "Missing value for --max-attempts (expected a positive integer)" >&2
+        exit 2
+      fi
+      if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Invalid value for --max-attempts: $2 (must be a positive integer)" >&2
+        exit 2
+      fi
+      MAX_ATTEMPTS="$2"
+      shift 2
+      ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -80,7 +91,7 @@ Complete this ticket. Read relevant code, make the changes, and run tests to ver
 
 When finished and all tests pass:
 1. Commit with a message referencing $TICKET_ID
-2. Run: lit update $TICKET_ID --status closed --reason \"completed\"
+2. Run: lit close $TICKET_ID --reason \"completed\"
 
 If you cannot fully complete the ticket in this session, commit any partial progress and explain what remains."
 
