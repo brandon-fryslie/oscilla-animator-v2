@@ -416,9 +416,6 @@ export class RuntimeService {
     const panX = viewport?.pan?.x ?? 0;
     const panY = viewport?.pan?.y ?? 0;
 
-    // [LAW:single-enforcer] RuntimeService owns initial install publication,
-    // so it must size the renderer surface before the first worker-side render.
-    renderer.resizeCanvas(renderWidth, renderHeight);
     renderer.render({
       shapeBank: {
         data: installContract.shapeBank.words,

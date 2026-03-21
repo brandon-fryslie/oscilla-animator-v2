@@ -12,3 +12,8 @@ pnpm install -g vitest
 name = "Run"
 icon = "run"
 command = "just dev"
+
+[[actions]]
+name = "install"
+icon = "tool"
+command = "pnpm install --frozen-lockfile"

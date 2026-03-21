@@ -191,7 +191,7 @@ const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 
 impl Engine {
-    pub async fn new(canvas: OffscreenCanvas, config: EngineConfig) -> Result<Self, JsValue> {
+    pub async fn new(canvas: OffscreenCanvas, config: EngineConfig, initial_width: u32, initial_height: u32) -> Result<Self, JsValue> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
@@ -268,11 +268,14 @@ impl Engine {
             .find(|mode| *mode == wgpu::PresentMode::Fifo)
             .unwrap_or(capabilities.present_modes[0]);
         let alpha_mode = capabilities.alpha_modes[0];
+        // [LAW:one-source-of-truth] Initial surface dimensions come from the
+        // bootstrap caller (OffscreenCanvas size at transfer time). Subsequent
+        // resizes are driven by shared-buffer reads in input_marshal_phase.
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: 1,
-            height: 1,
+            width: initial_width.max(1),
+            height: initial_height.max(1),
             present_mode,
             desired_maximum_frame_latency: 2,
             alpha_mode,
@@ -896,6 +899,17 @@ impl Engine {
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
+        // [LAW:one-source-of-truth] Surface dimensions are driven by the
+        // shared input buffer — no separate RESIZE_CANVAS message needed.
+        // Read dimensions before the shared_input borrow scope so we can
+        // call resize_surface (which needs &mut self).
+        if let Some(shared_input) = self.shared_input.as_ref() {
+            let pixel_w = (shared_input.get_index(INPUT_WORD_WIDTH as u32) as u32).max(1);
+            let pixel_h = (shared_input.get_index(INPUT_WORD_HEIGHT as u32) as u32).max(1);
+            if pixel_w != self.surface_config.width || pixel_h != self.surface_config.height {
+                self.resize_surface(pixel_w, pixel_h);
+            }
+        }
         let mut header = self.arena.frame_header;
         if let Some(shared_input) = self.shared_input.as_ref() {
             if let Some(shared_input_signals) = self.shared_input_signals.as_ref() {

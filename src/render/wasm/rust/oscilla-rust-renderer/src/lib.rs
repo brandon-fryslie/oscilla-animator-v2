@@ -157,6 +157,8 @@ pub async fn init_engine(
     max_particles: u32,
     max_shapes: u32,
     debug_readback_hz: u32,
+    initial_width: u32,
+    initial_height: u32,
 ) -> Result<(), JsValue> {
     install_panic_hook();
     let config = EngineConfig {
@@ -164,7 +166,7 @@ pub async fn init_engine(
         max_shapes: max_shapes as usize,
         debug_readback_hz,
     };
-    let engine = Engine::new(canvas, config).await?;
+    let engine = Engine::new(canvas, config, initial_width, initial_height).await?;
     ENGINE.with(|engine_cell| {
         // [LAW:single-enforcer] The worker runtime stores one canonical engine
         // instance; worker callbacks and rebuild commands mutate this owner only.
@@ -289,18 +291,6 @@ pub fn upload_atlas_data(data: js_sys::Uint32Array) -> Result<(), JsValue> {
         })?;
         let words = data.to_vec();
         engine.upload_atlas_data(&words);
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn resize_surface(width: u32, height: u32) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before resize_surface")
-        })?;
-        engine.resize_surface(width, height);
         Ok(())
     })
 }

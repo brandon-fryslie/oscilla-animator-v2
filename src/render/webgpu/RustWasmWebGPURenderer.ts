@@ -493,8 +493,6 @@ export class WebGPURenderer {
   private disposed = false;
   private fatalError: Error | null = null;
   private fatalRecord: RendererFatalRecord | null = null;
-  private lastResizeWidth = -1;
-  private lastResizeHeight = -1;
   private latestTelemetry: RustRendererRuntimeTelemetry | null = null;
   private lifecycleState: RustRendererSchedulerState = 'Booting';
   private latestRuntimeEvent: RuntimeEventBreadcrumb | null = null;
@@ -891,10 +889,10 @@ export class WebGPURenderer {
     this.publishSignalWord();
   }
 
-  resizeCanvas(width: number, height: number): void {
-    this.assertRuntimeInputBoundaryReady();
-    this.syncCanvasSize(width, height);
-  }
+  // [LAW:one-source-of-truth] Surface resize is driven by the shared input
+  // buffer dimensions (read by the Rust tick loop in input_marshal_phase).
+  // No explicit resize call needed — writeViewportFrame publishes width/height
+  // to the shared buffer, and the Rust engine auto-reconfigures the surface.
 
   getRuntimeSharedPlanes(): RuntimeSharedPlanes {
     // [LAW:one-source-of-truth] Runtime workers write the same canonical shared
@@ -1140,14 +1138,6 @@ export class WebGPURenderer {
     this.setInputWord(RUNTIME_INPUT_INDEX.installRevision, this.installRevision);
   }
 
-  private createResizeCanvasMessage(width: number, height: number): RustRendererWorkerInboundMessage {
-    return {
-      type: 'RESIZE_CANVAS',
-      width,
-      height,
-    };
-  }
-
   private createShutdownMessage(): RustRendererWorkerInboundMessage {
     return { type: 'SHUTDOWN' };
   }
@@ -1186,10 +1176,6 @@ export class WebGPURenderer {
       return;
     }
     console.warn(`[RustWasmWebGPURenderer] ${message}`, error);
-  }
-
-  private isCanvasSizeUnchanged(width: number, height: number): boolean {
-    return width === this.lastResizeWidth && height === this.lastResizeHeight;
   }
 
   private hasDispatchCountMismatch(
@@ -1241,7 +1227,6 @@ export class WebGPURenderer {
     const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
     const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
 
-    this.syncCanvasSize(width, height);
     this.setInputWord(RUNTIME_INPUT_INDEX.width, width);
     this.setInputWord(RUNTIME_INPUT_INDEX.height, height);
     this.setInputWord(RUNTIME_INPUT_INDEX.zoom, zoom);
@@ -1481,6 +1466,9 @@ export class WebGPURenderer {
     config: RustRendererBootstrapConfig,
   ): Promise<void> {
     const rendererWasmBytes = await fetchRustRendererWasmBytes();
+    // [LAW:one-source-of-truth] Initial surface dimensions come from the
+    // OffscreenCanvas at transfer time. Subsequent resizes are driven by
+    // the shared input buffer (read each tick in input_marshal_phase).
     const message: RustRendererWorkerInboundMessage = {
       type: 'BOOTSTRAP',
       canvas: offscreenCanvas,
@@ -1489,6 +1477,8 @@ export class WebGPURenderer {
       sharedShapeBank,
       sharedSinkTable,
       config,
+      initialWidth: Math.max(1, Math.floor(offscreenCanvas.width || 1)),
+      initialHeight: Math.max(1, Math.floor(offscreenCanvas.height || 1)),
     };
 
     await this.awaitWorkerAck({
@@ -1618,18 +1608,6 @@ export class WebGPURenderer {
         computeDispatchCount: telemetry.dispatchCounters.computeDispatchCount,
       });
     }
-  }
-
-  private syncCanvasSize(width: number, height: number): void {
-    const safeWidth = Math.max(1, Math.floor(width));
-    const safeHeight = Math.max(1, Math.floor(height));
-    if (this.isCanvasSizeUnchanged(safeWidth, safeHeight)) {
-      return;
-    }
-    this.lastResizeWidth = safeWidth;
-    this.lastResizeHeight = safeHeight;
-    const message = this.createResizeCanvasMessage(safeWidth, safeHeight);
-    this.postWorkerMessage(message);
   }
 
   private shouldIgnoreRuntimeMessage(

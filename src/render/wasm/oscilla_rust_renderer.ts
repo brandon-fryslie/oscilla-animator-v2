@@ -10,11 +10,12 @@ interface RendererWasmModule {
     maxParticles: number,
     maxShapes: number,
     debugReadbackHz: number,
+    initialWidth: number,
+    initialHeight: number,
   ) => Promise<void> | void;
   readonly attach_shared_input?: (sharedInput: SharedArrayBuffer) => void;
   readonly attach_shared_shape_bank?: (sharedShapeBank: SharedArrayBuffer) => void;
   readonly attach_shared_sink_table?: (sharedSinkTable: SharedArrayBuffer) => void;
-  readonly resize_surface?: (width: number, height: number) => void;
   readonly pause_engine?: () => void;
   readonly resume_engine?: () => void;
   readonly inject_poison_alloc?: () => void;
@@ -33,7 +34,6 @@ let initEngineImpl: RendererWasmModule['init_engine'] | null = null;
 let attachSharedInputImpl: RendererWasmModule['attach_shared_input'] | null = null;
 let attachSharedShapeBankImpl: RendererWasmModule['attach_shared_shape_bank'] | null = null;
 let attachSharedSinkTableImpl: RendererWasmModule['attach_shared_sink_table'] | null = null;
-let resizeSurfaceImpl: RendererWasmModule['resize_surface'] | null = null;
 let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
@@ -76,9 +76,6 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       if (typeof wasmModule.rebuild_gpu_pipelines !== 'function') {
         throw new Error('Rust renderer wasm module missing rebuild_gpu_pipelines export');
       }
-      if (typeof wasmModule.resize_surface !== 'function') {
-        throw new Error('Rust renderer wasm module missing resize_surface export');
-      }
       if (typeof wasmModule.pause_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing pause_engine export');
       }
@@ -98,7 +95,6 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       attachSharedInputImpl = wasmModule.attach_shared_input.bind(wasmModule);
       attachSharedShapeBankImpl = wasmModule.attach_shared_shape_bank.bind(wasmModule);
       attachSharedSinkTableImpl = wasmModule.attach_shared_sink_table.bind(wasmModule);
-      resizeSurfaceImpl = wasmModule.resize_surface.bind(wasmModule);
       pauseEngineImpl = wasmModule.pause_engine.bind(wasmModule);
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
@@ -124,6 +120,8 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
 export async function initRustRendererEngine(
   canvas: OffscreenCanvas,
   config: RustRendererBootstrapConfig,
+  initialWidth: number,
+  initialHeight: number,
 ): Promise<void> {
   if (!initialized || !initEngineImpl) {
     throw new Error('Rust renderer wasm is not initialized');
@@ -133,6 +131,8 @@ export async function initRustRendererEngine(
     config.maxParticles,
     config.maxShapes,
     config.debugReadbackHz,
+    initialWidth,
+    initialHeight,
   );
 }
 
@@ -155,13 +155,6 @@ export function attachRustRendererSharedSinkTable(sharedSinkTable: SharedArrayBu
     throw new Error('Rust renderer wasm is not initialized');
   }
   attachSharedSinkTableImpl(sharedSinkTable);
-}
-
-export function resizeRustRendererSurface(width: number, height: number): void {
-  if (!initialized || !resizeSurfaceImpl) {
-    throw new Error('Rust renderer wasm is not initialized');
-  }
-  resizeSurfaceImpl(width, height);
 }
 
 export function pauseRustRendererEngine(): void {

@@ -10,7 +10,6 @@ import {
   pauseRustRendererEngine,
   rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
-  resizeRustRendererSurface,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
   uploadRustRendererAtlasData,
@@ -120,16 +119,15 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
   bootstrapInFlight = true;
   try {
     await initRustRendererWasm(message.rendererWasmBytes);
-    await initRustRendererEngine(message.canvas, message.config);
+    // [LAW:one-source-of-truth] Initial surface dimensions come from the
+    // bootstrap message so the engine starts with a valid surface size.
+    // Subsequent resizes are driven by the shared input buffer in tick().
+    const initialWidth = Math.max(1, Math.floor(message.initialWidth || 1));
+    const initialHeight = Math.max(1, Math.floor(message.initialHeight || 1));
+    await initRustRendererEngine(message.canvas, message.config, initialWidth, initialHeight);
     attachRustRendererSharedInput(message.sharedInput);
     attachRustRendererSharedShapeBank(message.sharedShapeBank);
     attachRustRendererSharedSinkTable(message.sharedSinkTable);
-    // [LAW:single-enforcer] Bootstrap owns first-frame ordering so the worker
-    // loop cannot race ahead of shared-plane attachment or initial surface size.
-    resizeRustRendererSurface(
-      Math.max(1, Math.floor(message.canvas.width || 1)),
-      Math.max(1, Math.floor(message.canvas.height || 1)),
-    );
     resumeRustRendererEngine();
     bootstrapped = true;
     deviceLostNotified = false;
@@ -168,15 +166,6 @@ async function handleRebuildGpuPipelines(
     }
   }
   postWorkerMessage({ type: 'REBUILD_GPU_PIPELINES_SUCCESS' });
-}
-
-function handleResize(message: Extract<RustRendererWorkerInboundMessage, { type: 'RESIZE_CANVAS' }>): void {
-  if (!isPositiveInt(message.width) || !isPositiveInt(message.height)) {
-    throw new Error(
-      `Rust worker resize contract violation: width/height must be positive integers (width=${String(message.width)}, height=${String(message.height)})`,
-    );
-  }
-  resizeRustRendererSurface(message.width, message.height);
 }
 
 function handlePause(): void {
@@ -349,11 +338,6 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   UPLOAD_ATLAS: (message) => {
     withFatalBoundary('atlas_upload_failure', 'Rust worker atlas upload failure', () => {
       handleUploadAtlas(message as Extract<InboundMessage, { type: 'UPLOAD_ATLAS' }>);
-    });
-  },
-  RESIZE_CANVAS: (message) => {
-    withFatalBoundary('resize_failure', 'Rust worker resize failure', () => {
-      handleResize(message as Extract<InboundMessage, { type: 'RESIZE_CANVAS' }>);
     });
   },
   REBUILD_GPU_PIPELINES: (message) => {
