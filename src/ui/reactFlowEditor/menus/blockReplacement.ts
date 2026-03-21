@@ -42,7 +42,7 @@ function canConnect(
       sourcePortId,
       targetBlockId,
       targetPortId,
-      { mutationMode: 'replaceWriter' },
+      { mutationMode: 'replaceWriter', exact: true },
     ).valid;
   } catch {
     return false;

@@ -14,7 +14,7 @@ import { makeObservable, observable, computed, action } from 'mobx';
 import type { BlockId, PortId, PortEndpointRef } from '../types';
 import type { PatchStore } from './PatchStore';
 import type { FrontendResultStore } from './FrontendResultStore';
-import { getCompatiblePortsForPort } from '../ui/authoring/semanticQueries';
+import { getHoverCompatiblePortsForPort } from '../ui/authoring/semanticQueries';
 
 export class PortHighlightStore {
   // Observable state - hover tracking only
@@ -50,7 +50,7 @@ export class PortHighlightStore {
     if (!patch) return new Set();
 
     const { blockId: hoveredBlockId, portId: hoveredPortId, direction: hoveredDirection } = this.hoveredPort;
-    const compatible = getCompatiblePortsForPort(
+    const compatible = getHoverCompatiblePortsForPort(
       patch,
       this.frontendStore,
       hoveredBlockId,

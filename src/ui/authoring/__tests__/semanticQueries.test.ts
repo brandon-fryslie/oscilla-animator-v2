@@ -1,15 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { registerAllBlocks } from '../../../blocks/all';
 import { buildPatch } from '../../../graph';
 import { compileFrontend } from '../../../compiler/frontend';
 import { FrontendResultStore } from '../../../stores/FrontendResultStore';
 import { portId, type BlockId } from '../../../types';
+import * as authoringQueries from '../../../compiler/frontend/authoring-queries';
 import {
+  getHoverCompatiblePortsForPort,
   getCompatibleBlockTypesForPort,
   getCompatibleLensesForConnection,
   getCompatiblePortsForPort,
   getValidCombineModesForInput,
   getValidDefaultSourceBlockTypes,
+  validateSemanticConnection,
 } from '../semanticQueries';
 
 registerAllBlocks();
@@ -34,6 +37,28 @@ describe('authoring semantic queries', () => {
         expect.objectContaining({ blockId: constId, portId: 'out' }),
       ]),
     );
+  });
+
+  it('keeps hover compatibility on the cheap prefilter path', () => {
+    const frontend = new FrontendResultStore();
+    const sessionSpy = vi.spyOn(authoringQueries, 'createAuthoringQuerySession');
+
+    let ellipseId!: BlockId;
+    let constId!: BlockId;
+    const patch = buildPatch((b) => {
+      ellipseId = b.addBlock('Ellipse');
+      constId = b.addBlock('Const');
+    });
+
+    frontend.updateFromFrontendResult(compileFrontend(patch), 1);
+
+    const compatible = getHoverCompatiblePortsForPort(patch, frontend, constId, portId('out'), false);
+    expect(compatible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ blockId: ellipseId, portId: 'rx' }),
+      ]),
+    );
+    expect(sessionSpy).not.toHaveBeenCalled();
   });
 
   it('derives add-block suggestions from the same semantic target type', () => {
@@ -111,5 +136,26 @@ describe('authoring semantic queries', () => {
         expect.objectContaining({ blockType: 'Const' }),
       ]),
     );
+  });
+
+  it('keeps drag validation cheap unless exact validation is requested', () => {
+    const exactSpy = vi.spyOn(authoringQueries, 'queryConnectExistingSources');
+
+    let ellipseId!: BlockId;
+    let constId!: BlockId;
+    const patch = buildPatch((b) => {
+      ellipseId = b.addBlock('Ellipse');
+      constId = b.addBlock('Const');
+    });
+
+    expect(
+      validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx').valid,
+    ).toBe(true);
+    expect(exactSpy).not.toHaveBeenCalled();
+
+    expect(
+      validateSemanticConnection(patch, constId, 'out', ellipseId, 'rx', { exact: true }).valid,
+    ).toBe(true);
+    expect(exactSpy).toHaveBeenCalledTimes(1);
   });
 });
