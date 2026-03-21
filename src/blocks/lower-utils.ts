@@ -113,6 +113,35 @@ export function tryResolveInputConstant(
   return val;
 }
 
+/**
+ * Resolve an input to a compile-time constant float value.
+ * Like resolveInputConstant but permits non-integer values.
+ */
+export function resolveInputConstantFloat(
+  ctx: import('./registry').LowerCtx,
+  input: import('../compiler/ir/lowerTypes').ValueRefExpr,
+  portId: string,
+  opts?: { min?: number; max?: number }
+): number {
+  const expr = ctx.b.getValueExpr(input.id);
+  if (!expr || expr.kind !== 'const') {
+    throw new Error(
+      `Input '${portId}' must lower to a const expression, got ${expr?.kind ?? 'undefined'}`
+    );
+  }
+  const val = expr.value.value as number;
+  if (!Number.isFinite(val)) {
+    throw new Error(`Input '${portId}' const value is not finite: ${val}`);
+  }
+  if (opts?.min !== undefined && val < opts.min) {
+    throw new Error(`Input '${portId}' must be >= ${opts.min}, got ${val}`);
+  }
+  if (opts?.max !== undefined && val > opts.max) {
+    throw new Error(`Input '${portId}' must be <= ${opts.max}, got ${val}`);
+  }
+  return val;
+}
+
 export interface StatefulStoragePlan {
   readonly stateDecl: StateDecl;
   readonly writeKind: 'stateWrite' | 'fieldStateWrite';

@@ -33,7 +33,8 @@ const INPUT_WORD_HEIGHT: usize = 1;
 const INPUT_WORD_ZOOM: usize = 2;
 const INPUT_WORD_PAN_X: usize = 3;
 const INPUT_WORD_PAN_Y: usize = 4;
-const INPUT_WORD_TIME_MS: usize = 5;
+// INPUT_WORD_TIME_MS (index 5) is intentionally unused — the worker owns
+// animation time via its rAF timestamp, not the main-thread's relayed value.
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_INSTALL_REVISION: usize = 15;
@@ -85,6 +86,11 @@ pub struct Engine {
     last_sink_table_words: u32,
     last_install_revision: u32,
     pending_fatal_gpu_error: Arc<AtomicBool>,
+    // [LAW:one-source-of-truth] Worker-owned animation time. The worker's own
+    // rAF timestamp is the timing authority — not the main thread's timestamp
+    // relayed via SharedArrayBuffer. This decouples animation smoothness from
+    // main-thread scheduling jitter (React, MobX, GC pauses).
+    prev_tick_timestamp_ms: f64,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -368,6 +374,7 @@ impl Engine {
             last_sink_table_words: 0,
             last_install_revision: 0,
             pending_fatal_gpu_error,
+            prev_tick_timestamp_ms: 0.0,
         })
     }
 
@@ -421,6 +428,9 @@ impl Engine {
     }
 
     pub fn resume(&mut self) {
+        // [LAW:one-source-of-truth] Reset worker-owned time anchor so the
+        // first post-resume tick uses nominal dt instead of the pause gap.
+        self.prev_tick_timestamp_ms = 0.0;
         self.scheduler.mark_running(worker_monotonic_now_ms());
     }
 
@@ -910,7 +920,32 @@ impl Engine {
                 self.resize_surface(pixel_w, pixel_h);
             }
         }
+
+        // [LAW:one-source-of-truth] Worker-owned time: the worker's rAF
+        // timestamp is the single timing authority. This decouples animation
+        // smoothness from main-thread scheduling jitter (React, MobX, GC).
+        let safe_timestamp_ms = timestamp_ms.max(0.0);
+        let prev_ms = self.prev_tick_timestamp_ms;
+        // [LAW:dataflow-not-control-flow] dt computation always produces a
+        // value; the prev_ms == 0 sentinel yields dt=0 (no advancement) so
+        // the first real dt comes from two consecutive rAF timestamps — never
+        // from a baked refresh rate assumption.
+        let delta_seconds = if prev_ms > 0.0 {
+            let raw_dt = (safe_timestamp_ms - prev_ms).max(0.0) * 0.001;
+            // Clamp dt to 2x the previous frame's dt (or 50ms hard cap) to
+            // absorb occasional dropped frames without letting animations
+            // jump after long stalls (tab backgrounding, debugger pauses).
+            raw_dt.min(0.05) as f32
+        } else {
+            0.0_f32
+        };
+        self.prev_tick_timestamp_ms = safe_timestamp_ms;
+
         let mut header = self.arena.frame_header;
+        // Time and dt are worker-owned — never read from SharedArrayBuffer.
+        header.time_seconds = (safe_timestamp_ms * 0.001) as f32;
+        header.delta_time_seconds = delta_seconds;
+
         if let Some(shared_input) = self.shared_input.as_ref() {
             if let Some(shared_input_signals) = self.shared_input_signals.as_ref() {
                 // [LAW:single-enforcer] Frame input publication uses one atomic
@@ -919,9 +954,6 @@ impl Engine {
             }
             header.resolution[0] = shared_input.get_index(INPUT_WORD_WIDTH as u32) as f32;
             header.resolution[1] = shared_input.get_index(INPUT_WORD_HEIGHT as u32) as f32;
-            header.time_seconds =
-                (shared_input.get_index(INPUT_WORD_TIME_MS as u32).max(0.0) * 0.001) as f32;
-            header.delta_time_seconds = (1.0 / 60.0) as f32;
             let viewport_width = header.resolution[0].max(1.0);
             let viewport_height = header.resolution[1].max(1.0);
             let raw_zoom = shared_input.get_index(INPUT_WORD_ZOOM as u32) as f32;
@@ -1006,8 +1038,7 @@ impl Engine {
                 self.last_install_revision = install_revision;
             }
         } else {
-            header.time_seconds = (timestamp_ms.max(0.0) * 0.001) as f32;
-            header.delta_time_seconds = (1.0 / 60.0) as f32;
+            // No shared input attached — use identity viewport.
             header.view_proj = [[0.0; 4]; 4];
             header.view_proj[0][0] = 2.0;
             header.view_proj[1][1] = -2.0;
