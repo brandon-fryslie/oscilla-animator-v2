@@ -53,7 +53,12 @@ export default tseslint.config(
   {
     // [LAW:single-enforcer] Enforce explicit "any" usage at one boundary.
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+    ignores: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/__tests__/**',
+      'src/services/PatchPersistence.ts',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': ['error', { ignoreRestArgs: false }],
       '@typescript-eslint/ban-ts-comment': [

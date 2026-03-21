@@ -27,6 +27,12 @@ import type { ConstraintOrigin } from '../payload-unit/solve';
 import type { FixpointDiagnostic } from '../fixpoint-diagnostic';
 import { isSubdomainOf } from '../../../core/domain-registry';
 
+function isCardinalityVarAxis(
+  axis: Axis<CardinalityValue, CardinalityVarId>,
+): axis is CardinalityVarAxis {
+  return axis.kind === 'var';
+}
+
 // =============================================================================
 // InstanceTerm (solver-internal)
 // =============================================================================
@@ -640,8 +646,8 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
           // Keep cardinality as many with UNBOUND_INSTANCE; backend repair pass rewrites it when context exists.
           const allowsDeferredInstance = members.some((port) => {
             const axis = baseCardinalityAxis.get(port);
-            if (!axis || !isAxisVar(axis)) return false;
-            const cardAxis = axis as CardinalityVarAxis;
+            if (!axis || !isCardinalityVarAxis(axis)) return false;
+            const cardAxis = axis;
             const hasDeclaredPolicy = cardAxis.relation !== undefined
               || cardAxis.acceptance !== undefined
               || cardAxis.instanceBinding !== undefined;

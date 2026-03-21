@@ -22,7 +22,7 @@ import { NumberInput } from './common/NumberInput';
 import { SelectInput } from './common/SelectInput';
 import { TextInput } from './common/TextInput';
 import { SliderWithInput } from './common/SliderWithInput';
-import type { SettingsToken, FieldUIHint } from '../../settings/types';
+import type { FieldUIHint, SettingsShape, SettingsToken, SettingsValue } from '../../settings/types';
 
 export const SettingsPanel: React.FC = observer(() => {
   const settingsStore = useStore('settings');
@@ -65,11 +65,11 @@ export const SettingsPanel: React.FC = observer(() => {
 /**
  * Single settings section for one namespace.
  */
-const SettingsSection: React.FC<{ token: SettingsToken<Record<string, unknown>> }> = observer(({ token }) => {
+const SettingsSection: React.FC<{ token: SettingsToken<SettingsShape> }> = observer(({ token }) => {
   const settingsStore = useStore('settings');
   const values = settingsStore.get(token);
 
-  const handleFieldChange = (key: string, value: unknown) => {
+  const handleFieldChange = (key: string, value: SettingsValue) => {
     settingsStore.update(token, { [key]: value });
   };
 
@@ -101,9 +101,9 @@ const SettingsSection: React.FC<{ token: SettingsToken<Record<string, unknown>> 
  */
 const FieldControl: React.FC<{
   fieldKey: string;
-  value: unknown;
+  value: SettingsValue;
   hint: FieldUIHint;
-  onChange: (value: unknown) => void;
+  onChange: (value: SettingsValue) => void;
 }> = ({ value, hint, onChange }) => {
   const label = (
     <Tooltip label={hint.description} position="left" withArrow multiline maw={250} disabled={!hint.description}>
@@ -119,7 +119,7 @@ const FieldControl: React.FC<{
         <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
           {label}
           <Switch
-            checked={value as boolean}
+            checked={typeof value === 'boolean' ? value : false}
             onChange={(e) => onChange(e.currentTarget.checked)}
             size="xs"
             color="violet"
@@ -132,7 +132,7 @@ const FieldControl: React.FC<{
         <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
           {label}
           <NumberInput
-            value={value as number}
+            value={typeof value === 'number' ? value : 0}
             onChange={onChange}
             min={hint.min}
             max={hint.max}
@@ -148,7 +148,7 @@ const FieldControl: React.FC<{
           {/* [LAW:one-source-of-truth] Settings sliders reuse the shared slider instead of introducing a panel-specific variant. */}
           <SliderWithInput
             label={hint.label}
-            value={value as number}
+            value={typeof value === 'number' ? value : 0}
             onChange={(next) => onChange(next)}
             min={hint.min ?? 0}
             max={hint.max ?? 1}
@@ -172,7 +172,7 @@ const FieldControl: React.FC<{
         <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
           {label}
           <SelectInput
-            value={value as string}
+            value={typeof value === 'string' ? value : ''}
             onChange={onChange}
             options={hint.options.map((opt) => ({
               value: String(opt.value),
@@ -188,7 +188,7 @@ const FieldControl: React.FC<{
         <Group justify="space-between" wrap="nowrap" gap="xs" py={rem(1)}>
           {label}
           <TextInput
-            value={value as string}
+            value={typeof value === 'string' ? value : ''}
             onChange={(v) => onChange(v)}
             size="xs"
           />

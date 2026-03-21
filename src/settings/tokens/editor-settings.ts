@@ -5,8 +5,9 @@
  */
 
 import { defineSettings } from '../defineSettings';
+import type { SettingsShape } from '../types';
 
-export interface EditorSettings extends Record<string, unknown> {
+export interface EditorSettings extends SettingsShape {
   showMinimap: boolean;
 }
 

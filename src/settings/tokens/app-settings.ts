@@ -5,8 +5,9 @@
  */
 
 import { defineSettings } from '../defineSettings';
+import type { SettingsShape } from '../types';
 
-export interface AppSettings extends Record<string, unknown> {
+export interface AppSettings extends SettingsShape {
   defaultPatchIndex: number;
 }
 
