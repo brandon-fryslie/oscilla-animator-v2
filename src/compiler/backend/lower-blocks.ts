@@ -103,6 +103,19 @@ export interface UnlinkedIRFragments {
   /** Non-fatal compile warnings encountered during lowering */
   warnings: CompileError[];
 
+  /**
+   * Additional memory resources declared by blocks (e.g., Texture2D for fluid sims).
+   * Collected from LowerEffects.memoryResources during pass 6 and forwarded to
+   * the MemoryManifest in compile.ts.
+   */
+  additionalMemoryResources: import('../ir/program').MemoryResourceIR[];
+
+  /**
+   * DispatchKernel instructions emitted by blocks.
+   * Collected from LowerEffects.dispatchInstructions during pass 6 and forwarded
+   * to the NagaLoweringProgramIR.
+   */
+  dispatchInstructions: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[];
 }
 
 /**
@@ -522,7 +535,9 @@ function lowerBlockInstance(
   timeModelState: TimeModelState,
   existingOutputs?: Partial<LowerResult>,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
-  failedBlocks?: ReadonlySet<BlockIndex>
+  failedBlocks?: ReadonlySet<BlockIndex>,
+  additionalMemoryResources?: import('../ir/program').MemoryResourceIR[],
+  dispatchInstructions?: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[],
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
@@ -583,6 +598,18 @@ function lowerBlockInstance(
           where: { blockId: block.id },
         });
         hasUnresolvedInputs = true;
+      }
+    }
+
+    // [LAW:single-enforcer] Register consumer updateClass requirements on upstream slots.
+    // The intersection in registerSlotType ensures the most restrictive consumer wins.
+    for (const [portId, ref] of Object.entries(inputsById)) {
+      if (isExprRef(ref) && ref.slot !== undefined) {
+        const key = portKey(blockIndex, portId, 'in');
+        const policy = inputPortPolicies.get(key);
+        if (policy) {
+          builder.registerSlotType(ref.slot, ref.type, undefined, policy.updateClass);
+        }
       }
     }
 
@@ -838,6 +865,14 @@ function lowerBlockInstance(
     // Apply binding (mechanical execution)
     applyBinding(builder, binding, blockEffects);
 
+    // Collect additional memory resources and dispatch instructions from effects
+    if (blockEffects.memoryResources && additionalMemoryResources) {
+      additionalMemoryResources.push(...blockEffects.memoryResources);
+    }
+    if (blockEffects.dispatchInstructions && dispatchInstructions) {
+      dispatchInstructions.push(...blockEffects.dispatchInstructions);
+    }
+
     // Bind outputs using the new helper
     const boundOutputsMap = bindOutputs(
       result.outputsById,
@@ -968,7 +1003,9 @@ function lowerSCCTwoPass(
   timeModelState: TimeModelState,
   options?: Pass6Options,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
-  failedBlocks?: Set<BlockIndex>
+  failedBlocks?: Set<BlockIndex>,
+  additionalMemoryResources?: import('../ir/program').MemoryResourceIR[],
+  dispatchInstructions?: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[],
 ): void {
   // Storage for phase 1 results
   // Phase 1 returns symbolic outputs + effects; binding happens before registration
@@ -1132,7 +1169,9 @@ function lowerSCCTwoPass(
       timeModelState,
       existingOutputs,
       collectEdgeTypes,
-      failedBlocks
+      failedBlocks,
+      additionalMemoryResources,
+      dispatchInstructions,
     );
 
     // Update blockOutputs (may overwrite phase 1 results, but should be identical)
@@ -1429,6 +1468,8 @@ export function pass6BlockLowering(
   const errors: CompileError[] = [];
   const warnings: CompileError[] = [];
   const timeModelState: TimeModelState = {};
+  const additionalMemoryResources: import('../ir/program').MemoryResourceIR[] = [];
+  const dispatchInstructions: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[] = [];
 
   // Track blocks that failed to lower — downstream blocks skip cascade errors
   const failedBlocks = new Set<BlockIndex>();
@@ -1449,6 +1490,8 @@ export function pass6BlockLowering(
       blockOutputs,
       errors,
       warnings,
+      additionalMemoryResources,
+      dispatchInstructions,
     };
   }
 
@@ -1477,7 +1520,9 @@ export function pass6BlockLowering(
         timeModelState,
         options,
         validated.collectEdgeTypes,
-        failedBlocks
+        failedBlocks,
+        additionalMemoryResources,
+        dispatchInstructions,
       );
     } else {
       // Single-pass lowering for trivial SCCs (no cycles)
@@ -1518,7 +1563,9 @@ export function pass6BlockLowering(
           timeModelState,
           undefined, // existingOutputs
           validated.collectEdgeTypes,
-          failedBlocks
+          failedBlocks,
+          additionalMemoryResources,
+          dispatchInstructions,
         );
 
         if (outputRefs.size > 0) {
@@ -1579,5 +1626,7 @@ export function pass6BlockLowering(
     blockOutputs,
     errors,
     warnings,
+    additionalMemoryResources,
+    dispatchInstructions,
   };
 }

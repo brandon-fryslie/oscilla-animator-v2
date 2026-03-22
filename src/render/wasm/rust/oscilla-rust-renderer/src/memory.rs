@@ -79,6 +79,23 @@ pub struct MemoryResource {
     pub resource_type: String, // e.g. "f32", "vec2", "vec4"
     #[serde(default)]
     pub update_class: String,
+    /// Resource kind: "buffer" (default) or "texture2d".
+    #[serde(default = "default_resource_kind", rename = "resourceKind")]
+    pub resource_kind: String,
+    /// Texture width (required when resource_kind == "texture2d").
+    #[serde(default, rename = "textureWidth")]
+    pub texture_width: u32,
+    /// Texture height (required when resource_kind == "texture2d").
+    #[serde(default, rename = "textureHeight")]
+    pub texture_height: u32,
+    /// Texture format (required when resource_kind == "texture2d").
+    /// One of: "rgba32float", "rg32float", "r32float", "rgba16float".
+    #[serde(default, rename = "textureFormat")]
+    pub texture_format: String,
+}
+
+fn default_resource_kind() -> String {
+    "buffer".to_string()
 }
 
 // [LAW:one-source-of-truth] Storage location is the single authority for where
@@ -91,6 +108,10 @@ pub enum ResourceStorageLocation {
     State,
     /// Resource is packed into the global_controls uniform buffer (vec4 array).
     GlobalControlUbo,
+    /// Resource is a GPU Texture2D (e.g., fluid velocity/pressure fields).
+    /// FORBIDDEN: 1D array flattened simulations — Texture2D is required for
+    /// 120fps hardware filtering.
+    Texture2D,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -109,6 +130,16 @@ pub struct ResolvedResource {
     pub ubo_vec4_index: u32,
     /// For GlobalControlUbo: which component (0=x, 1=y, 2=z, 3=w).
     pub ubo_component: u32,
+    /// For Texture2D: texture dimensions and format.
+    pub texture_desc: Option<Texture2DDescriptor>,
+}
+
+/// Descriptor for a resolved Texture2D resource.
+#[derive(Clone, Debug)]
+pub struct Texture2DDescriptor {
+    pub width: u32,
+    pub height: u32,
+    pub format: wgpu::TextureFormat,
 }
 
 impl ResolvedResource {
@@ -129,6 +160,11 @@ impl ResolvedResource {
             ResourceStorageLocation::Arena => "arena_in",
             ResourceStorageLocation::State => "state_in",
             ResourceStorageLocation::GlobalControlUbo => "global_controls",
+            // [LAW:no-silent-fallbacks] Texture2D resources are not accessed
+            // via named buffer bindings — they use texture/sampler bind groups.
+            ResourceStorageLocation::Texture2D => {
+                panic!("Texture2D resources use texture bindings, not buffer names")
+            }
         }
     }
 
@@ -141,7 +177,22 @@ impl ResolvedResource {
                 // [LAW:no-silent-fallbacks] UBO is read-only from compute shaders.
                 panic!("Cannot write to GlobalControlUbo from compute shader")
             }
+            ResourceStorageLocation::Texture2D => {
+                panic!("Texture2D resources use storage texture bindings, not buffer names")
+            }
         }
+    }
+}
+
+/// Parse a texture format string into a wgpu::TextureFormat.
+/// [LAW:no-silent-fallbacks] Unknown formats are hard errors.
+fn parse_texture_format(format: &str) -> wgpu::TextureFormat {
+    match format {
+        "rgba32float" => wgpu::TextureFormat::Rgba32Float,
+        "rg32float" => wgpu::TextureFormat::Rg32Float,
+        "r32float" => wgpu::TextureFormat::R32Float,
+        "rgba16float" => wgpu::TextureFormat::Rgba16Float,
+        _ => panic!("Unknown Texture2D format: '{}'. Supported: rgba32float, rg32float, r32float, rgba16float", format),
     }
 }
 
@@ -190,6 +241,30 @@ impl SymbolResolver {
         let mut current_offset_bytes: u32 = 0;
 
         for resource in &manifest.resources {
+            // [LAW:single-enforcer] Texture2D resources are routed to dedicated
+            // GPU textures, not buffer memory. Handle them before buffer routing.
+            if resource.resource_kind == "texture2d" {
+                let format = parse_texture_format(&resource.texture_format);
+                map.insert(
+                    resource.id.clone(),
+                    ResolvedResource {
+                        base_offset_bytes: 0,
+                        lane_stride_bytes: 0,
+                        component_stride_bytes: 0,
+                        total_bytes: 0,
+                        storage_location: ResourceStorageLocation::Texture2D,
+                        ubo_vec4_index: 0,
+                        ubo_component: 0,
+                        texture_desc: Some(Texture2DDescriptor {
+                            width: resource.texture_width,
+                            height: resource.texture_height,
+                            format,
+                        }),
+                    },
+                );
+                continue;
+            }
+
             // [LAW:single-enforcer] Storage location routing is determined here
             // in the MMU based on update_class + cardinality. The emitter never
             // inspects resource IDs to choose buffers.
@@ -211,6 +286,7 @@ impl SymbolResolver {
                         storage_location: ResourceStorageLocation::GlobalControlUbo,
                         ubo_vec4_index: vec4_index,
                         ubo_component: component,
+                        texture_desc: None,
                     },
                 );
                 continue;
@@ -261,6 +337,7 @@ impl SymbolResolver {
                     storage_location,
                     ubo_vec4_index: 0,
                     ubo_component: 0,
+                    texture_desc: None,
                 },
             );
 
@@ -272,6 +349,13 @@ impl SymbolResolver {
             total_arena_bytes: current_offset_bytes,
         }
     }
+}
+
+/// A created GPU Texture2D resource with its view.
+pub struct GpuTexture2DResource {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub desc: Texture2DDescriptor,
 }
 
 pub struct GpuMemoryArena {
@@ -289,6 +373,10 @@ pub struct GpuMemoryArena {
     pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
     pub topology_bind_group: wgpu::BindGroup,
+    /// Texture2D resources keyed by symbolic resource ID.
+    /// [LAW:one-source-of-truth] The texture map is the single owner of GPU
+    /// texture objects for fluid sim / compute resources.
+    texture_resources: std::collections::HashMap<String, GpuTexture2DResource>,
     assembly_layout: wgpu::BindGroupLayout,
     draw_prep_layout: wgpu::BindGroupLayout,
     instance_layout: wgpu::BindGroupLayout,
@@ -362,6 +450,46 @@ impl GpuMemoryArena {
             // [LAW:one-source-of-truth] Bind groups MUST be rebuilt after buffer re-allocation.
             self.rebuild_arena_bind_groups(device);
         }
+
+        // Create Texture2D resources for entries with Texture2D storage location.
+        // [LAW:single-enforcer] This is the single boundary where Texture2D
+        // manifest entries are fulfilled by creating wgpu::Texture objects.
+        self.texture_resources.clear();
+        for (resource_id, resolved) in &resolver.map {
+            if resolved.storage_location != ResourceStorageLocation::Texture2D {
+                continue;
+            }
+            let desc = resolved.texture_desc.as_ref().unwrap_or_else(|| {
+                panic!("Texture2D resource '{}' missing texture descriptor", resource_id)
+            });
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(resource_id),
+                size: wgpu::Extent3d {
+                    width: desc.width,
+                    height: desc.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: desc.format,
+                usage: wgpu::TextureUsages::STORAGE_BINDING
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.texture_resources.insert(resource_id.clone(), GpuTexture2DResource {
+                texture,
+                view,
+                desc: desc.clone(),
+            });
+        }
+    }
+
+    /// Look up a Texture2D resource by its symbolic ID.
+    pub fn get_texture(&self, resource_id: &str) -> Option<&GpuTexture2DResource> {
+        self.texture_resources.get(resource_id)
     }
 
     fn rebuild_arena_bind_groups(&mut self, device: &wgpu::Device) {
@@ -762,6 +890,7 @@ impl GpuMemoryArena {
             draw_prep_bind_group,
             instance_bind_group,
             topology_bind_group,
+            texture_resources: std::collections::HashMap::new(),
             assembly_layout: assembly_layout.clone(),
             draw_prep_layout: draw_prep_layout.clone(),
             instance_layout: instance_layout.clone(),
