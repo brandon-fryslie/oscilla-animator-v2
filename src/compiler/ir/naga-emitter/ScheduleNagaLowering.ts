@@ -200,6 +200,7 @@ export interface NagaLoweringProgramIR {
 interface SlotAddressPlan {
   readonly resourceId: string;
   readonly laneCount: number;
+  readonly stride: number;
   readonly storage: 'f32' | 'i32' | 'u32';
 }
 
@@ -445,6 +446,7 @@ function toSlotAddressPlan(runtimeAddressTable: RuntimeAddressTableIR, slot: Val
   return {
     resourceId: (arena as any).resourceId as string,
     laneCount: arena.laneCount,
+    stride: arena.stride,
     storage: lookup.storage,
   };
 }
@@ -751,6 +753,7 @@ function createStateSlotAddressPlan(schedule: ScheduleIR, stateSlotStart: number
     return {
       resourceId: 'state:bank',
       laneCount: mapping.laneCount,
+      stride: mapping.stride,
       storage: 'f32',
     };
   }
@@ -1024,7 +1027,7 @@ function emitUniformVec4(
     source,
   );
   return ctx.addExpression(
-    { kind: 'buffer_load', buffer: 'uniforms', index: uniformIndex },
+    { kind: 'load_uniform', resourceId: 'uniforms', index: uniformIndex },
     source,
   );
 }

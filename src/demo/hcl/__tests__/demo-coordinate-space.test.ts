@@ -39,14 +39,11 @@ function materializeRenderControlPoints(relativePath: string): { values: Float32
     throw new Error(`Missing instance declaration for ${relativePath}`);
   }
 
+  // [LAW:one-source-of-truth] Physical arena layout owned by Rust MMU via memoryManifest.
   const runtimeState = createRuntimeState(
     schedule.stateSlotCount ?? 0,
     schedule.eventSlotCount ?? 0,
     result.program.valueExprs.nodes.length,
-    result.program.arenaZones?.totalFloats ?? 0,
-    undefined,
-    undefined,
-    result.program.arenaRuntimeLayout,
   );
   runtimeState.time = {
     tAbsMs: 0,

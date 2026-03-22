@@ -388,15 +388,13 @@ export async function compileAndSwap(
   }
 
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
+  // [LAW:one-source-of-truth] Physical arena layout is owned by Rust MMU via
+  // memoryManifest — TS RuntimeState no longer carries arena sizing.
   state.currentState = createRuntimeStateFromSession(
     state.sessionState!,
     newStateSlotCount,
     newEventSlotCount,
     newValueExprCount,
-    program.arenaTotalFloats,
-    undefined,
-    undefined,
-    program.arenaRuntimeLayout,
   );
 
   // Handle primitive state migration

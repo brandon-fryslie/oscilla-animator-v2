@@ -64,9 +64,7 @@ function makeMinimalProgram(
     renderGlobals: [],
     kernelRegistry: {} as never,
     topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
-    arenaLayout: [],
-    arenaPayloadFloats: 0,
-    arenaTotalFloats: 0,
+    memoryManifest: { resources: [] },
     schedule: {
       instances: new Map(),
       steps,

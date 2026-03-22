@@ -48,8 +48,8 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   /** Allocate a typed slot (stride-aware). */
   allocTypedSlot(type: CanonicalType, label?: string, source?: { blockId: BlockId; portId: PortId }): ValueSlot;
 
-  /** Register a slot's type metadata with optional source identity. */
-  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }): void;
+  /** Register a slot's type metadata with optional source identity and update class requirement. */
+  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }, updateClass?: UpdateClass): void;
 
   /** Register a cardinality-one expression -> slot binding. */
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void;

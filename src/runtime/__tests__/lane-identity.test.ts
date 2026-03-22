@@ -68,9 +68,7 @@ function makeMinimalProgram(opts: {
     renderGlobals: [],
     kernelRegistry: {} as any,
     topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
-    arenaLayout: [],
-    arenaPayloadFloats: 0,
-    arenaTotalFloats: 0,
+    memoryManifest: { resources: [] },
     runtimeAddressTable: {
       slotLookup: new Map(),
       fieldExprToSlot: new Map(),
