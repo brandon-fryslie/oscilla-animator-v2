@@ -35,7 +35,11 @@
  *                             followed by R*3 u32 triangle fan indices
  */
 
-import { TopologyType } from './types';
+import { TopologyType, ShapeClass } from './types';
+import {
+  SHAPE_BANK_HEADER_WORDS,
+  ShapeBankHeaderWord,
+} from '../runtime/RuntimeState';
 
 // =============================================================================
 // Template Payload Builders
@@ -158,57 +162,71 @@ export function buildClosedBlobTemplate(
 // =============================================================================
 
 /**
- * Pack a ParametricTemplatePayload into ShapeBank words.
+ * Compute the total word count for a Type 2 Parametric ShapeBank record.
  *
- * Returns a Uint32Array containing the 16-word header followed by the
- * template t-values (as f32→u32 bit-cast) and optional index payload.
+ * Use this to pre-allocate the target buffer before calling
+ * packParametricShapeBankRecord().
+ */
+export function parametricRecordWordCount(payload: ParametricTemplatePayload): number {
+  return SHAPE_BANK_HEADER_WORDS + payload.templateValues.length + payload.indices.length;
+}
+
+/**
+ * Pack a ParametricTemplatePayload DIRECTLY into a pre-allocated target buffer.
+ *
+ * Writes the 16-word header followed by template t-values (f32→u32 bit-cast)
+ * and optional index payload into `target` starting at `offset`.
+ *
+ * Returns the number of words written (header + template + indices).
  *
  * // [LAW:one-source-of-truth] This function is the single producer of
  * // Type 2 ShapeBank records. Both compile-time install and runtime
  * // materialization use this packer.
  */
 export function packParametricShapeBankRecord(
+  target: Uint32Array,
+  offset: number,
   payload: ParametricTemplatePayload,
   cpArenaBaseOffset: number,
   cpArenaLaneStride: number,
   cpArenaComponentStride: number,
-): Uint32Array {
+): number {
   const { templateValues, indices, vertexCount, indexCount, topologyType, paramStride } = payload;
 
-  // Header (16 words) + template t-values + index buffer
-  const HEADER_WORDS = 16;
-  const firstVertex = HEADER_WORDS; // t-values start immediately after header
+  // Template t-values start immediately after the 16-word header (relative offset)
+  const firstVertex = SHAPE_BANK_HEADER_WORDS;
+  // Index payload starts after t-values (relative offset within record)
   const firstIndex = indexCount > 0 ? firstVertex + templateValues.length : 0;
-  const totalWords = HEADER_WORDS + templateValues.length + indices.length;
+  const totalWords = SHAPE_BANK_HEADER_WORDS + templateValues.length + indices.length;
 
-  const words = new Uint32Array(totalWords);
-
-  // -- 16-word header --
-  words[0] = 2; // Kind = Type2Parametric
-  words[1] = topologyType; // TopologyType
-  words[2] = 0; // Flags (reserved)
-  words[3] = 0; // MaterialClass (reserved)
-  words[4] = indexCount >>> 0; // IndexCount
-  words[5] = firstIndex >>> 0; // FirstIndex (word offset to index payload)
-  words[6] = vertexCount >>> 0; // VertexCount
-  words[7] = firstVertex >>> 0; // FirstVertex (word offset to t-values, always 16)
-  words[8] = 0; // reserved
-  words[9] = paramStride >>> 0; // ParamStride (SoA stride)
-  words[10] = 0; // ParamBlockWords (reserved)
-  words[11] = cpArenaBaseOffset >>> 0; // CpArenaBaseOffset
-  words[12] = 0; // BoundsMinPacked (reserved)
-  words[13] = 0; // BoundsMaxPacked (reserved)
-  words[14] = cpArenaLaneStride >>> 0; // CpArenaLaneStride
-  words[15] = cpArenaComponentStride >>> 0; // CpArenaComponentStride
+  // -- 16-word header via ShapeBankHeaderWord enum --
+  // [LAW:one-source-of-truth] ShapeBankHeaderWord is the single authority for word offsets.
+  target[offset + ShapeBankHeaderWord.Kind] = ShapeClass.Type2Parametric >>> 0;
+  target[offset + ShapeBankHeaderWord.TopologyMode] = topologyType >>> 0;
+  target[offset + ShapeBankHeaderWord.Flags] = 0;
+  target[offset + ShapeBankHeaderWord.MaterialClass] = 0;
+  target[offset + ShapeBankHeaderWord.IndexCount] = indexCount >>> 0;
+  target[offset + ShapeBankHeaderWord.FirstIndex] = firstIndex >>> 0;
+  // Word 6 (BaseVertex) is unused for Type 2 — leave as 0 (zero-initialized by caller)
+  target[offset + ShapeBankHeaderWord.VertexCount] = vertexCount >>> 0;
+  target[offset + ShapeBankHeaderWord.FirstVertex] = firstVertex >>> 0;
+  // Word 9 (ParamBlockOffset) stores ParamStride for Type 2
+  target[offset + ShapeBankHeaderWord.ParamBlockOffset] = paramStride >>> 0;
+  target[offset + ShapeBankHeaderWord.ParamBlockWords] = 0;
+  target[offset + ShapeBankHeaderWord.CpArenaBaseOffset] = cpArenaBaseOffset >>> 0;
+  target[offset + ShapeBankHeaderWord.BoundsMinPacked] = 0;
+  target[offset + ShapeBankHeaderWord.BoundsMaxPacked] = 0;
+  target[offset + ShapeBankHeaderWord.CpArenaLaneStride] = cpArenaLaneStride >>> 0;
+  target[offset + ShapeBankHeaderWord.CpArenaComponentStride] = cpArenaComponentStride >>> 0;
 
   // -- Template t-values (f32 → u32 bit-cast) --
   const templateU32View = new Uint32Array(templateValues.buffer, templateValues.byteOffset, templateValues.length);
-  words.set(templateU32View, firstVertex);
+  target.set(templateU32View, offset + firstVertex);
 
   // -- Index payload (u32, only for indexed families) --
   if (indexCount > 0) {
-    words.set(indices, firstIndex);
+    target.set(indices, offset + firstIndex);
   }
 
-  return words;
+  return totalWords;
 }
