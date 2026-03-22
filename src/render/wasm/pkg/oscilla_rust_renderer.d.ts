@@ -17,7 +17,7 @@ export function rebuild_gpu_pipelines(passes: any): Promise<void>;
 
 export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
 
-export function rebuild_with_symbolic_manifest(manifest_json: string, lowering_json: string, max_active_lanes: number, uber_shader_wgsl: string): void;
+export function rebuild_with_symbolic_manifest(manifest_json: string, lowering_json: string, max_active_lanes: number, uber_shader_wgsl: string, dispatch_instructions_json: string): void;
 
 export function resume_engine(): void;
 
@@ -39,7 +39,7 @@ export interface InitOutput {
     readonly pause_engine: () => [number, number];
     readonly rebuild_gpu_pipelines: (a: any) => any;
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
-    readonly rebuild_with_symbolic_manifest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly rebuild_with_symbolic_manifest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];

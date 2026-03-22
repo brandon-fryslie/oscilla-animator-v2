@@ -3,6 +3,7 @@ mod compute;
 mod default_shaders;
 mod engine;
 mod error_boundary;
+mod fluid_kernels;
 mod memory;
 mod render;
 mod scheduler;
@@ -248,18 +249,26 @@ pub fn rebuild_with_symbolic_manifest(
     lowering_json: String,
     max_active_lanes: u32,
     uber_shader_wgsl: String,
+    dispatch_instructions_json: String,
 ) -> Result<(), JsValue> {
     let manifest: MemoryManifest = serde_json::from_str(&manifest_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse MemoryManifest: {}", e)))?;
     let lowering: NagaModuleIR = serde_json::from_str(&lowering_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse NagaModuleIR: {}", e)))?;
+    let dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction> =
+        if dispatch_instructions_json.is_empty() || dispatch_instructions_json == "[]" {
+            Vec::new()
+        } else {
+            serde_json::from_str(&dispatch_instructions_json)
+                .map_err(|e| JsValue::from_str(&format!("Failed to parse dispatch instructions: {}", e)))?
+        };
 
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
             JsValue::from_str("Rust engine must be initialized before rebuild_with_symbolic_manifest")
         })?;
-        engine.rebuild_with_symbolic_manifest(manifest, lowering, max_active_lanes, &uber_shader_wgsl)
+        engine.rebuild_with_symbolic_manifest(manifest, lowering, max_active_lanes, &uber_shader_wgsl, dispatch_instructions)
             .map_err(|e| JsValue::from_str(&e))?;
         Ok(())
     })

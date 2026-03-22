@@ -302,10 +302,38 @@ impl NagaEmitterInstruction {
                     entries: &entries,
                 });
 
-                let workgroup_count_x = ((particle_count
-                    .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
-                    / kernel.workgroup_size[0])
-                    .max(1);
+                // [LAW:dataflow-not-control-flow] Workgroup dispatch dimensionality
+                // is derived from kernel workgroup_size: 2D kernels (y > 1) derive
+                // dispatch size from the first Texture2D argument; 1D kernels use
+                // particle_count.
+                let (wg_x, wg_y) = if kernel.workgroup_size[1] > 1 {
+                    // 2D kernel — derive grid dimensions from first texture argument.
+                    let first_tex_id = arguments.values()
+                        .find(|sym_id| {
+                            resolver.resolve(sym_id)
+                                .map(|r| matches!(r.storage_location, crate::memory::ResourceStorageLocation::Texture2D))
+                                .unwrap_or(false)
+                        });
+                    match first_tex_id.and_then(|id| arena.get_texture(id)) {
+                        Some(tex) => (
+                            (tex.desc.width.saturating_add(kernel.workgroup_size[0] - 1)) / kernel.workgroup_size[0],
+                            (tex.desc.height.saturating_add(kernel.workgroup_size[1] - 1)) / kernel.workgroup_size[1],
+                        ),
+                        None => {
+                            return Err(format!(
+                                "DispatchKernel({}): 2D kernel requires at least one Texture2D argument",
+                                kernel_id
+                            ));
+                        }
+                    }
+                } else {
+                    // 1D kernel — dispatch from particle_count.
+                    let count_x = ((particle_count
+                        .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
+                        / kernel.workgroup_size[0])
+                        .max(1);
+                    (count_x, 1)
+                };
 
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("DispatchKernel"),
@@ -320,7 +348,7 @@ impl NagaEmitterInstruction {
                 );
                 // Group 1: dynamic arguments resolved from symbolic IDs
                 pass.set_bind_group(1, &args_bind_group, &[]);
-                pass.dispatch_workgroups(workgroup_count_x, 1, 1);
+                pass.dispatch_workgroups(wg_x, wg_y, 1);
 
                 Ok(())
             }
@@ -729,6 +757,9 @@ pub struct ComputeDispatcher {
     pub assembly_layout: wgpu::BindGroupLayout,
     pub draw_prep_layout: wgpu::BindGroupLayout,
     pub kernel_registry: KernelRegistry,
+    /// Dispatch instructions from TS compiler (e.g., fluid sim kernel chain).
+    /// [LAW:one-source-of-truth] Set during rebuild; executed every frame.
+    pending_dispatch_instructions: Vec<NagaEmitterInstruction>,
 }
 
 #[derive(Clone, Debug)]
@@ -1060,6 +1091,16 @@ impl ComputeDispatcher {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 
+        // [LAW:single-enforcer] Fluid kernels are registered once at
+        // engine init, keyed by the same IDs that TS DispatchKernel
+        // instructions reference.
+        let mut kernel_registry = KernelRegistry::new();
+        crate::fluid_kernels::register_fluid_kernels(
+            device,
+            &compiler_simulation_layout,
+            &mut kernel_registry,
+        );
+
         Self {
             simulation_pipelines,
             instance_assembly_pipeline,
@@ -1069,7 +1110,8 @@ impl ComputeDispatcher {
             state_layout,
             assembly_layout,
             draw_prep_layout,
-            kernel_registry: KernelRegistry::new(),
+            kernel_registry,
+            pending_dispatch_instructions: Vec::new(),
         }
     }
 
@@ -1257,6 +1299,7 @@ impl ComputeDispatcher {
         resolver: &crate::memory::SymbolResolver,
         lowering: NagaModuleIR,
         max_active_lanes: u32,
+        dispatch_instructions: Vec<NagaEmitterInstruction>,
     ) -> Result<(), String> {
         let wgsl = emit_module_to_wgsl(&lowering, resolver, Some(max_active_lanes))?;
 
@@ -1287,6 +1330,10 @@ impl ComputeDispatcher {
             workgroup_count: (max_active_lanes + 63) / 64,
         }];
 
+        // [LAW:one-source-of-truth] Dispatch instructions are stored once at
+        // rebuild time and executed every frame in encode_simulation_and_assembly.
+        self.pending_dispatch_instructions = dispatch_instructions;
+
         Ok(())
     }
 
@@ -1307,6 +1354,7 @@ impl ComputeDispatcher {
 
     pub fn encode_simulation_and_assembly(
         &self,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
         assembly_instance_count: u32,
@@ -1325,6 +1373,24 @@ impl ComputeDispatcher {
             );
             compute_pass.dispatch_workgroups(compiled_pass.workgroup_count, 1, 1);
             read_index = (read_index + 1) & 1;
+        }
+
+        // Execute DispatchKernel instructions (e.g., fluid sim kernel chain)
+        // after simulation passes, before instance assembly.
+        if !self.pending_dispatch_instructions.is_empty() {
+            let particle_count = self.simulation_pipelines.first()
+                .map(|p| p.workgroup_count * 64)
+                .unwrap_or(0);
+            if let Err(e) = self.execute_instructions(
+                device,
+                encoder,
+                &self.pending_dispatch_instructions,
+                &arena.symbol_resolver,
+                arena,
+                particle_count,
+            ) {
+                web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(&e));
+            }
         }
 
         {
