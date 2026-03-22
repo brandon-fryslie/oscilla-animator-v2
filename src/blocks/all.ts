@@ -10,7 +10,7 @@ import { registerScalarBlocks } from './scalar';
 import { registerMathBlocks } from './math';
 import { registerFieldBlocks } from './field';
 import { registerShapeBlocks } from './shape';
-import { registerLayoutBlocks } from './layout';
+import { register as registerAttractorLayout } from './layout/attractor-layout';
 import { registerColorBlocks } from './color';
 import { registerAdapterBlocks } from './adapter';
 import { registerLensBlocks } from './lens';
@@ -32,7 +32,7 @@ export function registerAllBlocks(): void {
   registerMathBlocks();
   registerFieldBlocks();
   registerShapeBlocks();
-  registerLayoutBlocks();
+  registerAttractorLayout();
   registerColorBlocks();
   registerAdapterBlocks();
   registerLensBlocks();

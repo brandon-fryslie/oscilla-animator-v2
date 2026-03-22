@@ -3,31 +3,19 @@ import { buildPatch } from '../../graph';
 import { compile } from '../compile';
 import { rgLines } from '../../testing/rg-search';
 
-function compileRenderProgram() {
+function compileScalarProgram() {
   const patch = buildPatch((b) => {
-    b.addBlock('InfiniteTimeRoot');
+    const time = b.addBlock('InfiniteTimeRoot');
+    b.setPortDefault(time, 'periodAMs', 1000);
 
-    const ellipse = b.addBlock('Ellipse');
-    b.setPortDefault(ellipse, 'rx', 0.03);
-    b.setPortDefault(ellipse, 'ry', 0.03);
+    const osc = b.addBlock('Oscillator');
+    b.wire(time, 'phaseA', osc, 'phase');
 
-    const array = b.addBlock('Array');
-    b.setPortDefault(array, 'count', 12);
-
-    const layout = b.addBlock('GridLayoutUV');
-    b.setPortDefault(layout, 'rows', 3);
-    b.setPortDefault(layout, 'cols', 4);
-
-    const color = b.addBlock('Const');
-    b.setConfig(color, 'value', { r: 0.2, g: 0.7, b: 0.9, a: 1.0 });
-    const colorField = b.addBlock('Broadcast');
-    b.wire(color, 'out', colorField, 'one');
-
-    const render = b.addBlock('RenderInstances2D');
-    b.wire(ellipse, 'shape', array, 'element');
-    b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'controlPoints', render, 'controlPoints');
-    b.wire(colorField, 'field', render, 'color');
+    const c = b.addBlock('Const');
+    b.setConfig(c, 'value', 0.5);
+    const add = b.addBlock('Add');
+    b.wire(osc, 'out', add, 'a');
+    b.wire(c, 'out', add, 'b');
   });
 
   const result = compile(patch);
@@ -58,8 +46,8 @@ describe('no-legacy-types gate', () => {
     expect(matches).toEqual([]);
   });
 
-  it('enforces numeric-only runtime storage contract and SoA render lanes', () => {
-    const program = compileRenderProgram();
+  it('enforces numeric-only runtime storage contract and SoA packing', () => {
+    const program = compileScalarProgram();
 
     // [LAW:one-source-of-truth] Runtime slot ABI is numeric-only for the
     // compiler/runtime contract; no legacy object-shaped storage classes.

@@ -112,7 +112,7 @@ describe('authoring queries', () => {
     let constId!: BlockId;
 
     const patch = buildPatch((b) => {
-      layoutId = b.addBlock('CircleLayoutUV');
+      layoutId = b.addBlock('AttractorLayout');
       constId = b.addBlock('Const');
     });
 
@@ -120,7 +120,7 @@ describe('authoring queries', () => {
       patch,
       {
         kind: 'connectExistingSources',
-        target: { blockId: layoutId, portId: 'elements' as any },
+        target: { blockId: layoutId, portId: 'target' as any },
         candidates: [
           { candidateId: 'const', sourceBlockId: constId, sourcePortId: 'out' as any },
         ],
@@ -303,14 +303,14 @@ describe('authoring queries', () => {
     let layoutId!: BlockId;
 
     const patch = buildPatch((b) => {
-      layoutId = b.addBlock('CircleLayoutUV');
+      layoutId = b.addBlock('AttractorLayout');
     });
 
     const result = queryAddSourceBlocks(
       patch,
       {
         kind: 'addSourceBlocks',
-        target: { blockId: layoutId, portId: 'elements' as any },
+        target: { blockId: layoutId, portId: 'target' as any },
         candidates: [{ candidateId: 'const', blockType: 'Const' }],
       },
       { mutationMode: 'replaceWriter' },

@@ -34,7 +34,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'ExternalInput.out — user input shape in real time',
     ],
     duds: [
-      'GridLayoutUV.position — constant per instance, flat line',
+      'Layout.position — constant per instance, flat line',
       'Broadcast.field — every instance identical, sparkline equals the input one value',
       'DomainIndex.out — constant integer per instance, flat line',
       'Any adapter output where the input was already constant',
@@ -54,13 +54,13 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'Lag.out / Slew.out field — see smoothing propagate across instances',
       'Add.out field (periodic + offset) — phase offset patterns',
       'Noise.out field — spatial correlation visible',
-      'Any field downstream of GridLayoutUV that varies over time',
+      'Any field downstream of a layout block that varies over time',
     ],
     duds: [
       'Instance count < 8 — too few rows, sparkline overlay is better',
       'Broadcast.field of one value — all rows identical, solid horizontal bands',
       'Color payload — single-channel heatmap loses color information',
-      'Static fields (e.g. GridLayoutUV.position alone) — solid stripes, no temporal info',
+      'Static fields (e.g. layout.position alone) — solid stripes, no temporal info',
     ],
   },
   {

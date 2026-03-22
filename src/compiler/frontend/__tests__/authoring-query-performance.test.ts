@@ -18,7 +18,7 @@ describe('authoring query performance budgets', () => {
       b.addBlock('Const');
       b.addBlock('MakeColorOKLCH');
       b.addBlock('SplitColorOKLCH');
-      b.addBlock('CircleLayoutUV');
+      b.addBlock('AttractorLayout');
     });
 
     const result = queryAddSourceBlocks(
@@ -30,7 +30,7 @@ describe('authoring query performance budgets', () => {
           { candidateId: 'const', blockType: 'Const' },
           { candidateId: 'color', blockType: 'MakeColorOKLCH' },
           { candidateId: 'split', blockType: 'SplitColorOKLCH' },
-          { candidateId: 'layout', blockType: 'CircleLayoutUV' },
+          { candidateId: 'layout', blockType: 'AttractorLayout' },
         ],
       },
       { mutationMode: 'replaceWriter' },
