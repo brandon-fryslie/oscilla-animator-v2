@@ -28,8 +28,7 @@ import {
 } from '../../runtime/RuntimeState';
 import { ShapeClass, TopologyMode } from '../../shapes/types';
 import type { PathTopologyDef, TopologyDef } from '../../shapes/types';
-import type { ParametricTemplatePayload } from '../../shapes/parametric-templates';
-import { packParametricShapeBankRecord } from '../../shapes/parametric-templates';
+import { packParametricShapeBankRecord, parametricRecordWordCount } from '../../shapes/parametric-templates';
 
 export interface CompiledDrawPrepInstallArtifact {
   readonly words: Uint32Array;
@@ -141,8 +140,7 @@ function buildCanonicalTopologyHeaders(
   // Type 2 records are variable-size (header + template payload + optional indices).
   const recordSizes = shapeRefSteps.map(({ expr }) => {
     if (expr.parametricTemplate) {
-      const tmpl = expr.parametricTemplate;
-      return SHAPE_BANK_HEADER_WORDS + tmpl.templateValues.length + tmpl.indices.length;
+      return parametricRecordWordCount(expr.parametricTemplate);
     }
     return SHAPE_BANK_HEADER_WORDS;
   });
@@ -180,14 +178,16 @@ function buildCanonicalTopologyHeaders(
     if (expr.parametricTemplate) {
       // -- Type 2 Parametric: pack header + template payload --
       // [LAW:one-source-of-truth] packParametricShapeBankRecord is the single
-      // producer of Type 2 ShapeBank records.
-      const packed = packParametricShapeBankRecord(
+      // producer of Type 2 ShapeBank records. Writes directly into the
+      // pre-allocated shapeBankWords buffer — no intermediate allocation.
+      packParametricShapeBankRecord(
+        shapeBankWords,
+        wordOffset,
         expr.parametricTemplate,
         cpArenaBaseOffset,
         cpArenaLaneStride,
         cpArenaComponentStride,
       );
-      shapeBankWords.set(packed, wordOffset);
     } else {
       // -- Type 1 Rigid: write 16-word header --
       const isPath = isPathTopology(topology);
