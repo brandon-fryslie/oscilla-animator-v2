@@ -196,4 +196,15 @@ export interface LowerEffects {
   readonly evalRequests?: readonly { exprId: ValueExprId }[];
   /** Optional time model contribution for runtime clock resolution. */
   readonly timeModel?: TimeModelIR;
+  /**
+   * Additional memory resources to include in the MemoryManifest.
+   * Used by blocks that require GPU resources beyond standard arena slots
+   * (e.g., Texture2D for fluid simulation fields).
+   */
+  readonly memoryResources?: readonly import('./program').MemoryResourceIR[];
+  /**
+   * DispatchKernel instructions emitted by this block.
+   * Collected into the NagaLoweringProgramIR for execution by the Rust dispatcher.
+   */
+  readonly dispatchInstructions?: readonly import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[];
 }

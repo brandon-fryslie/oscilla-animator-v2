@@ -189,6 +189,12 @@ export interface NagaLoweringProgramIR {
   readonly sourceMap: Readonly<Record<string, NagaSourceMapEntryIR>>;
   readonly compute: NagaComputeMetadataIR;
   readonly coverage: NagaLoweringCoverageIR;
+  /**
+   * DispatchKernel instructions emitted by blocks (e.g., fluid sim passes).
+   * These are executed by the Rust compute dispatcher independently of the
+   * Naga-generated compute shader.
+   */
+  readonly dispatchInstructions?: readonly DispatchKernelInstruction[];
 }
 
 interface SlotAddressPlan {

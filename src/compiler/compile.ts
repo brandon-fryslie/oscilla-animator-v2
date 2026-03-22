@@ -659,6 +659,9 @@ function convertLinkedIRToProgram(
     });
   }
 
+  // 3. Additional resources declared by blocks (e.g., Texture2D for fluid sims)
+  manifestResources.push(...unlinkedIR.additionalMemoryResources);
+
   const memoryManifest: MemoryManifestIR = { resources: manifestResources };
 
   // Update runtimeSlots with symbolic arena descriptors (offsets/strides are now symbolic)
@@ -716,12 +719,16 @@ function convertLinkedIRToProgram(
     scheduleIR,
     runtimeAddressTable,
   );
-  const nagaLoweringProgram = lowerScheduleToNagaModule({
+  const nagaLoweringProgramBase = lowerScheduleToNagaModule({
     schedule: scheduleIR,
     runtimeAddressTable,
     valueExprs: valueExprNodes,
     exprToBlock: builder.getExprToBlock(),
   });
+  // Attach block-emitted dispatch instructions (e.g., fluid sim kernels)
+  const nagaLoweringProgram = unlinkedIR.dispatchInstructions.length > 0
+    ? { ...nagaLoweringProgramBase, dispatchInstructions: unlinkedIR.dispatchInstructions }
+    : nagaLoweringProgramBase;
 
   // Build debug index
   type DebugPortBinding = CompiledProgramIR['debugIndex']['ports'][number];

@@ -84,6 +84,22 @@ export interface MemoryManifestIR {
   readonly resources: readonly MemoryResourceIR[];
 }
 
+/**
+ * Resource kind discriminant for MemoryResourceIR.
+ *
+ * - 'buffer': Standard storage/uniform buffer (arena slots, state banks).
+ * - 'texture2d': 2D GPU texture (e.g., fluid velocity/pressure fields).
+ *   FORBIDDEN: 1D array flattened simulations — Texture2D is required for
+ *   120fps hardware filtering.
+ */
+export type MemoryResourceKind = 'buffer' | 'texture2d';
+
+/**
+ * Texture2D format descriptor.
+ * Maps to wgpu::TextureFormat on the Rust side.
+ */
+export type Texture2DFormat = 'rgba32float' | 'rg32float' | 'r32float' | 'rgba16float';
+
 export interface MemoryResourceIR {
   /** Unique symbolic ID (e.g., 'arena:node_12_out', 'state:fluid_vel') */
   readonly id: string;
@@ -91,7 +107,7 @@ export interface MemoryResourceIR {
   readonly type: CanonicalType;
   /** Number of lanes (1 for scalars, N for fields) */
   readonly cardinality: number;
-  /** Memory packing preference */
+  /** Memory packing preference (buffer resources only) */
   readonly packing: 'soa' | 'aos';
   /** Update class governs when this resource changes (Rust MMU uses this for storage placement). */
   readonly updateClass: import('../../types/compiler').UpdateClass;
@@ -99,6 +115,21 @@ export interface MemoryResourceIR {
   readonly source?: { readonly blockId: import('../../types/compiler').BlockId; readonly portId: import('../../types/compiler').PortId };
   /** Optional debug label */
   readonly label?: string;
+  /**
+   * Resource kind. Defaults to 'buffer' when absent (backwards-compatible).
+   * 'texture2d' resources are fulfilled by creating wgpu::Texture objects
+   * instead of buffer allocations.
+   */
+  readonly resourceKind?: MemoryResourceKind;
+  /**
+   * Texture2D dimensions. Required when resourceKind === 'texture2d'.
+   */
+  readonly textureWidth?: number;
+  readonly textureHeight?: number;
+  /**
+   * Texture2D format. Required when resourceKind === 'texture2d'.
+   */
+  readonly textureFormat?: Texture2DFormat;
 }
 
 /**
