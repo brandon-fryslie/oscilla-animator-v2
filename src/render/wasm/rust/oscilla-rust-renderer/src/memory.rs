@@ -77,6 +77,20 @@ pub struct MemoryResource {
     pub packing: MemoryPacking,
     #[serde(rename = "type")]
     pub resource_type: String, // e.g. "f32", "vec2", "vec4"
+    #[serde(default)]
+    pub update_class: String,
+}
+
+// [LAW:one-source-of-truth] Storage location is the single authority for where
+// a resource lives on the GPU. The emitter dispatches on this, never on ID prefixes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResourceStorageLocation {
+    /// Resource lives in the compiler arena storage buffer (arena_in/arena_out).
+    Arena,
+    /// Resource lives in the state ping-pong storage buffer (state_in/state_out).
+    State,
+    /// Resource is packed into the global_controls uniform buffer (vec4 array).
+    GlobalControlUbo,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -90,6 +104,45 @@ pub struct ResolvedResource {
     pub lane_stride_bytes: u32,
     pub component_stride_bytes: u32,
     pub total_bytes: u32,
+    pub storage_location: ResourceStorageLocation,
+    /// For GlobalControlUbo: which vec4 index in global_controls[].
+    pub ubo_vec4_index: u32,
+    /// For GlobalControlUbo: which component (0=x, 1=y, 2=z, 3=w).
+    pub ubo_component: u32,
+}
+
+impl ResolvedResource {
+    /// WGSL component accessor (x, y, z, w) for UBO resources.
+    pub fn ubo_component_name(&self) -> &'static str {
+        match self.ubo_component {
+            0 => "x",
+            1 => "y",
+            2 => "z",
+            3 => "w",
+            _ => unreachable!("UBO component must be 0..3"),
+        }
+    }
+
+    /// Buffer name for read access (load side).
+    pub fn read_buffer_name(&self) -> &'static str {
+        match self.storage_location {
+            ResourceStorageLocation::Arena => "arena_in",
+            ResourceStorageLocation::State => "state_in",
+            ResourceStorageLocation::GlobalControlUbo => "global_controls",
+        }
+    }
+
+    /// Buffer name for write access (store side).
+    pub fn write_buffer_name(&self) -> &'static str {
+        match self.storage_location {
+            ResourceStorageLocation::Arena => "arena_out",
+            ResourceStorageLocation::State => "state_out",
+            ResourceStorageLocation::GlobalControlUbo => {
+                // [LAW:no-silent-fallbacks] UBO is read-only from compute shaders.
+                panic!("Cannot write to GlobalControlUbo from compute shader")
+            }
+        }
+    }
 }
 
 pub struct SymbolResolver {
@@ -109,11 +162,60 @@ impl SymbolResolver {
         self.map.get(id)
     }
 
+    // [LAW:single-enforcer] UBO offset mapping is computed here in the MMU,
+    // never in the emitter. The emitter receives opaque (vec4_index, component).
+    fn compute_ubo_address(offset_floats: u32) -> (u32, u32) {
+        let vec4_index = offset_floats / 4;
+        let component = offset_floats % 4;
+        (vec4_index, component)
+    }
+
+    /// Map a FrameHeader field name to its float offset within the uniform buffer.
+    /// Returns None for unknown fields (caller falls back to Arena).
+    fn frame_header_field_offset(resource_id: &str) -> Option<u32> {
+        // [LAW:one-source-of-truth] These offsets mirror FrameHeader's repr(C) layout.
+        // view_proj: 16 floats (0..16), resolution: 2 floats (16..18),
+        // time_seconds: 1 float (18), delta_time_seconds: 1 float (19).
+        match resource_id {
+            "time_seconds" => Some(18),
+            "delta_time_seconds" => Some(19),
+            "resolution_x" => Some(16),
+            "resolution_y" => Some(17),
+            _ => None,
+        }
+    }
+
     pub fn build_from_manifest(manifest: &MemoryManifest) -> Self {
         let mut map = std::collections::HashMap::new();
         let mut current_offset_bytes: u32 = 0;
 
         for resource in &manifest.resources {
+            // [LAW:single-enforcer] Storage location routing is determined here
+            // in the MMU based on update_class + cardinality. The emitter never
+            // inspects resource IDs to choose buffers.
+            let is_ubo = resource.update_class == "FrameTime" && resource.cardinality == 1;
+
+            if is_ubo {
+                // [LAW:one-source-of-truth] UBO resources are mapped to their
+                // canonical FrameHeader offset; they do not consume arena space.
+                let offset_floats = Self::frame_header_field_offset(&resource.id).unwrap_or(0);
+                let (vec4_index, component) = Self::compute_ubo_address(offset_floats);
+
+                map.insert(
+                    resource.id.clone(),
+                    ResolvedResource {
+                        base_offset_bytes: 0,
+                        lane_stride_bytes: 0,
+                        component_stride_bytes: 0,
+                        total_bytes: 0,
+                        storage_location: ResourceStorageLocation::GlobalControlUbo,
+                        ubo_vec4_index: vec4_index,
+                        ubo_component: component,
+                    },
+                );
+                continue;
+            }
+
             // [LAW:single-enforcer] All std430/std140 alignment rules are
             // enforced here in the Rust MMU.
             let component_size_bytes = 4; // Assuming f32/u32 for now
@@ -140,6 +242,15 @@ impl SymbolResolver {
 
             let total_bytes = resource.cardinality * component_count * component_size_bytes;
 
+            // [LAW:single-enforcer] State vs Arena routing is determined by
+            // the resource's ID prefix. This is the single place that makes
+            // this decision — the emitter reads the resolved storage_location.
+            let storage_location = if resource.id.starts_with("state:") {
+                ResourceStorageLocation::State
+            } else {
+                ResourceStorageLocation::Arena
+            };
+
             map.insert(
                 resource.id.clone(),
                 ResolvedResource {
@@ -147,13 +258,16 @@ impl SymbolResolver {
                     lane_stride_bytes,
                     component_stride_bytes,
                     total_bytes,
+                    storage_location,
+                    ubo_vec4_index: 0,
+                    ubo_component: 0,
                 },
             );
 
             current_offset_bytes += total_bytes;
         }
 
-        Self { 
+        Self {
             map,
             total_arena_bytes: current_offset_bytes,
         }
