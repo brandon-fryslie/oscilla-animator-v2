@@ -643,14 +643,18 @@ function convertLinkedIRToProgram(
       : 1;
 
     // [LAW:one-source-of-truth] Read updateClass and source from builder slot metadata.
+    // Every arena slot was allocated through allocTypedSlot, so metadata must exist.
     const slotMd = slotTypes.get(slotInput.slot);
+    if (!slotMd) {
+      throw new Error(`Slot ${slotInput.slot} missing from slotLayoutInputs — allocTypedSlot was not called for this slot.`);
+    }
     manifestResources.push({
       id: `arena:slot:${slotInput.slot}`,
       type: slotInput.type,
       cardinality,
       packing: slotInput.packingPreference,
-      updateClass: slotMd?.updateClass ?? 'FrameTime',
-      source: slotMd?.source,
+      updateClass: slotMd.updateClass,
+      source: slotMd.source,
       label: `Slot ${slotInput.slot}`,
     });
   }
