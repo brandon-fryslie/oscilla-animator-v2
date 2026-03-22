@@ -31,9 +31,11 @@ function packIntoFreshBuffer(
 // =============================================================================
 
 describe('buildRibbonTemplate', () => {
-  it('generates R+1 evenly-spaced t-values for resolution R', () => {
+  it('generates R+1 evenly-spaced t-values and R*6 draw vertices for resolution R', () => {
     const result = buildRibbonTemplate(4, 8);
-    expect(result.vertexCount).toBe(5);
+    // Draw vertex count is R*6 (6 vertices per quad segment).
+    expect(result.vertexCount).toBe(24);
+    // Template stores R+1 t-values (segment endpoints).
     expect(result.templateValues.length).toBe(5);
     expect(Array.from(result.templateValues)).toEqual([0.0, 0.25, 0.5, 0.75, 1.0]);
   });
@@ -138,7 +140,7 @@ describe('packParametricShapeBankRecord', () => {
     expect(words[ShapeBankHeaderWord.TopologyMode]).toBe(TopologyType.NonIndexed);
     expect(words[ShapeBankHeaderWord.IndexCount]).toBe(0); // non-indexed
     expect(words[ShapeBankHeaderWord.FirstIndex]).toBe(0); // non-indexed
-    expect(words[ShapeBankHeaderWord.VertexCount]).toBe(5); // R+1
+    expect(words[ShapeBankHeaderWord.VertexCount]).toBe(24); // R*6
     expect(words[ShapeBankHeaderWord.FirstVertex]).toBe(16); // always 16
     expect(words[ShapeBankHeaderWord.ParamBlockOffset]).toBe(8); // ParamStride
 
@@ -200,7 +202,7 @@ describe('packParametricShapeBankRecord', () => {
 
     // Header at offset
     expect(target[bufferOffset + ShapeBankHeaderWord.Kind]).toBe(ShapeClass.Type2Parametric);
-    expect(target[bufferOffset + ShapeBankHeaderWord.VertexCount]).toBe(3); // R+1 = 2+1
+    expect(target[bufferOffset + ShapeBankHeaderWord.VertexCount]).toBe(12); // R*6 = 2*6
     expect(target[bufferOffset + ShapeBankHeaderWord.CpArenaBaseOffset]).toBe(50);
     expect(target[bufferOffset + ShapeBankHeaderWord.CpArenaLaneStride]).toBe(100);
     expect(target[bufferOffset + ShapeBankHeaderWord.CpArenaComponentStride]).toBe(3);

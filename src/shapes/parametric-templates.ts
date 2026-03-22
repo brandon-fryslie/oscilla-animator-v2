@@ -83,12 +83,18 @@ export function buildRibbonTemplate(
     throw new Error(`Ribbon resolution must be >= 1 (got ${resolution})`);
   }
 
-  const vertexCount = resolution + 1;
-  const templateValues = new Float32Array(vertexCount);
+  // Template stores R+1 t-values (segment endpoints).
+  // Draw vertex count is R*6: each segment becomes a quad (2 triangles, 6 vertices).
+  // The vertex shader maps each draw vertex to the correct t-value and normal side
+  // via vertex_index % 6u lookup tables.
+  const templateValueCount = resolution + 1;
+  const templateValues = new Float32Array(templateValueCount);
 
   for (let i = 0; i <= resolution; i++) {
     templateValues[i] = i / resolution;
   }
+
+  const vertexCount = resolution * 6;
 
   return {
     templateValues,
