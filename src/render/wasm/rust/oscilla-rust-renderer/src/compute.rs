@@ -139,6 +139,125 @@ pub struct NagaModuleIR {
     pub entry_points: Vec<NagaEntryPointIR>,
 }
 
+// ---------------------------------------------------------------------------
+// NagaEmitterInstruction — Typed instructions from the TS compiler.
+// [LAW:one-type-per-behavior] All dispatch variants live in one enum so match
+// arms are exhaustive and new ops require explicit Rust handling.
+// ---------------------------------------------------------------------------
+
+/// Instruction emitted by the TS Naga lowering pipeline.
+/// Deserialized from JSON sent across the JS↔Wasm boundary.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "op")]
+pub enum NagaEmitterInstruction {
+    /// Trigger a pre-compiled static WGSL kernel.
+    /// `kernel_id` indexes into `KernelRegistry`; `arguments` maps parameter
+    /// names to Symbolic IDs resolved by the MMU at dispatch time.
+    DispatchKernel {
+        #[serde(rename = "kernelId")]
+        kernel_id: String,
+        arguments: HashMap<String, String>,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// KernelRegistry — Static kernel pipeline store.
+// [LAW:one-source-of-truth] The registry is the single owner of pre-compiled
+// kernel pipelines; no other path compiles or caches kernels.
+// ---------------------------------------------------------------------------
+
+/// A pre-compiled compute kernel ready for dispatch.
+pub struct CompiledKernel {
+    pub pipeline: wgpu::ComputePipeline,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub workgroup_size: [u32; 3],
+}
+
+/// Registry of pre-compiled static WGSL kernels keyed by kernel ID.
+pub struct KernelRegistry {
+    kernels: HashMap<String, CompiledKernel>,
+}
+
+impl KernelRegistry {
+    pub fn new() -> Self {
+        Self {
+            kernels: HashMap::new(),
+        }
+    }
+
+    /// Register a pre-compiled kernel under the given ID.
+    pub fn register(&mut self, kernel_id: String, kernel: CompiledKernel) {
+        self.kernels.insert(kernel_id, kernel);
+    }
+
+    /// Look up a kernel by ID. Returns None if unregistered.
+    pub fn get(&self, kernel_id: &str) -> Option<&CompiledKernel> {
+        self.kernels.get(kernel_id)
+    }
+}
+
+impl NagaEmitterInstruction {
+    /// Execute this instruction against the GPU.
+    ///
+    /// [LAW:single-enforcer] Instruction dispatch is the single boundary where
+    /// Symbolic IDs are resolved to physical buffer offsets and kernels are
+    /// dispatched — no other code path performs this translation.
+    pub fn execute(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        registry: &KernelRegistry,
+        resolver: &SymbolResolver,
+        arena: &GpuMemoryArena,
+        particle_count: u32,
+    ) -> Result<(), String> {
+        match self {
+            NagaEmitterInstruction::DispatchKernel {
+                kernel_id,
+                arguments,
+            } => {
+                let kernel = registry.get(kernel_id).ok_or_else(|| {
+                    format!("DispatchKernel: kernel '{}' not found in registry", kernel_id)
+                })?;
+
+                // [LAW:no-silent-fallbacks] Every symbolic argument must resolve;
+                // unresolved IDs are hard errors, not silent skips.
+                for (param_name, symbolic_id) in arguments {
+                    let _resolved = resolver.resolve(symbolic_id).ok_or_else(|| {
+                        format!(
+                            "DispatchKernel({}): argument '{}' symbolic ID '{}' not found in MMU",
+                            kernel_id, param_name, symbolic_id
+                        )
+                    })?;
+                }
+
+                // Bind group creation is deferred to when concrete resource
+                // binding layouts are defined (Phase 2 fluid port ticket).
+                // For now we dispatch using the kernel's own layout with the
+                // arena's existing bind groups.
+                let workgroup_count_x = ((particle_count
+                    .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
+                    / kernel.workgroup_size[0])
+                    .max(1);
+
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("DispatchKernel"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&kernel.pipeline);
+                // Bind group 0: arena read (current ping-pong bank)
+                pass.set_bind_group(
+                    0,
+                    arena.get_compiler_simulation_bind_group_for_index(arena.ping_pong_index()),
+                    &[],
+                );
+                pass.dispatch_workgroups(workgroup_count_x, 1, 1);
+
+                Ok(())
+            }
+        }
+    }
+}
+
 struct ExpressionEmitter<'a> {
     function_ir: &'a NagaFunctionIR,
     module_ir: &'a NagaModuleIR,
@@ -539,6 +658,7 @@ pub struct ComputeDispatcher {
     pub state_layout: wgpu::BindGroupLayout,
     pub assembly_layout: wgpu::BindGroupLayout,
     pub draw_prep_layout: wgpu::BindGroupLayout,
+    pub kernel_registry: KernelRegistry,
 }
 
 #[derive(Clone, Debug)]
@@ -879,6 +999,7 @@ impl ComputeDispatcher {
             state_layout,
             assembly_layout,
             draw_prep_layout,
+            kernel_registry: KernelRegistry::new(),
         }
     }
 
@@ -1158,6 +1279,29 @@ impl ComputeDispatcher {
             compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
         }
         arena.set_ping_pong_index(read_index);
+    }
+
+    /// Execute a batch of NagaEmitterInstructions from the TS compiler.
+    /// [LAW:single-enforcer] This is the single boundary where emitter
+    /// instructions are dispatched to the GPU.
+    pub fn execute_instructions(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        instructions: &[NagaEmitterInstruction],
+        resolver: &SymbolResolver,
+        arena: &GpuMemoryArena,
+        particle_count: u32,
+    ) -> Result<(), String> {
+        for instruction in instructions {
+            instruction.execute(
+                encoder,
+                &self.kernel_registry,
+                resolver,
+                arena,
+                particle_count,
+            )?;
+        }
+        Ok(())
     }
 
     pub fn encode_draw_prep(
