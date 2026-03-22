@@ -382,9 +382,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     topologyId: TopologyId,
     paramArgs: readonly ValueExprId[],
     type: CanonicalType,
-    controlPointField?: ValueExprId
+    controlPointField?: ValueExprId,
+    parametricTemplate?: import('../../shapes/parametric-templates').ParametricTemplatePayload,
   ): ValueExprId {
-    return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField });
+    return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField, parametricTemplate });
   }
 
   registerTopology(topology: AbstractTopologyDef | PathTopologyDefInput, _debugName?: string): TopologyId {

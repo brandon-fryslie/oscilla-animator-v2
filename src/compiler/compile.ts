@@ -1039,11 +1039,18 @@ function classifyShapeForRenderStep(
     );
   }
 
-  // [LAW:one-type-per-behavior] The current geometry path is Type 1 rigid and
-  // uses non-indexed draws with GPU vertex pulling from canonical ShapeBank
-  // topology data.
-  // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
-  // to nonIndexed (GPU vertex pulling from topologyBank).
+  // [LAW:one-type-per-behavior] Type 2 Parametric shapes carry a parametricTemplate
+  // payload on the shapeRef expression. The install contract packs the template
+  // into ShapeBank using packParametricShapeBankRecord.
+  if (shapeExpr.parametricTemplate) {
+    const topo = shapeExpr.parametricTemplate;
+    const drawMode: DrawPrepSinkIR['drawMode'] =
+      topo.indexCount > 0 ? 'indexed' : 'nonIndexed';
+    return { drawMode, shapeClass: ShapeClass.Type2Parametric };
+  }
+
+  // [LAW:one-type-per-behavior] The rigid geometry path is Type 1 and uses
+  // non-indexed draws with GPU vertex pulling from canonical ShapeBank topology data.
   const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
 
   return { drawMode, shapeClass: ShapeClass.Type1Rigid };
