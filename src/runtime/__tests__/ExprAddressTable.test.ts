@@ -156,6 +156,7 @@ function mockProgram(opts: {
         hardDrops: [],
       },
     },
+    fastPathOffsets: {},
   } as CompiledProgramIR;
 }
 

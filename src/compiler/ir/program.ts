@@ -229,6 +229,16 @@ export interface CompiledProgramIR {
    * Contains the structured module and expr/statement source-map provenance.
    */
   readonly nagaLoweringProgram: NagaLoweringProgramIR;
+
+  /**
+   * O(1) fast-path offset table for control parameter updates.
+   *
+   * Maps `"blockId:portId"` → physical f32 offset so that ParamChanged events
+   * can write directly to the backing store without searching the debug index.
+   *
+   * [LAW:one-source-of-truth] Populated once at compile time from slotMeta labels.
+   */
+  readonly fastPathOffsets: Readonly<Record<string, number>>;
 }
 
 /**
