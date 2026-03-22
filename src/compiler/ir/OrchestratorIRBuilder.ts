@@ -25,7 +25,6 @@ import type { TimeModelIR } from './schedule';
 import type {
   InstanceDecl,
   Step,
-  ContinuityPolicy,
   StableStateId,
   StateMapping,
 } from './types';
@@ -73,20 +72,6 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
 
   /** Emit a field materialization step. */
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void;
-
-  /** Emit a continuity map build step. */
-  stepContinuityMapBuild(instanceId: InstanceId): void;
-
-  /** Emit a continuity apply step. */
-  stepContinuityApply(
-    targetKey: string,
-    instanceId: InstanceId,
-    policy: ContinuityPolicy,
-    baseSlot: ValueSlot,
-    outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-    stride: number
-  ): void;
 
   // =========================================================================
   // State Slots (orchestrator-only)

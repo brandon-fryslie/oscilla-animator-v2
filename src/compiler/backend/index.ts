@@ -27,7 +27,7 @@ import { pass4DepGraph } from './derive-dep-graph';
 import { pass5CycleValidation } from './schedule-scc';
 import { pass6BlockLowering, type UnlinkedIRFragments, type Pass6Options } from './lower-blocks';
 import { pass7Schedule, type ScheduleIR } from './schedule-program';
-import { allocateContinuityPipeline } from './continuity-pipeline';
+import { allocateRenderMaterializationPipeline } from './render-materialization-pipeline';
 
 // Re-export for consumers
 export { pass4DepGraph } from './derive-dep-graph';
@@ -146,14 +146,14 @@ export function compileBackend(
     }
 
     // =========================================================================
-    // Step 4a: Continuity Pipeline Allocation
+    // Step 4a: Render Materialization Pipeline
     // =========================================================================
-    const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
+    const renderPipeline = allocateRenderMaterializationPipeline(unlinkedIR, acyclicPatch);
 
     // =========================================================================
     // Step 4b: Schedule Construction (pure ordering, no allocation)
     // =========================================================================
-    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, renderPipeline);
 
     try {
       compilationInspector.capturePass('backend:schedule', unlinkedIR, scheduleIR);

@@ -13,7 +13,6 @@ import {
 import { OpCode } from '../types';
 import type {
   Step,
-  StepContinuityApply,
   StepFieldStateWrite,
   StepMaterialize,
   PureFn,
@@ -202,7 +201,6 @@ export type HardDropReason =
   | 'missing_target_slot_metadata'
   | 'unresolved_materialize_source'
   | 'missing_source_slot_metadata'
-  | 'continuity_missing_slot_metadata'
   | 'state_write_missing_source_slot'
   | 'state_write_missing_slot_metadata';
 
@@ -384,9 +382,6 @@ function getStepExprId(step: Step): ValueExprId | null {
     case 'fieldStateWrite':
       return step.value;
     case 'render':
-      return null;
-    case 'continuityApply':
-    case 'continuityMapBuild':
       return null;
     default: {
       const _exhaustive: never = step;
@@ -2186,20 +2181,6 @@ function lowerStep(
       return;
     }
 
-    case 'continuityApply': {
-      lowerContinuityApply(
-        ctx,
-        builtins,
-        laneExpr,
-        step,
-        stepIndex,
-        runtimeAddressTable,
-        source,
-        coverage,
-      );
-      return;
-    }
-
     case 'stateWrite':
     case 'fieldStateWrite': {
       lowerStateWrite({
@@ -2217,7 +2198,6 @@ function lowerStep(
     }
 
     case 'eventDispatch':
-    case 'continuityMapBuild':
     case 'render': {
       // [LAW:one-source-of-truth] Non-compute schedule steps are explicit
       // runtime/render boundary work and are intentionally excluded from
@@ -2231,46 +2211,6 @@ function lowerStep(
       void _exhaustive;
     }
   }
-}
-
-function lowerContinuityApply(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  step: StepContinuityApply,
-  stepIndex: number,
-  runtimeAddressTable: RuntimeAddressTableIR,
-  source: NagaSourceMapEntryIR,
-  coverage: LoweringCoverageState,
-): void {
-  const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
-  const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
-  if (!sourcePlan || !targetPlan) {
-    recordHardDrop(coverage, 'continuity_missing_slot_metadata', stepIndex);
-    ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
-    return;
-  }
-
-  withTargetLaneGuard({
-    ctx,
-    builtins,
-    laneExpr,
-    targetLaneCount: targetPlan.laneCount,
-    source,
-    emit: () => {
-      emitTypedCopy(
-        ctx,
-        builtins,
-        laneExpr,
-        sourcePlan,
-        'arena_in',
-        targetPlan,
-        'arena_out',
-        source,
-        `step ${stepIndex} kind=continuityApply semantic=${step.semantic}`,
-      );
-    },
-  });
 }
 
 function lowerStateWrite(args: {

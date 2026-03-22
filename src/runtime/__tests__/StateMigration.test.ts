@@ -3,7 +3,7 @@ import { createInitialState, migrateState } from '../StateMigration';
 import type { StateMapping } from '../../compiler/ir/types';
 import { stableStateId } from '../../compiler/ir/types';
 import { instanceId } from '../../core/ids';
-import type { MappingState } from '../ContinuityState';
+import type { MappingState } from '../StateMigration';
 
 describe('StateMigration', () => {
   it('initializes scalar and field mappings from one state contract', () => {
