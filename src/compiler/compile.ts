@@ -879,6 +879,19 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
+  // Build fast-path offset table for O(1) control parameter updates.
+  // [LAW:one-source-of-truth] Derived once from slotMeta labels at compile time.
+  const fastPathOffsets: Record<string, number> = {};
+  for (const meta of slotMeta) {
+    if (meta.storage !== 'f32') continue;
+    const source = parseSlotPortLabel(
+      slotTypes.get(meta.slot)?.label,
+    );
+    if (source.blockId && source.portId) {
+      fastPathOffsets[`${source.blockId}:${source.portId}`] = meta.offset;
+    }
+  }
+
   // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
     irVersion: 1,
@@ -898,6 +911,7 @@ function convertLinkedIRToProgram(
     drawPrepProgram,
     generatedComputeProgram,
     nagaLoweringProgram,
+    fastPathOffsets,
   };
 
   return program;

@@ -111,6 +111,7 @@ function makeMinimalProgram(opts: {
         hardDrops: [],
       },
     },
+    fastPathOffsets: {},
   } as CompiledProgramIR;
 }
 
