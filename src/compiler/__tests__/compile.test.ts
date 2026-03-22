@@ -285,7 +285,7 @@ describe('Debug Probe Support', () => {
 
     const fn = lowering.module.functions[0];
     const hasStateWriteStore = fn?.statements.some(
-      (statement) => statement.kind === 'store' && statement.buffer === 'state_out',
+      (statement) => statement.kind === 'store_symbolic' && statement.resourceId === 'state:bank',
     );
     expect(hasStateWriteStore).toBe(true);
   });

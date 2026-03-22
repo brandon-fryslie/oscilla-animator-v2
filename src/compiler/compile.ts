@@ -27,6 +27,8 @@ import type {
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
   PortBindingIR,
+  MemoryResourceIR,
+  MemoryManifestIR,
 } from './ir/program';
 import type { InstanceId, StepIndex, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID, stepIndex } from './ir/Indices';
@@ -35,11 +37,13 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { payloadStride, requireInst, requireManyInstance } from '../core/canonical-types';
+import { payloadStride, requireInst, requireManyInstance, isMany } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import {
   deriveStorageLayout,
   deriveArenaZonePlan,
   DEFAULT_ARENA_ALIGNMENT_POLICY,
+  resolveInstanceCount,
 } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
@@ -416,9 +420,9 @@ function buildRuntimeAddressTable(
       type: slotEntry.type,
       arena: slotEntry.arena,
     });
-    if (slotEntry.arena.offset >= 0) {
-      slotToArena.set(slotEntry.slot, slotEntry.arena);
-    }
+    // [LAW:one-source-of-truth] Every slot with an arena descriptor is registered.
+    // Physical offsets are resolved by Rust MMU; TS-side uses symbolic resourceId.
+    slotToArena.set(slotEntry.slot, slotEntry.arena);
   }
 
   // [LAW:one-source-of-truth] Field slot ownership comes from IR builder
@@ -651,7 +655,7 @@ function convertLinkedIRToProgram(
     // We declare ONE resource for the bank; Rust MMU handles double-buffering.
     manifestResources.push({
       id: 'state:bank',
-      type: { payload: { kind: 'float' }, extent: { cardinality: { kind: 'one' }, temporality: { kind: 'discrete' } } } as CanonicalType,
+      type: { payload: { kind: 'float' }, extent: { cardinality: { kind: 'one' }, temporality: { kind: 'discrete' } } } as unknown as CanonicalType,
       cardinality: scheduleIR.stateSlotCount,
       packing: 'soa',
       updateClass: 'FrameTime',

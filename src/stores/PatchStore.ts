@@ -762,6 +762,30 @@ export class PatchStore {
    * // instead of each UI surface guessing the storage shape it happens to hit.
    */
   updateControlValue(target: ControlMutationTarget, value: unknown): void {
+    // [LAW:single-enforcer] PatchStore only emits pure data events.
+    // The FastPathController listens to this to perform O(1) Rust UBO writes.
+    if (this.eventHub) {
+      let paramKey = '';
+      if (target.kind === 'blockParam' || target.kind === 'bindingLensParam') {
+        paramKey = target.paramId;
+      } else if (target.kind === 'bindingSourceParam') {
+        // Fast-path map keys for source params use the port ID since they are attached to the port.
+        paramKey = target.portId;
+      }
+      if (paramKey) {
+        this.eventHub.emit({
+          type: 'ParamChanged',
+          patchId: this.patchId,
+          patchRevision: this.getPatchRevision ? this.getPatchRevision() : 0,
+          blockId: target.blockId,
+          blockType: target.kind,
+          paramKey,
+          oldValue: null, // Don't have it here easily, but FastPathController doesn't need it
+          newValue: value,
+        });
+      }
+    }
+
     switch (target.kind) {
       case 'blockParam': {
         this.updateBlockParams(target.blockId, { [target.paramId]: value });

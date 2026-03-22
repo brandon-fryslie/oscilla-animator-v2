@@ -53,7 +53,7 @@ export function deriveStorageLayout(
  * Resolve instance count from a many-cardinality value.
  * For static counts returns count directly; for dynamic returns maxCount.
  */
-function resolveInstanceCount(
+export function resolveInstanceCount(
   instanceId: InstanceId,
   instances: ReadonlyMap<InstanceId, InstanceDecl>,
 ): number {
