@@ -322,6 +322,10 @@ export function materializeValueExpr(
       if (expr.intrinsicKind === 'property') {
         const intrinsic = expr.intrinsic;
         materializeIntrinsic(buf, intrinsic, instanceId, count, state, program);
+      } else if (expr.intrinsicKind === 'domain_property') {
+        // [LAW:one-source-of-truth] Domain properties resolve to the same
+        // per-element identity values as legacy property intrinsics.
+        materializeDomainProperty(buf, expr.domainProperty, count);
       } else {
         // Placement intrinsic: uv, rank, seed with basis kind
         materializePlacement(buf, expr.field, expr.basisKind, count, stride);
@@ -920,6 +924,24 @@ function evaluatePureFn(fn: PureFn, args: number[], pureFnContext: PureFnExecuti
  * @param state - Runtime state
  * @param program - Compiled program
  */
+function materializeDomainProperty(
+  buf: Float32Array,
+  prop: string,
+  count: number,
+): void {
+  if (prop === 'index') {
+    for (let i = 0; i < count; i++) {
+      buf[i] = i;
+    }
+  } else if (prop === 'rank') {
+    for (let i = 0; i < count; i++) {
+      buf[i] = count > 1 ? i / (count - 1) : 0;
+    }
+  } else {
+    throw new Error(`Unknown domain property: ${prop}`);
+  }
+}
+
 function materializeIntrinsic(
   buf: Float32Array,
   intrinsic: string,

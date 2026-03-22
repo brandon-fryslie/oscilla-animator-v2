@@ -23,6 +23,7 @@ import type {
   PureFn,
   OpCode,
   IntrinsicPropertyName,
+  DomainPropertyName,
   PlacementFieldName,
   BasisKind,
   StableStateId,
@@ -70,6 +71,9 @@ export interface BlockIRBuilder {
 
   /** Create an intrinsic field expression (index, randomId, normalizedIndex). */
   intrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId;
+
+  /** Create a domain property expression (rank, index). */
+  domainProperty(prop: DomainPropertyName, type: CanonicalType): ValueExprId;
 
   /** Create a placement field expression (uv, rank, seed). */
   placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId;

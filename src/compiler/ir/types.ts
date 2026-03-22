@@ -40,6 +40,13 @@ export type IntrinsicPropertyName =
   | 'randomId';
 
 /**
+ * Domain property names (per-element identity within a domain).
+ * - 'rank': Normalized [0,1] index (gid.x / (laneCount - 1))
+ * - 'index': Raw integer lane index (gid.x)
+ */
+export type DomainPropertyName = 'rank' | 'index';
+
+/**
  * PlacementBasis field names (stable per-element coordinates).
  * These replace normalizedIndex in gauge-invariant layout blocks.
  */
