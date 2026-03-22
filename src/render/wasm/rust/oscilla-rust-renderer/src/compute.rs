@@ -6,8 +6,10 @@ use naga::Module;
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
 // geometry source. Descriptors carry static metadata resolved at pack time.
 const DEFAULT_DRAW_PREP_WGSL: &str = r#"
-const DRAW_MODE_INDEXED: u32 = 0u;
-const DRAW_MODE_NON_INDEXED: u32 = 1u;
+// [LAW:one-source-of-truth] TopologyType values must match shapes/types.ts TopologyType enum.
+const TOPOLOGY_TYPE_NON_INDEXED: u32 = 0u;
+const TOPOLOGY_TYPE_INDEXED: u32 = 1u;
+
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
 const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
@@ -21,8 +23,6 @@ const TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS: u32 = 5u;
 const TABLE_WORD_INDEXED_STRIDE_WORDS: u32 = 6u;
 const TABLE_WORD_NON_INDEXED_STRIDE_WORDS: u32 = 7u;
 
-const RECORD_WORD_DRAW_MODE: u32 = 0u;
-
 // Descriptor word offsets for instance-count and shape metadata
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
@@ -31,6 +31,8 @@ const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
 
 // ShapeHeaderV1 word offsets (must match RuntimeState.ts ShapeBankHeaderWord)
+// [LAW:one-source-of-truth] Word 1 = TopologyMode, used as TopologyType discriminant.
+const SHAPE_WORD_TOPOLOGY_TYPE: u32 = 1u;
 const SHAPE_WORD_INDEX_COUNT: u32 = 4u;
 const SHAPE_WORD_FIRST_INDEX: u32 = 5u;
 const SHAPE_WORD_BASE_VERTEX: u32 = 6u;
@@ -65,14 +67,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
   let indexedRecordCount = sinkTableWords[TABLE_WORD_INDEXED_COUNT];
   let indexedRegionBaseWords = sinkTableWords[TABLE_WORD_INDEXED_REGION_BASE_WORDS];
   let nonIndexedRegionBaseWords = sinkTableWords[TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS];
   let indexedStrideWords = max(sinkTableWords[TABLE_WORD_INDEXED_STRIDE_WORDS], DEFAULT_INDEXED_STRIDE_WORDS);
   let nonIndexedStrideWords = max(sinkTableWords[TABLE_WORD_NON_INDEXED_STRIDE_WORDS], DEFAULT_NON_INDEXED_STRIDE_WORDS);
 
-  // [RECOVER-06] Read descriptor for this record
+  // [RECOVER-06] Read descriptor for this record (moved before topology type
+  // read so shapeWordOffset is available for the bifurcated dispatch).
   let descriptorsBase = SINK_TABLE_HEADER_WORDS + totalRecordCount * SINK_TABLE_RECORD_WORDS;
   let descriptorBase = descriptorsBase + recordIndex * SINK_TABLE_DESCRIPTOR_WORDS;
 
@@ -88,10 +90,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     firstInstance = firstInstance + select(0u, sinkTableWords[prevDescBase + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT], prevMode == INSTANCE_COUNT_MODE_STATIC);
   }
 
-  // Read shape word offset from descriptor and derive geometry from topology bank
+  // [LAW:one-source-of-truth] Read topology type from the canonical topology
+  // bank header (word 1 = TopologyMode). This is the bifurcated dispatch
+  // discriminant — indexed vs non-indexed families.
+  // See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
   let shapeWordOffset = sinkTableWords[descriptorBase + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET];
+  let topologyType = readTopology(shapeWordOffset + SHAPE_WORD_TOPOLOGY_TYPE);
 
-  if (drawMode == DRAW_MODE_INDEXED) {
+  if (topologyType == TOPOLOGY_TYPE_INDEXED) {
     if (recordIndex >= indexedRecordCount) {
       return;
     }
@@ -117,12 +123,17 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  if (drawMode != DRAW_MODE_NON_INDEXED || recordIndex < indexedRecordCount) {
+  if (topologyType != TOPOLOGY_TYPE_NON_INDEXED || recordIndex < indexedRecordCount) {
     return;
   }
   // Derive non-indexed draw args from ShapeHeaderV1
   let count = readTopology(shapeWordOffset + SHAPE_WORD_VERTEX_COUNT);
-  let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_VERTEX);
+  let relativeFirstVertex = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_VERTEX);
+  // [LAW:one-source-of-truth] FirstVertex in the header is a relative word
+  // offset within the shape record. drawIndirect needs an absolute vertex
+  // index into the bound topology buffer, so add the record base.
+  // See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
+  let absoluteFirstVertex = shapeWordOffset + relativeFirstVertex;
 
   let nonIndexedRecordIndex = recordIndex - indexedRecordCount;
   let base = nonIndexedRegionBaseWords + nonIndexedRecordIndex * nonIndexedStrideWords;
@@ -131,7 +142,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   atomicStore(&indirectWords[base + 0u], count);
   atomicAdd(&indirectWords[base + 1u], instanceCount);
-  atomicStore(&indirectWords[base + 2u], first);
+  atomicStore(&indirectWords[base + 2u], absoluteFirstVertex);
   atomicStore(&indirectWords[base + 3u], firstInstance);
 }
 "#;
