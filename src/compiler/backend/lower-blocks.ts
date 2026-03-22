@@ -9,7 +9,6 @@ import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../ir/program";
 import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
 import type { InstanceId, StateSlotId } from "../ir/Indices";
 import type { StableStateId } from "../ir/types";
@@ -103,11 +102,6 @@ export interface UnlinkedIRFragments {
   /** Non-fatal compile warnings encountered during lowering */
   warnings: CompileError[];
 
-  /** Maps user-facing port key ("blockId:portId") → component ValueExprIds for patchable constants */
-  constantProvenance: Map<string, ConstantProvenanceEntry>;
-
-  /** Maps user-facing port key ("blockId:portId") → instance whose count is patchable */
-  instanceCountProvenance: Map<string, InstanceCountProvenanceEntry>;
 }
 
 /**
@@ -1249,100 +1243,6 @@ function lowerSCCTwoPass(
   }
 }
 
-// =============================================================================
-// Post-Lowering Provenance Maps (Source-Agnostic)
-// =============================================================================
-
-/**
- * Build constant and instance-count provenance maps by scanning edges post-lowering.
- *
- * Source-agnostic: works with any lowered edge topology.
- * Multi-edge guard: ports with >1 incoming edge are not patchable (combine semantics).
- *
- * For constant provenance:
- * - Single-source edges whose source output is a `const` or `construct` ValueExpr
- *   are recorded keyed by "targetBlockId:targetPortId".
- * - Ports on cardinality-transform blocks that have `semantic: 'instanceCount'`
- *   are excluded from constant provenance (they go into instanceCountProvenance instead).
- *
- * For instance count provenance:
- * - Single-source edges targeting a port with `semantic: 'instanceCount'` on a block
- *   that created an instance → record `{ instanceId }`.
- */
-function buildProvenanceMaps(
-  blocks: readonly Block[],
-  edges: readonly NormalizedEdge[],
-  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
-  instanceContextByBlock: Map<BlockIndex, InstanceId>,
-  builder: OrchestratorIRBuilder,
-): {
-  constantProvenance: Map<string, ConstantProvenanceEntry>;
-  instanceCountProvenance: Map<string, InstanceCountProvenanceEntry>;
-} {
-  const constantProvenance = new Map<string, ConstantProvenanceEntry>();
-  const instanceCountProvenance = new Map<string, InstanceCountProvenanceEntry>();
-
-  // Count incoming edges per target port to detect multi-edge (combine) targets
-  const edgeCountByTarget = new Map<string, number>();
-  for (const edge of edges) {
-    const targetKey = `${edge.toBlock}:${edge.toPort}`;
-    edgeCountByTarget.set(targetKey, (edgeCountByTarget.get(targetKey) ?? 0) + 1);
-  }
-
-  for (const edge of edges) {
-    const targetKey = `${edge.toBlock}:${edge.toPort}`;
-
-    // Multi-edge guard: skip ports with >1 incoming edge (combine semantics)
-    if ((edgeCountByTarget.get(targetKey) ?? 0) > 1) continue;
-
-    const targetBlock = blocks[edge.toBlock];
-    if (!targetBlock) continue;
-
-    const targetDef = getBlockDefinition(targetBlock.type);
-    if (!targetDef) continue;
-
-    const targetInputDef = targetDef.inputs[edge.toPort];
-    if (!targetInputDef) continue;
-
-    const portKey = `${targetBlock.id}:${edge.toPort}`;
-
-    // Look up source block's output ref
-    const sourceOutputs = blockOutputs.get(edge.fromBlock);
-    const sourceRef = sourceOutputs?.get(edge.fromPort);
-    if (!sourceRef) continue;
-
-    // Instance count provenance: port has semantic: 'instanceCount' and target block created an instance
-    if (targetInputDef.semantic === 'instanceCount') {
-      const instanceId = instanceContextByBlock.get(edge.toBlock);
-      if (instanceId !== undefined) {
-        const instanceDecl = builder.getInstances().get(instanceId);
-        if (instanceDecl && typeof instanceDecl.count === 'number') {
-          instanceCountProvenance.set(portKey, { instanceId });
-        }
-      }
-      // instanceCount ports are not added to constantProvenance
-      continue;
-    }
-
-    // Constant provenance: source output is const or construct
-    const topExpr = builder.getValueExpr(sourceRef.id);
-
-    if (topExpr.kind === 'construct') {
-      constantProvenance.set(portKey, {
-        componentExprIds: [...topExpr.components],
-        payloadKind: topExpr.type.payload.kind,
-      });
-    } else if (topExpr.kind === 'const') {
-      constantProvenance.set(portKey, {
-        componentExprIds: [sourceRef.id],
-        payloadKind: topExpr.type.payload.kind,
-      });
-    }
-  }
-
-  return { constantProvenance, instanceCountProvenance };
-}
-
 /**
  * Repair unresolved many-cardinality output types that still reference placeholder
  * block IDs (e.g., Broadcast lowered before an instance context was available).
@@ -1544,8 +1444,6 @@ export function pass6BlockLowering(
       blockOutputs,
       errors,
       warnings,
-      constantProvenance: new Map<string, ConstantProvenanceEntry>(),
-      instanceCountProvenance: new Map<string, InstanceCountProvenanceEntry>(),
     };
   }
 
@@ -1671,21 +1569,10 @@ export function pass6BlockLowering(
     });
   }
 
-  // Build provenance maps post-lowering (source-agnostic, scans edges)
-  const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(
-    blocks,
-    edges,
-    blockOutputs,
-    instanceContextByBlock,
-    builder,
-  );
-
   return {
     builder,
     blockOutputs,
     errors,
     warnings,
-    constantProvenance,
-    instanceCountProvenance,
   };
 }

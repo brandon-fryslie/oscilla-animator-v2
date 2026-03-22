@@ -791,14 +791,9 @@ export class RuntimeService {
       store.patch.startPersistence();
 
       // Set up live recompile reaction.
-      // [LAW:one-source-of-truth] The worker-owned compile/swap bundle is the
-      // only runtime artifact authority. Main-thread program-only patching does
-      // not update the installed renderer bundle, so value edits must flow
-      // through the canonical async compile path until a worker-owned patch
-      // protocol exists.
       this.liveRecompile.setup(store, async () => {
         this.requireCompilerServices('scheduling a live recompile').compiler.scheduleCompile(this.buildCompileRequest());
-      }, undefined, (err) => {
+      }, (err) => {
         // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
         const message = err instanceof Error ? err.message : String(err);
         store.diagnostics.log({

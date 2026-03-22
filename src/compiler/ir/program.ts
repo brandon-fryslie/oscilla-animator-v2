@@ -167,30 +167,6 @@ export interface CompiledProgramIR {
   readonly topologyTable: ProgramTopologyTableIR;
 
   /**
-   * Constant provenance map for fast-path value patching.
-   * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
-   * Only present when the program contains patchable constant-backed ports.
-   * Built during lowering (pass 6) from lowered graph topology.
-   */
-  readonly constantProvenance?: ConstantProvenanceMap;
-
-  /**
-   * Instance count provenance map for fast-path count patching.
-   * Maps user-facing port key ("blockId:portId") to the instance whose count
-   * that port controls. Only present when the program contains patchable
-   * instance count ports (semantic: 'instanceCount').
-   */
-  readonly instanceCountProvenance?: InstanceCountProvenanceMap;
-
-  /**
-   * Compiler-owned runtime-live expression IDs for fast-path constant patching.
-   *
-   * [LAW:single-enforcer] Liveness/patchability ownership lives in compiler
-   * metadata; runtime services consume this set and do not infer from schedule.
-   */
-  readonly runtimeLiveExprIds?: readonly number[];
-
-  /**
    * Arena layout — flat Float32Array descriptor for every slot.
    * Indexed by slot ID (same ordering as slotMeta).
    *
@@ -289,44 +265,6 @@ export interface GeneratedGpuArtifactManifestIR {
   readonly schemaVersion: 1;
   readonly passes: readonly GpuPassManifestEntryIR[];
 }
-
-// =============================================================================
-// Constant Provenance (Fast-Path Patching)
-// =============================================================================
-
-/**
- * Entry in the constant provenance map.
- * Maps a user-facing port to the ValueExprConst nodes that carry its value.
- * Multi-component payloads (vec2, color) have multiple component expr IDs.
- */
-export interface ConstantProvenanceEntry {
-  readonly componentExprIds: readonly ValueExprId[];
-  readonly payloadKind: string;
-}
-
-/**
- * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
- * Built during lowering from lowered graph topology.
- */
-export type ConstantProvenanceMap = ReadonlyMap<string, ConstantProvenanceEntry>;
-
-// =============================================================================
-// Instance Count Provenance (Fast-Path Instance Count Patching)
-// =============================================================================
-
-/**
- * Entry in the instance count provenance map.
- * Maps a user-facing port to the instance whose count it controls.
- */
-export interface InstanceCountProvenanceEntry {
-  readonly instanceId: import('./Indices').InstanceId;
-}
-
-/**
- * Maps user-facing port key ("blockId:portId") to patchable instance count.
- * Built during lowering for ports with `semantic: 'instanceCount'`.
- */
-export type InstanceCountProvenanceMap = ReadonlyMap<string, InstanceCountProvenanceEntry>;
 
 /**
  * Entry in the field slot registry.

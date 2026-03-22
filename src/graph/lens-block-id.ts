@@ -14,11 +14,5 @@ export function derivedLensBlockId(portId: string, lensId: string): BlockId {
   return `_lens_${portId}_${lensId}` as BlockId;
 }
 
-/**
- * Compute constant-patcher key for a derived lens parameter port.
- * Format: `{derivedLensBlockId}:{paramId}`
- */
-export function derivedLensParamKey(portId: string, lensId: string, paramId: string): string {
-  return `${derivedLensBlockId(portId, lensId)}:${paramId}`;
-}
+
 
