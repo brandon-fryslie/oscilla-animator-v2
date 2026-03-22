@@ -440,6 +440,7 @@ impl Engine {
         lowering: crate::compute::NagaModuleIR,
         max_active_lanes: u32,
         uber_shader_wgsl: &str,
+        dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction>,
     ) -> Result<(), String> {
         let resolver = crate::memory::SymbolResolver::build_from_manifest(&manifest);
 
@@ -449,6 +450,7 @@ impl Engine {
             &resolver,
             lowering,
             max_active_lanes,
+            dispatch_instructions,
         )?;
 
         self.render = RenderDispatcher::new(
@@ -635,6 +637,7 @@ impl Engine {
 
                 let simulation_stage_start_ms = worker_monotonic_now_ms();
                 self.compute.encode_simulation_and_assembly(
+                    &self.device,
                     &mut encoder,
                     &mut self.arena,
                     self.draw_regions.total_instance_count,
