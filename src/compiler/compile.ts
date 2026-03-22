@@ -361,83 +361,6 @@ export function collectNagaLoweringCoverageDiagnostics(
   };
 }
 
-function collectRuntimeLiveExprIdsForPatching(args: {
-  readonly valueExprs: readonly ValueExpr[];
-  readonly schedule: ScheduleIR;
-  readonly fieldSlotRegistry: ReadonlyMap<ValueSlot, FieldSlotEntry>;
-}): readonly number[] {
-  // [LAW:single-enforcer] Compiler owns runtime-live patchability metadata so
-  // fast-path services consume one canonical source.
-  const live = new Set<number>();
-  const stack: number[] = [];
-  const fieldExprBySlot = new Map<number, number>();
-
-  for (const [slot, entry] of args.fieldSlotRegistry.entries()) {
-    fieldExprBySlot.set(slot as number, entry.fieldId as number);
-  }
-
-  const pushExpr = (exprId: number | undefined | null): void => {
-    if (exprId === undefined || exprId === null) return;
-    if (!Number.isInteger(exprId) || exprId < 0) return;
-    if (!live.has(exprId)) {
-      stack.push(exprId);
-    }
-  };
-
-  const pushFieldExprForSlot = (slot: number | undefined): void => {
-    if (slot === undefined || slot === null) return;
-    const fieldExprId = fieldExprBySlot.get(slot);
-    if (fieldExprId === undefined) return;
-    pushExpr(fieldExprId);
-  };
-
-  // [LAW:dataflow-not-control-flow] Liveness roots are runtime compute/render
-  // sinks; materialize is transfer plumbing and not a patchability root.
-  for (const step of args.schedule.steps as readonly Step[]) {
-    switch (step.kind) {
-      case 'eventDispatch':
-        pushExpr(step.expr as number);
-        break;
-      case 'stateWrite':
-      case 'fieldStateWrite':
-        pushExpr(step.value as number);
-        break;
-      case 'render':
-        pushFieldExprForSlot(step.controlPointsSlot as number);
-        pushFieldExprForSlot(step.colorSlot as number);
-        pushFieldExprForSlot(step.scale.slot as number);
-        pushFieldExprForSlot(step.shape.slot as number);
-        if (step.controlPoints?.k === 'slot') {
-          pushFieldExprForSlot(step.controlPoints.slot as number);
-        }
-        pushFieldExprForSlot(step.rotationSlot as number | undefined);
-        pushFieldExprForSlot(step.scale2Slot as number | undefined);
-        break;
-      case 'continuityMapBuild':
-      case 'continuityApply':
-      case 'materialize':
-        break;
-      default: {
-        const _exhaustive: never = step;
-        void _exhaustive;
-      }
-    }
-  }
-
-  while (stack.length > 0) {
-    const exprId = stack.pop()!;
-    if (live.has(exprId)) continue;
-    live.add(exprId);
-    const expr = args.valueExprs[exprId];
-    if (!expr) continue;
-    for (const child of getValueExprChildren(expr)) {
-      pushExpr(child as number);
-    }
-  }
-
-  return Array.from(live.values()).sort((a, b) => a - b);
-}
-
 /**
  * Compiler invariants are non-negotiable backend correctness checks and must
  * not be downgraded to unreachable warnings.
@@ -952,12 +875,6 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  const runtimeLiveExprIds = collectRuntimeLiveExprIdsForPatching({
-    valueExprs: valueExprNodes,
-    schedule: scheduleIR,
-    fieldSlotRegistry,
-  });
-
   // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
     irVersion: 1,
@@ -970,16 +887,9 @@ function convertLinkedIRToProgram(
     runtimeAddressTable,
     debugIndex,
     fieldSlotRegistry,
-    renderGlobals, // NEW - Camera system: populated from builder
-    kernelRegistry: registry, // Phase B: Kernel registry with resolved handles
+    renderGlobals,
+    kernelRegistry: registry,
     topologyTable,
-    constantProvenance: unlinkedIR.constantProvenance.size > 0
-      ? unlinkedIR.constantProvenance
-      : undefined,
-    instanceCountProvenance: unlinkedIR.instanceCountProvenance.size > 0
-      ? unlinkedIR.instanceCountProvenance
-      : undefined,
-    runtimeLiveExprIds,
     arenaLayout,
     arenaZones: arenaZonePlan.toIR(),
     arenaRuntimeLayout: arenaZonePlan.runtimeLayout,

@@ -14,7 +14,6 @@ export interface LiveRecompileController {
   setup(
     store: RootStore,
     onRecompile: () => Promise<void>,
-    onValuePatch: ((changes: ReadonlyMap<string, unknown>) => boolean) | undefined,
     onRecompileError: (error: unknown) => void,
   ): void;
   cleanup(): void;
@@ -48,7 +47,6 @@ export function createLiveRecompileController(
     setup(
       store: RootStore,
       onRecompile: () => Promise<void>,
-      onValuePatch: ((changes: ReadonlyMap<string, unknown>) => boolean) | undefined,
       onRecompileError: (error: unknown) => void,
     ): void {
       if (reactionSetup) return;
@@ -61,12 +59,6 @@ export function createLiveRecompileController(
           return store.patch.patch;
         },
         () => {
-          // Fast-path: if only constant values changed, try patching without full recompile
-          const pending = store.patch.consumePendingChanges();
-          if (pending.kind === 'valueOnly' && onValuePatch) {
-            const handled = onValuePatch(pending.changes);
-            if (handled) return; // Fast path succeeded, skip full recompile
-          }
           scheduleRecompile(onRecompile, onRecompileError);
         },
         {
