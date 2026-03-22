@@ -3,7 +3,8 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { BlockId } from "../../types/compiler";
+import type { BlockId, PortId } from "../../types/compiler";
+import { blockId as toBlockId, portId as toPortId } from "../../types/compiler";
 import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
@@ -877,6 +878,8 @@ function lowerBlockInstance(
 
       // Register slot for one/many/event outputs
       // Check extent directly instead of using deriveKind
+      // [LAW:one-source-of-truth] Source identity tracks which block/port owns each slot.
+      const slotSource = { blockId: toBlockId(block.id), portId: toPortId(portId) };
       if (isExprRef(finalRef)) {
         const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
         const isEvent = temp.kind === 'discrete';
@@ -888,15 +891,15 @@ function lowerBlockInstance(
           if (isField) {
             // Field — register field slot and slot type
             builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type);
+            builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
           } else {
             // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
             builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type);
+            builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
           }
         } else {
           // Event — register slot type only
-          builder.registerSlotType(finalRef.slot!, finalRef.type);
+          builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
         }
       }
       outputRefs.set(portId, finalRef);
@@ -1054,7 +1057,9 @@ function lowerSCCTwoPass(
         );
 
         // Register slot types - same logic as in lowerBlockInstance
-        for (const [, finalRef] of boundOutputsMap.entries()) {
+        for (const [portName, finalRef] of boundOutputsMap.entries()) {
+          // [LAW:one-source-of-truth] Source identity tracks which block/port owns each slot.
+          const sccSlotSource = { blockId: toBlockId(block.id), portId: toPortId(portName) };
           if (isExprRef(finalRef)) {
             const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
             const isEvent = temp.kind === 'discrete';
@@ -1066,15 +1071,15 @@ function lowerSCCTwoPass(
               if (isField) {
                 // Field — register field slot and slot type
                 builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-                builder.registerSlotType(finalRef.slot!, finalRef.type);
+                builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
               } else {
                 // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
                 builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-                builder.registerSlotType(finalRef.slot!, finalRef.type);
+                builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
               }
             } else {
               // Event — register slot type only
-              builder.registerSlotType(finalRef.slot!, finalRef.type);
+              builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
             }
           }
         }

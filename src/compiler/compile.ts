@@ -642,11 +642,15 @@ function convertLinkedIRToProgram(
       ? resolveInstanceCount(card.instance.instanceId, instances)
       : 1;
 
+    // [LAW:one-source-of-truth] Read updateClass and source from builder slot metadata.
+    const slotMd = slotTypes.get(slotInput.slot);
     manifestResources.push({
       id: `arena:slot:${slotInput.slot}`,
       type: slotInput.type,
       cardinality,
       packing: slotInput.packingPreference,
+      updateClass: slotMd?.updateClass ?? 'FrameTime',
+      source: slotMd?.source,
       label: `Slot ${slotInput.slot}`,
     });
   }
@@ -660,6 +664,7 @@ function convertLinkedIRToProgram(
       type: { payload: { kind: 'float' }, extent: { cardinality: { kind: 'one' }, temporality: { kind: 'discrete' } } } as CanonicalType,
       cardinality: scheduleIR.stateSlotCount,
       packing: 'soa',
+      updateClass: 'FrameTime',
       label: 'Persistent State Bank',
     });
   }

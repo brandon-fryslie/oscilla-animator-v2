@@ -14,7 +14,8 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
-import type { BlockId } from '../../types/compiler';
+import type { BlockId, PortId, UpdateClass } from '../../types/compiler';
+import { intersectUpdateClass } from '../../types/compiler';
 import {
   PathVerb,
   type AbstractTopologyDef,
@@ -65,7 +66,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private scalarSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
-  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number; label?: string }>();
+  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number; label?: string; source?: { blockId: BlockId; portId: PortId }; updateClass: UpdateClass }>();
   private schedule: TimeModelIR = { periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
@@ -532,17 +533,29 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   // Slot Allocation & Registration (orchestrator-only)
   // ===========================================================================
 
-  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
+  allocTypedSlot(type: CanonicalType, label?: string, source?: { blockId: BlockId; portId: PortId }): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     const stride = payloadStride(type.payload);
-    this.slotLayoutInputs.set(slot, { type, stride, label });
+    // [LAW:one-source-of-truth] Default updateClass is FrameTime (least restrictive).
+    this.slotLayoutInputs.set(slot, { type, stride, label, source, updateClass: 'FrameTime' });
     return slot;
   }
 
-  registerSlotType(slot: ValueSlot, type: CanonicalType): void {
+  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }): void {
     const stride = payloadStride(type.payload);
     const existing = this.slotLayoutInputs.get(slot);
-    this.slotLayoutInputs.set(slot, { type, stride, label: existing?.label });
+    // [LAW:single-enforcer] Intersection: most restrictive UpdateClass wins when
+    // multiple consumers register the same slot.
+    const updateClass = existing
+      ? intersectUpdateClass(existing.updateClass, 'FrameTime')
+      : 'FrameTime';
+    this.slotLayoutInputs.set(slot, {
+      type,
+      stride,
+      label: existing?.label,
+      source: source ?? existing?.source,
+      updateClass,
+    });
   }
 
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void {
@@ -720,7 +733,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.slotCounter;
   }
 
-  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string }> {
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string; readonly source?: { readonly blockId: BlockId; readonly portId: PortId }; readonly updateClass: UpdateClass }> {
     return this.slotLayoutInputs;
   }
 
