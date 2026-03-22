@@ -25,30 +25,17 @@ registerAllBlocks();
 /** Compile a normal connected patch and return program + snapshot */
 function compileConnectedPatch(): { program: CompiledProgramIR; snapshot: CompilationSnapshot } {
   const patch = buildPatch((b) => {
-    b.addBlock('InfiniteTimeRoot');
+    const time = b.addBlock('InfiniteTimeRoot');
+    b.setPortDefault(time, 'periodAMs', 1000);
 
-    const ellipse = b.addBlock('Ellipse');
-    b.setPortDefault(ellipse, 'rx', 0.03);
-    b.setPortDefault(ellipse, 'ry', 0.03);
+    const osc = b.addBlock('Oscillator');
+    b.wire(time, 'phaseA', osc, 'phase');
 
-    const array = b.addBlock('Array');
-    b.setPortDefault(array, 'count', 4);
-
-    const layout = b.addBlock('GridLayoutUV');
-    b.setPortDefault(layout, 'rows', 2);
-    b.setPortDefault(layout, 'cols', 2);
-
-    const render = b.addBlock('RenderInstances2D');
-
-    const colorSig = b.addBlock('Const');
-    b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
-    const colorField = b.addBlock('Broadcast');
-    b.wire(colorSig, 'out', colorField, 'one');
-
-    b.wire(ellipse, 'shape', array, 'element');
-    b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'controlPoints', render, 'controlPoints');
-    b.wire(colorField, 'field', render, 'color');
+    const c = b.addBlock('Const');
+    b.setConfig(c, 'value', 0.5);
+    const add = b.addBlock('Add');
+    b.wire(osc, 'out', add, 'a');
+    b.wire(c, 'out', add, 'b');
   });
 
   compilationInspector.clear();
@@ -73,30 +60,17 @@ function compileWithDisconnectedBlock(): {
 } {
   let disconnectedId = '';
   const patch = buildPatch((b) => {
-    b.addBlock('InfiniteTimeRoot');
+    const time = b.addBlock('InfiniteTimeRoot');
+    b.setPortDefault(time, 'periodAMs', 1000);
 
-    const ellipse = b.addBlock('Ellipse');
-    b.setPortDefault(ellipse, 'rx', 0.03);
-    b.setPortDefault(ellipse, 'ry', 0.03);
+    const osc = b.addBlock('Oscillator');
+    b.wire(time, 'phaseA', osc, 'phase');
 
-    const array = b.addBlock('Array');
-    b.setPortDefault(array, 'count', 4);
-
-    const layout = b.addBlock('GridLayoutUV');
-    b.setPortDefault(layout, 'rows', 2);
-    b.setPortDefault(layout, 'cols', 2);
-
-    const render = b.addBlock('RenderInstances2D');
-
-    const colorSig = b.addBlock('Const');
-    b.setConfig(colorSig, 'value', { r: 1, g: 0.5, b: 0.2, a: 1 });
-    const colorField = b.addBlock('Broadcast');
-    b.wire(colorSig, 'out', colorField, 'one');
-
-    b.wire(ellipse, 'shape', array, 'element');
-    b.wire(array, 'elements', layout, 'elements');
-    b.wire(layout, 'controlPoints', render, 'controlPoints');
-    b.wire(colorField, 'field', render, 'color');
+    const c = b.addBlock('Const');
+    b.setConfig(c, 'value', 0.5);
+    const add = b.addBlock('Add');
+    b.wire(osc, 'out', add, 'a');
+    b.wire(c, 'out', add, 'b');
 
     // Add a disconnected Const block (not wired to anything)
     const disconnected = b.addBlock('Const');
