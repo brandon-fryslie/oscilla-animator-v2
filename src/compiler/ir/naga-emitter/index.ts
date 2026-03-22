@@ -26,6 +26,8 @@ export {
   type NagaLoweringCoverageIR,
   type HardDropReason,
   type HardDropEntry,
+  type NagaEmitterInstruction,
+  type DispatchKernelInstruction,
   type NagaTypeIR,
   type NagaConstantIR,
   type NagaGlobalVariableIR,

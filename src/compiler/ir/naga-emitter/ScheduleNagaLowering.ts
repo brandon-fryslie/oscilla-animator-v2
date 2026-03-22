@@ -213,6 +213,34 @@ export interface HardDropEntry {
   readonly stepIndex: number;
 }
 
+// ---------------------------------------------------------------------------
+// NagaEmitterInstruction — Typed instructions for the Rust compute dispatcher.
+// [LAW:one-type-per-behavior] All kernel dispatch variants are members of one
+// discriminated union so the Rust side can exhaustively match.
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger a pre-compiled static WGSL kernel on the GPU.
+ *
+ * `kernelId` identifies a kernel registered in the Rust KernelRegistry.
+ * `arguments` maps parameter names to Symbolic IDs (e.g. 'arena:slot:42')
+ * that the MMU resolves to physical wgpu::Buffer offsets at dispatch time.
+ *
+ * FORBIDDEN: DispatchKernel must NEVER generate inline WGSL — it triggers a
+ * pre-compiled pipeline only.
+ */
+export interface DispatchKernelInstruction {
+  readonly op: 'DispatchKernel';
+  readonly kernelId: string;
+  readonly arguments: Readonly<Record<string, string>>;
+}
+
+/**
+ * Instructions emitted by the Naga lowering pipeline for execution by the
+ * Rust compute dispatcher.  New instruction kinds extend this union.
+ */
+export type NagaEmitterInstruction = DispatchKernelInstruction;
+
 export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
   readonly boundaryStepCount: number;
