@@ -2,7 +2,6 @@
  * Domain Change Detector Service
  *
  * Tracks and logs domain count changes between recompiles.
- * Integrates with ContinuityStore for UI display.
  */
 
 import type { RootStore } from '../stores';
@@ -40,13 +39,6 @@ export function createDomainChangeDetector(
     const lastLog = domainChangeLogThrottle.get(instanceId) ?? 0;
 
     if (now - lastLog >= logIntervalMs) {
-      store.continuity.recordDomainChange(
-        instanceId,
-        oldCount,
-        newCount,
-        tMs || now,
-      );
-
       domainChangeLogThrottle.set(instanceId, now);
     }
   }

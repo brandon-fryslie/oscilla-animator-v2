@@ -40,7 +40,6 @@ import {
   deriveStorageLayout,
   deriveArenaZonePlan,
   DEFAULT_ARENA_ALIGNMENT_POLICY,
-  type ArenaGaugeTargetPlanInput,
 } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
@@ -64,7 +63,7 @@ import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
-import { allocateContinuityPipeline } from './backend/continuity-pipeline';
+import { allocateRenderMaterializationPipeline } from './backend/render-materialization-pipeline';
 
 registerAllBlocks();
 
@@ -249,12 +248,11 @@ export function compileFromFrontend(
     }
 
 
-    // Pass 6b: Continuity Pipeline Allocation
-    // [LAW:single-enforcer] All continuity pipeline slots allocated through builder.
-    const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
+    // Pass 6b: Render Materialization Pipeline
+    const renderPipeline = allocateRenderMaterializationPipeline(unlinkedIR, acyclicPatch);
 
     // Pass 7: Schedule Construction (pure ordering, no allocation)
-    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, renderPipeline);
 
     if (captureInspector) {
       compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
@@ -468,26 +466,6 @@ function buildRuntimeAddressTable(
   };
 }
 
-function collectGaugeTargetPlanInputs(scheduleIR: ScheduleIR): readonly ArenaGaugeTargetPlanInput[] {
-  const entries: ArenaGaugeTargetPlanInput[] = [];
-  const seen = new Set<string>();
-  for (const step of scheduleIR.steps) {
-    if (step.kind !== 'continuityApply') {
-      continue;
-    }
-    if (seen.has(step.targetKey)) {
-      continue;
-    }
-    seen.add(step.targetKey);
-    entries.push({
-      targetId: step.targetKey,
-      instanceId: step.instanceId,
-      slot: step.outputSlot,
-    });
-  }
-  return entries;
-}
-
 function assertRuntimeAddressTableCoverage(
   runtimeSlots: readonly RuntimeSlotEntry[],
   runtimeAddressTable: RuntimeAddressTableIR,
@@ -653,7 +631,6 @@ function convertLinkedIRToProgram(
   }
 
   // [LAW:one-source-of-truth] Arena zones + aligned offsets are compiled once.
-  const gaugeTargetPlanInputs = collectGaugeTargetPlanInputs(scheduleIR);
   const arenaZonePlan = deriveArenaZonePlan(
     arenaSlotPlanInputs,
     instances,
@@ -661,7 +638,6 @@ function convertLinkedIRToProgram(
     {
       stateBankLength: scheduleIR.stateSlotCount,
       stateEntryCount: scheduleIR.stateMappings.length,
-      gaugeTargets: gaugeTargetPlanInputs,
     },
   );
   const arenaLayout: ArenaSlotDescriptor[] = new Array(slotCount);
@@ -1117,10 +1093,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
       case 'materialize':
         slots.add(step.target);
         break;
-      case 'continuityApply':
-        slots.add(step.baseSlot);
-        slots.add(step.outputSlot);
-        break;
       case 'render':
         slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
@@ -1133,7 +1105,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
       case 'eventDispatch':
       case 'stateWrite':
       case 'fieldStateWrite':
-      case 'continuityMapBuild':
         break;
       default: {
         const _exhaustive: never = step;
@@ -1186,9 +1157,6 @@ function getStepExprId(step: Step): ValueExprId | null {
       return step.value;
     case 'render':
       return null;
-    case 'continuityMapBuild':
-    case 'continuityApply':
-      return null;
     default: {
       const _exhaustive: never = step;
       return _exhaustive;
@@ -1209,8 +1177,6 @@ function getStepTargetSlot(step: Step): ValueSlot | null {
     case 'render':
     case 'stateWrite':
     case 'fieldStateWrite':
-    case 'continuityMapBuild':
-    case 'continuityApply':
       return null;
     default: {
       const _exhaustive: never = step;

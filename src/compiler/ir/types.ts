@@ -233,12 +233,11 @@ export interface DynamicInstanceCountSpec {
 export type InstanceCountSpec = number | DynamicInstanceCountSpec;
 
 // =============================================================================
-// Continuity System Types (spec: topics/11-continuity-system.md)
+// Domain Instance (used by DomainIdentity and runtime)
 // =============================================================================
 
 /**
  * Runtime domain instance with identity information (spec §3.1).
- * Used by continuity system for element mapping.
  */
 export interface DomainInstance {
   /** Number of elements in this domain */
@@ -247,34 +246,12 @@ export interface DomainInstance {
   /** Stable element IDs - required when identityMode='stable' */
   readonly elementId: Uint32Array;
 
-  /** Identity mode - 'stable' enables per-element continuity */
+  /** Identity mode - 'stable' enables per-element identity tracking */
   readonly identityMode: 'stable' | 'none';
 
   /** Optional spatial hints for fallback position-based mapping */
   readonly posHintXY?: Float32Array;
 }
-
-/**
- * Gauge specification for continuity (spec §2.4).
- * A gauge is an operation that composes with the base value to produce the effective value.
- */
-export type GaugeSpec =
-  | { readonly kind: 'add' }           // scalar/vec/linear RGBA: x_eff = x_base + Δ
-  | { readonly kind: 'mul' }           // scale continuity (rare): x_eff = x_base * Δ
-  | { readonly kind: 'affine' }        // x_eff = a*x_base + b (for clamped values)
-  | { readonly kind: 'phaseOffset01' }; // specialized for phase (wrap-aware)
-
-/**
- * Continuity policy for a field target (spec §2.2).
- * Every target has exactly one declared policy. No "optional" behavior exists.
- */
-export type ContinuityPolicy =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'preserve'; readonly gauge: GaugeSpec }
-  | { readonly kind: 'slew'; readonly gauge: GaugeSpec; readonly tauMs: number }
-  | { readonly kind: 'crossfade'; readonly windowMs: number; readonly curve: 'linear' | 'smoothstep' | 'ease-in-out' }
-  | { readonly kind: 'project'; readonly projector: 'byId' | 'byPosition'; readonly post: 'slew'; readonly tauMs: number };
-
 
 // =============================================================================
 // Time Model
@@ -302,9 +279,7 @@ export type Step =
   | StepMaterialize
   | StepRender
   | StepStateWrite
-  | StepFieldStateWrite
-  | StepContinuityMapBuild
-  | StepContinuityApply;
+  | StepFieldStateWrite;
 
 export interface StepMaterialize {
   readonly kind: 'materialize';
@@ -316,9 +291,9 @@ export interface StepMaterialize {
 export interface StepRender {
   readonly kind: 'render';
   readonly instanceId: InstanceId;
-  /** Slot containing position buffer (after continuity applied) */
+  /** Slot containing position buffer */
   readonly controlPointsSlot: ValueSlot;
-  /** Slot containing color buffer (after continuity applied) */
+  /** Slot containing color buffer */
   readonly colorSlot: ValueSlot;
   /**
    * Scale multiplier for shape dimensions.
@@ -356,31 +331,6 @@ export interface StepFieldStateWrite {
   readonly value: ValueExprId;
 }
 
-/**
- * Continuity map build step (spec §5.1).
- * Detects domain changes and builds element mappings.
- */
-export interface StepContinuityMapBuild {
-  readonly kind: 'continuityMapBuild';
-  readonly instanceId: InstanceId;
-  readonly outputMapping: string; // Mapping identifier
-}
-
-/**
- * Continuity apply step (spec §5.1).
- * Applies continuity policy to a field target.
- */
-export interface StepContinuityApply {
-  readonly kind: 'continuityApply';
-  readonly targetKey: string; // Unique identifier for this target
-  readonly instanceId: InstanceId;
-  readonly policy: ContinuityPolicy;
-  readonly baseSlot: ValueSlot; // Input buffer (base values)
-  readonly outputSlot: ValueSlot; // Output buffer (continuity-applied values)
-  readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
-  readonly stride: number; // Components per element (from payload type, not semantic)
-}
-
 // =============================================================================
 // Stable State Identity (for hot-swap migration)
 // =============================================================================
@@ -390,8 +340,8 @@ export interface StepContinuityApply {
  *
  * Format: "blockId:stateKind" (e.g., "b3:delay", "b7:slew")
  *
- * The lane index is NOT part of StableStateId - lanes are remapped using
- * the continuity mapping service during hot-swap.
+ * The lane index is NOT part of StableStateId - lanes are remapped
+ * during hot-swap.
  */
 export type StableStateId = string & { readonly __brand: 'StableStateId' };
 

@@ -14,7 +14,6 @@ import type { SlotLookup } from './ExprAddressTable';
 import { getExprAddressTable } from './ExprAddressTable';
 import type { SlotValue, ValueAnomaly, LaneIdentity } from './StepDebugTypes';
 import type { InstanceId } from '../core/ids';
-import type { ContinuityState } from './ContinuityState';
 import type { ArenaSlotDescriptor } from './ArenaValueStore';
 import { arenaRead } from './ArenaValueStore';
 import { resolveBlockIndexFromBlockId } from './DebugIndexLookup';
@@ -207,23 +206,20 @@ export function computeSlotDeltas(
 }
 
 // =============================================================================
-// Lane Identity (F5: Continuity State Integration)
+// Lane Identity
 // =============================================================================
 
 /**
  * Build a map from field slots to their per-lane identity information.
  *
  * Iterates over `program.fieldSlotRegistry` to determine which instance owns each
- * field slot, then uses `program.schedule.instances` for element counts and
- * optionally enriches with element IDs from continuity state.
+ * field slot, then uses `program.schedule.instances` for element counts.
  *
  * @param program - Compiled program IR
- * @param continuity - Continuity state (for element identity enrichment)
  * @returns Map from field ValueSlot to array of LaneIdentity entries
  */
 export function buildLaneIdentityMap(
   program: CompiledProgramIR,
-  continuity: ContinuityState | null,
 ): ReadonlyMap<ValueSlot, readonly LaneIdentity[]> {
   const result = new Map<ValueSlot, readonly LaneIdentity[]>();
   const instances = program.schedule.instances;
@@ -235,12 +231,7 @@ export function buildLaneIdentityMap(
     const count = typeof instanceDecl.count === 'number' ? instanceDecl.count : instanceDecl.maxCount;
     if (count === 0) continue;
 
-    // Derive a human-readable label for the instance
     const instanceLabel = resolveInstanceLabel(entry.instanceId, program.debugIndex);
-
-    // Look up element IDs from continuity state (enrichment)
-    const prevDomain = continuity?.prevDomains.get(entry.instanceId as string);
-    const hasElementIds = prevDomain?.identityMode === 'stable' && prevDomain.elementId.length > 0;
 
     const lanes: LaneIdentity[] = new Array(count);
     for (let i = 0; i < count; i++) {
@@ -249,9 +240,6 @@ export function buildLaneIdentityMap(
         instanceLabel,
         laneIndex: i,
         totalLanes: count,
-        elementId: hasElementIds && i < prevDomain!.elementId.length
-          ? `element #${prevDomain!.elementId[i]}`
-          : undefined,
       };
     }
 

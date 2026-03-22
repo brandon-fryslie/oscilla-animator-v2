@@ -334,23 +334,6 @@ function applyStepRequest(
       break;
     }
 
-    case 'continuityMapBuild': {
-      builder.stepContinuityMapBuild(req.instanceId);
-      break;
-    }
-
-    case 'continuityApply': {
-      builder.stepContinuityApply(
-        req.targetKey,
-        req.instanceId,
-        req.policy,
-        req.baseSlot,
-        req.outputSlot,
-        req.semantic,
-        req.stride
-      );
-      break;
-    }
   }
 }
 

@@ -514,7 +514,7 @@ export interface RuntimeAddressTableIR {
 // Arena Zones (Compiler-Owned Memory Contract)
 // =============================================================================
 
-export type ArenaZoneKind = 'header' | 'scalar' | 'field' | 'state' | 'gauge';
+export type ArenaZoneKind = 'header' | 'scalar' | 'field' | 'state';
 
 export interface ArenaZoneAlignmentPolicyIR {
   /**
@@ -565,20 +565,9 @@ export interface ArenaStateBankLayoutIR {
   readonly writeOffset: number;
 }
 
-export interface ArenaGaugeTargetLayoutIR {
-  /** Stable continuity target ID (`StepContinuityApply.targetKey`). */
-  readonly targetId: string;
-  /** Instance owner for continuity/prune bookkeeping. */
-  readonly instanceId: string;
-  /** Arena descriptor for this target's gauge zone slice. */
-  readonly descriptor: ArenaSlotDescriptor;
-}
-
 export interface ArenaRuntimeLayoutIR {
   /** Persistent state bank views inside the arena state zone. */
   readonly stateBank: ArenaStateBankLayoutIR;
-  /** Gauge-zone descriptors for continuity targets. */
-  readonly gaugeTargets: readonly ArenaGaugeTargetLayoutIR[];
 }
 
 // =============================================================================

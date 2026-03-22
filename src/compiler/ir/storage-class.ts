@@ -13,7 +13,6 @@ import type {
   ArenaZoneRangeIR,
   ArenaZonesIR,
   ArenaRuntimeLayoutIR,
-  ArenaGaugeTargetLayoutIR,
 } from './program';
 import type { ArenaPacking, ArenaSlotDescriptor } from '../../runtime/ArenaValueStore';
 import type { InstanceId, ValueSlot } from './Indices';
@@ -139,19 +138,11 @@ export interface ArenaZonePlan {
   toIR(): ArenaZonesIR;
 }
 
-export interface ArenaGaugeTargetPlanInput {
-  readonly targetId: string;
-  readonly instanceId: string;
-  readonly slot: ValueSlot;
-}
-
 export interface ArenaZonePlanOptions {
   /** Floats per persistent state bank (read/write). */
   readonly stateBankLength?: number;
   /** Number of logical state mappings (for diagnostics/metadata only). */
   readonly stateEntryCount?: number;
-  /** Continuity targets that own gauge segments in zone 5. */
-  readonly gaugeTargets?: readonly ArenaGaugeTargetPlanInput[];
 }
 
 function alignUp(value: number, alignment: number): number {
@@ -227,12 +218,10 @@ export function deriveArenaZonePlan(
 
   const descriptors = new Map<ValueSlot, ArenaSlotDescriptor>();
   const zones: ArenaZoneRangeIR[] = [];
-  const gaugeTargetLayouts: ArenaGaugeTargetLayoutIR[] = [];
   let payloadFloats = 0;
 
   const normalizedStateBankLength = normalizeAlignmentCount(options.stateBankLength ?? 0, 0, 0);
   const normalizedStateEntryCount = normalizeAlignmentCount(options.stateEntryCount ?? 0, 0, 0);
-  const gaugeTargets = options.gaugeTargets ?? [];
 
   const headerStart = 0;
   const headerEnd = headerStart + normalizedAlignment.headerFloats;
@@ -303,50 +292,22 @@ export function deriveArenaZonePlan(
     readOffset: stateStart,
     writeOffset: stateStart + normalizedStateBankLength,
   };
-  const seenGaugeTargetIds = new Set<string>();
-  let gaugeCursor = stateEnd;
-  for (const target of gaugeTargets) {
-    if (seenGaugeTargetIds.has(target.targetId)) {
-      continue;
-    }
-    seenGaugeTargetIds.add(target.targetId);
-    const source = descriptors.get(target.slot);
-    if (!source) {
-      throw new Error(
-        `deriveArenaZonePlan: gauge target ${target.targetId} references missing slot ${target.slot}`,
-      );
-    }
-    const descriptor: ArenaSlotDescriptor = {
-      ...source,
-      offset: gaugeCursor,
-    };
-    gaugeTargetLayouts.push({
-      targetId: target.targetId,
-      instanceId: target.instanceId,
-      descriptor,
-    });
-    gaugeCursor += descriptor.length;
-  }
-  const gaugeStart = stateEnd;
-  const gaugeEnd = gaugeCursor;
   zones.push(makeZone('state', stateStart, stateEnd, normalizedStateEntryCount, 1));
-  zones.push(makeZone('gauge', gaugeStart, gaugeEnd, gaugeTargetLayouts.length, 1));
 
   const toIR = (): ArenaZonesIR => ({
     alignment: normalizedAlignment,
     zones,
     payloadFloats,
-    totalFloats: gaugeEnd,
+    totalFloats: stateEnd,
   });
 
   return {
     payloadFloats,
-    totalFloats: gaugeEnd,
+    totalFloats: stateEnd,
     zones,
     alignment: normalizedAlignment,
     runtimeLayout: {
       stateBank: stateRuntimeLayout,
-      gaugeTargets: gaugeTargetLayouts,
     },
     slotDescriptor(slot: ValueSlot): ArenaSlotDescriptor {
       const descriptor = descriptors.get(slot);

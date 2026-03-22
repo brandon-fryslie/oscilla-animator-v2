@@ -28,7 +28,7 @@ import type {
   InstanceId,
   StateSlotId,
 } from './Indices';
-import type { StableStateId, ContinuityPolicy } from './types';
+import type { StableStateId } from './types';
 import type { TimeModelIR } from './schedule';
 
 // =============================================================================
@@ -155,18 +155,7 @@ export interface StateDecl {
 export type StepRequest =
   | { readonly kind: 'stateWrite'; readonly stateKey: StableStateId; readonly value: ValueExprId }
   | { readonly kind: 'fieldStateWrite'; readonly stateKey: StableStateId; readonly value: ValueExprId }
-  | { readonly kind: 'materialize'; readonly field: ValueExprId; readonly instanceId: InstanceId; readonly target: ValueSlot }
-  | { readonly kind: 'continuityMapBuild'; readonly instanceId: InstanceId }
-  | {
-      readonly kind: 'continuityApply';
-      readonly targetKey: string;
-      readonly instanceId: InstanceId;
-      readonly policy: ContinuityPolicy;
-      readonly baseSlot: ValueSlot;
-      readonly outputSlot: ValueSlot;
-      readonly semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom';
-      readonly stride: number;
-    };
+  | { readonly kind: 'materialize'; readonly field: ValueExprId; readonly instanceId: InstanceId; readonly target: ValueSlot };
 
 /**
  * Slot request (declarative).

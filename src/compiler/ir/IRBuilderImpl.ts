@@ -33,7 +33,6 @@ import type {
   IntrinsicPropertyName,
   PlacementFieldName,
   BasisKind,
-  ContinuityPolicy,
   StableStateId,
   StateMapping,
 } from './types';
@@ -578,35 +577,6 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void {
     this.steps.push({ kind: 'materialize', field, instanceId, target });
-  }
-
-  stepContinuityMapBuild(instanceId: InstanceId): void {
-    this.steps.push({
-      kind: 'continuityMapBuild',
-      instanceId,
-      outputMapping: `continuity-map-${instanceId}`
-    });
-  }
-
-  stepContinuityApply(
-    targetKey: string,
-    instanceId: InstanceId,
-    policy: ContinuityPolicy,
-    baseSlot: ValueSlot,
-    outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-    stride: number
-  ): void {
-    this.steps.push({
-      kind: 'continuityApply',
-      targetKey,
-      instanceId,
-      policy,
-      baseSlot,
-      outputSlot,
-      semantic,
-      stride,
-    });
   }
 
   // ===========================================================================
