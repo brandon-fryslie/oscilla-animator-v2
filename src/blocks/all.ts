@@ -20,8 +20,6 @@ import { registerRenderBlocks } from './render';
 import { registerDomainBlocks } from './domain';
 import { registerInstanceBlocks } from './instance';
 import { registerDevBlocks } from './dev';
-import { registerFluidBlocks } from './fluid';
-
 /**
  * Explicitly activate all declared blocks in the live registry.
  */
@@ -43,7 +41,6 @@ export function registerAllBlocks(): void {
   registerRenderBlocks();
   registerDomainBlocks();
   registerInstanceBlocks();
-  registerFluidBlocks();
   registerDevBlocks();
   activateDeclaredBlocks();
 }

@@ -300,7 +300,7 @@ function shouldDumpRuntimeShaderPayload(): boolean {
  * Semantic guarantees are established upstream at compile worker validation:
  * - stage contract correctness
  * - entrypoint/WGSL signature agreement
- * - bundle policy (duplicate IDs / fluid order)
+ * - bundle policy (duplicate IDs)
  *
  * Keeping this boundary narrow avoids semantic policy drift between compiler
  * and renderer install paths.
