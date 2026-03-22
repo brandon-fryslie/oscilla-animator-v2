@@ -6,6 +6,7 @@ mod error_boundary;
 mod memory;
 mod render;
 mod scheduler;
+mod shader_prelude;
 mod telemetry;
 
 use std::cell::{Cell, RefCell};
