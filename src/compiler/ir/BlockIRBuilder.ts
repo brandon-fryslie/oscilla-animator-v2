@@ -91,7 +91,8 @@ export interface BlockIRBuilder {
     topologyId: TopologyId,
     paramArgs: readonly ValueExprId[],
     type: CanonicalType,
-    controlPointField?: ValueExprId
+    controlPointField?: ValueExprId,
+    parametricTemplate?: import('../../shapes/parametric-templates').ParametricTemplatePayload,
   ): ValueExprId;
 
   /**
