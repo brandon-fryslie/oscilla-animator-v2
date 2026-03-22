@@ -62,18 +62,107 @@ pub struct FrameHeader {
     pub delta_time_seconds: f32,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct SlotDescriptor {
-    pub buffer_id: u32,
-    pub byte_offset: u32,
-    pub stride: u32,
-    pub length: u32,
+#[derive(Clone, Debug, serde::Deserialize)]
+pub enum MemoryPacking {
+    #[serde(rename = "soa")]
+    Soa,
+    #[serde(rename = "aos")]
+    Aos,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct MemoryResource {
+    pub id: String,
+    pub cardinality: u32,
+    pub packing: MemoryPacking,
+    #[serde(rename = "type")]
+    pub resource_type: String, // e.g. "f32", "vec2", "vec4"
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct MemoryManifest {
+    pub resources: Vec<MemoryResource>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedResource {
+    pub base_offset_bytes: u32,
+    pub lane_stride_bytes: u32,
+    pub component_stride_bytes: u32,
+    pub total_bytes: u32,
+}
+
+pub struct SymbolResolver {
+    pub map: std::collections::HashMap<String, ResolvedResource>,
+    pub total_arena_bytes: u32,
+}
+
+impl SymbolResolver {
+    pub fn new() -> Self {
+        Self {
+            map: std::collections::HashMap::new(),
+            total_arena_bytes: 0,
+        }
+    }
+
+    pub fn resolve(&self, id: &str) -> Option<&ResolvedResource> {
+        self.map.get(id)
+    }
+
+    pub fn build_from_manifest(manifest: &MemoryManifest) -> Self {
+        let mut map = std::collections::HashMap::new();
+        let mut current_offset_bytes: u32 = 0;
+
+        for resource in &manifest.resources {
+            // [LAW:single-enforcer] All std430/std140 alignment rules are
+            // enforced here in the Rust MMU.
+            let component_size_bytes = 4; // Assuming f32/u32 for now
+            let component_count = match resource.resource_type.as_str() {
+                "f32" | "u32" | "i32" | "bool" => 1,
+                "vec2" => 2,
+                "vec3" => 3,
+                "vec4" => 4,
+                "mat4" => 16,
+                _ => 1,
+            };
+
+            // std430 alignment: align to size of the first element (max 16)
+            let alignment = (component_count * component_size_bytes).min(16).max(4);
+            current_offset_bytes = (current_offset_bytes + alignment - 1) / alignment * alignment;
+
+            let (lane_stride_bytes, component_stride_bytes) = match resource.packing {
+                MemoryPacking::Soa => (
+                    component_size_bytes,
+                    resource.cardinality * component_size_bytes,
+                ),
+                MemoryPacking::Aos => (component_count * component_size_bytes, component_size_bytes),
+            };
+
+            let total_bytes = resource.cardinality * component_count * component_size_bytes;
+
+            map.insert(
+                resource.id.clone(),
+                ResolvedResource {
+                    base_offset_bytes: current_offset_bytes,
+                    lane_stride_bytes,
+                    component_stride_bytes,
+                    total_bytes,
+                },
+            );
+
+            current_offset_bytes += total_bytes;
+        }
+
+        Self { 
+            map,
+            total_arena_bytes: current_offset_bytes,
+        }
+    }
 }
 
 pub struct GpuMemoryArena {
     pub frame_header: FrameHeader,
-    pub slot_descriptors: Vec<SlotDescriptor>,
+    pub symbol_resolver: SymbolResolver,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
     pub instance_buffer: wgpu::Buffer,
@@ -90,6 +179,9 @@ pub struct GpuMemoryArena {
     draw_prep_layout: wgpu::BindGroupLayout,
     instance_layout: wgpu::BindGroupLayout,
     topology_layout: wgpu::BindGroupLayout,
+    state_layout: wgpu::BindGroupLayout,
+    compiler_simulation_layout: wgpu::BindGroupLayout,
+    arena_render_layout: wgpu::BindGroupLayout,
     instance_capacity_bytes: u64,
     topology_capacity_words: usize,
     sink_table_capacity_words: usize,
@@ -127,6 +219,130 @@ impl GpuMemoryArena {
         Self::clear_buffer_words(queue, &self.state_buffers[1]);
         Self::clear_buffer_words(queue, &self.compiler_arena_buffers[0]);
         Self::clear_buffer_words(queue, &self.compiler_arena_buffers[1]);
+    }
+
+    pub fn rebuild_buffers_from_resolver(&mut self, device: &wgpu::Device, resolver: &SymbolResolver) {
+        let required_bytes = (resolver.total_arena_bytes as u64).max(16);
+        let current_bytes = self.compiler_arena_buffers[0].size();
+
+        if required_bytes > current_bytes {
+            // Re-allocate arena buffers
+            self.compiler_arena_buffers = [
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("CompilerArenaBuffer.A"),
+                    size: required_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("CompilerArenaBuffer.B"),
+                    size: required_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+            ];
+            // [LAW:one-source-of-truth] Bind groups MUST be rebuilt after buffer re-allocation.
+            self.rebuild_arena_bind_groups(device);
+        }
+    }
+
+    fn rebuild_arena_bind_groups(&mut self, device: &wgpu::Device) {
+        self.compiler_arena_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.A"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.B"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
+
+        self.compiler_simulation_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.A"),
+                layout: &self.compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.B"),
+                layout: &self.compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+        ];
+
+        self.arena_render_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.A"),
+                layout: &self.arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.B"),
+                layout: &self.arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
     }
 
     pub fn new(
@@ -420,7 +636,7 @@ impl GpuMemoryArena {
 
         Self {
             frame_header: FrameHeader::default(),
-            slot_descriptors: Vec::with_capacity(64),
+            symbol_resolver: SymbolResolver::new(),
             uniform_buffer,
             uniform_bind_group,
             instance_buffer,
@@ -436,6 +652,9 @@ impl GpuMemoryArena {
             draw_prep_layout: draw_prep_layout.clone(),
             instance_layout: instance_layout.clone(),
             topology_layout: topology_layout.clone(),
+            state_layout: state_layout.clone(),
+            compiler_simulation_layout: compiler_simulation_layout.clone(),
+            arena_render_layout: arena_render_layout.clone(),
             instance_capacity_bytes,
             topology_capacity_words,
             sink_table_capacity_words,

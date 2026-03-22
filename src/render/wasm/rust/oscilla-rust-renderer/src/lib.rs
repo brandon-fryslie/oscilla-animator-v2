@@ -17,9 +17,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
-use crate::compute::CompilerComputePassSpec;
+use crate::compute::{CompilerComputePassSpec, NagaModuleIR};
 use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
+use crate::memory::MemoryManifest;
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
@@ -239,6 +240,29 @@ pub fn resume_engine() -> Result<(), JsValue> {
         Ok::<(), JsValue>(())
     })?;
     arm_worker_loop_if_needed()
+}
+
+#[wasm_bindgen]
+pub fn rebuild_with_symbolic_manifest(
+    manifest_json: String,
+    lowering_json: String,
+    max_active_lanes: u32,
+    uber_shader_wgsl: String,
+) -> Result<(), JsValue> {
+    let manifest: MemoryManifest = serde_json::from_str(&manifest_json)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse MemoryManifest: {}", e)))?;
+    let lowering: NagaModuleIR = serde_json::from_str(&lowering_json)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse NagaModuleIR: {}", e)))?;
+
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before rebuild_with_symbolic_manifest")
+        })?;
+        engine.rebuild_with_symbolic_manifest(manifest, lowering, max_active_lanes, &uber_shader_wgsl)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(())
+    })
 }
 
 #[wasm_bindgen]
