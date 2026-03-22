@@ -11,6 +11,7 @@ import { registerMathBlocks } from './math';
 import { registerFieldBlocks } from './field';
 import { registerShapeBlocks } from './shape';
 import { register as registerAttractorLayout } from './layout/attractor-layout';
+import { register as registerSamplePath } from './layout/sample-path';
 import { registerColorBlocks } from './color';
 import { registerAdapterBlocks } from './adapter';
 import { registerLensBlocks } from './lens';
@@ -33,6 +34,7 @@ export function registerAllBlocks(): void {
   registerFieldBlocks();
   registerShapeBlocks();
   registerAttractorLayout();
+  registerSamplePath();
   registerColorBlocks();
   registerAdapterBlocks();
   registerLensBlocks();
