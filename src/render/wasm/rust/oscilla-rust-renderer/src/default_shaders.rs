@@ -417,57 +417,102 @@ fn get_hardened_bezier_data(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec
     return vec3<f32>(pos.x, pos.y, atan2(final_tangent.y, final_tangent.x));
 }
 
+// [LAW:one-source-of-truth] Ribbon half-width constant (local-space units).
+// Ribbon quads are expanded ± this distance along the surface normal.
+const RIBBON_HALF_WIDTH: f32 = 0.005;
+
+// TopologyType discriminant values (must match TypeScript TopologyType enum).
+const TOPOLOGY_TYPE_NON_INDEXED: u32 = 0u;
+const TOPOLOGY_TYPE_INDEXED: u32 = 1u;
+
 // Type2 Parametric vertex shader: reads template t-values from topologyBank
 // and control-point data from arenaWords, evaluates cubic Bezier via the
 // shared get_hardened_bezier_data function.
+// [LAW:one-source-of-truth] instanceIndex selects the per-instance lane for
+// control-point reads. Without it every instance reads Lane 0.
 fn vs_type2(
   inst: InstanceData,
   topologyWordOffset: u32,
   vertexIndex: u32,
+  instanceIndex: u32,
 ) -> VertexOutput {
   // Read CP arena addressing from header.
   let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
   let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
   let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
 
-  // Read template t-value from topologyBank payload (stored as f32 bitcast to u32).
+  // Per-instance lane offset into the arena for control-point data.
+  // [LAW:one-source-of-truth] Each instance has its OWN control points at:
+  //   arenaWords[cpArenaBase + instanceIndex * cpArenaLaneStride + component * cpArenaComponentStride]
+  let laneBase = cpArenaBase + instanceIndex * cpArenaLaneStride;
+
+  // Read topology type (ribbon vs closed-blob) from header.
+  let topologyType = topologyBank[topologyWordOffset + SHAPE_WORD_TOPOLOGY_TYPE];
+
+  // Read relative firstVertex offset from header (word offset where t-values begin).
   let firstVertex = topologyBank[topologyWordOffset + SHAPE_WORD_FIRST_VERTEX];
-  let tBits = topologyBank[firstVertex + topologyWordOffset + vertexIndex];
-  let t = bitcast<f32>(tBits);
 
-  // [LAW:dataflow-not-control-flow] Centroid sentinel (t < -0.5) produces
-  // a centroid position (average of all CPs); non-sentinel evaluates Bezier.
-  // Both paths always execute; the select chooses which result to use.
-  let isCentroid = t < -0.5;
-
-  // Read cubic Bezier control points (p0..p3) from arena.
+  // Read cubic Bezier control points (p0..p3) from arena, per-instance.
   // ParamStride layout: [p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y] per lane.
   let p0 = vec2<f32>(
-    bitcast<f32>(arenaWords[cpArenaBase]),
-    bitcast<f32>(arenaWords[cpArenaBase + cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 0u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 1u * cpArenaComponentStride]),
   );
   let p1 = vec2<f32>(
-    bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaComponentStride]),
-    bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 2u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 3u * cpArenaComponentStride]),
   );
   let p2 = vec2<f32>(
-    bitcast<f32>(arenaWords[cpArenaBase + 4u * cpArenaComponentStride]),
-    bitcast<f32>(arenaWords[cpArenaBase + 5u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 4u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 5u * cpArenaComponentStride]),
   );
   let p3 = vec2<f32>(
-    bitcast<f32>(arenaWords[cpArenaBase + 6u * cpArenaComponentStride]),
-    bitcast<f32>(arenaWords[cpArenaBase + 7u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 6u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 7u * cpArenaComponentStride]),
   );
 
-  // Evaluate hardened Bezier for the non-centroid case.
-  let safeT = clamp(t, 0.0, 1.0);
-  let bezierResult = get_hardened_bezier_data(p0, p1, p2, p3, safeT);
+  // --- Ribbon path (NonIndexed): 6 vertices per segment, quad expansion ---
+  // Lookup tables for the 6 vertices of each quad (two triangles: 0-2-1, 1-2-3).
+  // t_offset_lut: which segment endpoint (0 = start, 1 = end).
+  // side_lut: which side of the ribbon normal (-1 = left, +1 = right).
+  let t_offset_lut = array<u32, 6>(0u, 0u, 1u, 1u, 0u, 1u);
+  let side_lut = array<f32, 6>(-1.0, 1.0, -1.0, 1.0, 1.0, -1.0);
 
-  // Centroid = average of control points.
+  // --- Indexed path (ClosedBlob): centroid + perimeter fan ---
+  // [LAW:dataflow-not-control-flow] Both ribbon and blob data are computed;
+  // topologyType selects which result to use.
+  let isRibbon = topologyType == TOPOLOGY_TYPE_NON_INDEXED;
+
+  // Ribbon: derive segment and local vertex from vertexIndex.
+  // For non-indexed draws, vertexIndex = absoluteFirstVertex + localDrawVertex.
+  let absoluteFirstVertex = topologyWordOffset + firstVertex;
+  let localDrawVertex = vertexIndex - absoluteFirstVertex;
+  let seg = localDrawVertex / 6u;
+  let vi = localDrawVertex % 6u;
+  let ribbonTIndex = seg + t_offset_lut[vi];
+  let ribbonTBits = topologyBank[absoluteFirstVertex + ribbonTIndex];
+  let ribbonT = clamp(bitcast<f32>(ribbonTBits), 0.0, 1.0);
+  let ribbonBezier = get_hardened_bezier_data(p0, p1, p2, p3, ribbonT);
+  // Normal from tangent_angle: rotate tangent 90° CCW.
+  let tangentAngle = ribbonBezier.z;
+  let normalX = -sin(tangentAngle);
+  let normalY = cos(tangentAngle);
+  let ribbonLocalX = ribbonBezier.x + normalX * RIBBON_HALF_WIDTH * side_lut[vi];
+  let ribbonLocalY = ribbonBezier.y + normalY * RIBBON_HALF_WIDTH * side_lut[vi];
+
+  // Blob: read t-value directly (indexed draw, vertexIndex = baseVertex + local_index).
+  let blobTBits = topologyBank[topologyWordOffset + firstVertex + vertexIndex];
+  let blobT = bitcast<f32>(blobTBits);
+  let isCentroid = blobT < -0.5;
+  let safeBlobT = clamp(blobT, 0.0, 1.0);
+  let blobBezier = get_hardened_bezier_data(p0, p1, p2, p3, safeBlobT);
   let centroid = (p0 + p1 + p2 + p3) * 0.25;
+  let blobLocalX = select(blobBezier.x, centroid.x, isCentroid);
+  let blobLocalY = select(blobBezier.y, centroid.y, isCentroid);
 
-  let localX = select(bezierResult.x, centroid.x, isCentroid);
-  let localY = select(bezierResult.y, centroid.y, isCentroid);
+  // [LAW:dataflow-not-control-flow] Select result based on topology type.
+  let localX = select(blobLocalX, ribbonLocalX, isRibbon);
+  let localY = select(blobLocalY, ribbonLocalY, isRibbon);
 
   // Instance transform (same as Type1Rigid).
   let rawCenterX = inst.transform0.x;
@@ -568,7 +613,7 @@ fn vs_type5(
     return vs_type5(inst, topologyWordOffset, vertexIndex);
   }
   if (shapeClass == SHAPE_CLASS_TYPE2_PARAMETRIC) {
-    return vs_type2(inst, topologyWordOffset, vertexIndex);
+    return vs_type2(inst, topologyWordOffset, vertexIndex, instanceIndex);
   }
 
   // --- Type1Rigid path (existing behavior) ---
