@@ -1890,6 +1890,26 @@ function emitMaterializeExprComponentF32(args: {
         );
         break;
       }
+      // [LAW:one-source-of-truth] domain_property intrinsics resolve to the same
+      // GPU expressions as property intrinsics but use a distinct intrinsicKind so
+      // the IR distinguishes domain identity from legacy instance properties.
+      if (expr.intrinsicKind === 'domain_property' && expr.domainProperty === 'index') {
+        resolved = args.ctx.addExpression({ kind: 'call', function: 'f32', args: [args.laneExpr] }, args.source);
+        break;
+      }
+      if (expr.intrinsicKind === 'domain_property' && expr.domainProperty === 'rank') {
+        const denom = Math.max(1, args.targetPlan.laneCount - 1);
+        const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
+        const laneAsFloat = args.ctx.addExpression(
+          { kind: 'call', function: 'f32', args: [args.laneExpr] },
+          args.source,
+        );
+        resolved = args.ctx.addExpression(
+          { kind: 'binary', op: 'mul', left: laneAsFloat, right: inv },
+          args.source,
+        );
+        break;
+      }
       if (expr.intrinsicKind === 'placement') {
         // [LAW:one-source-of-truth] Placement intrinsics are lowered at the
         // compute boundary so GPU and CPU materialization share one semantic

@@ -32,6 +32,7 @@ import type {
   InstanceCountSpec,
   Step,
   IntrinsicPropertyName,
+  DomainPropertyName,
   PlacementFieldName,
   BasisKind,
   StableStateId,
@@ -318,6 +319,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   intrinsic(intrinsic: IntrinsicPropertyName, type: CanonicalType): ValueExprId {
     return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'property', intrinsic });
+  }
+
+  domainProperty(prop: DomainPropertyName, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'domain_property', domainProperty: prop });
   }
 
   placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId {

@@ -26,6 +26,7 @@ import type { StateSlotId, EventSlotId, ValueExprId } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type {
   IntrinsicPropertyName,
+  DomainPropertyName,
   PlacementFieldName,
   BasisKind,
   PureFn,
@@ -137,6 +138,12 @@ export type ValueExprIntrinsic =
       readonly type: CanonicalType;
       readonly intrinsicKind: 'property';
       readonly intrinsic: IntrinsicPropertyName;
+    }
+  | {
+      readonly kind: 'intrinsic';
+      readonly type: CanonicalType;
+      readonly intrinsicKind: 'domain_property';
+      readonly domainProperty: DomainPropertyName;
     }
   | {
       readonly kind: 'intrinsic';

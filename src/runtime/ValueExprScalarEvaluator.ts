@@ -200,7 +200,9 @@ function evaluateScalarExtent(
     }
 
     case 'intrinsic': {
-      const intrinsicName = expr.intrinsicKind === 'property' ? expr.intrinsic : expr.field;
+      const intrinsicName = expr.intrinsicKind === 'property' ? expr.intrinsic
+        : expr.intrinsicKind === 'domain_property' ? expr.domainProperty
+        : expr.field;
       throw new Error(`Intrinsic expressions are field-extent, not scalar-extent (intrinsic=${intrinsicName})`);
     }
 
