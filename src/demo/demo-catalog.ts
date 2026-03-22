@@ -111,14 +111,6 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     highlights: ['float range field', 'noisy broadcast', 'variation'],
   },
   {
-    filename: 'fluid-dynamics.hcl',
-    relativePath: 'features/fluid-dynamics.hcl',
-    group: 'features',
-    summary: 'Steel-thread demo for the fluid block all the way through the renderer.',
-    purposes: ['feature', 'integration'],
-    highlights: ['fluid dynamics', 'gpu pass', 'renderer'],
-  },
-  {
     filename: 'mouse-spiral.hcl',
     relativePath: 'features/mouse-spiral.hcl',
     group: 'features',
