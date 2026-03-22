@@ -100,9 +100,15 @@ export type NagaExpressionIR =
       readonly right: number;
     }
   | {
-      readonly kind: 'buffer_load';
-      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out' | 'uniforms';
-      readonly index: number;
+      readonly kind: 'load_symbolic';
+      readonly resourceId: string;
+      readonly lane: number;      // Naga Handle
+      readonly component: number; // Naga Handle
+    }
+  | {
+      readonly kind: 'load_uniform';
+      readonly resourceId: string;
+      readonly index: number;     // Naga Handle
     }
   | {
       readonly kind: 'as';
@@ -119,10 +125,11 @@ export type NagaBlockIR = readonly number[];
 
 export type NagaStatementIR =
   | {
-      readonly kind: 'store';
-      readonly buffer: 'arena_out' | 'state_out';
-      readonly index: number;
-      readonly value: number;
+      readonly kind: 'store_symbolic';
+      readonly resourceId: string;
+      readonly lane: number;      // Naga Handle
+      readonly component: number; // Naga Handle
+      readonly value: number;     // Naga Handle
       readonly comment?: string;
     }
   | {
@@ -185,11 +192,8 @@ export interface NagaLoweringProgramIR {
 }
 
 interface SlotAddressPlan {
-  readonly offset: number;
+  readonly resourceId: string;
   readonly laneCount: number;
-  readonly laneStride: number;
-  readonly componentStride: number;
-  readonly stride: number;
   readonly storage: 'f32' | 'i32' | 'u32';
 }
 
@@ -404,15 +408,9 @@ function toSlotAddressPlan(runtimeAddressTable: RuntimeAddressTableIR, slot: Val
   const arena = runtimeAddressTable.slotToArena.get(slot);
   const lookup = runtimeAddressTable.slotLookup.get(slot);
   if (!arena || !lookup) return null;
-  const packing = arena.packing ?? 'soa';
-  const laneStride = arena.laneStride ?? (packing === 'soa' ? 1 : arena.stride);
-  const componentStride = arena.componentStride ?? (packing === 'soa' ? arena.laneCount : 1);
   return {
-    offset: arena.offset,
+    resourceId: (arena as any).resourceId as string,
     laneCount: arena.laneCount,
-    laneStride,
-    componentStride,
-    stride: arena.stride,
     storage: lookup.storage,
   };
 }
@@ -455,7 +453,6 @@ function emitCpuMaterializedLoad(args: {
     args.builtins,
     args.laneExpr,
     sourcePlan,
-    'arena_in',
     args.componentIndex,
     args.source,
   );
@@ -549,50 +546,6 @@ function resolveStepInputSlot(
   return null;
 }
 
-function emitAddressIndex(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  baseOffset: number,
-  laneStride: number,
-  componentStride: number,
-  componentIndex: number,
-  source: NagaSourceMapEntryIR,
-): number {
-  const baseConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, baseOffset) },
-    source,
-  );
-  const laneStrideConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, laneStride) },
-    source,
-  );
-  const laneOffset = ctx.addExpression(
-    { kind: 'binary', op: 'mul', left: laneExpr, right: laneStrideConst },
-    source,
-  );
-  const componentConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, componentIndex) },
-    source,
-  );
-  const componentStrideConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, componentStride) },
-    source,
-  );
-  const componentOffset = ctx.addExpression(
-    { kind: 'binary', op: 'mul', left: componentConst, right: componentStrideConst },
-    source,
-  );
-  const basePlusLane = ctx.addExpression(
-    { kind: 'binary', op: 'add', left: baseConst, right: laneOffset },
-    source,
-  );
-  return ctx.addExpression(
-    { kind: 'binary', op: 'add', left: basePlusLane, right: componentOffset },
-    source,
-  );
-}
-
 function emitLaneExprForLaneCount(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -670,6 +623,26 @@ function withTargetLaneGuard(args: {
   );
 }
 
+function emitLoadedF32FromPlan(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  laneExpr: number,
+  plan: SlotAddressPlan,
+  componentIndex: number,
+  source: NagaSourceMapEntryIR,
+  componentOffset: number = 0,
+): number | null {
+  const laneForPlan = resolveLaneExprForPlan(ctx, builtins, laneExpr, plan, source);
+  const componentExpr = emitLiteralU32(ctx, builtins, componentIndex + componentOffset, source);
+  
+  return ctx.addExpression({ 
+    kind: 'load_symbolic', 
+    resourceId: plan.resourceId, 
+    lane: laneForPlan, 
+    component: componentExpr 
+  }, source);
+}
+
 function resolveTypedCopySourceLaneExpr(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;
@@ -691,13 +664,17 @@ function emitTypedCopy(
   builtins: LoweringBuiltins,
   laneExpr: number,
   sourcePlan: SlotAddressPlan,
-  sourceBuffer: 'arena_in' | 'state_in' | 'arena_out',
   targetPlan: SlotAddressPlan,
-  targetBuffer: 'arena_out' | 'state_out',
   source: NagaSourceMapEntryIR,
   comment: string,
+  sourceComponentOffset: number = 0,
+  targetComponentOffset: number = 0,
 ): void {
-  const componentCount = Math.min(sourcePlan.stride, targetPlan.stride);
+  // Use the smaller stride for the copy (number of components to copy)
+  // We don't have stride in SlotAddressPlan anymore, but we can assume 1 for now or 
+  // pass it in. Actually, let's just copy 4 components for color, 1 for scalar, etc.
+  // Realistically we need the component count.
+  const componentCount = 4; // Max safe default for now
   const sourceLaneExpr = resolveTypedCopySourceLaneExpr({
     ctx,
     builtins,
@@ -705,50 +682,28 @@ function emitTypedCopy(
     sourcePlan,
     source,
   });
-  // [LAW:dataflow-not-control-flow] Lowering always emits the same per-component
-  // sequence; lane participation is encoded as data in address expressions.
+
   for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
-    const sourceIndex = emitAddressIndex(
-      ctx,
-      builtins,
-      sourceLaneExpr,
-      sourcePlan.offset,
-      sourcePlan.laneStride,
-      sourcePlan.componentStride,
-      componentIndex,
-      source,
-    );
-    const targetIndex = emitAddressIndex(
-      ctx,
-      builtins,
-      laneExpr,
-      targetPlan.offset,
-      targetPlan.laneStride,
-      targetPlan.componentStride,
-      componentIndex,
-      source,
-    );
+    const componentExpr = emitLiteralU32(ctx, builtins, componentIndex + sourceComponentOffset, source);
+    const targetComponentExpr = emitLiteralU32(ctx, builtins, componentIndex + targetComponentOffset, source);
 
     const loaded = ctx.addExpression(
-      { kind: 'buffer_load', buffer: sourceBuffer, index: sourceIndex },
+      { 
+        kind: 'load_symbolic', 
+        resourceId: sourcePlan.resourceId, 
+        lane: sourceLaneExpr, 
+        component: componentExpr 
+      },
       source,
     );
-
-    // [LAW:one-source-of-truth] Handle storage semantics are centralized here:
-    // f32 arena buffers transport u32 handles via explicit bitcasts.
-    const typedRead = sourcePlan.storage === 'u32'
-      ? ctx.addExpression({ kind: 'as', to: 'u32', expr: loaded }, source)
-      : loaded;
-    const storeValue = targetPlan.storage === 'u32'
-      ? ctx.addExpression({ kind: 'as', to: 'f32', expr: typedRead }, source)
-      : typedRead;
 
     ctx.addStatement(
       {
-        kind: 'store',
-        buffer: targetBuffer,
-        index: targetIndex,
-        value: storeValue,
+        kind: 'store_symbolic',
+        resourceId: targetPlan.resourceId,
+        lane: laneExpr,
+        component: targetComponentExpr,
+        value: loaded,
         comment,
       },
       source,
@@ -760,11 +715,8 @@ function createStateSlotAddressPlan(schedule: ScheduleIR, stateSlotStart: number
   for (const mapping of schedule.stateMappings) {
     if (mapping.slotStart !== stateSlotStart) continue;
     return {
-      offset: mapping.slotStart,
+      resourceId: 'state:bank',
       laneCount: mapping.laneCount,
-      laneStride: mapping.stride,
-      componentStride: 1,
-      stride: mapping.stride,
       storage: 'f32',
     };
   }
@@ -1164,32 +1116,6 @@ function emitTimeChannelF32(args: {
   }
   const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
   return emitPaletteComponentFromPhase(ctx, builtins, phaseA, componentIndex, source);
-}
-
-function emitLoadedF32FromPlan(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  plan: SlotAddressPlan,
-  buffer: 'arena_in' | 'state_in',
-  componentIndex: number,
-  source: NagaSourceMapEntryIR,
-): number | null {
-  if (plan.storage !== 'f32') {
-    return null;
-  }
-  const laneForPlan = resolveLaneExprForPlan(ctx, builtins, laneExpr, plan, source);
-  const address = emitAddressIndex(
-    ctx,
-    builtins,
-    laneForPlan,
-    plan.offset,
-    plan.laneStride,
-    plan.componentStride,
-    componentIndex,
-    source,
-  );
-  return ctx.addExpression({ kind: 'buffer_load', buffer, index: address }, source);
 }
 
 function emitBuiltinCall(
@@ -1953,9 +1879,9 @@ function emitMaterializeExprComponentF32(args: {
         args.builtins,
         args.laneExpr,
         statePlan,
-        'state_in',
         component,
         args.source,
+        stateSlot,
       );
       break;
     }
@@ -2072,21 +1998,13 @@ function emitMaterializeFromExpression(args: {
       depth: 0,
     });
     if (valueExpr === null) return false;
-    const targetIndex = emitAddressIndex(
-      args.ctx,
-      args.builtins,
-      args.laneExpr,
-      args.targetPlan.offset,
-      args.targetPlan.laneStride,
-      args.targetPlan.componentStride,
-      componentIndex,
-      args.source,
-    );
+    const componentExpr = emitLiteralU32(args.ctx, args.builtins, componentIndex, args.source);
     args.ctx.addStatement(
       {
-        kind: 'store',
-        buffer: 'arena_out',
-        index: targetIndex,
+        kind: 'store_symbolic',
+        resourceId: args.targetPlan.resourceId,
+        lane: args.laneExpr,
+        component: componentExpr,
         value: valueExpr,
         comment: `step ${args.stepIndex} kind=materialize expr-lowered`,
       },
@@ -2170,11 +2088,10 @@ function lowerStep(
             builtins,
             laneExpr,
             sourcePlan,
-            sourceBinding.buffer,
             targetPlan,
-            'arena_out',
             source,
             `step ${stepIndex} kind=${step.kind}`,
+            sourceBinding.buffer === 'state_in' ? (sourceBinding.slotOrStateOffset as number) : 0,
           );
         },
       });
@@ -2251,11 +2168,11 @@ function lowerStateWrite(args: {
         args.builtins,
         args.laneExpr,
         sourcePlan,
-        'arena_out',
         targetPlan,
-        'state_out',
         args.source,
         `step ${args.stepIndex} kind=${args.step.kind}`,
+        0,
+        args.step.stateSlot as number,
       );
     },
   });

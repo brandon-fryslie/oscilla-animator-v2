@@ -71,6 +71,33 @@ export interface CameraDeclIR {
 // =============================================================================
 
 /**
+ * Symbolic Memory Manifest
+ *
+ * Describes the virtual memory resources required by the program.
+ * The Rust backend consumes this manifest to perform physical allocation,
+ * alignment (std140/std430), and bind-group generation.
+ *
+ * [LAW:one-source-of-truth] This manifest is the sole authority for GPU
+ * memory requirements; runtime never re-derives layouts.
+ */
+export interface MemoryManifestIR {
+  readonly resources: readonly MemoryResourceIR[];
+}
+
+export interface MemoryResourceIR {
+  /** Unique symbolic ID (e.g., 'arena:node_12_out', 'state:fluid_vel') */
+  readonly id: string;
+  /** Canonical data type (FLOAT, VEC2, etc.) */
+  readonly type: CanonicalType;
+  /** Number of lanes (1 for scalars, N for fields) */
+  readonly cardinality: number;
+  /** Memory packing preference */
+  readonly packing: 'soa' | 'aos';
+  /** Optional debug label */
+  readonly label?: string;
+}
+
+/**
  * CompiledProgramIR is the single canonical representation of a compiled program.
  *
  * Key Invariants:
@@ -102,6 +129,12 @@ export interface CompiledProgramIR {
 
   // Output extraction contract
   readonly outputs: readonly OutputSpecIR[];
+
+  /**
+   * Symbolic memory manifest (Phase 1 MMU boundary).
+   * Describes required GPU resources without physical offsets.
+   */
+  readonly memoryManifest: MemoryManifestIR;
 
   // Slot layout with required offsets
   readonly slotMeta: readonly SlotMetaEntry[];
@@ -165,47 +198,6 @@ export interface CompiledProgramIR {
    * compiled program table, never the ambient mutable registry.
    */
   readonly topologyTable: ProgramTopologyTableIR;
-
-  /**
-   * Arena layout — flat Float32Array descriptor for every slot.
-   * Indexed by slot ID (same ordering as slotMeta).
-   *
-   * [LAW:one-source-of-truth] Arena layout is computed once during compilation
-   * from CanonicalType + InstanceDecl — no parallel derivation.
-   */
-  readonly arenaLayout: readonly ArenaSlotDescriptor[];
-
-  /**
-   * Compiler-owned arena zone contract for runtime/render consumption.
-   *
-   * [LAW:one-source-of-truth] Zone offsets/alignment are emitted once by the
-   * compiler; runtime/render must consume this metadata rather than deriving
-   * independent zone boundaries.
-   */
-  readonly arenaZones?: ArenaZonesIR;
-
-  /**
-   * Compiler-owned runtime bindings for arena state/gauge zones.
-   *
-   * [LAW:one-source-of-truth] Runtime state/gauge surfaces resolve through one
-   * compiler-emitted layout contract instead of ad-hoc runtime offsets.
-   */
-  readonly arenaRuntimeLayout?: ArenaRuntimeLayoutIR;
-
-  /**
-   * Sum of canonical slot descriptor lengths across `arenaLayout`.
-   *
-   * [LAW:one-source-of-truth] Payload capacity is emitted once by compiler
-   * zone planning and used for descriptor-sum invariant checks.
-   */
-  readonly arenaPayloadFloats: number;
-
-  /**
-   * Total number of floats in the arena buffer, as computed by the arena zone
-   * plan (`totalFloats`). Includes header reservation and scalar->field
-   * alignment padding and state/gauge zones.
-   */
-  readonly arenaTotalFloats: number;
 
   /**
    * Draw-prep metadata for indirect rendering sinks.

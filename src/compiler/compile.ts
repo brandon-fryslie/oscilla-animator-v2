@@ -630,37 +630,65 @@ function convertLinkedIRToProgram(
     });
   }
 
-  // [LAW:one-source-of-truth] Arena zones + aligned offsets are compiled once.
-  const arenaZonePlan = deriveArenaZonePlan(
-    arenaSlotPlanInputs,
-    instances,
-    DEFAULT_ARENA_ALIGNMENT_POLICY,
-    {
-      stateBankLength: scheduleIR.stateSlotCount,
-      stateEntryCount: scheduleIR.stateMappings.length,
-    },
-  );
-  const arenaLayout: ArenaSlotDescriptor[] = new Array(slotCount);
+  // Build Memory Manifest (Symbolic intent for Phase 1 MMU)
+  // [LAW:one-source-of-truth] This manifest is the sole authority for GPU
+  // memory requirements; Rust MMU performs physical allocation.
+  const manifestResources: MemoryResourceIR[] = [];
+
+  // 1. Scalar/Field Arena Slots
+  for (const slotInput of arenaSlotPlanInputs) {
+    const card = requireInst(slotInput.type.extent.cardinality, 'cardinality');
+    const cardinality = isMany(card)
+      ? resolveInstanceCount(card.instance.instanceId, instances)
+      : 1;
+
+    manifestResources.push({
+      id: `arena:slot:${slotInput.slot}`,
+      type: slotInput.type,
+      cardinality,
+      packing: slotInput.packingPreference,
+      label: `Slot ${slotInput.slot}`,
+    });
+  }
+
+  // 2. Persistent State Bank
+  if (scheduleIR.stateSlotCount > 0) {
+    // [LAW:one-source-of-truth] State bank cardinality is governed by the schedule.
+    // We declare ONE resource for the bank; Rust MMU handles double-buffering.
+    manifestResources.push({
+      id: 'state:bank',
+      type: { payload: { kind: 'float' }, extent: { cardinality: { kind: 'one' }, temporality: { kind: 'discrete' } } } as CanonicalType,
+      cardinality: scheduleIR.stateSlotCount,
+      packing: 'soa',
+      label: 'Persistent State Bank',
+    });
+  }
+
+  const memoryManifest: MemoryManifestIR = { resources: manifestResources };
+
+  // Update runtimeSlots with symbolic arena descriptors (offsets/strides are now symbolic)
   const runtimeSlots: RuntimeSlotEntry[] = runtimeSlotEntries.map((entry) => {
-    const arena = arenaZonePlan.slotDescriptor(entry.slot);
-    arenaLayout[entry.slot as number] = arena;
+    const card = requireInst(entry.type.extent.cardinality, 'cardinality');
+    const laneCount = isMany(card)
+      ? resolveInstanceCount(card.instance.instanceId, instances)
+      : 1;
+
     return {
       ...entry,
-      arena,
+      arena: {
+        resourceId: `arena:slot:${entry.slot}`,
+        // These fields are legacy and will be removed in hardening pass.
+        // We set them to dummy values to satisfy the existing type.
+        offset: -1,
+        stride: entry.stride,
+        laneCount,
+        length: -1,
+        packing: 'soa',
+        laneStride: -1,
+        componentStride: -1,
+      } as any,
     };
   });
-  const descriptorPayloadFloats = arenaLayout.reduce((sum, descriptor) => sum + descriptor.length, 0);
-  if (descriptorPayloadFloats !== arenaZonePlan.payloadFloats) {
-    // [LAW:single-enforcer] Compiler layout planning is the single boundary
-    // that guarantees descriptor-sum payload invariants.
-    throw new Error(
-      'convertLinkedIRToProgram: payload sum mismatch (layout=' +
-        descriptorPayloadFloats +
-        ', plan=' +
-        arenaZonePlan.payloadFloats +
-        ')',
-    );
-  }
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
@@ -858,6 +886,7 @@ function convertLinkedIRToProgram(
     constants: { json: [] },
     schedule: scheduleIR,
     outputs,
+    memoryManifest,
     slotMeta,
     runtimeSlots,
     runtimeAddressTable,
@@ -866,11 +895,6 @@ function convertLinkedIRToProgram(
     renderGlobals,
     kernelRegistry: registry,
     topologyTable,
-    arenaLayout,
-    arenaZones: arenaZonePlan.toIR(),
-    arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
-    arenaPayloadFloats: arenaZonePlan.payloadFloats,
-    arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     generatedComputeProgram,
     nagaLoweringProgram,

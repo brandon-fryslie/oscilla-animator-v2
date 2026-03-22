@@ -1,6 +1,378 @@
-use crate::memory::GpuMemoryArena;
+use std::collections::{HashMap, HashSet};
+use serde::{Deserialize, Serialize};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::Module;
+use crate::memory::{GpuMemoryArena, SymbolResolver};
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NagaScalarKindIR {
+    F32,
+    U32,
+    Bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum NagaArraySizeIR {
+    Dynamic(String),
+    Fixed(u32),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NagaTypeIR {
+    Scalar {
+        scalar: NagaScalarKindIR,
+        width: u8,
+    },
+    Vector {
+        size: u8,
+        scalar: NagaScalarKindIR,
+        width: u8,
+    },
+    Array {
+        base: usize,
+        size: NagaArraySizeIR,
+    },
+    Struct {
+        name: String,
+        fields: Vec<NagaStructFieldIR>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaStructFieldIR {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaConstantIR {
+    #[serde(rename = "type")]
+    pub type_index: usize,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaBindingIR {
+    pub group: u32,
+    pub binding: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaGlobalVariableIR {
+    pub name: String,
+    #[serde(rename = "storageClass")]
+    pub storage_class: String,
+    pub access: String,
+    pub binding: NagaBindingIR,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaFunctionArgumentIR {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+    pub builtin: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NagaBinaryOpIR {
+    Add, Sub, Mul, Div, Mod, Lt, Le, Gt, Ge, Eq, Ne,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NagaExpressionIR {
+    Argument { argument: usize },
+    Constant { constant: usize },
+    AccessIndex { base: usize, index: usize },
+    Binary { op: NagaBinaryOpIR, left: usize, right: usize },
+    LoadSymbolic { resource_id: String, lane: usize, component: usize },
+    LoadUniform { resource_id: String, index: usize },
+    As { to: NagaScalarKindIR, expr: usize },
+    Call { function: String, args: Vec<usize> },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NagaStatementIR {
+    StoreSymbolic { resource_id: String, lane: usize, component: usize, value: usize, comment: Option<String> },
+    Comment { text: String },
+    If { condition: usize, accept: Vec<usize>, reject: Vec<usize> },
+    Loop { body: Vec<usize> },
+    Break,
+    Continue,
+    Return,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaFunctionIR {
+    pub name: String,
+    pub arguments: Vec<NagaFunctionArgumentIR>,
+    pub expressions: Vec<NagaExpressionIR>,
+    pub statements: Vec<NagaStatementIR>,
+    pub body: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaEntryPointIR {
+    pub stage: String,
+    pub function: String,
+    #[serde(rename = "workgroupSize")]
+    pub workgroup_size: [u32; 3],
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaModuleIR {
+    pub types: Vec<NagaTypeIR>,
+    pub constants: Vec<NagaConstantIR>,
+    #[serde(rename = "global_variables")]
+    pub global_variables: Vec<NagaGlobalVariableIR>,
+    pub functions: Vec<NagaFunctionIR>,
+    #[serde(rename = "entry_points")]
+    pub entry_points: Vec<NagaEntryPointIR>,
+}
+
+struct ExpressionEmitter<'a> {
+    function_ir: &'a NagaFunctionIR,
+    module_ir: &'a NagaModuleIR,
+    resolver: &'a crate::memory::SymbolResolver,
+    cache: HashMap<usize, String>,
+    stack: HashSet<usize>,
+}
+
+impl<'a> ExpressionEmitter<'a> {
+    fn new(function_ir: &'a NagaFunctionIR, module_ir: &'a NagaModuleIR, resolver: &'a crate::memory::SymbolResolver) -> Self {
+        Self {
+            function_ir,
+            module_ir,
+            resolver,
+            cache: HashMap::new(),
+            stack: HashSet::new(),
+        }
+    }
+
+    fn emit(&mut self, expr_id: usize) -> Result<String, String> {
+        if let Some(value) = self.cache.get(&expr_id) {
+            return Ok(value.clone());
+        }
+        if self.stack.contains(&expr_id) {
+            return Err(format!("Expression cycle detected at [{}]", expr_id));
+        }
+
+        let expr = self.function_ir.expressions.get(expr_id).ok_or_else(|| {
+            format!("Expression handle not found: {}", expr_id)
+        })?;
+
+        self.stack.insert(expr_id);
+
+        let emitted = match expr {
+            NagaExpressionIR::Argument { argument } => {
+                let arg = self.function_ir.arguments.get(*argument).ok_or_else(|| "Argument not found")?;
+                arg.name.clone()
+            }
+            NagaExpressionIR::Constant { constant } => {
+                let constant_ir = self.module_ir.constants.get(*constant).ok_or_else(|| "Constant not found")?;
+                let scalar = match self.module_ir.types.get(constant_ir.type_index) {
+                    Some(NagaTypeIR::Scalar { scalar, .. }) => scalar,
+                    _ => return Err("Constant scalar type missing".to_string()),
+                };
+                format_scalar_literal(constant_ir.value, *scalar)
+            }
+            NagaExpressionIR::AccessIndex { base, index } => {
+                let base_expr = self.emit(*base)?;
+                let component = match index {
+                    0 => "x", 1 => "y", 2 => "z", 3 => "w",
+                    _ => return Err("access_index out of range".to_string()),
+                };
+                format!("{base_expr}.{component}")
+            }
+            NagaExpressionIR::Binary { op, left, right } => {
+                let left_expr = self.emit(*left)?;
+                let right_expr = self.emit(*right)?;
+                let op_token = match op {
+                    NagaBinaryOpIR::Add => "+", NagaBinaryOpIR::Sub => "-",
+                    NagaBinaryOpIR::Mul => "*", NagaBinaryOpIR::Div => "/",
+                    NagaBinaryOpIR::Mod => "%", NagaBinaryOpIR::Lt => "<",
+                    NagaBinaryOpIR::Le => "<=", NagaBinaryOpIR::Gt => ">",
+                    NagaBinaryOpIR::Ge => ">=", NagaBinaryOpIR::Eq => "==",
+                    NagaBinaryOpIR::Ne => "!=",
+                };
+                format!("({left_expr} {op_token} {right_expr})")
+            }
+            NagaExpressionIR::LoadSymbolic { resource_id, lane, component } => {
+                let lane_expr = self.emit(*lane)?;
+                let component_expr = self.emit(*component)?;
+                let resolved = self.resolver.resolve(resource_id).ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
+                
+                // [LAW:one-source-of-truth] Physical SoA math is generated by the Rust MMU resolver.
+                let base_words = resolved.base_offset_bytes / 4;
+                let lane_stride_words = resolved.lane_stride_bytes / 4;
+                let component_stride_words = resolved.component_stride_bytes / 4;
+
+                let buffer_name = if resource_id.starts_with("state:") { "state_in" } else { "arena_in" };
+
+                format!("{}[{}u + ({} * {}u) + ({} * {}u)]", 
+                    buffer_name, base_words, lane_expr, lane_stride_words, component_expr, component_stride_words)
+            }
+            NagaExpressionIR::LoadUniform { resource_id: _, index } => {
+                let idx_expr = self.emit(*index)?;
+                // [PHASE 1] For now, uniforms target the global control buffer (group 0, binding 4)
+                format!("global_controls[{}]", idx_expr)
+            }
+            NagaExpressionIR::As { to, expr } => {
+                let source = self.emit(*expr)?;
+                match to {
+                    NagaScalarKindIR::Bool => format!("({source} != 0u)"),
+                    _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*to)),
+                }
+            }
+            NagaExpressionIR::Call { function, args } => {
+                let mut emitted_args = Vec::new();
+                for arg in args {
+                    emitted_args.push(self.emit(*arg)?);
+                }
+                format!("{}({})", function, emitted_args.join(", "))
+            }
+        };
+
+        self.stack.remove(&expr_id);
+        self.cache.insert(expr_id, emitted.clone());
+        Ok(emitted)
+    }
+}
+
+fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
+    match scalar {
+        NagaScalarKindIR::F32 => "f32",
+        NagaScalarKindIR::U32 => "u32",
+        NagaScalarKindIR::Bool => "bool",
+    }
+}
+
+fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
+    match scalar {
+        NagaScalarKindIR::U32 => format!("{}u", value.trunc() as u32),
+        NagaScalarKindIR::Bool => if value == 0.0 { "false".to_string() } else { "true".to_string() },
+        NagaScalarKindIR::F32 => if value.fract() == 0.0 { format!("{value:.1}") } else { value.to_string() },
+    }
+}
+
+fn emit_statement_block(
+    function_ir: &NagaFunctionIR,
+    module_ir: &NagaModuleIR,
+    emitter: &mut ExpressionEmitter,
+    statement_handles: &[usize],
+    indent_level: usize,
+    statement_stack: &mut HashSet<usize>,
+) -> Result<Vec<String>, String> {
+    let mut lines: Vec<String> = Vec::new();
+
+    for statement_handle in statement_handles {
+        if statement_stack.contains(statement_handle) {
+            return Err(format!("Statement cycle detected at [{}]", statement_handle));
+        }
+
+        let statement = function_ir.statements.get(*statement_handle).ok_or_else(|| "Statement not found")?;
+        statement_stack.insert(*statement_handle);
+        let indent = "  ".repeat(indent_level);
+
+        match statement {
+            NagaStatementIR::StoreSymbolic { resource_id, lane, component, value, comment } => {
+                let lane_expr = emitter.emit(*lane)?;
+                let component_expr = emitter.emit(*component)?;
+                let value_expr = emitter.emit(*value)?;
+                let resolved = emitter.resolver.resolve(resource_id).ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
+                
+                let base_words = resolved.base_offset_bytes / 4;
+                let lane_stride_words = resolved.lane_stride_bytes / 4;
+                let component_stride_words = resolved.component_stride_bytes / 4;
+
+                let buffer_name = if resource_id.starts_with("state:") { "state_out" } else { "arena_out" };
+
+                let mut line = format!("{indent}{}[{}u + ({} * {}u) + ({} * {}u)] = {};", 
+                    buffer_name, base_words, lane_expr, lane_stride_words, component_expr, component_stride_words, value_expr);
+                if let Some(c) = comment {
+                    line.push_str(" // ");
+                    line.push_str(c);
+                }
+                lines.push(line);
+            }
+            NagaStatementIR::Comment { text } => {
+                lines.push(format!("{indent}// {text}"));
+            }
+            NagaStatementIR::If { condition, accept, reject } => {
+                let condition_expr = emitter.emit(*condition)?;
+                lines.push(format!("{indent}if ({condition_expr}) {{"));
+                lines.extend(emit_statement_block(function_ir, module_ir, emitter, accept, indent_level + 1, statement_stack)?);
+                if !reject.is_empty() {
+                    lines.push(format!("{indent}}} else {{"));
+                    lines.extend(emit_statement_block(function_ir, module_ir, emitter, reject, indent_level + 1, statement_stack)?);
+                }
+                lines.push(format!("{indent}}}"));
+            }
+            NagaStatementIR::Loop { body } => {
+                lines.push(format!("{indent}loop {{"));
+                lines.extend(emit_statement_block(function_ir, module_ir, emitter, body, indent_level + 1, statement_stack)?);
+                lines.push(format!("{indent}}}"));
+            }
+            NagaStatementIR::Break => lines.push(format!("{indent}break;")),
+            NagaStatementIR::Continue => lines.push(format!("{indent}continue;")),
+            NagaStatementIR::Return => lines.push(format!("{indent}return;")),
+        }
+        statement_stack.remove(statement_handle);
+    }
+    Ok(lines)
+}
+
+fn emit_module_to_wgsl(module_ir: &NagaModuleIR, resolver: &crate::memory::SymbolResolver, max_active_lanes: Option<u32>) -> Result<String, String> {
+    // Basic WGSL scaffolding for the compute shader.
+    let mut lines = Vec::new();
+    
+    // [LAW:one-source-of-truth] Bindings match ComputeDispatcher::create_compiler_simulation_layout
+    lines.push("@group(0) @binding(0) var<storage, read> arena_in: array<u32>;".to_string());
+    lines.push("@group(0) @binding(1) var<storage, read_write> arena_out: array<u32>;".to_string());
+    lines.push("@group(0) @binding(2) var<storage, read> state_in: array<u32>;".to_string());
+    lines.push("@group(0) @binding(3) var<storage, read_write> state_out: array<u32>;".to_string());
+    lines.push("@group(0) @binding(4) var<uniform> global_controls: array<vec4<f32>, 16>;".to_string());
+    lines.push(String::new());
+
+    let compute_entry = module_ir.entry_points.iter().find(|e| e.stage == "compute").ok_or("Missing compute entry")?;
+    let function_ir = module_ir.functions.iter().find(|f| f.name == compute_entry.function).ok_or("Entry function not found")?;
+
+    let mut arg_parts = Vec::new();
+    for argument in &function_ir.arguments {
+        if let Some(builtin) = &argument.builtin {
+            arg_parts.push(format!("@builtin({builtin}) {}: vec3<u32>", argument.name));
+        }
+    }
+
+    if let Some(max_lanes) = max_active_lanes {
+        lines.push(format!("const MAX_ACTIVE_LANES: u32 = {}u;", max_lanes));
+    }
+
+    lines.push(format!("@compute @workgroup_size({}, {}, {})", compute_entry.workgroup_size[0], compute_entry.workgroup_size[1], compute_entry.workgroup_size[2]));
+    lines.push(format!("fn main({}) {{", arg_parts.join(", ")));
+    
+    if let Some(_max_lanes) = max_active_lanes {
+        let gid_name = function_ir.arguments.iter().find(|a| a.builtin.as_deref() == Some("global_invocation_id")).map(|a| a.name.as_str()).unwrap_or("gid");
+        lines.push(format!("  let lane = {}.x;", gid_name));
+        lines.push("  if (lane >= MAX_ACTIVE_LANES) { return; }".to_string());
+    }
+
+    let mut emitter = ExpressionEmitter::new(function_ir, module_ir, resolver);
+    let mut statement_stack = HashSet::new();
+    lines.extend(emit_statement_block(function_ir, module_ir, &mut emitter, &function_ir.body, 1, &mut statement_stack)?);
+    
+    lines.push("}".to_string());
+    Ok(lines.join("\n"))
+}
 
 // [RECOVER-06] Draw-prep compute derives indirect args from canonical GPU state.
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
@@ -674,6 +1046,45 @@ impl ComputeDispatcher {
             return Err(error.to_string());
         }
         self.simulation_pipelines = pipelines;
+        Ok(())
+    }
+
+    pub fn rebuild_simulation_pipeline_with_manifest(
+        &mut self,
+        device: &wgpu::Device,
+        resolver: &crate::memory::SymbolResolver,
+        lowering: NagaModuleIR,
+        max_active_lanes: u32,
+    ) -> Result<(), String> {
+        let wgsl = emit_module_to_wgsl(&lowering, resolver, Some(max_active_lanes))?;
+
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Compute.DynamicSimulation.Shader"),
+            source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute.DynamicSimulation.PipelineLayout"),
+            bind_group_layouts: &[&self.compiler_simulation_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute.DynamicSimulation.Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("main"),
+            cache: None,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        });
+
+        // For Phase 1, we replace the first simulation pipeline
+        self.simulation_pipelines = vec![CompiledComputePassPipeline {
+            _pass_id: "dynamic".to_string(),
+            pipeline,
+            workgroup_count: (max_active_lanes + 63) / 64,
+        }];
+
         Ok(())
     }
 

@@ -434,6 +434,43 @@ impl Engine {
         self.scheduler.mark_running(worker_monotonic_now_ms());
     }
 
+    pub fn rebuild_with_symbolic_manifest(
+        &mut self,
+        manifest: crate::memory::MemoryManifest,
+        lowering: crate::compute::NagaModuleIR,
+        max_active_lanes: u32,
+        uber_shader_wgsl: &str,
+    ) -> Result<(), String> {
+        let resolver = crate::memory::SymbolResolver::build_from_manifest(&manifest);
+
+        // [LAW:one-source-of-truth] Rust MMU is now the sole authority for physical layout.
+        self.compute.rebuild_simulation_pipeline_with_manifest(
+            &self.device,
+            &resolver,
+            lowering,
+            max_active_lanes,
+        )?;
+
+        self.render = RenderDispatcher::new(
+            &self.device,
+            uber_shader_wgsl,
+            self.surface_format,
+            self.sample_count,
+            &self.compute.uniform_layout,
+        );
+
+        // Update the arena with the new resolver
+        self.arena.symbol_resolver = resolver;
+        self.arena.clear_simulation_planes(&self.queue);
+
+        self.draw_regions = IndirectRegionPlan::default();
+        self.last_shape_bank_words = 0;
+        self.last_sink_table_words = 0;
+        self.last_install_revision = 0;
+
+        Ok(())
+    }
+
     pub fn rebuild_pipeline(
         &mut self,
         simulation_wgsl: &str,
