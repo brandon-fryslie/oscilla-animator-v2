@@ -322,7 +322,13 @@ const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
 
 // [LAW:one-type-per-behavior] ShapeClass discriminant values.
 const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2u;
 const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
+
+// Type2 Parametric ShapeBank header word offsets (must match parametric-templates.ts ABI).
+const SHAPE_WORD_TOPOLOGY_TYPE: u32 = 1u;
+const SHAPE_WORD_FIRST_VERTEX: u32 = 8u;
+const SHAPE_WORD_PARAM_STRIDE: u32 = 9u;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -368,6 +374,130 @@ fn safe_color_from_instance(inst: InstanceData) -> vec4<f32> {
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
   let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
   return vec4<f32>(safeRgb, safeA);
+}
+
+// [LAW:one-source-of-truth] Canonical hardened Bezier evaluation for all
+// ParametricTemplates families (ribbon, closed-loop). Central-difference
+// fallback replaces the old epsilon-skew tangent hack.
+// Returns vec3<f32>(pos.x, pos.y, tangent_angle).
+fn get_hardened_bezier_data(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec3<f32> {
+    let u = 1.0 - t;
+    let u2 = u * u;
+    let t2 = t * t;
+
+    let pos = (u2*u)*p0 + (3.0*u2*t)*p1 + (3.0*u*t2)*p2 + (t2*t)*p3;
+    let analytical_tan = (3.0*u2)*(p1 - p0) + (6.0*u*t)*(p2 - p1) + (3.0*t2)*(p3 - p2);
+    let tan_len = length(analytical_tan);
+
+    var final_tangent: vec2<f32>;
+
+    if (tan_len > 1e-5) {
+        final_tangent = analytical_tan / tan_len;
+    } else {
+        // Fallback: Central Difference
+        let t_a = clamp(t + 0.001, 0.0, 1.0);
+        let t_b = clamp(t - 0.001, 0.0, 1.0);
+
+        let u_a = 1.0 - t_a;
+        let pos_a = (u_a*u_a*u_a)*p0 + (3.0*u_a*u_a*t_a)*p1 + (3.0*u_a*t_a*t_a)*p2 + (t_a*t_a*t_a)*p3;
+
+        let u_b = 1.0 - t_b;
+        let pos_b = (u_b*u_b*u_b)*p0 + (3.0*u_b*u_b*t_b)*p1 + (3.0*u_b*t_b*t_b)*p2 + (t_b*t_b*t_b)*p3;
+
+        let secant = pos_a - pos_b;
+        let secant_len = length(secant);
+
+        if (secant_len > 1e-5) {
+            final_tangent = secant / secant_len;
+        } else {
+            final_tangent = vec2<f32>(1.0, 0.0); // Absolute collapse guard
+        }
+    }
+
+    return vec3<f32>(pos.x, pos.y, atan2(final_tangent.y, final_tangent.x));
+}
+
+// Type2 Parametric vertex shader: reads template t-values from topologyBank
+// and control-point data from arenaWords, evaluates cubic Bezier via the
+// shared get_hardened_bezier_data function.
+fn vs_type2(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+) -> VertexOutput {
+  // Read CP arena addressing from header.
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+
+  // Read template t-value from topologyBank payload (stored as f32 bitcast to u32).
+  let firstVertex = topologyBank[topologyWordOffset + SHAPE_WORD_FIRST_VERTEX];
+  let tBits = topologyBank[firstVertex + topologyWordOffset + vertexIndex];
+  let t = bitcast<f32>(tBits);
+
+  // [LAW:dataflow-not-control-flow] Centroid sentinel (t < -0.5) produces
+  // a centroid position (average of all CPs); non-sentinel evaluates Bezier.
+  // Both paths always execute; the select chooses which result to use.
+  let isCentroid = t < -0.5;
+
+  // Read cubic Bezier control points (p0..p3) from arena.
+  // ParamStride layout: [p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y] per lane.
+  let p0 = vec2<f32>(
+    bitcast<f32>(arenaWords[cpArenaBase]),
+    bitcast<f32>(arenaWords[cpArenaBase + cpArenaComponentStride]),
+  );
+  let p1 = vec2<f32>(
+    bitcast<f32>(arenaWords[cpArenaBase + 2u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[cpArenaBase + 3u * cpArenaComponentStride]),
+  );
+  let p2 = vec2<f32>(
+    bitcast<f32>(arenaWords[cpArenaBase + 4u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[cpArenaBase + 5u * cpArenaComponentStride]),
+  );
+  let p3 = vec2<f32>(
+    bitcast<f32>(arenaWords[cpArenaBase + 6u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[cpArenaBase + 7u * cpArenaComponentStride]),
+  );
+
+  // Evaluate hardened Bezier for the non-centroid case.
+  let safeT = clamp(t, 0.0, 1.0);
+  let bezierResult = get_hardened_bezier_data(p0, p1, p2, p3, safeT);
+
+  // Centroid = average of control points.
+  let centroid = (p0 + p1 + p2 + p3) * 0.25;
+
+  let localX = select(bezierResult.x, centroid.x, isCentroid);
+  let localY = select(bezierResult.y, centroid.y, isCentroid);
+
+  // Instance transform (same as Type1Rigid).
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
+  );
+
+  let worldPos = model * vec4<f32>(localX, localY, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(0.0, 0.0);
+  out.shape_class = SHAPE_CLASS_TYPE2_PARAMETRIC;
+  return out;
 }
 
 // [RECOVER-11] Type5 text vertex shader: generates a unit quad (6 vertices)
@@ -436,6 +566,9 @@ fn vs_type5(
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
   if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
     return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+  if (shapeClass == SHAPE_CLASS_TYPE2_PARAMETRIC) {
+    return vs_type2(inst, topologyWordOffset, vertexIndex);
   }
 
   // --- Type1Rigid path (existing behavior) ---
