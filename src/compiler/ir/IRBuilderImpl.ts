@@ -541,20 +541,22 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return slot;
   }
 
-  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }): void {
+  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }, updateClass?: UpdateClass): void {
     const stride = payloadStride(type.payload);
     const existing = this.slotLayoutInputs.get(slot);
     // [LAW:single-enforcer] Intersection: most restrictive UpdateClass wins when
-    // multiple consumers register the same slot.
-    const updateClass = existing
-      ? intersectUpdateClass(existing.updateClass, 'FrameTime')
-      : 'FrameTime';
+    // multiple consumers register the same slot. When no updateClass is passed,
+    // preserve the existing value — callers that don't assert a requirement
+    // must not inject FrameTime into the intersection.
+    const resolvedUpdateClass = existing && updateClass
+      ? intersectUpdateClass(existing.updateClass, updateClass)
+      : updateClass ?? existing?.updateClass ?? 'FrameTime';
     this.slotLayoutInputs.set(slot, {
       type,
       stride,
       label: existing?.label,
       source: source ?? existing?.source,
-      updateClass,
+      updateClass: resolvedUpdateClass,
     });
   }
 
