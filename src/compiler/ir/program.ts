@@ -93,6 +93,10 @@ export interface MemoryResourceIR {
   readonly cardinality: number;
   /** Memory packing preference */
   readonly packing: 'soa' | 'aos';
+  /** Update class governs when this resource changes (Rust MMU uses this for storage placement). */
+  readonly updateClass: import('../../types/compiler').UpdateClass;
+  /** Source block/port that owns this resource (no forensics — propagated from registry). */
+  readonly source?: { readonly blockId: import('../../types/compiler').BlockId; readonly portId: import('../../types/compiler').PortId };
   /** Optional debug label */
   readonly label?: string;
 }
