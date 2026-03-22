@@ -97,8 +97,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // Derive indexed draw args from ShapeHeaderV1
     let count = readTopology(shapeWordOffset + SHAPE_WORD_INDEX_COUNT);
-    let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_INDEX);
+    let relativeFirstIndex = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_INDEX);
     let baseVertex = readTopology(shapeWordOffset + SHAPE_WORD_BASE_VERTEX);
+    // [LAW:one-source-of-truth] FirstIndex in the header is a relative word
+    // offset within the shape record. drawIndexedIndirect needs an absolute
+    // index into the bound index buffer (== TopologyBank), so add the record
+    // base. See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
+    let absoluteFirstIndex = shapeWordOffset + relativeFirstIndex;
 
     let base = indexedRegionBaseWords + recordIndex * indexedStrideWords;
     if (base + 4u >= arrayLength(&indirectWords)) {
@@ -106,7 +111,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     atomicStore(&indirectWords[base + 0u], count);
     atomicAdd(&indirectWords[base + 1u], instanceCount);
-    atomicStore(&indirectWords[base + 2u], first);
+    atomicStore(&indirectWords[base + 2u], absoluteFirstIndex);
     atomicStore(&indirectWords[base + 3u], baseVertex);
     atomicStore(&indirectWords[base + 4u], firstInstance);
     return;

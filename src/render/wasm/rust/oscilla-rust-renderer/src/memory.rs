@@ -600,7 +600,11 @@ impl GpuMemoryArena {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render.TopologyBuffer"),
             size: ((words.max(1) * std::mem::size_of::<u32>()) as u64).max(16),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            // [LAW:one-source-of-truth] TopologyBank is both the storage buffer for
+            // vertex-pulling (bind group 2) AND the index buffer for indexed draws.
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::INDEX,
             mapped_at_creation: false,
         })
     }
