@@ -380,18 +380,6 @@ function compileErrorFromUnexpected(args: {
   });
 }
 
-function parseSlotPortLabel(label: string | undefined): { readonly blockId?: string; readonly portId?: string } {
-  if (!label) return {};
-  const separator = label.lastIndexOf('.');
-  if (separator <= 0 || separator >= label.length - 1) {
-    return {};
-  }
-  return {
-    blockId: label.slice(0, separator),
-    portId: label.slice(separator + 1),
-  };
-}
-
 function readRequiredBlockLabel(
   blockMap: ReadonlyMap<BlockIndex, string>,
   blockId: BlockIndex,
@@ -590,8 +578,6 @@ function convertLinkedIRToProgram(
     const slotInfo = slotTypes.get(slot);
     if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
     const type = slotInfo.type;
-    const slotPort = parseSlotPortLabel(slotInfo.label);
-
     // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
     let derivedStorage: ReturnType<typeof deriveStorageLayout>['storage'];
     let stride: number;
@@ -601,8 +587,8 @@ function convertLinkedIRToProgram(
       throw compileErrorFromUnexpected({
         code: 'AxisInvalid',
         error,
-        blockId: slotPort.blockId,
-        portId: slotPort.portId,
+        blockId: slotInfo.source?.blockId,
+        portId: slotInfo.source?.portId,
       });
     }
     const storage = assertCanonicalRuntimeStorage(derivedStorage);
@@ -889,15 +875,13 @@ function convertLinkedIRToProgram(
   }
 
   // Build fast-path offset table for O(1) control parameter updates.
-  // [LAW:one-source-of-truth] Derived once from slotMeta labels at compile time.
+  // [LAW:one-source-of-truth] Derived once from structured IR metadata at compile time.
   const fastPathOffsets: Record<string, number> = {};
   for (const meta of slotMeta) {
     if (meta.storage !== 'f32') continue;
-    const source = parseSlotPortLabel(
-      slotTypes.get(meta.slot)?.label,
-    );
-    if (source.blockId && source.portId) {
-      fastPathOffsets[`${source.blockId}:${source.portId}`] = meta.offset;
+    const slotMd = slotTypes.get(meta.slot);
+    if (slotMd?.source) {
+      fastPathOffsets[`${slotMd.source.blockId}:${slotMd.source.portId}`] = meta.offset;
     }
   }
 
