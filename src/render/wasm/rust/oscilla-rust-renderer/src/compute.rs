@@ -171,6 +171,10 @@ pub struct CompiledKernel {
     pub pipeline: wgpu::ComputePipeline,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub workgroup_size: [u32; 3],
+    /// Maps parameter names to binding indices in `bind_group_layout`.
+    /// [LAW:one-source-of-truth] This is the single authority for which
+    /// binding slot each named argument occupies.
+    pub param_bindings: HashMap<String, u32>,
 }
 
 /// Registry of pre-compiled static WGSL kernels keyed by kernel ID.
@@ -204,6 +208,7 @@ impl NagaEmitterInstruction {
     /// dispatched — no other code path performs this translation.
     pub fn execute(
         &self,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         registry: &KernelRegistry,
         resolver: &SymbolResolver,
@@ -221,19 +226,82 @@ impl NagaEmitterInstruction {
 
                 // [LAW:no-silent-fallbacks] Every symbolic argument must resolve;
                 // unresolved IDs are hard errors, not silent skips.
+                // Build dynamic bind group entries from resolved arguments.
+                let mut entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(arguments.len());
+                // Hold references alive for the bind group creation scope.
+                let mut texture_views: Vec<&wgpu::TextureView> = Vec::new();
+
                 for (param_name, symbolic_id) in arguments {
-                    let _resolved = resolver.resolve(symbolic_id).ok_or_else(|| {
+                    let resolved = resolver.resolve(symbolic_id).ok_or_else(|| {
                         format!(
                             "DispatchKernel({}): argument '{}' symbolic ID '{}' not found in MMU",
                             kernel_id, param_name, symbolic_id
                         )
                     })?;
+
+                    let binding = *kernel.param_bindings.get(param_name.as_str()).ok_or_else(|| {
+                        format!(
+                            "DispatchKernel({}): parameter '{}' has no binding index in kernel",
+                            kernel_id, param_name
+                        )
+                    })?;
+
+                    // [LAW:dataflow-not-control-flow] Resource type determines
+                    // binding resource — dispatch on storage_location, not ID prefixes.
+                    match &resolved.storage_location {
+                        crate::memory::ResourceStorageLocation::Texture2D => {
+                            let tex = arena.get_texture(symbolic_id).ok_or_else(|| {
+                                format!(
+                                    "DispatchKernel({}): Texture2D resource '{}' not allocated in arena",
+                                    kernel_id, symbolic_id
+                                )
+                            })?;
+                            texture_views.push(&tex.view);
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::TextureView(
+                                    texture_views.last().unwrap(),
+                                ),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::Arena => {
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: arena.read_arena_buffer(),
+                                    offset: resolved.base_offset_bytes as u64,
+                                    size: std::num::NonZeroU64::new(resolved.total_bytes as u64),
+                                }),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::State => {
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: arena.read_state_buffer(),
+                                    offset: resolved.base_offset_bytes as u64,
+                                    size: std::num::NonZeroU64::new(resolved.total_bytes as u64),
+                                }),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                            return Err(format!(
+                                "DispatchKernel({}): GlobalControlUbo resources cannot be bound as kernel arguments — use uniform buffer group 0 instead",
+                                kernel_id
+                            ));
+                        }
+                    }
                 }
 
-                // Bind group creation is deferred to when concrete resource
-                // binding layouts are defined (Phase 2 fluid port ticket).
-                // For now we dispatch using the kernel's own layout with the
-                // arena's existing bind groups.
+                // Sort entries by binding index for deterministic bind group creation.
+                entries.sort_by_key(|e| e.binding);
+
+                let args_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("DispatchKernel.DynamicArgs"),
+                    layout: &kernel.bind_group_layout,
+                    entries: &entries,
+                });
+
                 let workgroup_count_x = ((particle_count
                     .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
                     / kernel.workgroup_size[0])
@@ -244,12 +312,14 @@ impl NagaEmitterInstruction {
                     timestamp_writes: None,
                 });
                 pass.set_pipeline(&kernel.pipeline);
-                // Bind group 0: arena read (current ping-pong bank)
+                // Group 0: standard simulation resources (arena/state ping-pong)
                 pass.set_bind_group(
                     0,
                     arena.get_compiler_simulation_bind_group_for_index(arena.ping_pong_index()),
                     &[],
                 );
+                // Group 1: dynamic arguments resolved from symbolic IDs
+                pass.set_bind_group(1, &args_bind_group, &[]);
                 pass.dispatch_workgroups(workgroup_count_x, 1, 1);
 
                 Ok(())
@@ -1286,6 +1356,7 @@ impl ComputeDispatcher {
     /// instructions are dispatched to the GPU.
     pub fn execute_instructions(
         &self,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         instructions: &[NagaEmitterInstruction],
         resolver: &SymbolResolver,
@@ -1294,6 +1365,7 @@ impl ComputeDispatcher {
     ) -> Result<(), String> {
         for instruction in instructions {
             instruction.execute(
+                device,
                 encoder,
                 &self.kernel_registry,
                 resolver,

@@ -978,6 +978,18 @@ impl GpuMemoryArena {
         &self.state_buffers[self.ping_pong_index]
     }
 
+    pub fn write_state_buffer(&self) -> &wgpu::Buffer {
+        &self.state_buffers[(self.ping_pong_index + 1) & 1]
+    }
+
+    pub fn read_arena_buffer(&self) -> &wgpu::Buffer {
+        &self.compiler_arena_buffers[self.ping_pong_index]
+    }
+
+    pub fn write_arena_buffer(&self) -> &wgpu::Buffer {
+        &self.compiler_arena_buffers[(self.ping_pong_index + 1) & 1]
+    }
+
     pub fn debug_staging_buffer(&self) -> &wgpu::Buffer {
         &self.staging_buffers[self.ping_pong_index & 1]
     }
