@@ -11,7 +11,7 @@
  * // [LAW:one-source-of-truth] This module is the canonical source for the
  * // built-in font atlas. No other module generates or caches atlas data.
  *
- * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md §II
+ * Spec: docs/current/webgpu-specs/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md §II
  */
 
 import type { FontAtlasDescriptor, GlyphMetrics } from './types';

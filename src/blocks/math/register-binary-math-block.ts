@@ -59,7 +59,7 @@ export function registerBinaryMathBlock(spec: BinaryMathBlockSpec): void {
           out: { id: resultId, slot: undefined, type: outType, stride: payloadStride(outType.payload) },
         },
         effects: {
-          slotRequests: [{ portId: 'out', type: outType }],
+          // Pure functional blocks are zero-allocation
         },
       };
     },

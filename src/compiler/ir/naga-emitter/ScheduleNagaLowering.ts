@@ -2167,6 +2167,7 @@ function lowerStep(
         runtimeAddressTable,
         source,
         coverage,
+        valueExprs,
       });
       return;
     }
@@ -2197,17 +2198,65 @@ function lowerStateWrite(args: {
   readonly runtimeAddressTable: RuntimeAddressTableIR;
   readonly source: NagaSourceMapEntryIR;
   readonly coverage: LoweringCoverageState;
+  readonly valueExprs: readonly ValueExpr[];
 }): void {
   const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
+  const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
+  
+  if (!targetPlan) {
+    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
+    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
+    return;
+  }
+
   if (sourceSlot === null) {
-    recordHardDrop(args.coverage, 'state_write_missing_source_slot', args.stepIndex);
-    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
+    // Zero-allocation path: evaluate the expression inline and write directly to state.
+    withTargetLaneGuard({
+      ctx: args.ctx,
+      builtins: args.builtins,
+      laneExpr: args.laneExpr,
+      targetLaneCount: targetPlan.laneCount,
+      source: args.source,
+      emit: () => {
+        const functionScope = new ScopeEnvironment<number>();
+        for (let componentIndex = 0; componentIndex < targetPlan.stride; componentIndex++) {
+          const componentScope = functionScope.createChild();
+          const valueExpr = emitMaterializeExprComponentF32({
+            ctx: args.ctx,
+            builtins: args.builtins,
+            laneExpr: args.laneExpr,
+            exprId: args.step.value as number,
+            schedule: args.schedule,
+            runtimeAddressTable: args.runtimeAddressTable,
+            valueExprs: { nodes: args.valueExprs },
+            source: args.source,
+            targetPlan,
+            componentIndex,
+            scope: componentScope,
+            depth: 0,
+          });
+          if (valueExpr !== null) {
+            const componentExpr = emitLiteralU32(args.ctx, args.builtins, componentIndex, args.source);
+            args.ctx.addStatement(
+              {
+                kind: 'store_symbolic',
+                resourceId: targetPlan.resourceId,
+                lane: args.laneExpr,
+                component: componentExpr,
+                value: valueExpr,
+                comment: `step ${args.stepIndex} kind=${args.step.kind} inline`,
+              },
+              args.source,
+            );
+          }
+        }
+      },
+    });
     return;
   }
 
   const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-  const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
-  if (!sourcePlan || !targetPlan) {
+  if (!sourcePlan) {
     recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;

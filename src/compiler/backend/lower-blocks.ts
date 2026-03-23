@@ -900,16 +900,8 @@ function lowerBlockInstance(
       }
 
 
-      // Handle missing slot metadata uniformly for all blocks.
+      // Zero-allocation (virtual) outputs may legitimately have undefined slots.
       let finalRef = ref;
-      if (isExprRef(ref) && ref.slot === undefined) {
-        errors.push({
-          code: "IRValidationFailed",
-          message: `Block ${ctx.blockType}#${ctx.instanceId} output '${portId}' missing slot (must provide effect slotRequest or explicit slot)`,
-          where: { blockId: block.id },
-        });
-        continue;
-      }
 
       // Register slot for one/many/event outputs
       // Check extent directly instead of using deriveKind
@@ -919,22 +911,24 @@ function lowerBlockInstance(
         const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
         const isEvent = temp.kind === 'discrete';
 
-        if (!isEvent) {
-          const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
-          const isField = card.kind === 'many';
+        if (finalRef.slot !== undefined) {
+          if (!isEvent) {
+            const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
+            const isField = card.kind === 'many';
 
-          if (isField) {
-            // Field — register field slot and slot type
-            builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
+            if (isField) {
+              // Field — register field slot and slot type
+              builder.registerFieldSlot(finalRef.id, finalRef.slot);
+              builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
+            } else {
+              // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
+              builder.registerScalarSlot(finalRef.id, finalRef.slot);
+              builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
+            }
           } else {
-            // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
-            builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
+            // Event — register slot type only
+            builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
           }
-        } else {
-          // Event — register slot type only
-          builder.registerSlotType(finalRef.slot!, finalRef.type, slotSource);
         }
       }
       outputRefs.set(portId, finalRef);

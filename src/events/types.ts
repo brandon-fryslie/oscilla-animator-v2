@@ -573,7 +573,7 @@ export interface EditorStateChangedEvent {
  * - Rust scheduler enters `Lost` state (device.lost)
  * - Worker fatal errors during GPU operations
  *
- * Spec: docs/WebGPU-Complete/P5-2_Error_Propagation__Developer_Experience.md
+ * Spec: docs/current/webgpu-specs/P5-2_Error_Propagation__Developer_Experience.md
  */
 export interface GpuFaultEvent {
   readonly type: 'GpuFault';

@@ -21,7 +21,7 @@
  * // (topology source, dominant cost, command stream ABI). Each class maps to a
  * // concrete data contract across compile → runtime → draw-prep → render.
  *
- * Spec: docs/WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
+ * Spec: docs/current/webgpu-specs/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
  *
  * Values are u32-compatible for direct ShapeBankHeaderWord.Kind storage.
  */
@@ -61,7 +61,7 @@ export enum ShapeClass {
    * // [LAW:one-type-per-behavior] Text has a fundamentally different ownership
    * // split from rigid/path geometry: CPU owns shaping, GPU owns rendering.
    *
-   * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
+   * Spec: docs/current/webgpu-specs/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
    */
   Type5TextHybrid = 5,
 }
