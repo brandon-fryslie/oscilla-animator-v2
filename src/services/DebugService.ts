@@ -497,12 +497,13 @@ class DebugService {
     // stores (arena-backed reads/tap caches), not the generic object map.
     const rawMeta = this.edgeToSlotMap.get(edgeId);
     if (!rawMeta) {
-      // Edge not in mapping - this indicates the compiler failed to register
-      // the edge's source output in debugIndex. This is a compiler bug.
-      throw new Error(
-        `[DebugService.getEdgeValue] Edge '${edgeId}' not found in edge-to-slot mapping. ` +
-        `This indicates a compiler bug - the edge's source output was not registered in debugIndex.`
-      );
+      this.recordIssue({
+        level: 'error',
+        source: 'reporter',
+        key: `edge:${edgeId}`,
+        message: `Edge '${edgeId}' not in debug mapping (stale compile or missing debugIndex registration)`,
+      });
+      return undefined;
     }
     const meta = this.validateMetadata(rawMeta, 'reporter', `edge:${edgeId}`, `edge '${edgeId}'`);
     if (!meta) return undefined;
@@ -1079,13 +1080,7 @@ class DebugService {
     // Fallback: read from scalar write snapshots (stepped/debug snapshots).
     const value = this.scalarValues.get(meta.slotId);
     if (value === undefined) {
-      if (!this.runtimeStarted) {
-        return undefined;
-      }
-      throw new Error(
-        `[DebugService.getEdgeValue] Slot ${meta.slotId} has no value. ` +
-        `Runtime has started but this slot was never written to - this is a scheduling bug.`
-      );
+      return undefined;
     }
     return { kind: 'scalar', value, slotId: meta.slotId, type: meta.type };
   }
