@@ -47,7 +47,7 @@
  */
 
 import type { BlockId, PortId, BlockRole, DefaultSource, EdgeRole, CombineMode } from '../types';
-import { requireBlockDef } from '../blocks/registry';
+import { requireAnyBlockDef } from '../blocks/registry';
 import { detectCanonicalNameCollisions, normalizeCanonicalName } from '../core/canonical-name';
 import { deriveEdgeAlias } from './edge-alias';
 import { nextLensAttachmentId } from './lens-id';
@@ -304,7 +304,7 @@ function generateDefaultDisplayName(
   blockType: string,
   existingBlocks: ReadonlyMap<BlockId, Block>
 ): string {
-  const blockDef = requireBlockDef(blockType);
+  const blockDef = requireAnyBlockDef(blockType);
   const baseLabel = blockDef.label;
 
   // Count existing blocks of the same type
@@ -358,7 +358,7 @@ export class PatchBuilder {
     }
   ): BlockId {
     const id = `b${this.nextBlockId++}` as BlockId;
-    const blockDef = requireBlockDef(type);
+    const blockDef = requireAnyBlockDef(type);
 
     // Create input ports from registry (ONLY for exposed ports)
     // Also collect default values for config params (exposedAsPort: false)
