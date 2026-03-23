@@ -68,10 +68,14 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
 
   let debugValue = undefined;
   if (debugEnabled) {
-    if (port.connection) {
-      debugValue = debug.getEdgeValue(port.connection.edgeId);
-    } else if (!isInput && blockId) {
-      debugValue = debug.getPortValue(blockId, port.id);
+    try {
+      if (port.connection) {
+        debugValue = debug.getEdgeValue(port.connection.edgeId);
+      } else if (!isInput && blockId) {
+        debugValue = debug.getPortValue(blockId, port.id);
+      }
+    } catch {
+      // Debug value unavailable — degrade gracefully, don't crash the popover.
     }
   }
 
