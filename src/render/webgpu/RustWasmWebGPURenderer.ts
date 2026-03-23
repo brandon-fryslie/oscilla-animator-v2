@@ -28,6 +28,9 @@ import {
   RUNTIME_INPUT_FLOAT_WORDS,
   RUNTIME_INPUT_INDEX,
   RUNTIME_INPUT_SIGNAL_WORDS,
+  HEARTBEAT_SIGNAL_INDEX,
+  HEARTBEAT_INDEX,
+  decodeHeartbeatState,
   type RuntimeSharedPlanes,
 } from '../rust/runtime-input-layout';
 import { getNavigatorGpu } from './gpu-api';
@@ -802,11 +805,29 @@ export class WebGPURenderer {
     return renderer;
   }
 
+  private lastHeartbeatSequence = -1;
+
   private startCircuitBreakerPolling(): void {
     if (this.circuitBreakerTimer !== null) {
       return;
     }
     this.circuitBreakerTimer = setInterval(() => {
+      // Read heartbeat from SharedArrayBuffer — zero postMessage overhead.
+      // Atomic load on the sequence word acts as an acquire fence for the
+      // data words written by the worker.
+      const sequence = Atomics.load(this.signalWords, HEARTBEAT_SIGNAL_INDEX);
+      if (sequence !== this.lastHeartbeatSequence) {
+        this.lastHeartbeatSequence = sequence;
+        const state = decodeHeartbeatState(this.inputWords[HEARTBEAT_INDEX.state]);
+        this.lifecycleState = state;
+        this.circuitBreaker.noteHeartbeat({
+          state,
+          sequence,
+          frameCount: this.inputWords[HEARTBEAT_INDEX.frameCount],
+          lastSuccessMs: this.inputWords[HEARTBEAT_INDEX.lastSuccessMs],
+          observedAtMs: performance.now(),
+        });
+      }
       const trip = this.circuitBreaker.check(performance.now());
       if (trip === null) {
         return;
@@ -1148,6 +1169,13 @@ export class WebGPURenderer {
     this.tryPostWorkerMessage(
       { type: 'UPLOAD_ATLAS', data } as RustRendererWorkerInboundMessage,
       'Failed to upload atlas data to worker',
+    );
+  }
+
+  setTelemetryEnabled(enabled: boolean): void {
+    this.tryPostWorkerMessage(
+      { type: 'SET_TELEMETRY_ENABLED', enabled },
+      'Failed to toggle worker telemetry',
     );
   }
 
@@ -1678,16 +1706,9 @@ export class WebGPURenderer {
   private handleSchedulerHeartbeatMessage(
     payload: Extract<RustRendererWorkerOutboundMessage, { type: 'SCHEDULER_HEARTBEAT' }>,
   ): void {
-    // [LAW:one-source-of-truth] Renderer mirrors scheduler state from
-    // heartbeat packets instead of deriving lifecycle state client-side.
-    this.lifecycleState = payload.state;
-    this.circuitBreaker.noteHeartbeat({
-      state: payload.state,
-      sequence: payload.sequence,
-      frameCount: payload.frameCount,
-      lastSuccessMs: payload.lastSuccessMs,
-      observedAtMs: performance.now(),
-    });
+    // Circuit breaker state is now read from SharedArrayBuffer in the
+    // polling timer — this handler only processes telemetry display data
+    // (sent by the worker only when telemetry is enabled).
     this.validateHeartbeatHealth(payload);
     this.latestTelemetry = {
       meanMs: payload.meanTickMs,

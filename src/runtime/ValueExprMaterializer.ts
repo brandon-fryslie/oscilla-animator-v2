@@ -934,7 +934,7 @@ function materializeIntrinsic(
     }
   } else if (intrinsic === 'normalizedIndex') {
     for (let i = 0; i < count; i++) {
-      buf[i] = count > 1 ? i / (count - 1) : 0;
+      buf[i] = i / count;
     }
   } else if (intrinsic === 'randomId') {
     // Generate stable random IDs per instance using hash function
@@ -1011,7 +1011,7 @@ function materializePlacement(
     case 'rank': {
       // 1D ordering value in [0, 1)
       for (let i = 0; i < count; i++) {
-        buf[laneComponentIndex(i, 0, stride)] = count > 1 ? i / (count - 1) : 0;
+        buf[laneComponentIndex(i, 0, stride)] = i / count;
       }
       break;
     }
