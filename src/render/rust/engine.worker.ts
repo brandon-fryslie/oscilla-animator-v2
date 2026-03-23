@@ -301,7 +301,13 @@ function parseRuntimeSchedulerPacket(rawPacket: unknown): ReturnType<typeof pars
 function writeHeartbeatToSharedBuffer(
   heartbeat: ReturnType<typeof parseSchedulerPacket>['heartbeat'],
 ): void {
-  if (!heartbeatFloatWords || !heartbeatSignalWords) return;
+  if (!heartbeatFloatWords || !heartbeatSignalWords) {
+    postRuntimePollFatalError(
+      'heartbeat_shared_buffer_missing',
+      'Rust worker is missing SharedArrayBuffer heartbeat views; cannot publish scheduler heartbeat.',
+    );
+    return;
+  }
   const stateCode = HEARTBEAT_STATE_MAP[heartbeat.state as RustRendererSchedulerState] ?? 0;
   // Data words (release-ordered via the atomic store below).
   heartbeatFloatWords[HEARTBEAT_INDEX.state] = stateCode;
