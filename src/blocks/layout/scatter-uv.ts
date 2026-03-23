@@ -58,9 +58,7 @@ export function register(): void {
           uv: { id: uvField, slot: undefined, type: uvType, stride: payloadStride(uvType.payload) },
         },
         effects: {
-          slotRequests: [
-            { portId: 'uv', type: uvType },
-          ],
+          // Zero-allocation: ScatterUV is a pure ALU block.
         },
         instanceContext: ctx.inferredInstance,
       };

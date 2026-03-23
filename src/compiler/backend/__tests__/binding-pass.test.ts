@@ -181,7 +181,7 @@ describe('bindOutputs', () => {
     expect(bound.get('out')?.slot).toBe(17);
   });
 
-  it('throws for missing slots without effect slotRequest', () => {
+  it('leaves slot undefined for virtual outputs without effect slotRequest', () => {
     const type = canonicalScalar(FLOAT);
 
     const outputsById: Record<string, ValueRefExpr> = {
@@ -195,9 +195,8 @@ describe('bindOutputs', () => {
 
     const slotMap = new Map(); // No pre-allocated slot
 
-    expect(() => {
-      bindOutputs(outputsById, slotMap, 'test-block');
-    }).toThrow('missing slot');
+    const bound = bindOutputs(outputsById, slotMap, 'test-block');
+    expect(bound.get('out')?.slot).toBeUndefined();
   });
 });
 

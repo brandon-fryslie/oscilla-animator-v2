@@ -371,11 +371,7 @@ export function bindOutputs(
         // Effects-as-data block - bind slot from slotRequests
         finalRef = { ...ref, slot: effectSlot };
       } else {
-        // [LAW:single-enforcer] Slot ownership is enforced only by effect slotRequests
-        // or explicit slot-bearing refs from lowering. No fallback allocator here.
-        throw new Error(
-          `Block ${blockId} output '${portId}' missing slot (block must provide effect slotRequest or explicit slot)`
-        );
+        // Zero-allocation intrinsic or virtual value; leave slot as undefined.
       }
     }
 

@@ -681,13 +681,13 @@ function convertLinkedIRToProgram(
         resourceId: `arena:slot:${entry.slot}`,
         // These fields are legacy and will be removed in hardening pass.
         // We set them to dummy values to satisfy the existing type.
-        offset: -1,
-        stride: entry.stride,
+        offset: 0,
+        stride: 1, // dummy
         laneCount,
-        length: -1,
+        length: 0,
         packing: 'soa',
-        laneStride: -1,
-        componentStride: -1,
+        laneStride: 0,
+        componentStride: 0,
       } as any,
     };
   });
