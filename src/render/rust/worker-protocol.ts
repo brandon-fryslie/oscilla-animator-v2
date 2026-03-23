@@ -70,6 +70,11 @@ export interface RustRendererUploadAtlasMessage {
   readonly data: Uint32Array;
 }
 
+export interface RustRendererSetTelemetryEnabledMessage {
+  readonly type: 'SET_TELEMETRY_ENABLED';
+  readonly enabled: boolean;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -77,7 +82,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererPauseMessage
   | RustRendererResumeMessage
   | RustRendererInjectPoisonAllocMessage
-  | RustRendererUploadAtlasMessage;
+  | RustRendererUploadAtlasMessage
+  | RustRendererSetTelemetryEnabledMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';

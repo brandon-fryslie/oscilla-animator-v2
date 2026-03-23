@@ -15,6 +15,13 @@ import {
   uploadRustRendererAtlasData,
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
+import {
+  RUNTIME_INPUT_SIGNAL_WORDS,
+  RUNTIME_INPUT_FLOAT_WORDS,
+  HEARTBEAT_SIGNAL_INDEX,
+  HEARTBEAT_INDEX,
+  HEARTBEAT_STATE_MAP,
+} from './runtime-input-layout';
 import type {
   RustRendererEngineError,
   RustRendererIndirectArgsRecord,
@@ -22,6 +29,7 @@ import type {
   RustRendererRebuildGpuPipelinesFailure,
   RustRendererWorkerInboundMessage,
   RustRendererWorkerOutboundMessage,
+  RustRendererSchedulerState,
 } from './worker-protocol';
 
 const POLL_INTERVAL_MS = 250;
@@ -31,6 +39,14 @@ let bootstrapInFlight = false;
 let runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 let deviceLostNotified = false;
 let runtimePollFatalNotified = false;
+let telemetryEnabled = false;
+
+// Shared buffer views for zero-overhead heartbeat channel.
+// Set during bootstrap; the worker writes heartbeat state here instead
+// of postMessage-ing it, so the main-thread circuit breaker can read
+// directly with no serialization or message-event overhead.
+let heartbeatSignalWords: Int32Array | null = null;
+let heartbeatFloatWords: Float32Array | null = null;
 
 function postWorkerMessage(message: RustRendererWorkerOutboundMessage): void {
   self.postMessage(message);
@@ -128,6 +144,13 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     attachRustRendererSharedInput(message.sharedInput);
     attachRustRendererSharedShapeBank(message.sharedShapeBank);
     attachRustRendererSharedSinkTable(message.sharedSinkTable);
+    // Capture shared buffer views for heartbeat channel.
+    heartbeatSignalWords = new Int32Array(message.sharedInput, 0, RUNTIME_INPUT_SIGNAL_WORDS);
+    heartbeatFloatWords = new Float32Array(
+      message.sharedInput,
+      RUNTIME_INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
+      RUNTIME_INPUT_FLOAT_WORDS,
+    );
     resumeRustRendererEngine();
     bootstrapped = true;
     deviceLostNotified = false;
@@ -212,25 +235,46 @@ function startRuntimePolling(): void {
       if (packet === null) {
         return;
       }
-      publishRuntimeSchedulerPacket(packet.heartbeat, packet.events);
+
+      // Write heartbeat to SharedArrayBuffer — zero postMessage overhead.
+      // Main-thread circuit breaker reads this directly via Atomics.
+      writeHeartbeatToSharedBuffer(packet.heartbeat);
+
+      // Runtime events (Lost state, errors) still need postMessage since
+      // the main thread must react to them immediately.
+      for (const event of packet.events) {
+        postWorkerMessage(event);
+        if (event.state === 'Lost') {
+          postDeviceLost(event.code, event.message);
+        }
+      }
+      if (packet.heartbeat.state === 'Lost') {
+        postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
+      }
+
+      // Full telemetry via postMessage only when debug mode is active.
+      if (telemetryEnabled) {
+        postWorkerMessage(packet.heartbeat);
+      }
     } catch (error) {
       postRuntimePollFatalError(
         'runtime_poll_failure',
         `Rust worker runtime poll failure: ${toErrorMessage(error)}`,
       );
     }
-    // [RECOVER-10] [LAW:single-enforcer] Readback snapshot polling shares the
-    // same cadence as telemetry; structured data replaces console-only previews.
-    try {
-      const rawSnapshot = takeRustRendererReadbackSnapshot();
-      if (rawSnapshot != null) {
-        const snapshot = parseReadbackSnapshot(rawSnapshot);
-        if (snapshot !== null) {
-          postWorkerMessage(snapshot);
+    // Readback snapshots: only when telemetry is enabled (debug mode).
+    if (telemetryEnabled) {
+      try {
+        const rawSnapshot = takeRustRendererReadbackSnapshot();
+        if (rawSnapshot != null) {
+          const snapshot = parseReadbackSnapshot(rawSnapshot);
+          if (snapshot !== null) {
+            postWorkerMessage(snapshot);
+          }
         }
+      } catch {
+        // Readback failures are non-fatal; the next poll will retry.
       }
-    } catch {
-      // Readback failures are non-fatal; the next poll will retry.
     }
   }, POLL_INTERVAL_MS);
 }
@@ -249,20 +293,22 @@ function parseRuntimeSchedulerPacket(rawPacket: unknown): ReturnType<typeof pars
   }
 }
 
-function publishRuntimeSchedulerPacket(
+// Write heartbeat fields to the SharedArrayBuffer so the main-thread
+// circuit breaker can read them with zero postMessage overhead.
+// Data words are written first, then the sequence is stored atomically
+// to signal word index 1 — providing an acquire/release fence so the
+// main thread always reads a consistent snapshot.
+function writeHeartbeatToSharedBuffer(
   heartbeat: ReturnType<typeof parseSchedulerPacket>['heartbeat'],
-  events: ReturnType<typeof parseSchedulerPacket>['events'],
 ): void {
-  postWorkerMessage(heartbeat);
-  if (heartbeat.state === 'Lost') {
-    postDeviceLost('scheduler_lost', 'Rust scheduler entered Lost state');
-  }
-  for (const event of events) {
-    postWorkerMessage(event);
-    if (event.state === 'Lost') {
-      postDeviceLost(event.code, event.message);
-    }
-  }
+  if (!heartbeatFloatWords || !heartbeatSignalWords) return;
+  const stateCode = HEARTBEAT_STATE_MAP[heartbeat.state as RustRendererSchedulerState] ?? 0;
+  // Data words (release-ordered via the atomic store below).
+  heartbeatFloatWords[HEARTBEAT_INDEX.state] = stateCode;
+  heartbeatFloatWords[HEARTBEAT_INDEX.frameCount] = heartbeat.frameCount;
+  heartbeatFloatWords[HEARTBEAT_INDEX.lastSuccessMs] = heartbeat.lastSuccessMs;
+  // Sequence is the release fence — must be written last.
+  Atomics.store(heartbeatSignalWords, HEARTBEAT_SIGNAL_INDEX, heartbeat.sequence);
 }
 
 // [RECOVER-10] Parse raw JS readback snapshot from Rust into typed message.
@@ -333,6 +379,9 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   },
   INJECT_POISON_ALLOC: () => {
     handleInjectPoisonAlloc();
+  },
+  SET_TELEMETRY_ENABLED: (message) => {
+    telemetryEnabled = (message as Extract<InboundMessage, { type: 'SET_TELEMETRY_ENABLED' }>).enabled;
   },
   // [RECOVER-11] Atlas upload for Type5 MSDF text.
   UPLOAD_ATLAS: (message) => {
