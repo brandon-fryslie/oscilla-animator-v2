@@ -6,7 +6,7 @@
  */
 
 import type { Patch } from '../graph/Patch';
-import { requireBlockDef } from '../blocks/registry';
+import { requireAnyBlockDef } from '../blocks/registry';
 import type { DiagnosticsStore } from '../stores/DiagnosticsStore';
 import {
   formatBlockShorthand,
@@ -115,7 +115,7 @@ function exportNormal(
     lines.push('|----|------|--------|');
 
     for (const [blockId, block] of patch.blocks) {
-      const def = requireBlockDef(block.type);
+      const def = requireAnyBlockDef(block.type);
       const configParts: string[] = [];
 
       for (const [key, currentValue] of Object.entries(block.params)) {
@@ -178,7 +178,7 @@ function exportVerbose(
 
   let hasDetails = false;
   for (const [blockId, block] of patch.blocks) {
-    const def = requireBlockDef(block.type);
+    const def = requireAnyBlockDef(block.type);
 
     const nonDefaults: Array<[string, unknown, unknown]> = [];
     for (const [key, currentValue] of Object.entries(block.params)) {
