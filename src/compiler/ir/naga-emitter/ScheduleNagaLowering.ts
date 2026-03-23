@@ -929,11 +929,10 @@ function emitPlacementIntrinsicF32(args: {
 }): number {
   const normalizedLaneCount = Math.max(1, Math.trunc(args.laneCount));
   if (args.field === 'rank') {
-    if (normalizedLaneCount <= 1) {
-      return emitLiteralF32(args.ctx, args.builtins, 0, args.source);
-    }
+    // [LAW:one-source-of-truth] rank = lane / count → [0, 1)
+    // Matches CPU-side ValueExprMaterializer.
     const laneAsF32 = emitLaneAsF32(args.ctx, args.laneExpr, args.source);
-    const denom = emitLiteralF32(args.ctx, args.builtins, normalizedLaneCount - 1, args.source);
+    const denom = emitLiteralF32(args.ctx, args.builtins, normalizedLaneCount, args.source);
     return args.ctx.addExpression({ kind: 'binary', op: 'div', left: laneAsF32, right: denom }, args.source);
   }
   if (args.field === 'seed') {
@@ -1916,7 +1915,12 @@ function emitMaterializeExprComponentF32(args: {
         break;
       }
       if (expr.intrinsicKind === 'property' && expr.intrinsic === 'normalizedIndex') {
-        const denom = Math.max(1, args.targetPlan.laneCount - 1);
+        // [LAW:one-source-of-truth] normalizedIndex = lane / count → [0, 1)
+        // Matches CPU-side ValueExprMaterializer. Using count (not count-1)
+        // ensures the last element stays below 1.0, preventing floor(t*N)
+        // band-decomposition bugs where the last element escapes into a
+        // phantom (N+1)th band.
+        const denom = Math.max(1, args.targetPlan.laneCount);
         const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
         const laneAsFloat = args.ctx.addExpression(
           { kind: 'call', function: 'f32', args: [args.laneExpr] },
