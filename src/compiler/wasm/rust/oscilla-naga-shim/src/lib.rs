@@ -131,6 +131,17 @@ enum NagaExpressionIR {
         buffer: String,
         index: usize,
     },
+    LoadSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
+    },
+    LoadUniform {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        index: usize,
+    },
     As {
         to: NagaScalarKindIR,
         expr: usize,
@@ -147,6 +158,14 @@ enum NagaStatementIR {
     Store {
         buffer: String,
         index: usize,
+        value: usize,
+        comment: Option<String>,
+    },
+    StoreSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
         value: usize,
         comment: Option<String>,
     },
@@ -201,7 +220,11 @@ struct ExpressionEmitter<'a> {
     stack: HashSet<usize>,
 }
 
-fn make_error(message: impl Into<String>, location: impl Into<String>, path: impl Into<String>) -> FormattedError {
+fn make_error(
+    message: impl Into<String>,
+    location: impl Into<String>,
+    path: impl Into<String>,
+) -> FormattedError {
     FormattedError {
         message: message.into(),
         location: location.into(),
@@ -216,6 +239,24 @@ fn is_valid_wgsl_identifier(identifier: &str) -> bool {
         _ => return false,
     }
     chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+// [LAW:single-enforcer] Symbolic storage routing for shim validation is owned
+// here so expression/statement emitters don't duplicate prefix logic.
+fn symbolic_read_buffer_name(resource_id: &str) -> &'static str {
+    if resource_id.starts_with("state:") {
+        "state_in"
+    } else {
+        "arena_in"
+    }
+}
+
+fn symbolic_write_buffer_name(resource_id: &str) -> &'static str {
+    if resource_id.starts_with("state:") {
+        "state_out"
+    } else {
+        "arena_out"
+    }
 }
 
 fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
@@ -269,7 +310,11 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
             }
             Ok(scalar_to_wgsl(*scalar).to_owned())
         }
-        NagaTypeIR::Vector { size, scalar, width } => {
+        NagaTypeIR::Vector {
+            size,
+            scalar,
+            width,
+        } => {
             if *width != 4 {
                 return Err(make_error(
                     format!("Unsupported vector width: {width}"),
@@ -297,7 +342,9 @@ fn emit_type_ref(type_index: usize, types: &[NagaTypeIR]) -> Result<String, Form
                 }
                 Ok(format!("array<{}>", emit_type_ref(*base, types)?))
             }
-            NagaArraySizeIR::Fixed(len) => Ok(format!("array<{}, {}>", emit_type_ref(*base, types)?, len)),
+            NagaArraySizeIR::Fixed(len) => {
+                Ok(format!("array<{}, {}>", emit_type_ref(*base, types)?, len))
+            }
         },
         NagaTypeIR::Struct { name, .. } => Ok(name.clone()),
     }
@@ -362,7 +409,10 @@ impl<'a> ExpressionEmitter<'a> {
                     make_error(
                         "Argument handle not found",
                         format!("Expression [{expr_id}]"),
-                        format!("Function [{}] -> Argument [{argument}]", self.function_ir.name),
+                        format!(
+                            "Function [{}] -> Argument [{argument}]",
+                            self.function_ir.name
+                        ),
                     )
                 })?;
                 arg.name.clone()
@@ -372,7 +422,10 @@ impl<'a> ExpressionEmitter<'a> {
                     make_error(
                         "Constant handle not found",
                         format!("Expression [{expr_id}]"),
-                        format!("Function [{}] -> Constant [{constant}]", self.function_ir.name),
+                        format!(
+                            "Function [{}] -> Constant [{constant}]",
+                            self.function_ir.name
+                        ),
                     )
                 })?;
                 let scalar = match self.module_ir.types.get(constant_ir.type_index) {
@@ -428,6 +481,27 @@ impl<'a> ExpressionEmitter<'a> {
             NagaExpressionIR::BufferLoad { buffer, index } => {
                 let index_expr = self.emit(*index)?;
                 format!("{buffer}[{index_expr}]")
+            }
+            NagaExpressionIR::LoadSymbolic {
+                resource_id,
+                lane,
+                component,
+            } => {
+                let lane_expr = self.emit(*lane)?;
+                let component_expr = self.emit(*component)?;
+                let buffer_name = symbolic_read_buffer_name(resource_id);
+                // [LAW:dataflow-not-control-flow] Shim WGSL emits one canonical
+                // symbolic index form; resource values choose buffer names.
+                format!("{buffer_name}[({lane_expr}) + ({component_expr})]")
+            }
+            NagaExpressionIR::LoadUniform { resource_id, index } => {
+                let index_expr = self.emit(*index)?;
+                let uniform_name = if resource_id.is_empty() {
+                    "uniforms"
+                } else {
+                    resource_id.as_str()
+                };
+                format!("{uniform_name}[{index_expr}]")
             }
             NagaExpressionIR::As { to, expr } => {
                 let source = self.emit(*expr)?;
@@ -511,6 +585,28 @@ fn emit_statement_block(
                 }
                 lines.push(line);
             }
+            NagaStatementIR::StoreSymbolic {
+                resource_id,
+                lane,
+                component,
+                value,
+                comment,
+            } => {
+                let lane_expr = emitter.emit(*lane)?;
+                let component_expr = emitter.emit(*component)?;
+                let value_expr = emitter.emit(*value)?;
+                let buffer_name = symbolic_write_buffer_name(resource_id);
+                let mut line = format!(
+                    "{indent}{buffer_name}[({lane_expr}) + ({component_expr})] = {value_expr};"
+                );
+                if let Some(comment_value) = comment {
+                    if !comment_value.is_empty() {
+                        line.push_str(" // ");
+                        line.push_str(comment_value);
+                    }
+                }
+                lines.push(line);
+            }
             NagaStatementIR::Comment { text } => {
                 lines.push(format!("{indent}// {text}"));
             }
@@ -573,7 +669,10 @@ fn emit_statement_block(
     Ok(lines)
 }
 
-fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, FormattedError> {
+fn emit_module_to_wgsl(
+    module_ir: &NagaModuleIR,
+    max_active_lanes: Option<u32>,
+) -> Result<String, FormattedError> {
     let compute_entry = module_ir
         .entry_points
         .iter()
@@ -586,7 +685,10 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) 
         .find(|candidate| candidate.name == compute_entry.function)
         .ok_or_else(|| {
             make_error(
-                format!("Entry point function '{}' not found", compute_entry.function),
+                format!(
+                    "Entry point function '{}' not found",
+                    compute_entry.function
+                ),
                 "EntryPoint",
                 "Module",
             )
@@ -630,9 +732,15 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) 
 
     lines.push(format!(
         "@compute @workgroup_size({}, {}, {})",
-        compute_entry.workgroup_size[0], compute_entry.workgroup_size[1], compute_entry.workgroup_size[2]
+        compute_entry.workgroup_size[0],
+        compute_entry.workgroup_size[1],
+        compute_entry.workgroup_size[2]
     ));
-    lines.push(format!("fn {}({}) {{", function_ir.name, arg_parts.join(", ")));
+    lines.push(format!(
+        "fn {}({}) {{",
+        function_ir.name,
+        arg_parts.join(", ")
+    ));
 
     if let Some(max_lanes) = max_active_lanes {
         let gid_arg = function_ir
@@ -665,8 +773,12 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, max_active_lanes: Option<u32>) 
     Ok(lines.join("\n"))
 }
 
-fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> Result<String, Vec<FormattedError>> {
-    let emitted_wgsl = emit_module_to_wgsl(&module_ir, max_active_lanes).map_err(|error| vec![error])?;
+fn compile_internal(
+    module_ir: NagaModuleIR,
+    max_active_lanes: Option<u32>,
+) -> Result<String, Vec<FormattedError>> {
+    let emitted_wgsl =
+        emit_module_to_wgsl(&module_ir, max_active_lanes).map_err(|error| vec![error])?;
 
     let module = naga::front::wgsl::parse_str(&emitted_wgsl).map_err(|error| {
         vec![make_error(
@@ -693,7 +805,13 @@ fn compile_internal(module_ir: NagaModuleIR, max_active_lanes: Option<u32>) -> R
         &module_info,
         naga::back::wgsl::WriterFlags::empty(),
     )
-    .map_err(|error| vec![make_error(format!("Emission Failure: {error}"), "Module", "WGSL emit")])?;
+    .map_err(|error| {
+        vec![make_error(
+            format!("Emission Failure: {error}"),
+            "Module",
+            "WGSL emit",
+        )]
+    })?;
 
     Ok(canonical_wgsl)
 }
@@ -714,7 +832,8 @@ pub fn compile_ir(module_ir: JsValue, max_active_lanes: Option<u32>) -> JsValue 
                     "serde_wasm_bindgen",
                 )],
             };
-            return serde_wasm_bindgen::to_value(&result).expect("failed to serialize compile result");
+            return serde_wasm_bindgen::to_value(&result)
+                .expect("failed to serialize compile result");
         }
     };
 
@@ -737,4 +856,70 @@ pub fn compile_ir(module_ir: JsValue, max_active_lanes: Option<u32>) -> JsValue 
 #[wasm_bindgen]
 pub fn init() {
     console_error_panic_hook::set_once();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compile_internal, NagaModuleIR};
+
+    fn symbolic_module_json() -> &'static str {
+        r#"{
+          "types": [
+            { "kind": "scalar", "scalar": "u32", "width": 4 },
+            { "kind": "array", "base": 0, "size": "dynamic" }
+          ],
+          "constants": [
+            { "type": 0, "value": 0 },
+            { "type": 0, "value": 1 }
+          ],
+          "global_variables": [
+            {
+              "name": "arena_in",
+              "storageClass": "storage",
+              "access": "read",
+              "binding": { "group": 0, "binding": 0 },
+              "type": 1
+            },
+            {
+              "name": "arena_out",
+              "storageClass": "storage",
+              "access": "read_write",
+              "binding": { "group": 0, "binding": 1 },
+              "type": 1
+            }
+          ],
+          "functions": [
+            {
+              "name": "main",
+              "arguments": [],
+              "expressions": [
+                { "kind": "constant", "constant": 0 },
+                { "kind": "constant", "constant": 1 },
+                { "kind": "load_symbolic", "resourceId": "arena:slot:1", "lane": 0, "component": 1 }
+              ],
+              "statements": [
+                { "kind": "store_symbolic", "resourceId": "arena:slot:1", "lane": 0, "component": 1, "value": 2 }
+              ],
+              "body": [0]
+            }
+          ],
+          "entry_points": [
+            { "stage": "compute", "function": "main", "workgroupSize": [1, 1, 1] }
+          ]
+        }"#
+    }
+
+    #[test]
+    fn deserializes_symbolic_variants() {
+        let parsed: Result<NagaModuleIR, _> = serde_json::from_str(symbolic_module_json());
+        assert!(parsed.is_ok(), "expected symbolic module IR to deserialize");
+    }
+
+    #[test]
+    fn compile_internal_accepts_symbolic_variants() {
+        let module: NagaModuleIR =
+            serde_json::from_str(symbolic_module_json()).expect("module deserialization succeeds");
+        let compiled = compile_internal(module, Some(16));
+        assert!(compiled.is_ok(), "expected symbolic module IR to compile");
+    }
 }
