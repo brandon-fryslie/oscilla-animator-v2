@@ -59,6 +59,7 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import { compileError, type CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
+import { intersectUpdateClass } from '../types/compiler';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -624,6 +625,7 @@ function convertLinkedIRToProgram(
   // [LAW:one-source-of-truth] This manifest is the sole authority for GPU
   // memory requirements; Rust MMU performs physical allocation.
   const manifestResources: MemoryResourceIR[] = [];
+  const materializeTargetSlots = collectMaterializeTargetSlots(scheduleIR);
 
   // 1. Scalar/Field Arena Slots
   for (const slotInput of arenaSlotPlanInputs) {
@@ -638,12 +640,18 @@ function convertLinkedIRToProgram(
     if (!slotMd) {
       throw new Error(`Slot ${slotInput.slot} missing from slotLayoutInputs — allocTypedSlot was not called for this slot.`);
     }
+    // [LAW:single-enforcer] Writable arena-slot classification is enforced once
+    // at manifest emission: materialize targets cannot remain FrameTime-only UBO.
+    const writeCompatibilityClass = materializeTargetSlots.has(slotInput.slot)
+      ? 'CompileTime'
+      : 'FrameTime';
+    const effectiveUpdateClass = intersectUpdateClass(slotMd.updateClass, writeCompatibilityClass);
     manifestResources.push({
       id: `arena:slot:${slotInput.slot}`,
       type: slotInput.type,
       cardinality,
       packing: slotInput.packingPreference,
-      updateClass: slotMd.updateClass,
+      updateClass: effectiveUpdateClass,
       source: slotMd.source,
       label: `Slot ${slotInput.slot}`,
     });
@@ -919,6 +927,17 @@ function convertLinkedIRToProgram(
   };
 
   return program;
+}
+
+function collectMaterializeTargetSlots(scheduleIR: ScheduleIR): ReadonlySet<ValueSlot> {
+  const targets = new Set<ValueSlot>();
+  // [LAW:dataflow-not-control-flow] Slot writeability is derived by walking the
+  // canonical schedule in one fixed pass; step kind carries variability as data.
+  for (const step of scheduleIR.steps) {
+    if (step.kind !== 'materialize') continue;
+    targets.add(step.target);
+  }
+  return targets;
 }
 
 interface ShapeClassification {
