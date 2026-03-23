@@ -1,6 +1,8 @@
 import type { NagaModuleIR } from './ir/naga-emitter';
+import type { MemoryManifestIR } from './ir/program';
 import initShim, {
   compile_ir,
+  compile_ir_with_manifest,
   type ShimBootStage,
   type ShimFormattedError,
 } from './wasm/oscilla_naga_shim';
@@ -11,6 +13,7 @@ export interface NagaCompilationResult {
 
 export interface NagaCompileOptions {
   readonly maxActiveLanes?: number;
+  readonly memoryManifest?: MemoryManifestIR;
 }
 
 export interface NagaBootOptions {
@@ -52,7 +55,9 @@ export class NagaService {
     if (!this.ready) {
       throw new Error('NagaService.compile called before boot');
     }
-    const result = compile_ir(module, options?.maxActiveLanes);
+    const result = options?.memoryManifest
+      ? compile_ir_with_manifest(module, options.memoryManifest, options.maxActiveLanes)
+      : compile_ir(module, options?.maxActiveLanes);
     if (!result.is_valid) {
       throw new NagaValidationError(result.errors);
     }
