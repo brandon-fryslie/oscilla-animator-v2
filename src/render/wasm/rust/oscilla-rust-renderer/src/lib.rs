@@ -18,7 +18,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
-use crate::compute::{CompilerComputePassSpec, NagaModuleIR};
+use crate::compute::{CompilerComputePassSpec, NagaModuleIR_TS};
 use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
 use crate::memory::MemoryManifest;
@@ -253,22 +253,32 @@ pub fn rebuild_with_symbolic_manifest(
 ) -> Result<(), JsValue> {
     let manifest: MemoryManifest = serde_json::from_str(&manifest_json)
         .map_err(|e| JsValue::from_str(&format!("Failed to parse MemoryManifest: {}", e)))?;
-    let lowering: NagaModuleIR = serde_json::from_str(&lowering_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse NagaModuleIR: {}", e)))?;
+    let lowering: NagaModuleIR_TS = serde_json::from_str(&lowering_json)
+        .map_err(|e| JsValue::from_str(&format!("Failed to parse NagaModuleIR_TS: {}", e)))?;
     let dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction> =
         if dispatch_instructions_json.is_empty() || dispatch_instructions_json == "[]" {
             Vec::new()
         } else {
-            serde_json::from_str(&dispatch_instructions_json)
-                .map_err(|e| JsValue::from_str(&format!("Failed to parse dispatch instructions: {}", e)))?
+            serde_json::from_str(&dispatch_instructions_json).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse dispatch instructions: {}", e))
+            })?
         };
 
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before rebuild_with_symbolic_manifest")
+            JsValue::from_str(
+                "Rust engine must be initialized before rebuild_with_symbolic_manifest",
+            )
         })?;
-        engine.rebuild_with_symbolic_manifest(manifest, lowering, max_active_lanes, &uber_shader_wgsl, dispatch_instructions)
+        engine
+            .rebuild_with_symbolic_manifest(
+                manifest,
+                lowering,
+                max_active_lanes,
+                &uber_shader_wgsl,
+                dispatch_instructions,
+            )
             .map_err(|e| JsValue::from_str(&e))?;
         Ok(())
     })

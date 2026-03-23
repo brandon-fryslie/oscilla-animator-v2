@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
+use crate::memory::{GpuMemoryArena, SymbolResolver};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::Module;
-use crate::memory::{GpuMemoryArena, SymbolResolver};
+use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -83,39 +83,138 @@ pub struct NagaFunctionArgumentIR {
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NagaBinaryOpIR {
-    Add, Sub, Mul, Div, Mod, Lt, Le, Gt, Ge, Eq, Ne,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[allow(non_camel_case_types)]
+pub enum NagaExpressionIR_TS {
+    Argument {
+        argument: usize,
+    },
+    Constant {
+        constant: usize,
+    },
+    AccessIndex {
+        base: usize,
+        index: usize,
+    },
+    Binary {
+        op: NagaBinaryOpIR,
+        left: usize,
+        right: usize,
+    },
+    LoadSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
+    },
+    LoadUniform {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        index: usize,
+    },
+    As {
+        to: NagaScalarKindIR,
+        expr: usize,
+    },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub enum NagaExpressionIR {
-    Argument { argument: usize },
-    Constant { constant: usize },
-    AccessIndex { base: usize, index: usize },
-    Binary { op: NagaBinaryOpIR, left: usize, right: usize },
-    LoadSymbolic { resource_id: String, lane: usize, component: usize },
-    LoadUniform { resource_id: String, index: usize },
-    As { to: NagaScalarKindIR, expr: usize },
-    Call { function: String, args: Vec<usize> },
+    Argument {
+        argument: usize,
+    },
+    Constant {
+        constant: usize,
+    },
+    AccessIndex {
+        base: usize,
+        index: usize,
+    },
+    Binary {
+        op: NagaBinaryOpIR,
+        left: usize,
+        right: usize,
+    },
+    LiteralU32 {
+        value: u32,
+    },
+    BufferLoad {
+        buffer: String,
+        index: usize,
+    },
+    LoadUniform {
+        index: usize,
+    },
+    As {
+        to: NagaScalarKindIR,
+        expr: usize,
+    },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NagaStatementIR {
-    StoreSymbolic { resource_id: String, lane: usize, component: usize, value: usize, comment: Option<String> },
-    Comment { text: String },
-    If { condition: usize, accept: Vec<usize>, reject: Vec<usize> },
-    Loop { body: Vec<usize> },
+    StoreSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
+        value: usize,
+        comment: Option<String>,
+    },
+    Comment {
+        text: String,
+    },
+    If {
+        condition: usize,
+        accept: Vec<usize>,
+        reject: Vec<usize>,
+    },
+    Loop {
+        body: Vec<usize>,
+    },
     Break,
     Continue,
     Return,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NagaFunctionIR {
     pub name: String,
     pub arguments: Vec<NagaFunctionArgumentIR>,
     pub expressions: Vec<NagaExpressionIR>,
+    pub statements: Vec<NagaStatementIR>,
+    pub body: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(non_camel_case_types)]
+pub struct NagaFunctionIR_TS {
+    pub name: String,
+    pub arguments: Vec<NagaFunctionArgumentIR>,
+    pub expressions: Vec<NagaExpressionIR_TS>,
     pub statements: Vec<NagaStatementIR>,
     pub body: Vec<usize>,
 }
@@ -128,13 +227,23 @@ pub struct NagaEntryPointIR {
     pub workgroup_size: [u32; 3],
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NagaModuleIR {
+    pub types: Vec<NagaTypeIR>,
+    pub constants: Vec<NagaConstantIR>,
+    pub global_variables: Vec<NagaGlobalVariableIR>,
+    pub functions: Vec<NagaFunctionIR>,
+    pub entry_points: Vec<NagaEntryPointIR>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(non_camel_case_types)]
+pub struct NagaModuleIR_TS {
     pub types: Vec<NagaTypeIR>,
     pub constants: Vec<NagaConstantIR>,
     #[serde(rename = "global_variables")]
     pub global_variables: Vec<NagaGlobalVariableIR>,
-    pub functions: Vec<NagaFunctionIR>,
+    pub functions: Vec<NagaFunctionIR_TS>,
     #[serde(rename = "entry_points")]
     pub entry_points: Vec<NagaEntryPointIR>,
 }
@@ -221,7 +330,10 @@ impl NagaEmitterInstruction {
                 arguments,
             } => {
                 let kernel = registry.get(kernel_id).ok_or_else(|| {
-                    format!("DispatchKernel: kernel '{}' not found in registry", kernel_id)
+                    format!(
+                        "DispatchKernel: kernel '{}' not found in registry",
+                        kernel_id
+                    )
                 })?;
 
                 // [LAW:no-silent-fallbacks] Every symbolic argument must resolve;
@@ -239,12 +351,16 @@ impl NagaEmitterInstruction {
                         )
                     })?;
 
-                    let binding = *kernel.param_bindings.get(param_name.as_str()).ok_or_else(|| {
-                        format!(
+                    let binding =
+                        *kernel
+                            .param_bindings
+                            .get(param_name.as_str())
+                            .ok_or_else(|| {
+                                format!(
                             "DispatchKernel({}): parameter '{}' has no binding index in kernel",
                             kernel_id, param_name
                         )
-                    })?;
+                            })?;
 
                     // [LAW:dataflow-not-control-flow] Resource type determines
                     // binding resource — dispatch on storage_location, not ID prefixes.
@@ -308,16 +424,23 @@ impl NagaEmitterInstruction {
                 // particle_count.
                 let (wg_x, wg_y) = if kernel.workgroup_size[1] > 1 {
                     // 2D kernel — derive grid dimensions from first texture argument.
-                    let first_tex_id = arguments.values()
-                        .find(|sym_id| {
-                            resolver.resolve(sym_id)
-                                .map(|r| matches!(r.storage_location, crate::memory::ResourceStorageLocation::Texture2D))
-                                .unwrap_or(false)
-                        });
+                    let first_tex_id = arguments.values().find(|sym_id| {
+                        resolver
+                            .resolve(sym_id)
+                            .map(|r| {
+                                matches!(
+                                    r.storage_location,
+                                    crate::memory::ResourceStorageLocation::Texture2D
+                                )
+                            })
+                            .unwrap_or(false)
+                    });
                     match first_tex_id.and_then(|id| arena.get_texture(id)) {
                         Some(tex) => (
-                            (tex.desc.width.saturating_add(kernel.workgroup_size[0] - 1)) / kernel.workgroup_size[0],
-                            (tex.desc.height.saturating_add(kernel.workgroup_size[1] - 1)) / kernel.workgroup_size[1],
+                            (tex.desc.width.saturating_add(kernel.workgroup_size[0] - 1))
+                                / kernel.workgroup_size[0],
+                            (tex.desc.height.saturating_add(kernel.workgroup_size[1] - 1))
+                                / kernel.workgroup_size[1],
                         ),
                         None => {
                             return Err(format!(
@@ -356,6 +479,309 @@ impl NagaEmitterInstruction {
     }
 }
 
+fn require_lowered_handle(
+    lowered_by_ts_index: &[usize],
+    ts_expr: usize,
+    current_ts_expr: usize,
+    label: &str,
+) -> Result<usize, String> {
+    if ts_expr >= current_ts_expr {
+        return Err(format!(
+            "{} expression [{}] must be lowered before expression [{}]",
+            label, ts_expr, current_ts_expr
+        ));
+    }
+    lowered_by_ts_index
+        .get(ts_expr)
+        .copied()
+        .ok_or_else(|| format!("{} expression handle not found: {}", label, ts_expr))
+}
+
+fn push_literal_u32(expressions: &mut Vec<NagaExpressionIR>, value: u32) -> usize {
+    let idx = expressions.len();
+    expressions.push(NagaExpressionIR::LiteralU32 { value });
+    idx
+}
+
+// [LAW:single-enforcer] Symbolic resource IDs are lowered to physical address
+// math at one MMU boundary so WGSL emission never resolves symbolic IDs.
+fn translate_and_lower_expressions(
+    ts_expressions: &[NagaExpressionIR_TS],
+    symbol_resolver: &crate::memory::SymbolResolver,
+) -> Result<(Vec<NagaExpressionIR>, Vec<usize>), String> {
+    let mut lowered_expressions: Vec<NagaExpressionIR> = Vec::new();
+    let mut lowered_by_ts_index: Vec<usize> = vec![0; ts_expressions.len()];
+
+    for (ts_index, expr_ts) in ts_expressions.iter().enumerate() {
+        let lowered_index = match expr_ts {
+            NagaExpressionIR_TS::Argument { argument } => {
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Argument {
+                    argument: *argument,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Constant { constant } => {
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Constant {
+                    constant: *constant,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::AccessIndex { base, index } => {
+                let base_idx = require_lowered_handle(
+                    &lowered_by_ts_index,
+                    *base,
+                    ts_index,
+                    "access_index base",
+                )?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::AccessIndex {
+                    base: base_idx,
+                    index: *index,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Binary { op, left, right } => {
+                let left_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *left, ts_index, "binary left")?;
+                let right_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *right, ts_index, "binary right")?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Binary {
+                    op: *op,
+                    left: left_idx,
+                    right: right_idx,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::LoadSymbolic {
+                resource_id,
+                lane,
+                component,
+            } => {
+                let resolved = symbol_resolver
+                    .resolve(resource_id)
+                    .ok_or_else(|| format!("Symbolic resource not found: {}", resource_id))?;
+                match resolved.storage_location {
+                    crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                        // [LAW:one-source-of-truth] UBO vec4/component addressing
+                        // comes from MMU resolution, never caller-provided math.
+                        let vec_index =
+                            push_literal_u32(&mut lowered_expressions, resolved.ubo_vec4_index);
+                        let uniform_load = lowered_expressions.len();
+                        lowered_expressions
+                            .push(NagaExpressionIR::LoadUniform { index: vec_index });
+                        let component_load = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::AccessIndex {
+                            base: uniform_load,
+                            index: resolved.ubo_component as usize,
+                        });
+                        component_load
+                    }
+                    crate::memory::ResourceStorageLocation::Texture2D => {
+                        return Err(format!(
+                            "Symbolic resource '{}' resolves to Texture2D and cannot be lowered as scalar buffer load",
+                            resource_id
+                        ));
+                    }
+                    _ => {
+                        let lane_idx = require_lowered_handle(
+                            &lowered_by_ts_index,
+                            *lane,
+                            ts_index,
+                            "load_symbolic lane",
+                        )?;
+                        let component_idx = require_lowered_handle(
+                            &lowered_by_ts_index,
+                            *component,
+                            ts_index,
+                            "load_symbolic component",
+                        )?;
+
+                        // [LAW:dataflow-not-control-flow] Load lowering always
+                        // emits the same address pipeline; values drive offsets.
+                        let base_words = resolved.base_offset_bytes / 4;
+                        let lane_stride_words = resolved.lane_stride_bytes / 4;
+                        let component_stride_words = resolved.component_stride_bytes / 4;
+                        let base_const = push_literal_u32(&mut lowered_expressions, base_words);
+                        let lane_stride_const =
+                            push_literal_u32(&mut lowered_expressions, lane_stride_words);
+                        let component_stride_const =
+                            push_literal_u32(&mut lowered_expressions, component_stride_words);
+
+                        let lane_offset_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Mul,
+                            left: lane_idx,
+                            right: lane_stride_const,
+                        });
+
+                        let component_offset_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Mul,
+                            left: component_idx,
+                            right: component_stride_const,
+                        });
+
+                        let lane_address_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Add,
+                            left: base_const,
+                            right: lane_offset_idx,
+                        });
+
+                        let final_index_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Add,
+                            left: lane_address_idx,
+                            right: component_offset_idx,
+                        });
+
+                        let buffer_load_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::BufferLoad {
+                            buffer: resolved.read_buffer_name().to_string(),
+                            index: final_index_idx,
+                        });
+                        buffer_load_idx
+                    }
+                }
+            }
+            NagaExpressionIR_TS::LoadUniform { resource_id, index } => {
+                if resource_id.is_empty() {
+                    return Err("load_uniform resourceId must be non-empty".to_string());
+                }
+                let index_idx = require_lowered_handle(
+                    &lowered_by_ts_index,
+                    *index,
+                    ts_index,
+                    "load_uniform index",
+                )?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::LoadUniform { index: index_idx });
+                idx
+            }
+            NagaExpressionIR_TS::As { to, expr } => {
+                let expr_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *expr, ts_index, "as expr")?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::As {
+                    to: *to,
+                    expr: expr_idx,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Call { function, args } => {
+                let mut lowered_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    lowered_args.push(require_lowered_handle(
+                        &lowered_by_ts_index,
+                        *arg,
+                        ts_index,
+                        "call arg",
+                    )?);
+                }
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Call {
+                    function: function.clone(),
+                    args: lowered_args,
+                });
+                idx
+            }
+        };
+        lowered_by_ts_index[ts_index] = lowered_index;
+    }
+
+    Ok((lowered_expressions, lowered_by_ts_index))
+}
+
+fn remap_statement_expression_handles(
+    statement: &NagaStatementIR,
+    lowered_by_ts_index: &[usize],
+) -> Result<NagaStatementIR, String> {
+    let remap = |handle: usize, label: &str| {
+        lowered_by_ts_index
+            .get(handle)
+            .copied()
+            .ok_or_else(|| format!("{} expression handle not found: {}", label, handle))
+    };
+    match statement {
+        NagaStatementIR::StoreSymbolic {
+            resource_id,
+            lane,
+            component,
+            value,
+            comment,
+        } => Ok(NagaStatementIR::StoreSymbolic {
+            resource_id: resource_id.clone(),
+            lane: remap(*lane, "store_symbolic lane")?,
+            component: remap(*component, "store_symbolic component")?,
+            value: remap(*value, "store_symbolic value")?,
+            comment: comment.clone(),
+        }),
+        NagaStatementIR::If {
+            condition,
+            accept,
+            reject,
+        } => Ok(NagaStatementIR::If {
+            condition: remap(*condition, "if condition")?,
+            accept: accept.clone(),
+            reject: reject.clone(),
+        }),
+        NagaStatementIR::Comment { text } => Ok(NagaStatementIR::Comment { text: text.clone() }),
+        NagaStatementIR::Loop { body } => Ok(NagaStatementIR::Loop { body: body.clone() }),
+        NagaStatementIR::Break => Ok(NagaStatementIR::Break),
+        NagaStatementIR::Continue => Ok(NagaStatementIR::Continue),
+        NagaStatementIR::Return => Ok(NagaStatementIR::Return),
+    }
+}
+
+fn lower_naga_module_ir(
+    module_ts: NagaModuleIR_TS,
+    symbol_resolver: &crate::memory::SymbolResolver,
+) -> Result<NagaModuleIR, String> {
+    let mut lowered_functions = Vec::with_capacity(module_ts.functions.len());
+    for function_ts in module_ts.functions {
+        let (lowered_expressions, lowered_by_ts_index) =
+            translate_and_lower_expressions(&function_ts.expressions, symbol_resolver)?;
+
+        let mut lowered_statements = Vec::with_capacity(function_ts.statements.len());
+        for statement in &function_ts.statements {
+            lowered_statements.push(remap_statement_expression_handles(
+                statement,
+                &lowered_by_ts_index,
+            )?);
+        }
+
+        let mut lowered_body = Vec::with_capacity(function_ts.body.len());
+        for statement_handle in &function_ts.body {
+            if *statement_handle >= lowered_statements.len() {
+                return Err(format!(
+                    "Function '{}' body statement handle out of bounds: {}",
+                    function_ts.name, statement_handle
+                ));
+            }
+            lowered_body.push(*statement_handle);
+        }
+
+        lowered_functions.push(NagaFunctionIR {
+            name: function_ts.name,
+            arguments: function_ts.arguments,
+            expressions: lowered_expressions,
+            statements: lowered_statements,
+            body: lowered_body,
+        });
+    }
+
+    Ok(NagaModuleIR {
+        types: module_ts.types,
+        constants: module_ts.constants,
+        global_variables: module_ts.global_variables,
+        functions: lowered_functions,
+        entry_points: module_ts.entry_points,
+    })
+}
+
 struct ExpressionEmitter<'a> {
     function_ir: &'a NagaFunctionIR,
     module_ir: &'a NagaModuleIR,
@@ -365,7 +791,11 @@ struct ExpressionEmitter<'a> {
 }
 
 impl<'a> ExpressionEmitter<'a> {
-    fn new(function_ir: &'a NagaFunctionIR, module_ir: &'a NagaModuleIR, resolver: &'a crate::memory::SymbolResolver) -> Self {
+    fn new(
+        function_ir: &'a NagaFunctionIR,
+        module_ir: &'a NagaModuleIR,
+        resolver: &'a crate::memory::SymbolResolver,
+    ) -> Self {
         Self {
             function_ir,
             module_ir,
@@ -383,19 +813,29 @@ impl<'a> ExpressionEmitter<'a> {
             return Err(format!("Expression cycle detected at [{}]", expr_id));
         }
 
-        let expr = self.function_ir.expressions.get(expr_id).ok_or_else(|| {
-            format!("Expression handle not found: {}", expr_id)
-        })?;
+        let expr = self
+            .function_ir
+            .expressions
+            .get(expr_id)
+            .ok_or_else(|| format!("Expression handle not found: {}", expr_id))?;
 
         self.stack.insert(expr_id);
 
         let emitted = match expr {
             NagaExpressionIR::Argument { argument } => {
-                let arg = self.function_ir.arguments.get(*argument).ok_or_else(|| "Argument not found")?;
+                let arg = self
+                    .function_ir
+                    .arguments
+                    .get(*argument)
+                    .ok_or_else(|| "Argument not found")?;
                 arg.name.clone()
             }
             NagaExpressionIR::Constant { constant } => {
-                let constant_ir = self.module_ir.constants.get(*constant).ok_or_else(|| "Constant not found")?;
+                let constant_ir = self
+                    .module_ir
+                    .constants
+                    .get(*constant)
+                    .ok_or_else(|| "Constant not found")?;
                 let scalar = match self.module_ir.types.get(constant_ir.type_index) {
                     Some(NagaTypeIR::Scalar { scalar, .. }) => scalar,
                     _ => return Err("Constant scalar type missing".to_string()),
@@ -405,7 +845,10 @@ impl<'a> ExpressionEmitter<'a> {
             NagaExpressionIR::AccessIndex { base, index } => {
                 let base_expr = self.emit(*base)?;
                 let component = match index {
-                    0 => "x", 1 => "y", 2 => "z", 3 => "w",
+                    0 => "x",
+                    1 => "y",
+                    2 => "z",
+                    3 => "w",
                     _ => return Err("access_index out of range".to_string()),
                 };
                 format!("{base_expr}.{component}")
@@ -414,41 +857,26 @@ impl<'a> ExpressionEmitter<'a> {
                 let left_expr = self.emit(*left)?;
                 let right_expr = self.emit(*right)?;
                 let op_token = match op {
-                    NagaBinaryOpIR::Add => "+", NagaBinaryOpIR::Sub => "-",
-                    NagaBinaryOpIR::Mul => "*", NagaBinaryOpIR::Div => "/",
-                    NagaBinaryOpIR::Mod => "%", NagaBinaryOpIR::Lt => "<",
-                    NagaBinaryOpIR::Le => "<=", NagaBinaryOpIR::Gt => ">",
-                    NagaBinaryOpIR::Ge => ">=", NagaBinaryOpIR::Eq => "==",
+                    NagaBinaryOpIR::Add => "+",
+                    NagaBinaryOpIR::Sub => "-",
+                    NagaBinaryOpIR::Mul => "*",
+                    NagaBinaryOpIR::Div => "/",
+                    NagaBinaryOpIR::Mod => "%",
+                    NagaBinaryOpIR::Lt => "<",
+                    NagaBinaryOpIR::Le => "<=",
+                    NagaBinaryOpIR::Gt => ">",
+                    NagaBinaryOpIR::Ge => ">=",
+                    NagaBinaryOpIR::Eq => "==",
                     NagaBinaryOpIR::Ne => "!=",
                 };
                 format!("({left_expr} {op_token} {right_expr})")
             }
-            NagaExpressionIR::LoadSymbolic { resource_id, lane, component } => {
-                let resolved = self.resolver.resolve(resource_id).ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
-
-                // [LAW:single-enforcer] Storage location dispatch is driven by
-                // the MMU's ResolvedResource, not by inspecting resource IDs.
-                match resolved.storage_location {
-                    crate::memory::ResourceStorageLocation::GlobalControlUbo => {
-                        // [LAW:one-source-of-truth] UBO vec4 index and component
-                        // are computed by the MMU; no vec4 modulo math here.
-                        format!("global_controls[{}u].{}", resolved.ubo_vec4_index, resolved.ubo_component_name())
-                    }
-                    _ => {
-                        let lane_expr = self.emit(*lane)?;
-                        let component_expr = self.emit(*component)?;
-                        // [LAW:one-source-of-truth] Physical SoA math is generated by the Rust MMU resolver.
-                        let base_words = resolved.base_offset_bytes / 4;
-                        let lane_stride_words = resolved.lane_stride_bytes / 4;
-                        let component_stride_words = resolved.component_stride_bytes / 4;
-                        let buffer_name = resolved.read_buffer_name();
-
-                        format!("{}[{}u + ({} * {}u) + ({} * {}u)]",
-                            buffer_name, base_words, lane_expr, lane_stride_words, component_expr, component_stride_words)
-                    }
-                }
+            NagaExpressionIR::LiteralU32 { value } => format!("{value}u"),
+            NagaExpressionIR::BufferLoad { buffer, index } => {
+                let index_expr = self.emit(*index)?;
+                format!("{buffer}[{index_expr}]")
             }
-            NagaExpressionIR::LoadUniform { resource_id: _, index } => {
+            NagaExpressionIR::LoadUniform { index } => {
                 let idx_expr = self.emit(*index)?;
                 // [PHASE 1] For now, uniforms target the global control buffer (group 0, binding 4)
                 format!("global_controls[{}]", idx_expr)
@@ -486,8 +914,20 @@ fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
 fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
     match scalar {
         NagaScalarKindIR::U32 => format!("{}u", value.trunc() as u32),
-        NagaScalarKindIR::Bool => if value == 0.0 { "false".to_string() } else { "true".to_string() },
-        NagaScalarKindIR::F32 => if value.fract() == 0.0 { format!("{value:.1}") } else { value.to_string() },
+        NagaScalarKindIR::Bool => {
+            if value == 0.0 {
+                "false".to_string()
+            } else {
+                "true".to_string()
+            }
+        }
+        NagaScalarKindIR::F32 => {
+            if value.fract() == 0.0 {
+                format!("{value:.1}")
+            } else {
+                value.to_string()
+            }
+        }
     }
 }
 
@@ -503,19 +943,34 @@ fn emit_statement_block(
 
     for statement_handle in statement_handles {
         if statement_stack.contains(statement_handle) {
-            return Err(format!("Statement cycle detected at [{}]", statement_handle));
+            return Err(format!(
+                "Statement cycle detected at [{}]",
+                statement_handle
+            ));
         }
 
-        let statement = function_ir.statements.get(*statement_handle).ok_or_else(|| "Statement not found")?;
+        let statement = function_ir
+            .statements
+            .get(*statement_handle)
+            .ok_or_else(|| "Statement not found")?;
         statement_stack.insert(*statement_handle);
         let indent = "  ".repeat(indent_level);
 
         match statement {
-            NagaStatementIR::StoreSymbolic { resource_id, lane, component, value, comment } => {
+            NagaStatementIR::StoreSymbolic {
+                resource_id,
+                lane,
+                component,
+                value,
+                comment,
+            } => {
                 let lane_expr = emitter.emit(*lane)?;
                 let component_expr = emitter.emit(*component)?;
                 let value_expr = emitter.emit(*value)?;
-                let resolved = emitter.resolver.resolve(resource_id).ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
+                let resolved = emitter
+                    .resolver
+                    .resolve(resource_id)
+                    .ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
 
                 // [LAW:single-enforcer] Buffer name is determined by the MMU's
                 // storage_location, not by inspecting resource ID prefixes.
@@ -524,8 +979,16 @@ fn emit_statement_block(
                 let component_stride_words = resolved.component_stride_bytes / 4;
                 let buffer_name = resolved.write_buffer_name();
 
-                let mut line = format!("{indent}{}[{}u + ({} * {}u) + ({} * {}u)] = {};",
-                    buffer_name, base_words, lane_expr, lane_stride_words, component_expr, component_stride_words, value_expr);
+                let mut line = format!(
+                    "{indent}{}[{}u + ({} * {}u) + ({} * {}u)] = {};",
+                    buffer_name,
+                    base_words,
+                    lane_expr,
+                    lane_stride_words,
+                    component_expr,
+                    component_stride_words,
+                    value_expr
+                );
                 if let Some(c) = comment {
                     line.push_str(" // ");
                     line.push_str(c);
@@ -535,19 +998,44 @@ fn emit_statement_block(
             NagaStatementIR::Comment { text } => {
                 lines.push(format!("{indent}// {text}"));
             }
-            NagaStatementIR::If { condition, accept, reject } => {
+            NagaStatementIR::If {
+                condition,
+                accept,
+                reject,
+            } => {
                 let condition_expr = emitter.emit(*condition)?;
                 lines.push(format!("{indent}if ({condition_expr}) {{"));
-                lines.extend(emit_statement_block(function_ir, module_ir, emitter, accept, indent_level + 1, statement_stack)?);
+                lines.extend(emit_statement_block(
+                    function_ir,
+                    module_ir,
+                    emitter,
+                    accept,
+                    indent_level + 1,
+                    statement_stack,
+                )?);
                 if !reject.is_empty() {
                     lines.push(format!("{indent}}} else {{"));
-                    lines.extend(emit_statement_block(function_ir, module_ir, emitter, reject, indent_level + 1, statement_stack)?);
+                    lines.extend(emit_statement_block(
+                        function_ir,
+                        module_ir,
+                        emitter,
+                        reject,
+                        indent_level + 1,
+                        statement_stack,
+                    )?);
                 }
                 lines.push(format!("{indent}}}"));
             }
             NagaStatementIR::Loop { body } => {
                 lines.push(format!("{indent}loop {{"));
-                lines.extend(emit_statement_block(function_ir, module_ir, emitter, body, indent_level + 1, statement_stack)?);
+                lines.extend(emit_statement_block(
+                    function_ir,
+                    module_ir,
+                    emitter,
+                    body,
+                    indent_level + 1,
+                    statement_stack,
+                )?);
                 lines.push(format!("{indent}}}"));
             }
             NagaStatementIR::Break => lines.push(format!("{indent}break;")),
@@ -559,20 +1047,34 @@ fn emit_statement_block(
     Ok(lines)
 }
 
-fn emit_module_to_wgsl(module_ir: &NagaModuleIR, resolver: &crate::memory::SymbolResolver, max_active_lanes: Option<u32>) -> Result<String, String> {
+fn emit_module_to_wgsl(
+    module_ir: &NagaModuleIR,
+    resolver: &crate::memory::SymbolResolver,
+    max_active_lanes: Option<u32>,
+) -> Result<String, String> {
     // Basic WGSL scaffolding for the compute shader.
     let mut lines = Vec::new();
-    
+
     // [LAW:one-source-of-truth] Bindings match ComputeDispatcher::create_compiler_simulation_layout
     lines.push("@group(0) @binding(0) var<storage, read> arena_in: array<u32>;".to_string());
     lines.push("@group(0) @binding(1) var<storage, read_write> arena_out: array<u32>;".to_string());
     lines.push("@group(0) @binding(2) var<storage, read> state_in: array<u32>;".to_string());
     lines.push("@group(0) @binding(3) var<storage, read_write> state_out: array<u32>;".to_string());
-    lines.push("@group(0) @binding(4) var<uniform> global_controls: array<vec4<f32>, 16>;".to_string());
+    lines.push(
+        "@group(0) @binding(4) var<uniform> global_controls: array<vec4<f32>, 16>;".to_string(),
+    );
     lines.push(String::new());
 
-    let compute_entry = module_ir.entry_points.iter().find(|e| e.stage == "compute").ok_or("Missing compute entry")?;
-    let function_ir = module_ir.functions.iter().find(|f| f.name == compute_entry.function).ok_or("Entry function not found")?;
+    let compute_entry = module_ir
+        .entry_points
+        .iter()
+        .find(|e| e.stage == "compute")
+        .ok_or("Missing compute entry")?;
+    let function_ir = module_ir
+        .functions
+        .iter()
+        .find(|f| f.name == compute_entry.function)
+        .ok_or("Entry function not found")?;
 
     let mut arg_parts = Vec::new();
     for argument in &function_ir.arguments {
@@ -585,19 +1087,36 @@ fn emit_module_to_wgsl(module_ir: &NagaModuleIR, resolver: &crate::memory::Symbo
         lines.push(format!("const MAX_ACTIVE_LANES: u32 = {}u;", max_lanes));
     }
 
-    lines.push(format!("@compute @workgroup_size({}, {}, {})", compute_entry.workgroup_size[0], compute_entry.workgroup_size[1], compute_entry.workgroup_size[2]));
+    lines.push(format!(
+        "@compute @workgroup_size({}, {}, {})",
+        compute_entry.workgroup_size[0],
+        compute_entry.workgroup_size[1],
+        compute_entry.workgroup_size[2]
+    ));
     lines.push(format!("fn main({}) {{", arg_parts.join(", ")));
-    
+
     if let Some(_max_lanes) = max_active_lanes {
-        let gid_name = function_ir.arguments.iter().find(|a| a.builtin.as_deref() == Some("global_invocation_id")).map(|a| a.name.as_str()).unwrap_or("gid");
+        let gid_name = function_ir
+            .arguments
+            .iter()
+            .find(|a| a.builtin.as_deref() == Some("global_invocation_id"))
+            .map(|a| a.name.as_str())
+            .unwrap_or("gid");
         lines.push(format!("  let lane = {}.x;", gid_name));
         lines.push("  if (lane >= MAX_ACTIVE_LANES) { return; }".to_string());
     }
 
     let mut emitter = ExpressionEmitter::new(function_ir, module_ir, resolver);
     let mut statement_stack = HashSet::new();
-    lines.extend(emit_statement_block(function_ir, module_ir, &mut emitter, &function_ir.body, 1, &mut statement_stack)?);
-    
+    lines.extend(emit_statement_block(
+        function_ir,
+        module_ir,
+        &mut emitter,
+        &function_ir.body,
+        1,
+        &mut statement_stack,
+    )?);
+
     lines.push("}".to_string());
     Ok(lines.join("\n"))
 }
@@ -1297,11 +1816,12 @@ impl ComputeDispatcher {
         &mut self,
         device: &wgpu::Device,
         resolver: &crate::memory::SymbolResolver,
-        lowering: NagaModuleIR,
+        lowering: NagaModuleIR_TS,
         max_active_lanes: u32,
         dispatch_instructions: Vec<NagaEmitterInstruction>,
     ) -> Result<(), String> {
-        let wgsl = emit_module_to_wgsl(&lowering, resolver, Some(max_active_lanes))?;
+        let lowered_module = lower_naga_module_ir(lowering, resolver)?;
+        let wgsl = emit_module_to_wgsl(&lowered_module, resolver, Some(max_active_lanes))?;
 
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Compute.DynamicSimulation.Shader"),
@@ -1378,7 +1898,9 @@ impl ComputeDispatcher {
         // Execute DispatchKernel instructions (e.g., fluid sim kernel chain)
         // after simulation passes, before instance assembly.
         if !self.pending_dispatch_instructions.is_empty() {
-            let particle_count = self.simulation_pipelines.first()
+            let particle_count = self
+                .simulation_pipelines
+                .first()
                 .map(|p| p.workgroup_count * 64)
                 .unwrap_or(0);
             if let Err(e) = self.execute_instructions(
@@ -1463,7 +1985,11 @@ impl ComputeDispatcher {
 
 #[cfg(test)]
 mod tests {
-    use super::{CompilerComputePassSpec, ComputeDispatcher, WorkgroupSize};
+    use super::{
+        translate_and_lower_expressions, CompilerComputePassSpec, ComputeDispatcher,
+        NagaBinaryOpIR, NagaExpressionIR, NagaExpressionIR_TS, NagaModuleIR_TS, WorkgroupSize,
+    };
+    use crate::memory::{ResolvedResource, ResourceStorageLocation, SymbolResolver};
 
     #[test]
     fn validate_compute_program_contract_rejects_missing_entry_point() {
@@ -1529,5 +2055,134 @@ mod tests {
         assert!(result
             .err()
             .is_some_and(|message| message.contains("must be 1D")));
+    }
+
+    #[test]
+    fn naga_module_ir_ts_deserializes_load_symbolic_shape() {
+        let json = r#"{
+          "types": [{"kind":"scalar","scalar":"u32","width":4}],
+          "constants": [],
+          "global_variables": [],
+          "functions": [{
+            "name": "main",
+            "arguments": [{"name":"gid","type":0,"builtin":"global_invocation_id"}],
+            "expressions": [
+              {"kind":"argument","argument":0},
+              {"kind":"access_index","base":0,"index":0},
+              {"kind":"constant","constant":0},
+              {"kind":"load_symbolic","resourceId":"arena:slot:1","lane":1,"component":2}
+            ],
+            "statements": [],
+            "body": []
+          }],
+          "entry_points": [{"stage":"compute","function":"main","workgroupSize":[64,1,1]}]
+        }"#;
+        let parsed: Result<NagaModuleIR_TS, _> = serde_json::from_str(json);
+        assert!(parsed.is_ok(), "expected load_symbolic JSON to deserialize");
+    }
+
+    #[test]
+    fn translate_and_lower_expressions_load_symbolic_lowers_to_address_math() {
+        let mut resolver = SymbolResolver::new();
+        resolver.map.insert(
+            "arena:slot:1".to_string(),
+            ResolvedResource {
+                base_offset_bytes: 64,     // 16 words
+                lane_stride_bytes: 8,      // 2 words
+                component_stride_bytes: 4, // 1 word
+                total_bytes: 256,
+                storage_location: ResourceStorageLocation::Arena,
+                ubo_vec4_index: 0,
+                ubo_component: 0,
+                texture_desc: None,
+            },
+        );
+
+        let ts_expressions = vec![
+            NagaExpressionIR_TS::Argument { argument: 0 }, // lane
+            NagaExpressionIR_TS::Argument { argument: 1 }, // component
+            NagaExpressionIR_TS::LoadSymbolic {
+                resource_id: "arena:slot:1".to_string(),
+                lane: 0,
+                component: 1,
+            },
+        ];
+
+        let (lowered, lowered_map) =
+            translate_and_lower_expressions(&ts_expressions, &resolver).expect("lowering succeeds");
+
+        let final_expr = lowered
+            .get(lowered_map[2])
+            .expect("mapped symbolic load expression exists");
+        let final_index = match final_expr {
+            NagaExpressionIR::BufferLoad { buffer, index } => {
+                assert_eq!(buffer, "arena_in");
+                *index
+            }
+            other => panic!("expected BufferLoad, got {:?}", other),
+        };
+
+        let (lane_addr_idx, component_mul_idx) = match lowered
+            .get(final_index)
+            .expect("final index expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Add,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected final Add expression, got {:?}", other),
+        };
+
+        let (base_words_idx, lane_mul_idx) = match lowered
+            .get(lane_addr_idx)
+            .expect("lane address expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Add,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected base + lane_offset Add, got {:?}", other),
+        };
+
+        assert!(matches!(
+            lowered.get(base_words_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 16 })
+        ));
+
+        let (lane_source_idx, lane_stride_idx) = match lowered
+            .get(lane_mul_idx)
+            .expect("lane mul expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Mul,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected lane mul expression, got {:?}", other),
+        };
+        assert_eq!(lane_source_idx, lowered_map[0]);
+        assert!(matches!(
+            lowered.get(lane_stride_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 2 })
+        ));
+
+        let (component_source_idx, component_stride_idx) = match lowered
+            .get(component_mul_idx)
+            .expect("component mul expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Mul,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected component mul expression, got {:?}", other),
+        };
+        assert_eq!(component_source_idx, lowered_map[1]);
+        assert!(matches!(
+            lowered.get(component_stride_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 1 })
+        ));
     }
 }

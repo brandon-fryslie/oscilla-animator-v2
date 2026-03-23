@@ -197,7 +197,12 @@ const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 
 impl Engine {
-    pub async fn new(canvas: OffscreenCanvas, config: EngineConfig, initial_width: u32, initial_height: u32) -> Result<Self, JsValue> {
+    pub async fn new(
+        canvas: OffscreenCanvas,
+        config: EngineConfig,
+        initial_width: u32,
+        initial_height: u32,
+    ) -> Result<Self, JsValue> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
@@ -437,7 +442,7 @@ impl Engine {
     pub fn rebuild_with_symbolic_manifest(
         &mut self,
         manifest: crate::memory::MemoryManifest,
-        lowering: crate::compute::NagaModuleIR,
+        lowering: crate::compute::NagaModuleIR_TS,
         max_active_lanes: u32,
         uber_shader_wgsl: &str,
         dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction>,
