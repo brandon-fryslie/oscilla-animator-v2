@@ -313,7 +313,9 @@ impl SymbolResolver {
                     component_size_bytes,
                     resource.cardinality * component_size_bytes,
                 ),
-                MemoryPacking::Aos => (component_count * component_size_bytes, component_size_bytes),
+                MemoryPacking::Aos => {
+                    (component_count * component_size_bytes, component_size_bytes)
+                }
             };
 
             let total_bytes = resource.cardinality * component_count * component_size_bytes;
@@ -423,7 +425,11 @@ impl GpuMemoryArena {
         Self::clear_buffer_words(queue, &self.compiler_arena_buffers[1]);
     }
 
-    pub fn rebuild_buffers_from_resolver(&mut self, device: &wgpu::Device, resolver: &SymbolResolver) {
+    pub fn rebuild_buffers_from_resolver(
+        &mut self,
+        device: &wgpu::Device,
+        resolver: &SymbolResolver,
+    ) {
         let required_bytes = (resolver.total_arena_bytes as u64).max(16);
         let current_bytes = self.compiler_arena_buffers[0].size();
 
@@ -460,7 +466,10 @@ impl GpuMemoryArena {
                 continue;
             }
             let desc = resolved.texture_desc.as_ref().unwrap_or_else(|| {
-                panic!("Texture2D resource '{}' missing texture descriptor", resource_id)
+                panic!(
+                    "Texture2D resource '{}' missing texture descriptor",
+                    resource_id
+                )
             });
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some(resource_id),
@@ -479,11 +488,14 @@ impl GpuMemoryArena {
                 view_formats: &[],
             });
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            self.texture_resources.insert(resource_id.clone(), GpuTexture2DResource {
-                texture,
-                view,
-                desc: desc.clone(),
-            });
+            self.texture_resources.insert(
+                resource_id.clone(),
+                GpuTexture2DResource {
+                    texture,
+                    view,
+                    desc: desc.clone(),
+                },
+            );
         }
     }
 

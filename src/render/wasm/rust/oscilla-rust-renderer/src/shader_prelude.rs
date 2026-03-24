@@ -3,7 +3,7 @@
 // builders can emit Expression::Call without duplicating Bezier math.
 
 use naga::valid::{Capabilities, ValidationFlags, Validator};
-use naga::{Handle, Function, Module};
+use naga::{Function, Handle, Module};
 
 /// WGSL source for the shared prelude (embedded from shader_prelude.wgsl).
 const PRELUDE_WGSL: &str = include_str!("shader_prelude.wgsl");

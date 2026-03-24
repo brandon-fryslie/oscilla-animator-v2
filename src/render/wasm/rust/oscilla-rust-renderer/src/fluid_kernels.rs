@@ -2,8 +2,8 @@
 // These are pre-compiled at engine init time and dispatched via DispatchKernel
 // instructions from the TS compiler. No TS-side WGSL generation.
 
-use std::collections::HashMap;
 use crate::compute::{CompiledKernel, KernelRegistry};
+use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
 // Kernel WGSL sources
@@ -137,7 +137,12 @@ struct FluidKernelSpec {
     kernel_id: &'static str,
     wgsl: &'static str,
     /// (param_name, binding_index, format, access) for each @group(1) binding.
-    params: &'static [(&'static str, u32, wgpu::TextureFormat, wgpu::StorageTextureAccess)],
+    params: &'static [(
+        &'static str,
+        u32,
+        wgpu::TextureFormat,
+        wgpu::StorageTextureAccess,
+    )],
 }
 
 // [LAW:one-source-of-truth] Kernel specs are the single authority for which
@@ -147,34 +152,84 @@ const FLUID_KERNEL_SPECS: &[FluidKernelSpec] = &[
         kernel_id: "fluid_advect",
         wgsl: FLUID_ADVECT_WGSL,
         params: &[
-            ("velocity_in",  0, wgpu::TextureFormat::Rg32Float, wgpu::StorageTextureAccess::ReadOnly),
-            ("velocity_out", 1, wgpu::TextureFormat::Rg32Float, wgpu::StorageTextureAccess::WriteOnly),
+            (
+                "velocity_in",
+                0,
+                wgpu::TextureFormat::Rg32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "velocity_out",
+                1,
+                wgpu::TextureFormat::Rg32Float,
+                wgpu::StorageTextureAccess::WriteOnly,
+            ),
         ],
     },
     FluidKernelSpec {
         kernel_id: "fluid_divergence",
         wgsl: FLUID_DIVERGENCE_WGSL,
         params: &[
-            ("velocity_in",    0, wgpu::TextureFormat::Rg32Float, wgpu::StorageTextureAccess::ReadOnly),
-            ("divergence_out", 1, wgpu::TextureFormat::R32Float,  wgpu::StorageTextureAccess::WriteOnly),
+            (
+                "velocity_in",
+                0,
+                wgpu::TextureFormat::Rg32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "divergence_out",
+                1,
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::WriteOnly,
+            ),
         ],
     },
     FluidKernelSpec {
         kernel_id: "fluid_jacobi",
         wgsl: FLUID_JACOBI_WGSL,
         params: &[
-            ("pressure_in",   0, wgpu::TextureFormat::R32Float,  wgpu::StorageTextureAccess::ReadOnly),
-            ("divergence_in", 1, wgpu::TextureFormat::R32Float,  wgpu::StorageTextureAccess::ReadOnly),
-            ("pressure_out",  2, wgpu::TextureFormat::R32Float,  wgpu::StorageTextureAccess::WriteOnly),
+            (
+                "pressure_in",
+                0,
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "divergence_in",
+                1,
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "pressure_out",
+                2,
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::WriteOnly,
+            ),
         ],
     },
     FluidKernelSpec {
         kernel_id: "fluid_gradient_subtract",
         wgsl: FLUID_GRADIENT_SUBTRACT_WGSL,
         params: &[
-            ("velocity_in",  0, wgpu::TextureFormat::Rg32Float, wgpu::StorageTextureAccess::ReadOnly),
-            ("pressure_in",  1, wgpu::TextureFormat::R32Float,  wgpu::StorageTextureAccess::ReadOnly),
-            ("velocity_out", 2, wgpu::TextureFormat::Rg32Float, wgpu::StorageTextureAccess::WriteOnly),
+            (
+                "velocity_in",
+                0,
+                wgpu::TextureFormat::Rg32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "pressure_in",
+                1,
+                wgpu::TextureFormat::R32Float,
+                wgpu::StorageTextureAccess::ReadOnly,
+            ),
+            (
+                "velocity_out",
+                2,
+                wgpu::TextureFormat::Rg32Float,
+                wgpu::StorageTextureAccess::WriteOnly,
+            ),
         ],
     },
 ];
@@ -189,8 +244,10 @@ pub fn register_fluid_kernels(
     registry: &mut KernelRegistry,
 ) {
     for spec in FLUID_KERNEL_SPECS {
-        let entries: Vec<wgpu::BindGroupLayoutEntry> = spec.params.iter().map(|&(_, binding, format, access)| {
-            wgpu::BindGroupLayoutEntry {
+        let entries: Vec<wgpu::BindGroupLayoutEntry> = spec
+            .params
+            .iter()
+            .map(|&(_, binding, format, access)| wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
@@ -199,8 +256,8 @@ pub fn register_fluid_kernels(
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
-            }
-        }).collect();
+            })
+            .collect();
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(spec.kernel_id),
@@ -232,11 +289,14 @@ pub fn register_fluid_kernels(
             param_bindings.insert(name.to_string(), binding);
         }
 
-        registry.register(spec.kernel_id.to_string(), CompiledKernel {
-            pipeline,
-            bind_group_layout,
-            workgroup_size: [8, 8, 1],
-            param_bindings,
-        });
+        registry.register(
+            spec.kernel_id.to_string(),
+            CompiledKernel {
+                pipeline,
+                bind_group_layout,
+                workgroup_size: [8, 8, 1],
+                param_bindings,
+            },
+        );
     }
 }
