@@ -21,6 +21,7 @@ import {
   type RustRendererGpuPass,
   type RustRendererReadbackSnapshot,
   type RustRendererSchedulerState,
+  type RustRendererSinkPointerMap,
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
@@ -376,7 +377,21 @@ function readRequiredSinkTableWord(
 }
 
 function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
-  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT' || type === 'READBACK_SNAPSHOT';
+  return type === 'SCHEDULER_HEARTBEAT'
+    || type === 'RUNTIME_EVENT'
+    || type === 'READBACK_SNAPSHOT'
+    || type === 'SET_SINK_POINTER_MAP_SUCCESS';
+}
+
+function canonicalizeSinkPointerMap(
+  sinkPointerMap: RustRendererSinkPointerMap,
+): RustRendererSinkPointerMap {
+  const sortedEntries = Object.entries(sinkPointerMap).sort(([lhs], [rhs]) => lhs.localeCompare(rhs));
+  const canonical: Record<string, string> = {};
+  for (const [key, resourceId] of sortedEntries) {
+    canonical[key] = resourceId;
+  }
+  return canonical;
 }
 
 function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
@@ -525,6 +540,7 @@ export class WebGPURenderer {
   private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
   private readbackDebugLogged = false;
   private shapeBankInstallDebugLogged = false;
+  private installedSinkPointerMapJson: string | null = null;
 
   private reportEngineError(
     source: string,
@@ -1057,6 +1073,31 @@ export class WebGPURenderer {
 
   getLatestSinkTableSample(): SinkTableDebugSample | null {
     return this.latestSinkTableSample;
+  }
+
+  async installDrawPrepSinkPointerMap(
+    sinkPointerMap: RustRendererSinkPointerMap,
+  ): Promise<void> {
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
+    const canonicalMap = canonicalizeSinkPointerMap(sinkPointerMap);
+    const sinkPointerMapJson = JSON.stringify(canonicalMap);
+    if (sinkPointerMapJson === this.installedSinkPointerMapJson) {
+      return;
+    }
+    await this.awaitWorkerAck({
+      successType: 'SET_SINK_POINTER_MAP_SUCCESS',
+      context: `installDrawPrepSinkPointerMap(${Object.keys(canonicalMap).length})`,
+      dispatch: () => {
+        const message: RustRendererWorkerInboundMessage = {
+          type: 'SET_SINK_POINTER_MAP',
+          sinkPointerMap: canonicalMap,
+        };
+        this.worker.postMessage(message);
+      },
+    });
+    this.installedSinkPointerMapJson = sinkPointerMapJson;
   }
 
   /**

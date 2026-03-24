@@ -11,6 +11,7 @@ import {
   rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
   setRustRendererDebugReadbackHz,
+  setRustRendererSinkPointerMap,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
   uploadRustRendererAtlasData,
@@ -218,6 +219,15 @@ function handleResume(): void {
 
 function handleInjectPoisonAlloc(): void {
   injectRustRendererPoisonAlloc();
+}
+
+function handleSetSinkPointerMap(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'SET_SINK_POINTER_MAP' }>,
+): void {
+  // [LAW:single-enforcer] Symbolic sink pointer map install is owned by one
+  // worker->wasm boundary so runtime render loops never patch descriptor layout.
+  setRustRendererSinkPointerMap(JSON.stringify(message.sinkPointerMap));
+  postWorkerMessage({ type: 'SET_SINK_POINTER_MAP_SUCCESS' });
 }
 
 // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
@@ -450,6 +460,11 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
     telemetryEnabled = (message as Extract<InboundMessage, { type: 'SET_TELEMETRY_ENABLED' }>).enabled;
     withFatalBoundary('set_telemetry_failure', 'Rust worker telemetry toggle failure', () => {
       applyTelemetryReadbackCadence();
+    });
+  },
+  SET_SINK_POINTER_MAP: (message) => {
+    withFatalBoundary('set_sink_pointer_map_failure', 'Rust worker sink-pointer-map install failure', () => {
+      handleSetSinkPointerMap(message as Extract<InboundMessage, { type: 'SET_SINK_POINTER_MAP' }>);
     });
   },
   // [RECOVER-11] Atlas upload for Type5 MSDF text.

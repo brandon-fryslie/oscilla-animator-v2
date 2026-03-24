@@ -77,6 +77,13 @@ export interface RustRendererSetTelemetryEnabledMessage {
   readonly enabled: boolean;
 }
 
+export type RustRendererSinkPointerMap = Readonly<Record<string, string>>;
+
+export interface RustRendererSetSinkPointerMapMessage {
+  readonly type: 'SET_SINK_POINTER_MAP';
+  readonly sinkPointerMap: RustRendererSinkPointerMap;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -85,7 +92,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResumeMessage
   | RustRendererInjectPoisonAllocMessage
   | RustRendererUploadAtlasMessage
-  | RustRendererSetTelemetryEnabledMessage;
+  | RustRendererSetTelemetryEnabledMessage
+  | RustRendererSetSinkPointerMapMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';
@@ -114,6 +122,10 @@ export interface RustRendererRebuildGpuPipelinesFailure {
   readonly code: string;
   readonly passId: string;
   readonly message: string;
+}
+
+export interface RustRendererSetSinkPointerMapSuccess {
+  readonly type: 'SET_SINK_POINTER_MAP_SUCCESS';
 }
 
 export interface RustRendererDeviceLost {
@@ -226,6 +238,7 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererFatalError
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererRebuildGpuPipelinesFailure
+  | RustRendererSetSinkPointerMapSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent
