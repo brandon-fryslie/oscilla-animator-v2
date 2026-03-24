@@ -47,6 +47,12 @@ function makeBundle(passId: string): CompiledGpuArtifactBundle {
       drawPrep: {
         words: new Uint32Array([11, 22, 33]),
         wordCount: 3,
+        sinkPointerMap: {
+          '0:position': 'arena:slot:2',
+          '0:color': 'arena:slot:3',
+          '0:scale': 'arena:slot:4',
+          '0:shape': 'arena:slot:1',
+        },
       },
       shapeBank: {
         words: new Uint32Array([44, 55, 66, 77]),
@@ -60,6 +66,7 @@ function makeBundle(passId: string): CompiledGpuArtifactBundle {
 function makeRendererStub() {
   return {
     rebuildGpuPipelines: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
+    installDrawPrepSinkPointerMap: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
     setGpuFaultCallback: vi.fn<(callback: unknown) => void>(),
     dispose: vi.fn<() => void>(),
     render: vi.fn<(payload: unknown) => void>(),
@@ -99,13 +106,13 @@ describe('RuntimeService', () => {
     expect(serviceAccess.runtimeResourcesState.runtime.renderer).toBe(renderer);
   });
 
-  it('publishes worker-owned install metadata directly to renderer.render', () => {
+  it('publishes worker-owned install metadata directly to renderer.render', async () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
       runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => void;
+      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => Promise<void>;
     };
     const renderer = makeRendererStub();
     const bundle = makeBundle('worker-owned-install');
@@ -113,7 +120,11 @@ describe('RuntimeService', () => {
     serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer, canvas);
     serviceAccess.rendererExecutionState = 'active';
 
-    serviceAccess.installRendererCanonicalAssets(bundle);
+    await serviceAccess.installRendererCanonicalAssets(bundle);
+
+    expect(renderer.installDrawPrepSinkPointerMap).toHaveBeenCalledWith(
+      bundle.runtimeInstall.drawPrep.sinkPointerMap,
+    );
 
     expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
       shapeBank: expect.objectContaining({

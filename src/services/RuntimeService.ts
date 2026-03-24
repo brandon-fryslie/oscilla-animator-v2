@@ -406,7 +406,7 @@ export class RuntimeService {
       if (expectedProgram && this.compileState.currentProgram === expectedProgram && next.compiledGpuBundle) {
         // [RECOVER-08] Publish the worker-owned static install contract directly.
         // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
-        this.installRendererCanonicalAssets(next.compiledGpuBundle);
+        await this.installRendererCanonicalAssets(next.compiledGpuBundle);
       }
       this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapComplete();
     } catch (err) {
@@ -428,7 +428,7 @@ export class RuntimeService {
   // table descriptors only. No CPU materialization, no instance count
   // resolution, no ShapeBank allocator. The compile-time topology install
   // stage is the single GPU-visible runtime stage for shape-handle production.
-  private installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): void {
+  private async installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): Promise<void> {
     const runtime = this.readActiveRuntimeResources();
     if (!runtime || this.rendererExecutionState !== 'active') {
       return;
@@ -444,6 +444,8 @@ export class RuntimeService {
     const zoom = viewport?.zoom ?? 1;
     const panX = viewport?.pan?.x ?? 0;
     const panY = viewport?.pan?.y ?? 0;
+
+    await renderer.installDrawPrepSinkPointerMap(installContract.drawPrep.sinkPointerMap);
 
     renderer.render({
       shapeBank: {

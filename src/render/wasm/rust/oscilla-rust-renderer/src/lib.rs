@@ -11,6 +11,7 @@ mod shader_prelude;
 mod telemetry;
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 use js_sys::{Array, Function, Object, Reflect};
 use wasm_bindgen::closure::Closure;
@@ -274,6 +275,29 @@ pub fn set_debug_readback_hz(debug_readback_hz: u32) -> Result<(), JsValue> {
         // [LAW:single-enforcer] Debug readback cadence changes are applied at
         // one engine boundary so worker telemetry toggles stay deterministic.
         engine.set_debug_readback_hz(debug_readback_hz);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
+pub fn set_sink_pointer_map(sink_pointer_map_json: String) -> Result<(), JsValue> {
+    let sink_pointer_map: HashMap<String, String> = if sink_pointer_map_json.is_empty()
+        || sink_pointer_map_json == "{}"
+    {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&sink_pointer_map_json)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse sink pointer map: {}", e)))?
+    };
+
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before set_sink_pointer_map")
+        })?;
+        engine
+            .set_sink_pointer_map(sink_pointer_map)
+            .map_err(|e| JsValue::from_str(&e))?;
         Ok(())
     })
 }
