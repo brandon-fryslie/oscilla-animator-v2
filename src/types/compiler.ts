@@ -65,3 +65,19 @@ export function canonicalizeCombineMode(mode: CombineMode): CombineMode {
   return mode === 'array' ? 'collect' : mode;
 }
 
+// [LAW:one-source-of-truth] Single definition of update class for slot metadata.
+// CompileTime > InstallTime > FrameTime (most restrictive wins in intersection).
+export type UpdateClass = 'CompileTime' | 'InstallTime' | 'FrameTime';
+
+/** Ordering: lower number = more restrictive. */
+const UPDATE_CLASS_RANK: Record<UpdateClass, number> = {
+  CompileTime: 0,
+  InstallTime: 1,
+  FrameTime: 2,
+};
+
+/** Return the most restrictive (lowest rank) of two update classes. */
+export function intersectUpdateClass(a: UpdateClass, b: UpdateClass): UpdateClass {
+  return UPDATE_CLASS_RANK[a] <= UPDATE_CLASS_RANK[b] ? a : b;
+}
+

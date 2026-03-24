@@ -71,6 +71,68 @@ export interface CameraDeclIR {
 // =============================================================================
 
 /**
+ * Symbolic Memory Manifest
+ *
+ * Describes the virtual memory resources required by the program.
+ * The Rust backend consumes this manifest to perform physical allocation,
+ * alignment (std140/std430), and bind-group generation.
+ *
+ * [LAW:one-source-of-truth] This manifest is the sole authority for GPU
+ * memory requirements; runtime never re-derives layouts.
+ */
+export interface MemoryManifestIR {
+  readonly resources: readonly MemoryResourceIR[];
+}
+
+/**
+ * Resource kind discriminant for MemoryResourceIR.
+ *
+ * - 'buffer': Standard storage/uniform buffer (arena slots, state banks).
+ * - 'texture2d': 2D GPU texture (e.g., fluid velocity/pressure fields).
+ *   FORBIDDEN: 1D array flattened simulations — Texture2D is required for
+ *   120fps hardware filtering.
+ */
+export type MemoryResourceKind = 'buffer' | 'texture2d';
+
+/**
+ * Texture2D format descriptor.
+ * Maps to wgpu::TextureFormat on the Rust side.
+ */
+export type Texture2DFormat = 'rgba32float' | 'rg32float' | 'r32float' | 'rgba16float';
+
+export interface MemoryResourceIR {
+  /** Unique symbolic ID (e.g., 'arena:node_12_out', 'state:fluid_vel') */
+  readonly id: string;
+  /** Canonical data type (FLOAT, VEC2, etc.) */
+  readonly type: CanonicalType;
+  /** Number of lanes (1 for scalars, N for fields) */
+  readonly cardinality: number;
+  /** Memory packing preference (buffer resources only) */
+  readonly packing: 'soa' | 'aos';
+  /** Update class governs when this resource changes (Rust MMU uses this for storage placement). */
+  readonly updateClass: import('../../types/compiler').UpdateClass;
+  /** Source block/port that owns this resource (no forensics — propagated from registry). */
+  readonly source?: { readonly blockId: import('../../types/compiler').BlockId; readonly portId: import('../../types/compiler').PortId };
+  /** Optional debug label */
+  readonly label?: string;
+  /**
+   * Resource kind. Defaults to 'buffer' when absent (backwards-compatible).
+   * 'texture2d' resources are fulfilled by creating wgpu::Texture objects
+   * instead of buffer allocations.
+   */
+  readonly resourceKind?: MemoryResourceKind;
+  /**
+   * Texture2D dimensions. Required when resourceKind === 'texture2d'.
+   */
+  readonly textureWidth?: number;
+  readonly textureHeight?: number;
+  /**
+   * Texture2D format. Required when resourceKind === 'texture2d'.
+   */
+  readonly textureFormat?: Texture2DFormat;
+}
+
+/**
  * CompiledProgramIR is the single canonical representation of a compiled program.
  *
  * Key Invariants:
@@ -102,6 +164,12 @@ export interface CompiledProgramIR {
 
   // Output extraction contract
   readonly outputs: readonly OutputSpecIR[];
+
+  /**
+   * Symbolic memory manifest (Phase 1 MMU boundary).
+   * Describes required GPU resources without physical offsets.
+   */
+  readonly memoryManifest: MemoryManifestIR;
 
   // Slot layout with required offsets
   readonly slotMeta: readonly SlotMetaEntry[];
@@ -167,71 +235,6 @@ export interface CompiledProgramIR {
   readonly topologyTable: ProgramTopologyTableIR;
 
   /**
-   * Constant provenance map for fast-path value patching.
-   * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
-   * Only present when the program contains patchable constant-backed ports.
-   * Built during lowering (pass 6) from lowered graph topology.
-   */
-  readonly constantProvenance?: ConstantProvenanceMap;
-
-  /**
-   * Instance count provenance map for fast-path count patching.
-   * Maps user-facing port key ("blockId:portId") to the instance whose count
-   * that port controls. Only present when the program contains patchable
-   * instance count ports (semantic: 'instanceCount').
-   */
-  readonly instanceCountProvenance?: InstanceCountProvenanceMap;
-
-  /**
-   * Compiler-owned runtime-live expression IDs for fast-path constant patching.
-   *
-   * [LAW:single-enforcer] Liveness/patchability ownership lives in compiler
-   * metadata; runtime services consume this set and do not infer from schedule.
-   */
-  readonly runtimeLiveExprIds?: readonly number[];
-
-  /**
-   * Arena layout — flat Float32Array descriptor for every slot.
-   * Indexed by slot ID (same ordering as slotMeta).
-   *
-   * [LAW:one-source-of-truth] Arena layout is computed once during compilation
-   * from CanonicalType + InstanceDecl — no parallel derivation.
-   */
-  readonly arenaLayout: readonly ArenaSlotDescriptor[];
-
-  /**
-   * Compiler-owned arena zone contract for runtime/render consumption.
-   *
-   * [LAW:one-source-of-truth] Zone offsets/alignment are emitted once by the
-   * compiler; runtime/render must consume this metadata rather than deriving
-   * independent zone boundaries.
-   */
-  readonly arenaZones?: ArenaZonesIR;
-
-  /**
-   * Compiler-owned runtime bindings for arena state/gauge zones.
-   *
-   * [LAW:one-source-of-truth] Runtime state/gauge surfaces resolve through one
-   * compiler-emitted layout contract instead of ad-hoc runtime offsets.
-   */
-  readonly arenaRuntimeLayout?: ArenaRuntimeLayoutIR;
-
-  /**
-   * Sum of canonical slot descriptor lengths across `arenaLayout`.
-   *
-   * [LAW:one-source-of-truth] Payload capacity is emitted once by compiler
-   * zone planning and used for descriptor-sum invariant checks.
-   */
-  readonly arenaPayloadFloats: number;
-
-  /**
-   * Total number of floats in the arena buffer, as computed by the arena zone
-   * plan (`totalFloats`). Includes header reservation and scalar->field
-   * alignment padding and state/gauge zones.
-   */
-  readonly arenaTotalFloats: number;
-
-  /**
    * Draw-prep metadata for indirect rendering sinks.
    *
    * [LAW:one-source-of-truth] Compiler owns the canonical sink ordering and
@@ -261,6 +264,16 @@ export interface CompiledProgramIR {
    * Contains the structured module and expr/statement source-map provenance.
    */
   readonly nagaLoweringProgram: NagaLoweringProgramIR;
+
+  /**
+   * O(1) fast-path offset table for control parameter updates.
+   *
+   * Maps `"blockId:portId"` → physical f32 offset so that ParamChanged events
+   * can write directly to the backing store without searching the debug index.
+   *
+   * [LAW:one-source-of-truth] Populated once at compile time from slotMeta labels.
+   */
+  readonly fastPathOffsets: Readonly<Record<string, number>>;
 }
 
 /**
@@ -289,44 +302,6 @@ export interface GeneratedGpuArtifactManifestIR {
   readonly schemaVersion: 1;
   readonly passes: readonly GpuPassManifestEntryIR[];
 }
-
-// =============================================================================
-// Constant Provenance (Fast-Path Patching)
-// =============================================================================
-
-/**
- * Entry in the constant provenance map.
- * Maps a user-facing port to the ValueExprConst nodes that carry its value.
- * Multi-component payloads (vec2, color) have multiple component expr IDs.
- */
-export interface ConstantProvenanceEntry {
-  readonly componentExprIds: readonly ValueExprId[];
-  readonly payloadKind: string;
-}
-
-/**
- * Maps user-facing port key ("blockId:portId") to patchable constant expr IDs.
- * Built during lowering from lowered graph topology.
- */
-export type ConstantProvenanceMap = ReadonlyMap<string, ConstantProvenanceEntry>;
-
-// =============================================================================
-// Instance Count Provenance (Fast-Path Instance Count Patching)
-// =============================================================================
-
-/**
- * Entry in the instance count provenance map.
- * Maps a user-facing port to the instance whose count it controls.
- */
-export interface InstanceCountProvenanceEntry {
-  readonly instanceId: import('./Indices').InstanceId;
-}
-
-/**
- * Maps user-facing port key ("blockId:portId") to patchable instance count.
- * Built during lowering for ports with `semantic: 'instanceCount'`.
- */
-export type InstanceCountProvenanceMap = ReadonlyMap<string, InstanceCountProvenanceEntry>;
 
 /**
  * Entry in the field slot registry.
@@ -576,7 +551,7 @@ export interface RuntimeAddressTableIR {
 // Arena Zones (Compiler-Owned Memory Contract)
 // =============================================================================
 
-export type ArenaZoneKind = 'header' | 'scalar' | 'field' | 'state' | 'gauge';
+export type ArenaZoneKind = 'header' | 'scalar' | 'field' | 'state';
 
 export interface ArenaZoneAlignmentPolicyIR {
   /**
@@ -627,20 +602,9 @@ export interface ArenaStateBankLayoutIR {
   readonly writeOffset: number;
 }
 
-export interface ArenaGaugeTargetLayoutIR {
-  /** Stable continuity target ID (`StepContinuityApply.targetKey`). */
-  readonly targetId: string;
-  /** Instance owner for continuity/prune bookkeeping. */
-  readonly instanceId: string;
-  /** Arena descriptor for this target's gauge zone slice. */
-  readonly descriptor: ArenaSlotDescriptor;
-}
-
 export interface ArenaRuntimeLayoutIR {
   /** Persistent state bank views inside the arena state zone. */
   readonly stateBank: ArenaStateBankLayoutIR;
-  /** Gauge-zone descriptors for continuity targets. */
-  readonly gaugeTargets: readonly ArenaGaugeTargetLayoutIR[];
 }
 
 // =============================================================================

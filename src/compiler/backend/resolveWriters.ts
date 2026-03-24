@@ -324,7 +324,9 @@ export function resolveInput(
   const sortedWriters = sortWriters(writers);
 
   // Resolve combine policy from explicit input policy data.
-  const combine = resolveCombinePolicy(inputSlot, { combineMode });
+  // [LAW:one-source-of-truth] updateClass for standalone resolveInput defaults to
+  // FrameTime — callers with specific update classes use the full policy path.
+  const combine = resolveCombinePolicy(inputSlot, { combineMode, updateClass: 'FrameTime' });
 
   // [LAW:single-enforcer] Port type presence is enforced at the backend
   // boundary for explicit resolveInput callers.

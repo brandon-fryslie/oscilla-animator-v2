@@ -1,4 +1,5 @@
 use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
+use serde_json::Value as JsonValue;
 
 pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
@@ -62,18 +63,325 @@ pub struct FrameHeader {
     pub delta_time_seconds: f32,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
-pub struct SlotDescriptor {
-    pub buffer_id: u32,
-    pub byte_offset: u32,
-    pub stride: u32,
-    pub length: u32,
+#[derive(Clone, Debug, serde::Deserialize)]
+pub enum MemoryPacking {
+    #[serde(rename = "soa")]
+    Soa,
+    #[serde(rename = "aos")]
+    Aos,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct MemoryResource {
+    pub id: String,
+    pub cardinality: u32,
+    pub packing: MemoryPacking,
+    #[serde(rename = "type")]
+    pub resource_type: JsonValue,
+    #[serde(default, rename = "updateClass")]
+    pub update_class: String,
+    /// Resource kind: "buffer" (default) or "texture2d".
+    #[serde(default = "default_resource_kind", rename = "resourceKind")]
+    pub resource_kind: String,
+    /// Texture width (required when resource_kind == "texture2d").
+    #[serde(default, rename = "textureWidth")]
+    pub texture_width: u32,
+    /// Texture height (required when resource_kind == "texture2d").
+    #[serde(default, rename = "textureHeight")]
+    pub texture_height: u32,
+    /// Texture format (required when resource_kind == "texture2d").
+    /// One of: "rgba32float", "rg32float", "r32float", "rgba16float".
+    #[serde(default, rename = "textureFormat")]
+    pub texture_format: String,
+}
+
+fn default_resource_kind() -> String {
+    "buffer".to_string()
+}
+
+// [LAW:one-source-of-truth] Storage location is the single authority for where
+// a resource lives on the GPU. The emitter dispatches on this, never on ID prefixes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResourceStorageLocation {
+    /// Resource lives in the compiler arena storage buffer (arena_in/arena_out).
+    Arena,
+    /// Resource lives in the state ping-pong storage buffer (state_in/state_out).
+    State,
+    /// Resource is packed into the global_controls uniform buffer (vec4 array).
+    GlobalControlUbo,
+    /// Resource is a GPU Texture2D (e.g., fluid velocity/pressure fields).
+    /// FORBIDDEN: 1D array flattened simulations — Texture2D is required for
+    /// 120fps hardware filtering.
+    Texture2D,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct MemoryManifest {
+    pub resources: Vec<MemoryResource>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedResource {
+    pub base_offset_bytes: u32,
+    pub lane_stride_bytes: u32,
+    pub component_stride_bytes: u32,
+    pub total_bytes: u32,
+    pub storage_location: ResourceStorageLocation,
+    /// For GlobalControlUbo: which vec4 index in global_controls[].
+    pub ubo_vec4_index: u32,
+    /// For GlobalControlUbo: which component (0=x, 1=y, 2=z, 3=w).
+    pub ubo_component: u32,
+    /// For Texture2D: texture dimensions and format.
+    pub texture_desc: Option<Texture2DDescriptor>,
+}
+
+/// Descriptor for a resolved Texture2D resource.
+#[derive(Clone, Debug)]
+pub struct Texture2DDescriptor {
+    pub width: u32,
+    pub height: u32,
+    pub format: wgpu::TextureFormat,
+}
+
+impl ResolvedResource {
+    /// WGSL component accessor (x, y, z, w) for UBO resources.
+    pub fn ubo_component_name(&self) -> &'static str {
+        match self.ubo_component {
+            0 => "x",
+            1 => "y",
+            2 => "z",
+            3 => "w",
+            _ => unreachable!("UBO component must be 0..3"),
+        }
+    }
+
+    /// Buffer name for read access (load side).
+    pub fn read_buffer_name(&self) -> &'static str {
+        match self.storage_location {
+            ResourceStorageLocation::Arena => "arena_in",
+            ResourceStorageLocation::State => "state_in",
+            ResourceStorageLocation::GlobalControlUbo => "global_controls",
+            // [LAW:no-silent-fallbacks] Texture2D resources are not accessed
+            // via named buffer bindings — they use texture/sampler bind groups.
+            ResourceStorageLocation::Texture2D => {
+                panic!("Texture2D resources use texture bindings, not buffer names")
+            }
+        }
+    }
+
+    /// Buffer name for write access (store side).
+    pub fn write_buffer_name(&self) -> &'static str {
+        match self.storage_location {
+            ResourceStorageLocation::Arena => "arena_out",
+            ResourceStorageLocation::State => "state_out",
+            ResourceStorageLocation::GlobalControlUbo => {
+                // [LAW:no-silent-fallbacks] UBO is read-only from compute shaders.
+                panic!("Cannot write to GlobalControlUbo from compute shader")
+            }
+            ResourceStorageLocation::Texture2D => {
+                panic!("Texture2D resources use storage texture bindings, not buffer names")
+            }
+        }
+    }
+}
+
+/// Parse a texture format string into a wgpu::TextureFormat.
+/// [LAW:no-silent-fallbacks] Unknown formats are hard errors.
+fn parse_texture_format(format: &str) -> wgpu::TextureFormat {
+    match format {
+        "rgba32float" => wgpu::TextureFormat::Rgba32Float,
+        "rg32float" => wgpu::TextureFormat::Rg32Float,
+        "r32float" => wgpu::TextureFormat::R32Float,
+        "rgba16float" => wgpu::TextureFormat::Rgba16Float,
+        _ => panic!("Unknown Texture2D format: '{}'. Supported: rgba32float, rg32float, r32float, rgba16float", format),
+    }
+}
+
+fn resource_type_name(resource_type: &JsonValue) -> Option<&str> {
+    if let Some(name) = resource_type.as_str() {
+        return Some(name);
+    }
+    resource_type
+        .get("payload")
+        .and_then(|payload| payload.get("kind"))
+        .and_then(|kind| kind.as_str())
+}
+
+fn component_count_for_resource_type(resource_type: &JsonValue) -> u32 {
+    match resource_type_name(resource_type) {
+        Some("f32" | "u32" | "i32" | "bool" | "float" | "int" | "shape") => 1,
+        Some("vec2") => 2,
+        Some("vec3") => 3,
+        Some("vec4" | "color") => 4,
+        Some("mat4" | "cameraProjection") => 16,
+        Some(other) => panic!("Unknown memory manifest resource type '{}'", other),
+        None => panic!(
+            "Invalid memory manifest resource type payload: {}",
+            resource_type
+        ),
+    }
+}
+
+pub struct SymbolResolver {
+    pub map: std::collections::HashMap<String, ResolvedResource>,
+    pub total_arena_bytes: u32,
+}
+
+impl SymbolResolver {
+    pub fn new() -> Self {
+        Self {
+            map: std::collections::HashMap::new(),
+            total_arena_bytes: 0,
+        }
+    }
+
+    pub fn resolve(&self, id: &str) -> Option<&ResolvedResource> {
+        self.map.get(id)
+    }
+
+    // [LAW:single-enforcer] UBO offset mapping is computed here in the MMU,
+    // never in the emitter. The emitter receives opaque (vec4_index, component).
+    fn compute_ubo_address(offset_floats: u32) -> (u32, u32) {
+        let vec4_index = offset_floats / 4;
+        let component = offset_floats % 4;
+        (vec4_index, component)
+    }
+
+    /// Map a FrameHeader field name to its float offset within the uniform buffer.
+    /// Returns None for unknown fields (caller falls back to Arena).
+    fn frame_header_field_offset(resource_id: &str) -> Option<u32> {
+        // [LAW:one-source-of-truth] These offsets mirror FrameHeader's repr(C) layout.
+        // view_proj: 16 floats (0..16), resolution: 2 floats (16..18),
+        // time_seconds: 1 float (18), delta_time_seconds: 1 float (19).
+        match resource_id {
+            "time_seconds" => Some(18),
+            "delta_time_seconds" => Some(19),
+            "resolution_x" => Some(16),
+            "resolution_y" => Some(17),
+            _ => None,
+        }
+    }
+
+    pub fn build_from_manifest(manifest: &MemoryManifest) -> Self {
+        let mut map = std::collections::HashMap::new();
+        let mut current_offset_bytes: u32 = 0;
+
+        for resource in &manifest.resources {
+            // [LAW:single-enforcer] Texture2D resources are routed to dedicated
+            // GPU textures, not buffer memory. Handle them before buffer routing.
+            if resource.resource_kind == "texture2d" {
+                let format = parse_texture_format(&resource.texture_format);
+                map.insert(
+                    resource.id.clone(),
+                    ResolvedResource {
+                        base_offset_bytes: 0,
+                        lane_stride_bytes: 0,
+                        component_stride_bytes: 0,
+                        total_bytes: 0,
+                        storage_location: ResourceStorageLocation::Texture2D,
+                        ubo_vec4_index: 0,
+                        ubo_component: 0,
+                        texture_desc: Some(Texture2DDescriptor {
+                            width: resource.texture_width,
+                            height: resource.texture_height,
+                            format,
+                        }),
+                    },
+                );
+                continue;
+            }
+
+            // [LAW:single-enforcer] Storage location routing is determined here
+            // in the MMU based on update_class + cardinality. The emitter never
+            // inspects resource IDs to choose buffers.
+            let is_ubo = resource.update_class == "FrameTime" && resource.cardinality == 1;
+
+            if is_ubo {
+                // [LAW:one-source-of-truth] UBO resources are mapped to their
+                // canonical FrameHeader offset; they do not consume arena space.
+                let offset_floats = Self::frame_header_field_offset(&resource.id).unwrap_or(0);
+                let (vec4_index, component) = Self::compute_ubo_address(offset_floats);
+
+                map.insert(
+                    resource.id.clone(),
+                    ResolvedResource {
+                        base_offset_bytes: 0,
+                        lane_stride_bytes: 0,
+                        component_stride_bytes: 0,
+                        total_bytes: 0,
+                        storage_location: ResourceStorageLocation::GlobalControlUbo,
+                        ubo_vec4_index: vec4_index,
+                        ubo_component: component,
+                        texture_desc: None,
+                    },
+                );
+                continue;
+            }
+
+            // [LAW:single-enforcer] All std430/std140 alignment rules are
+            // enforced here in the Rust MMU.
+            let component_size_bytes = 4; // Assuming f32/u32 for now
+            let component_count = component_count_for_resource_type(&resource.resource_type);
+
+            // std430 alignment: align to size of the first element (max 16)
+            let alignment = (component_count * component_size_bytes).min(16).max(4);
+            current_offset_bytes = (current_offset_bytes + alignment - 1) / alignment * alignment;
+
+            let (lane_stride_bytes, component_stride_bytes) = match resource.packing {
+                MemoryPacking::Soa => (
+                    component_size_bytes,
+                    resource.cardinality * component_size_bytes,
+                ),
+                MemoryPacking::Aos => {
+                    (component_count * component_size_bytes, component_size_bytes)
+                }
+            };
+
+            let total_bytes = resource.cardinality * component_count * component_size_bytes;
+
+            // [LAW:single-enforcer] State vs Arena routing is determined by
+            // the resource's ID prefix. This is the single place that makes
+            // this decision — the emitter reads the resolved storage_location.
+            let storage_location = if resource.id.starts_with("state:") {
+                ResourceStorageLocation::State
+            } else {
+                ResourceStorageLocation::Arena
+            };
+
+            map.insert(
+                resource.id.clone(),
+                ResolvedResource {
+                    base_offset_bytes: current_offset_bytes,
+                    lane_stride_bytes,
+                    component_stride_bytes,
+                    total_bytes,
+                    storage_location,
+                    ubo_vec4_index: 0,
+                    ubo_component: 0,
+                    texture_desc: None,
+                },
+            );
+
+            current_offset_bytes += total_bytes;
+        }
+
+        Self {
+            map,
+            total_arena_bytes: current_offset_bytes,
+        }
+    }
+}
+
+/// A created GPU Texture2D resource with its view.
+pub struct GpuTexture2DResource {
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub desc: Texture2DDescriptor,
 }
 
 pub struct GpuMemoryArena {
     pub frame_header: FrameHeader,
-    pub slot_descriptors: Vec<SlotDescriptor>,
+    pub symbol_resolver: SymbolResolver,
     pub uniform_buffer: wgpu::Buffer,
     pub uniform_bind_group: wgpu::BindGroup,
     pub instance_buffer: wgpu::Buffer,
@@ -86,10 +394,17 @@ pub struct GpuMemoryArena {
     pub draw_prep_bind_group: wgpu::BindGroup,
     pub instance_bind_group: wgpu::BindGroup,
     pub topology_bind_group: wgpu::BindGroup,
+    /// Texture2D resources keyed by symbolic resource ID.
+    /// [LAW:one-source-of-truth] The texture map is the single owner of GPU
+    /// texture objects for fluid sim / compute resources.
+    texture_resources: std::collections::HashMap<String, GpuTexture2DResource>,
     assembly_layout: wgpu::BindGroupLayout,
     draw_prep_layout: wgpu::BindGroupLayout,
     instance_layout: wgpu::BindGroupLayout,
     topology_layout: wgpu::BindGroupLayout,
+    state_layout: wgpu::BindGroupLayout,
+    compiler_simulation_layout: wgpu::BindGroupLayout,
+    arena_render_layout: wgpu::BindGroupLayout,
     instance_capacity_bytes: u64,
     topology_capacity_words: usize,
     sink_table_capacity_words: usize,
@@ -127,6 +442,180 @@ impl GpuMemoryArena {
         Self::clear_buffer_words(queue, &self.state_buffers[1]);
         Self::clear_buffer_words(queue, &self.compiler_arena_buffers[0]);
         Self::clear_buffer_words(queue, &self.compiler_arena_buffers[1]);
+    }
+
+    pub fn rebuild_buffers_from_resolver(
+        &mut self,
+        device: &wgpu::Device,
+        resolver: &SymbolResolver,
+    ) {
+        let required_bytes = (resolver.total_arena_bytes as u64).max(16);
+        let current_bytes = self.compiler_arena_buffers[0].size();
+
+        if required_bytes > current_bytes {
+            // Re-allocate arena buffers
+            self.compiler_arena_buffers = [
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("CompilerArenaBuffer.A"),
+                    size: required_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("CompilerArenaBuffer.B"),
+                    size: required_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+            ];
+            // [LAW:one-source-of-truth] Bind groups MUST be rebuilt after buffer re-allocation.
+            self.rebuild_arena_bind_groups(device);
+        }
+
+        // Create Texture2D resources for entries with Texture2D storage location.
+        // [LAW:single-enforcer] This is the single boundary where Texture2D
+        // manifest entries are fulfilled by creating wgpu::Texture objects.
+        self.texture_resources.clear();
+        for (resource_id, resolved) in &resolver.map {
+            if resolved.storage_location != ResourceStorageLocation::Texture2D {
+                continue;
+            }
+            let desc = resolved.texture_desc.as_ref().unwrap_or_else(|| {
+                panic!(
+                    "Texture2D resource '{}' missing texture descriptor",
+                    resource_id
+                )
+            });
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(resource_id),
+                size: wgpu::Extent3d {
+                    width: desc.width,
+                    height: desc.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: desc.format,
+                usage: wgpu::TextureUsages::STORAGE_BINDING
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.texture_resources.insert(
+                resource_id.clone(),
+                GpuTexture2DResource {
+                    texture,
+                    view,
+                    desc: desc.clone(),
+                },
+            );
+        }
+    }
+
+    /// Look up a Texture2D resource by its symbolic ID.
+    pub fn get_texture(&self, resource_id: &str) -> Option<&GpuTexture2DResource> {
+        self.texture_resources.get(resource_id)
+    }
+
+    fn rebuild_arena_bind_groups(&mut self, device: &wgpu::Device) {
+        self.compiler_arena_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.A"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("CompilerArena.BindGroup.B"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
+
+        self.compiler_simulation_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.A"),
+                layout: &self.compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute.CompilerSimulation.BindGroup.B"),
+                layout: &self.compiler_simulation_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.state_buffers[1].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.state_buffers[0].as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            }),
+        ];
+
+        self.arena_render_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.A"),
+                layout: &self.arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Render.Arena.BindGroup.B"),
+                layout: &self.arena_render_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.compiler_arena_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
     }
 
     pub fn new(
@@ -420,7 +909,7 @@ impl GpuMemoryArena {
 
         Self {
             frame_header: FrameHeader::default(),
-            slot_descriptors: Vec::with_capacity(64),
+            symbol_resolver: SymbolResolver::new(),
             uniform_buffer,
             uniform_bind_group,
             instance_buffer,
@@ -432,10 +921,14 @@ impl GpuMemoryArena {
             draw_prep_bind_group,
             instance_bind_group,
             topology_bind_group,
+            texture_resources: std::collections::HashMap::new(),
             assembly_layout: assembly_layout.clone(),
             draw_prep_layout: draw_prep_layout.clone(),
             instance_layout: instance_layout.clone(),
             topology_layout: topology_layout.clone(),
+            state_layout: state_layout.clone(),
+            compiler_simulation_layout: compiler_simulation_layout.clone(),
+            arena_render_layout: arena_render_layout.clone(),
             instance_capacity_bytes,
             topology_capacity_words,
             sink_table_capacity_words,
@@ -514,6 +1007,18 @@ impl GpuMemoryArena {
 
     pub fn read_state_buffer(&self) -> &wgpu::Buffer {
         &self.state_buffers[self.ping_pong_index]
+    }
+
+    pub fn write_state_buffer(&self) -> &wgpu::Buffer {
+        &self.state_buffers[(self.ping_pong_index + 1) & 1]
+    }
+
+    pub fn read_arena_buffer(&self) -> &wgpu::Buffer {
+        &self.compiler_arena_buffers[self.ping_pong_index]
+    }
+
+    pub fn write_arena_buffer(&self) -> &wgpu::Buffer {
+        &self.compiler_arena_buffers[(self.ping_pong_index + 1) & 1]
     }
 
     pub fn debug_staging_buffer(&self) -> &wgpu::Buffer {
@@ -600,7 +1105,11 @@ impl GpuMemoryArena {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Render.TopologyBuffer"),
             size: ((words.max(1) * std::mem::size_of::<u32>()) as u64).max(16),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            // [LAW:one-source-of-truth] TopologyBank is both the storage buffer for
+            // vertex-pulling (bind group 2) AND the index buffer for indexed draws.
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::INDEX,
             mapped_at_creation: false,
         })
     }
@@ -782,7 +1291,10 @@ impl GpuMemoryArena {
 
 #[cfg(test)]
 mod tests {
-    use super::{BufferClearPlan, CLEAR_BUFFER_CHUNK_BYTES};
+    use super::{
+        BufferClearPlan, MemoryManifest, ResourceStorageLocation, SymbolResolver,
+        CLEAR_BUFFER_CHUNK_BYTES,
+    };
 
     #[test]
     fn clear_plan_empty_buffer_has_no_chunks() {
@@ -814,5 +1326,45 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|(_, chunk_len)| *chunk_len <= CLEAR_BUFFER_CHUNK_BYTES));
+    }
+
+    #[test]
+    fn manifest_update_class_camel_case_maps_frame_time_scalars_to_ubo() {
+        // [LAW:one-source-of-truth] MemoryManifest JSON uses `updateClass`.
+        // This regression guard ensures Rust MMU deserializes that canonical key.
+        let manifest_json = r#"
+        {
+          "resources": [
+            {
+              "id": "time_seconds",
+              "cardinality": 1,
+              "packing": "soa",
+              "type": { "payload": { "kind": "f32" } },
+              "updateClass": "FrameTime"
+            },
+            {
+              "id": "arena:slot:1",
+              "cardinality": 64,
+              "packing": "soa",
+              "type": { "payload": { "kind": "vec2" } },
+              "updateClass": "CompileTime"
+            }
+          ]
+        }
+        "#;
+        let manifest: MemoryManifest =
+            serde_json::from_str(manifest_json).expect("manifest JSON should deserialize");
+        let resolver = SymbolResolver::build_from_manifest(&manifest);
+        let time_seconds = resolver
+            .resolve("time_seconds")
+            .expect("time_seconds must resolve");
+        assert_eq!(
+            time_seconds.storage_location,
+            ResourceStorageLocation::GlobalControlUbo
+        );
+        let slot = resolver
+            .resolve("arena:slot:1")
+            .expect("arena slot should resolve");
+        assert_eq!(slot.base_offset_bytes / 4, 0);
     }
 }

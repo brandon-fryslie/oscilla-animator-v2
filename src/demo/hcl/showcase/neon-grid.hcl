@@ -43,19 +43,18 @@ patch "Neon Grid" {
     }
   }
 
-  block "Array" "grid_elements" {
+  block "InstanceDomain" "grid_elements" {
     count = 625
     outputs {
-      elements = [grid.elements, scaffold_color.elements, glow_color.elements]
-      t = [position.refs, core_hue_shift.a]
+      index = [grid.index, scaffold_color.index, glow_color.index]
+      rank = [position.refs, core_hue_shift.a]
     }
   }
 
-  block "GridLayoutUV" "grid" {
-    rows = 25
-    cols = 25
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = [scaffold_render.controlPoints, position.refs]
+      uv = [scaffold_render.controlPoints, position.refs]
     }
   }
 
@@ -63,10 +62,10 @@ patch "Neon Grid" {
     expression = <<-EXPR
       phase_a = clock.phaseA * 6.2832
       phase_b = clock.phaseB * 6.2832
-      lane = grid_elements.t
+      lane = grid_elements.rank
 
-      x0 = grid.controlPoints.x - 0.5
-      y0 = grid.controlPoints.y - 0.5
+      x0 = grid.uv.x - 0.5
+      y0 = grid.uv.y - 0.5
       diag = x0 + y0
       cross = x0 - y0
 

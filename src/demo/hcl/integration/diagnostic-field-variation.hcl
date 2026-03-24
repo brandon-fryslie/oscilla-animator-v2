@@ -22,18 +22,17 @@ patch "Diagnostic - Field Variation" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 196
     outputs {
-      elements = grid.elements
+      index = grid.index
     }
   }
 
-  block "GridLayoutUV" "grid" {
-    rows = 14
-    cols = 14
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

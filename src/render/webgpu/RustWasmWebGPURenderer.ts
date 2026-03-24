@@ -16,10 +16,12 @@ import { reportRenderIssue } from '../render-issues';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
+  RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS,
   type RustRendererBootstrapConfig,
   type RustRendererGpuPass,
   type RustRendererReadbackSnapshot,
   type RustRendererSchedulerState,
+  type RustRendererSinkPointerMap,
   type RustRendererWorkerInboundMessage,
   type RustRendererWorkerOutboundMessage,
 } from '../rust/worker-protocol';
@@ -276,12 +278,14 @@ function buildValidatedGpuPassPayload(
   stage: GpuPassStage,
   entryPoint: string,
   wgsl: string,
+  memoryManifest: RustRendererGpuPass['memoryManifest'],
 ): RustRendererGpuPass {
   return {
     passId,
     stage,
     entryPoint,
     wgsl,
+    ...(memoryManifest ? { memoryManifest } : {}),
   };
 }
 
@@ -300,7 +304,7 @@ function shouldDumpRuntimeShaderPayload(): boolean {
  * Semantic guarantees are established upstream at compile worker validation:
  * - stage contract correctness
  * - entrypoint/WGSL signature agreement
- * - bundle policy (duplicate IDs / fluid order)
+ * - bundle policy (duplicate IDs)
  *
  * Keeping this boundary narrow avoids semantic policy drift between compiler
  * and renderer install paths.
@@ -312,7 +316,7 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   const stage = requireGpuPassStage(pass, passId);
   const entryPoint = requireGpuPassEntryPoint(pass, passId);
   const wgsl = requireGpuPassWgsl(pass, passId);
-  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl);
+  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl, pass.memoryManifest);
 }
 
 /**
@@ -373,7 +377,21 @@ function readRequiredSinkTableWord(
 }
 
 function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
-  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT';
+  return type === 'SCHEDULER_HEARTBEAT'
+    || type === 'RUNTIME_EVENT'
+    || type === 'READBACK_SNAPSHOT'
+    || type === 'SET_SINK_POINTER_MAP_SUCCESS';
+}
+
+function canonicalizeSinkPointerMap(
+  sinkPointerMap: RustRendererSinkPointerMap,
+): RustRendererSinkPointerMap {
+  const sortedEntries = Object.entries(sinkPointerMap).sort(([lhs], [rhs]) => lhs.localeCompare(rhs));
+  const canonical: Record<string, string> = {};
+  for (const [key, resourceId] of sortedEntries) {
+    canonical[key] = resourceId;
+  }
+  return canonical;
 }
 
 function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
@@ -520,6 +538,9 @@ export class WebGPURenderer {
   // [RECOVER-10] [LAW:single-enforcer] Latest structured readback snapshot
   // from the worker, replacing the stubbed readIndirectArgsDebugView.
   private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
+  private readbackDebugLogged = false;
+  private shapeBankInstallDebugLogged = false;
+  private installedSinkPointerMapJson: string | null = null;
 
   private reportEngineError(
     source: string,
@@ -1054,6 +1075,31 @@ export class WebGPURenderer {
     return this.latestSinkTableSample;
   }
 
+  async installDrawPrepSinkPointerMap(
+    sinkPointerMap: RustRendererSinkPointerMap,
+  ): Promise<void> {
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
+    const canonicalMap = canonicalizeSinkPointerMap(sinkPointerMap);
+    const sinkPointerMapJson = JSON.stringify(canonicalMap);
+    if (sinkPointerMapJson === this.installedSinkPointerMapJson) {
+      return;
+    }
+    await this.awaitWorkerAck({
+      successType: 'SET_SINK_POINTER_MAP_SUCCESS',
+      context: `installDrawPrepSinkPointerMap(${Object.keys(canonicalMap).length})`,
+      dispatch: () => {
+        const message: RustRendererWorkerInboundMessage = {
+          type: 'SET_SINK_POINTER_MAP',
+          sinkPointerMap: canonicalMap,
+        };
+        this.worker.postMessage(message);
+      },
+    });
+    this.installedSinkPointerMapJson = sinkPointerMapJson;
+  }
+
   /**
    * Geometry routes classified during the most recent render() call.
    *
@@ -1286,6 +1332,19 @@ export class WebGPURenderer {
     }
     if (wordCount > 0) {
       this.sharedShapeBankWords.set(shapeBank.data.subarray(0, wordCount), 0);
+      if (this.shouldEmitRuntimeConsole() && !this.shapeBankInstallDebugLogged) {
+        this.shapeBankInstallDebugLogged = true;
+        const firstWords = Array.from(shapeBank.data.subarray(0, Math.min(16, wordCount)));
+        const offset32Words = wordCount > 32
+          ? Array.from(shapeBank.data.subarray(32, Math.min(48, wordCount)))
+          : [];
+        this.emitRuntimeConsoleInfo({
+          kind: 'shape-bank-install-sample',
+          wordCount,
+          firstWords,
+          offset32Words,
+        });
+      }
     }
     return wordCount;
   }
@@ -1332,7 +1391,7 @@ export class WebGPURenderer {
   private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
     const headerWords = 8;
     const recordWords = 8;
-    const descriptorWords = 20;
+    const descriptorWords = RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS;
     const totalRecords = readRequiredSinkTableWord(
       sinkTableWords,
       wordCount,
@@ -1638,6 +1697,41 @@ export class WebGPURenderer {
     }
   }
 
+  private validateReadbackSnapshotHealth(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'READBACK_SNAPSHOT' }>,
+  ): void {
+    const counters = payload.renderCounters;
+    const expectedRecordCount = counters.expectedIndexedRecordCount + counters.expectedNonIndexedRecordCount;
+    const decodedRecordCount = counters.decodedIndexedRecordCount + counters.decodedNonIndexedRecordCount;
+    const expectedInstanceCount = counters.expectedTotalInstanceCount;
+    const decodedInstanceCount =
+      counters.decodedIndexedInstanceCount + counters.decodedNonIndexedInstanceCount;
+
+    if (expectedRecordCount > 0 && decodedRecordCount === 0) {
+      this.emitRuntimeHealthWarning('indirect_records_missing_from_readback', {
+        expectedRecordCount,
+        decodedRecordCount,
+      });
+    }
+    if (expectedInstanceCount > 0 && decodedInstanceCount === 0) {
+      this.emitRuntimeHealthWarning('indirect_instances_missing_from_readback', {
+        expectedInstanceCount,
+        decodedInstanceCount,
+        decodedNonZeroRecordCount: counters.decodedNonZeroRecordCount,
+      });
+    }
+    if (expectedInstanceCount !== decodedInstanceCount) {
+      this.emitRuntimeHealthWarning('indirect_instance_count_mismatch', {
+        expectedInstanceCount,
+        decodedInstanceCount,
+        expectedIndexedRecordCount: counters.expectedIndexedRecordCount,
+        expectedNonIndexedRecordCount: counters.expectedNonIndexedRecordCount,
+        decodedIndexedRecordCount: counters.decodedIndexedRecordCount,
+        decodedNonIndexedRecordCount: counters.decodedNonIndexedRecordCount,
+      });
+    }
+  }
+
   private shouldIgnoreRuntimeMessage(
     payload: RustRendererWorkerOutboundMessage,
   ): boolean {
@@ -1750,7 +1844,30 @@ export class WebGPURenderer {
     }
     // [RECOVER-10] Store latest readback snapshot for debug consumers.
     if (payload.type === 'READBACK_SNAPSHOT') {
+      this.validateReadbackSnapshotHealth(payload);
       this.latestReadbackSnapshot = payload;
+      if (
+        this.shouldEmitRuntimeConsole()
+        && !this.readbackDebugLogged
+        && payload.renderCounters.expectedTotalInstanceCount > 0
+      ) {
+        this.readbackDebugLogged = true;
+        this.emitRuntimeConsoleInfo({
+          kind: 'readback-snapshot-sample',
+          renderCounters: payload.renderCounters,
+          firstIndirectArgs: payload.indirectArgs[0] ?? null,
+          indirectWordsHead: payload.indirectWordsHead
+            ? Array.from(payload.indirectWordsHead.slice(0, 16))
+            : [],
+          shapeHeaderSample: payload.shapeHeaderSample
+            ? Array.from(payload.shapeHeaderSample.slice(0, 16))
+            : [],
+          shapeCpResolutionSample: payload.shapeCpResolutionSample
+            ? Array.from(payload.shapeCpResolutionSample.slice(0, 8))
+            : [],
+          instanceProbeSample: Array.from(payload.instanceProbeValues.slice(0, 64)),
+        });
+      }
     }
   };
 }

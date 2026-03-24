@@ -2,10 +2,8 @@
  * State Migration Module
  *
  * Migrates stateful primitive state across hot-swap using stable StateIds.
- * Uses the continuity mapping service for lane remapping in field state.
  *
  * Key principle: State identity is semantic (StateId), not positional (slot index).
- * Lane remapping uses the same infrastructure as continuity buffers.
  *
  * @module runtime/StateMigration
  */
@@ -16,7 +14,14 @@ import type {
   StateMapping,
   StableStateId,
 } from '../compiler/ir/types';
-import type { MappingState } from './ContinuityState';
+
+/**
+ * Lane remapping state for field state migration.
+ * Maps new lane indices to old lane indices (-1 = no mapping).
+ */
+export interface MappingState {
+  readonly newToOld: Int32Array;
+}
 
 /**
  * Result of state migration.

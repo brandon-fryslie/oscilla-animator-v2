@@ -15,7 +15,6 @@ describe('RuntimeState state-bank ownership', () => {
         readOffset: 10,
         writeOffset: 14,
       },
-      gaugeTargets: [],
     } as const;
     const state = createRuntimeState(
       4, // stateSlotCount
@@ -47,7 +46,6 @@ describe('RuntimeState state-bank ownership', () => {
         readOffset: 0,
         writeOffset: 3,
       },
-      gaugeTargets: [],
     } as const;
     const state = createRuntimeState(3, 0, 0, 6, undefined, undefined, arenaRuntimeLayout);
     state.state[0] = 1;

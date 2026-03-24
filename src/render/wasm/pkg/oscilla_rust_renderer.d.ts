@@ -15,9 +15,11 @@ export function pause_engine(): void;
 
 export function rebuild_gpu_pipelines(passes: any): Promise<void>;
 
-export function rebuild_pipeline(simulation_wgsl: string, assembly_wgsl: string, uber_shader_wgsl: string, particle_count: number, shape_count: number): void;
-
 export function resume_engine(): void;
+
+export function set_debug_readback_hz(debug_readback_hz: number): void;
+
+export function set_sink_pointer_map(sink_pointer_map_json: string): void;
 
 export function take_frame_pacing_packet(): any;
 
@@ -36,19 +38,20 @@ export interface InitOutput {
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
     readonly rebuild_gpu_pipelines: (a: any) => any;
-    readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly resume_engine: () => [number, number];
+    readonly set_debug_readback_hz: (a: number) => [number, number];
+    readonly set_sink_pointer_map: (a: number, b: number) => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];
     readonly upload_atlas_data: (a: any) => [number, number];
-    readonly wasm_bindgen__closure__destroy__h5931e681d5dee89c: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__haf1314f791359451: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h226acc91fc00b34c: (a: number, b: number, c: number) => void;
+    readonly wasm_bindgen__closure__destroy__hac389948b8d10e82: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h3a942a1bf5f19357: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h08519952343379dd: (a: number, b: number, c: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hcb563ba53ad42ec8: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1d4d9e8783fdfb62: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h210728d8ddfda338_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h65696f0a51e234e0: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h65696f0a51e234e0_3: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

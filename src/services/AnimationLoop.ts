@@ -28,7 +28,6 @@ export interface AnimationLoopState {
   minFrameTime: number;
   maxFrameTime: number;
   frameTimeSum: number;
-  lastContinuityStoreUpdate: number;
 }
 
 export interface ActiveAnimationLoopRuntime {
@@ -407,7 +406,6 @@ export function createAnimationLoopState(): AnimationLoopState {
     minFrameTime: Infinity,
     maxFrameTime: 0,
     frameTimeSum: 0,
-    lastContinuityStoreUpdate: 0,
   };
 }
 
@@ -422,7 +420,6 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
   state.minFrameTime = next.minFrameTime;
   state.maxFrameTime = next.maxFrameTime;
   state.frameTimeSum = next.frameTimeSum;
-  state.lastContinuityStoreUpdate = next.lastContinuityStoreUpdate;
 }
 
 /**

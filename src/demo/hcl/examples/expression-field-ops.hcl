@@ -22,23 +22,22 @@ patch "Expression Field Ops" {
     }
   }
 
-  block "Array" "points" {
+  block "InstanceDomain" "points" {
     count = 144
     outputs {
-      elements = layout.elements
-      t = [scale_expr.refs, hue-shift.a]
+      index = layout.index
+      rank = [scale_expr.refs, hue-shift.a]
     }
   }
 
-  block "GridLayoutUV" "layout" {
-    rows = 12
-    cols = 12
+  block "ScatterUV" "layout" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 
-  # Explicit field operator: map one-cardinality oscillator value over points.t lanes
+  # Explicit field operator: map one-cardinality oscillator value over points.rank lanes
   block "Expression" "scale_expr" {
     expression = <<-EXPR
       // Baseline scale level shared by every instance.
@@ -57,9 +56,9 @@ patch "Expression Field Ops" {
       // Visual: all points start from the same temporal pulse.
       pulse_value = base_scale + pulse_amount * sin(pulse_phase)
 
-      // Broadcast pulse to every points.t lane.
+      // Broadcast pulse to every points.rank lane.
       // Visual: applies identical scale animation to the whole grid.
-      mapField(pulse_value, points.t)
+      mapField(pulse_value, points.rank)
     EXPR
     outputs {
       out = render.scale

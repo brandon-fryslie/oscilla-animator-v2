@@ -15,19 +15,18 @@ patch "Adapter Obligation Name Demo" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 24
     outputs {
-      elements = layout.elements
-      t = color.h
+      index = layout.index
+      rank = color.h
     }
   }
 
-  block "GridLayoutUV" "layout" {
-    rows = 4
-    cols = 6
+  block "ScatterUV" "layout" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

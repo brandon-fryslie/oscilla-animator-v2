@@ -27,6 +27,8 @@ import type {
   ExprProvenanceIR,
   GeneratedComputeProgramIR,
   PortBindingIR,
+  MemoryResourceIR,
+  MemoryManifestIR,
 } from './ir/program';
 import type { InstanceId, StepIndex, ValueSlot } from './ir/Indices';
 import { SCALAR_INSTANCE_ID, stepIndex } from './ir/Indices';
@@ -35,12 +37,11 @@ import type { UnlinkedIRFragments } from './backend/lower-blocks';
 import type { ScheduleIR } from './backend/schedule-program';
 import type { AcyclicOrLegalGraph } from './ir/patches';
 import type { EventHub } from '../events/EventHub';
-import { payloadStride, requireInst, requireManyInstance } from '../core/canonical-types';
+import { payloadStride, requireInst, requireManyInstance, isMany } from '../core/canonical-types';
+import type { CanonicalType } from '../core/canonical-types';
 import {
   deriveStorageLayout,
-  deriveArenaZonePlan,
-  DEFAULT_ARENA_ALIGNMENT_POLICY,
-  type ArenaGaugeTargetPlanInput,
+  resolveInstanceCount,
 } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
 import type { ValueExpr, ValueExprId } from './ir/value-expr';
@@ -56,6 +57,7 @@ import { getValueExprChildren } from '../runtime/ValueExprTreeWalker';
 import { compileFrontend, type FrontendResult, type FrontendError } from './frontend';
 import { compileError, type CompileError } from './types';
 import { buildProgramTopologyTable, collectAllProgramTopologyIds } from './ir/program-topology';
+import { intersectUpdateClass } from '../types/compiler';
 
 import { registerAllBlocks } from '../blocks/all';
 
@@ -64,7 +66,7 @@ import { pass4DepGraph } from './backend/derive-dep-graph';
 import { pass5CycleValidation } from './backend/schedule-scc';
 import { pass6BlockLowering } from './backend/lower-blocks';
 import { pass7Schedule } from './backend/schedule-program';
-import { allocateContinuityPipeline } from './backend/continuity-pipeline';
+import { allocateRenderMaterializationPipeline } from './backend/render-materialization-pipeline';
 
 registerAllBlocks();
 
@@ -249,12 +251,11 @@ export function compileFromFrontend(
     }
 
 
-    // Pass 6b: Continuity Pipeline Allocation
-    // [LAW:single-enforcer] All continuity pipeline slots allocated through builder.
-    const continuityPipeline = allocateContinuityPipeline(unlinkedIR, acyclicPatch);
+    // Pass 6b: Render Materialization Pipeline
+    const renderPipeline = allocateRenderMaterializationPipeline(unlinkedIR, acyclicPatch);
 
     // Pass 7: Schedule Construction (pure ordering, no allocation)
-    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, continuityPipeline);
+    const scheduleIR = pass7Schedule(unlinkedIR, acyclicPatch, renderPipeline);
 
     if (captureInspector) {
       compilationInspector.capturePass('schedule', unlinkedIR, scheduleIR);
@@ -361,83 +362,6 @@ export function collectNagaLoweringCoverageDiagnostics(
   };
 }
 
-function collectRuntimeLiveExprIdsForPatching(args: {
-  readonly valueExprs: readonly ValueExpr[];
-  readonly schedule: ScheduleIR;
-  readonly fieldSlotRegistry: ReadonlyMap<ValueSlot, FieldSlotEntry>;
-}): readonly number[] {
-  // [LAW:single-enforcer] Compiler owns runtime-live patchability metadata so
-  // fast-path services consume one canonical source.
-  const live = new Set<number>();
-  const stack: number[] = [];
-  const fieldExprBySlot = new Map<number, number>();
-
-  for (const [slot, entry] of args.fieldSlotRegistry.entries()) {
-    fieldExprBySlot.set(slot as number, entry.fieldId as number);
-  }
-
-  const pushExpr = (exprId: number | undefined | null): void => {
-    if (exprId === undefined || exprId === null) return;
-    if (!Number.isInteger(exprId) || exprId < 0) return;
-    if (!live.has(exprId)) {
-      stack.push(exprId);
-    }
-  };
-
-  const pushFieldExprForSlot = (slot: number | undefined): void => {
-    if (slot === undefined || slot === null) return;
-    const fieldExprId = fieldExprBySlot.get(slot);
-    if (fieldExprId === undefined) return;
-    pushExpr(fieldExprId);
-  };
-
-  // [LAW:dataflow-not-control-flow] Liveness roots are runtime compute/render
-  // sinks; materialize is transfer plumbing and not a patchability root.
-  for (const step of args.schedule.steps as readonly Step[]) {
-    switch (step.kind) {
-      case 'eventDispatch':
-        pushExpr(step.expr as number);
-        break;
-      case 'stateWrite':
-      case 'fieldStateWrite':
-        pushExpr(step.value as number);
-        break;
-      case 'render':
-        pushFieldExprForSlot(step.controlPointsSlot as number);
-        pushFieldExprForSlot(step.colorSlot as number);
-        pushFieldExprForSlot(step.scale.slot as number);
-        pushFieldExprForSlot(step.shape.slot as number);
-        if (step.controlPoints?.k === 'slot') {
-          pushFieldExprForSlot(step.controlPoints.slot as number);
-        }
-        pushFieldExprForSlot(step.rotationSlot as number | undefined);
-        pushFieldExprForSlot(step.scale2Slot as number | undefined);
-        break;
-      case 'continuityMapBuild':
-      case 'continuityApply':
-      case 'materialize':
-        break;
-      default: {
-        const _exhaustive: never = step;
-        void _exhaustive;
-      }
-    }
-  }
-
-  while (stack.length > 0) {
-    const exprId = stack.pop()!;
-    if (live.has(exprId)) continue;
-    live.add(exprId);
-    const expr = args.valueExprs[exprId];
-    if (!expr) continue;
-    for (const child of getValueExprChildren(expr)) {
-      pushExpr(child as number);
-    }
-  }
-
-  return Array.from(live.values()).sort((a, b) => a - b);
-}
-
 /**
  * Compiler invariants are non-negotiable backend correctness checks and must
  * not be downgraded to unreachable warnings.
@@ -457,18 +381,6 @@ function compileErrorFromUnexpected(args: {
     blockId: args.blockId,
     port: args.portId,
   });
-}
-
-function parseSlotPortLabel(label: string | undefined): { readonly blockId?: string; readonly portId?: string } {
-  if (!label) return {};
-  const separator = label.lastIndexOf('.');
-  if (separator <= 0 || separator >= label.length - 1) {
-    return {};
-  }
-  return {
-    blockId: label.slice(0, separator),
-    portId: label.slice(separator + 1),
-  };
 }
 
 function readRequiredBlockLabel(
@@ -507,9 +419,9 @@ function buildRuntimeAddressTable(
       type: slotEntry.type,
       arena: slotEntry.arena,
     });
-    if (slotEntry.arena.offset >= 0) {
-      slotToArena.set(slotEntry.slot, slotEntry.arena);
-    }
+    // [LAW:one-source-of-truth] Every slot with an arena descriptor is registered.
+    // Physical offsets are resolved by Rust MMU; TS-side uses symbolic resourceId.
+    slotToArena.set(slotEntry.slot, slotEntry.arena);
   }
 
   // [LAW:one-source-of-truth] Field slot ownership comes from IR builder
@@ -543,26 +455,6 @@ function buildRuntimeAddressTable(
     scalarExprToArenaAddress,
     slotToArena,
   };
-}
-
-function collectGaugeTargetPlanInputs(scheduleIR: ScheduleIR): readonly ArenaGaugeTargetPlanInput[] {
-  const entries: ArenaGaugeTargetPlanInput[] = [];
-  const seen = new Set<string>();
-  for (const step of scheduleIR.steps) {
-    if (step.kind !== 'continuityApply') {
-      continue;
-    }
-    if (seen.has(step.targetKey)) {
-      continue;
-    }
-    seen.add(step.targetKey);
-    entries.push({
-      targetId: step.targetKey,
-      instanceId: step.instanceId,
-      slot: step.outputSlot,
-    });
-  }
-  return entries;
 }
 
 function assertRuntimeAddressTableCoverage(
@@ -689,8 +581,6 @@ function convertLinkedIRToProgram(
     const slotInfo = slotTypes.get(slot);
     if (!slotInfo?.type) throw new Error(`Slot ${slot} has no registered type — IR builder bug`);
     const type = slotInfo.type;
-    const slotPort = parseSlotPortLabel(slotInfo.label);
-
     // [LAW:one-source-of-truth] Single derivation point for storage class + stride.
     let derivedStorage: ReturnType<typeof deriveStorageLayout>['storage'];
     let stride: number;
@@ -700,8 +590,8 @@ function convertLinkedIRToProgram(
       throw compileErrorFromUnexpected({
         code: 'AxisInvalid',
         error,
-        blockId: slotPort.blockId,
-        portId: slotPort.portId,
+        blockId: slotInfo.source?.blockId,
+        portId: slotInfo.source?.portId,
       });
     }
     const storage = assertCanonicalRuntimeStorage(derivedStorage);
@@ -729,39 +619,82 @@ function convertLinkedIRToProgram(
     });
   }
 
-  // [LAW:one-source-of-truth] Arena zones + aligned offsets are compiled once.
-  const gaugeTargetPlanInputs = collectGaugeTargetPlanInputs(scheduleIR);
-  const arenaZonePlan = deriveArenaZonePlan(
-    arenaSlotPlanInputs,
-    instances,
-    DEFAULT_ARENA_ALIGNMENT_POLICY,
-    {
-      stateBankLength: scheduleIR.stateSlotCount,
-      stateEntryCount: scheduleIR.stateMappings.length,
-      gaugeTargets: gaugeTargetPlanInputs,
-    },
-  );
-  const arenaLayout: ArenaSlotDescriptor[] = new Array(slotCount);
+  // Build Memory Manifest (Symbolic intent for Phase 1 MMU)
+  // [LAW:one-source-of-truth] This manifest is the sole authority for GPU
+  // memory requirements; Rust MMU performs physical allocation.
+  const manifestResources: MemoryResourceIR[] = [];
+  const materializeTargetSlots = collectMaterializeTargetSlots(scheduleIR);
+
+  // 1. Scalar/Field Arena Slots
+  for (const slotInput of arenaSlotPlanInputs) {
+    const card = requireInst(slotInput.type.extent.cardinality, 'cardinality');
+    const cardinality = isMany(card)
+      ? resolveInstanceCount(card.instance.instanceId, instances)
+      : 1;
+
+    // [LAW:one-source-of-truth] Read updateClass and source from builder slot metadata.
+    // Every arena slot was allocated through allocTypedSlot, so metadata must exist.
+    const slotMd = slotTypes.get(slotInput.slot);
+    if (!slotMd) {
+      throw new Error(`Slot ${slotInput.slot} missing from slotLayoutInputs — allocTypedSlot was not called for this slot.`);
+    }
+    // [LAW:single-enforcer] Writable arena-slot classification is enforced once
+    // at manifest emission: materialize targets cannot remain FrameTime-only UBO.
+    const writeCompatibilityClass = materializeTargetSlots.has(slotInput.slot)
+      ? 'CompileTime'
+      : 'FrameTime';
+    const effectiveUpdateClass = intersectUpdateClass(slotMd.updateClass, writeCompatibilityClass);
+    manifestResources.push({
+      id: `arena:slot:${slotInput.slot}`,
+      type: slotInput.type,
+      cardinality,
+      packing: slotInput.packingPreference,
+      updateClass: effectiveUpdateClass,
+      source: slotMd.source,
+      label: `Slot ${slotInput.slot}`,
+    });
+  }
+
+  // 2. Persistent State Bank
+  if (scheduleIR.stateSlotCount > 0) {
+    // [LAW:one-source-of-truth] State bank cardinality is governed by the schedule.
+    // We declare ONE resource for the bank; Rust MMU handles double-buffering.
+    manifestResources.push({
+      id: 'state:bank',
+      type: { payload: { kind: 'float' }, extent: { cardinality: { kind: 'one' }, temporality: { kind: 'discrete' } } } as unknown as CanonicalType,
+      cardinality: scheduleIR.stateSlotCount,
+      packing: 'soa',
+      updateClass: 'FrameTime',
+      label: 'Persistent State Bank',
+    });
+  }
+
+  // 3. Additional resources declared by blocks (e.g., Texture2D for fluid sims)
+  manifestResources.push(...unlinkedIR.additionalMemoryResources);
+
+  const memoryManifest: MemoryManifestIR = { resources: manifestResources };
+
+  // [LAW:one-source-of-truth] Runtime slot descriptors mirror the same
+  // slot-offset basis used by generated simulation WGSL.
   const runtimeSlots: RuntimeSlotEntry[] = runtimeSlotEntries.map((entry) => {
-    const arena = arenaZonePlan.slotDescriptor(entry.slot);
-    arenaLayout[entry.slot as number] = arena;
+    const card = requireInst(entry.type.extent.cardinality, 'cardinality');
+    const laneCount = isMany(card)
+      ? resolveInstanceCount(card.instance.instanceId, instances)
+      : 1;
     return {
       ...entry,
-      arena,
+      arena: {
+        resourceId: `arena:slot:${entry.slot}`,
+        offset: entry.offset,
+        stride: entry.stride,
+        laneCount,
+        length: entry.stride * laneCount,
+        packing: 'soa',
+        laneStride: 1,
+        componentStride: laneCount,
+      },
     };
   });
-  const descriptorPayloadFloats = arenaLayout.reduce((sum, descriptor) => sum + descriptor.length, 0);
-  if (descriptorPayloadFloats !== arenaZonePlan.payloadFloats) {
-    // [LAW:single-enforcer] Compiler layout planning is the single boundary
-    // that guarantees descriptor-sum payload invariants.
-    throw new Error(
-      'convertLinkedIRToProgram: payload sum mismatch (layout=' +
-        descriptorPayloadFloats +
-        ', plan=' +
-        arenaZonePlan.payloadFloats +
-        ')',
-    );
-  }
 
   // Build output specs from canonical output contract only.
   const outputs: OutputSpecIR[] = [{ kind: 'renderFrame' }];
@@ -794,12 +727,16 @@ function convertLinkedIRToProgram(
     scheduleIR,
     runtimeAddressTable,
   );
-  const nagaLoweringProgram = lowerScheduleToNagaModule({
+  const nagaLoweringProgramBase = lowerScheduleToNagaModule({
     schedule: scheduleIR,
     runtimeAddressTable,
     valueExprs: valueExprNodes,
     exprToBlock: builder.getExprToBlock(),
   });
+  // Attach block-emitted dispatch instructions (e.g., fluid sim kernels)
+  const nagaLoweringProgram = unlinkedIR.dispatchInstructions.length > 0
+    ? { ...nagaLoweringProgramBase, dispatchInstructions: unlinkedIR.dispatchInstructions }
+    : nagaLoweringProgramBase;
 
   // Build debug index
   type DebugPortBinding = CompiledProgramIR['debugIndex']['ports'][number];
@@ -952,11 +889,16 @@ function convertLinkedIRToProgram(
     throw new Error('E_CAMERA_MULTIPLE: Only one Camera block is permitted.');
   }
 
-  const runtimeLiveExprIds = collectRuntimeLiveExprIdsForPatching({
-    valueExprs: valueExprNodes,
-    schedule: scheduleIR,
-    fieldSlotRegistry,
-  });
+  // Build fast-path offset table for O(1) control parameter updates.
+  // [LAW:one-source-of-truth] Derived once from structured IR metadata at compile time.
+  const fastPathOffsets: Record<string, number> = {};
+  for (const meta of slotMeta) {
+    if (meta.storage !== 'f32') continue;
+    const slotMd = slotTypes.get(meta.slot);
+    if (slotMd?.source) {
+      fastPathOffsets[`${slotMd.source.blockId}:${slotMd.source.portId}`] = meta.offset;
+    }
+  }
 
   // Build the program (ValueExpr-only, with kernel registry)
   const program: CompiledProgramIR = {
@@ -965,32 +907,33 @@ function convertLinkedIRToProgram(
     constants: { json: [] },
     schedule: scheduleIR,
     outputs,
+    memoryManifest,
     slotMeta,
     runtimeSlots,
     runtimeAddressTable,
     debugIndex,
     fieldSlotRegistry,
-    renderGlobals, // NEW - Camera system: populated from builder
-    kernelRegistry: registry, // Phase B: Kernel registry with resolved handles
+    renderGlobals,
+    kernelRegistry: registry,
     topologyTable,
-    constantProvenance: unlinkedIR.constantProvenance.size > 0
-      ? unlinkedIR.constantProvenance
-      : undefined,
-    instanceCountProvenance: unlinkedIR.instanceCountProvenance.size > 0
-      ? unlinkedIR.instanceCountProvenance
-      : undefined,
-    runtimeLiveExprIds,
-    arenaLayout,
-    arenaZones: arenaZonePlan.toIR(),
-    arenaRuntimeLayout: arenaZonePlan.runtimeLayout,
-    arenaPayloadFloats: arenaZonePlan.payloadFloats,
-    arenaTotalFloats: arenaZonePlan.totalFloats,
     drawPrepProgram,
     generatedComputeProgram,
     nagaLoweringProgram,
+    fastPathOffsets,
   };
 
   return program;
+}
+
+function collectMaterializeTargetSlots(scheduleIR: ScheduleIR): ReadonlySet<ValueSlot> {
+  const targets = new Set<ValueSlot>();
+  // [LAW:dataflow-not-control-flow] Slot writeability is derived by walking the
+  // canonical schedule in one fixed pass; step kind carries variability as data.
+  for (const step of scheduleIR.steps) {
+    if (step.kind !== 'materialize') continue;
+    targets.add(step.target);
+  }
+  return targets;
 }
 
 interface ShapeClassification {
@@ -1039,11 +982,18 @@ function classifyShapeForRenderStep(
     );
   }
 
-  // [LAW:one-type-per-behavior] The current geometry path is Type 1 rigid and
-  // uses non-indexed draws with GPU vertex pulling from canonical ShapeBank
-  // topology data.
-  // [RECOVER-04] Switched from indexed (requiring CPU-realized index buffers)
-  // to nonIndexed (GPU vertex pulling from topologyBank).
+  // [LAW:one-type-per-behavior] Type 2 Parametric shapes carry a parametricTemplate
+  // payload on the shapeRef expression. The install contract packs the template
+  // into ShapeBank using packParametricShapeBankRecord.
+  if (shapeExpr.parametricTemplate) {
+    const topo = shapeExpr.parametricTemplate;
+    const drawMode: DrawPrepSinkIR['drawMode'] =
+      topo.indexCount > 0 ? 'indexed' : 'nonIndexed';
+    return { drawMode, shapeClass: ShapeClass.Type2Parametric };
+  }
+
+  // [LAW:one-type-per-behavior] The rigid geometry path is Type 1 and uses
+  // non-indexed draws with GPU vertex pulling from canonical ShapeBank topology data.
   const drawMode: DrawPrepSinkIR['drawMode'] = 'nonIndexed';
 
   return { drawMode, shapeClass: ShapeClass.Type1Rigid };
@@ -1200,10 +1150,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
       case 'materialize':
         slots.add(step.target);
         break;
-      case 'continuityApply':
-        slots.add(step.baseSlot);
-        slots.add(step.outputSlot);
-        break;
       case 'render':
         slots.add(step.controlPointsSlot);
         slots.add(step.colorSlot);
@@ -1216,7 +1162,6 @@ function collectComputeSlots(scheduleIR: ScheduleIR): ValueSlot[] {
       case 'eventDispatch':
       case 'stateWrite':
       case 'fieldStateWrite':
-      case 'continuityMapBuild':
         break;
       default: {
         const _exhaustive: never = step;
@@ -1269,9 +1214,6 @@ function getStepExprId(step: Step): ValueExprId | null {
       return step.value;
     case 'render':
       return null;
-    case 'continuityMapBuild':
-    case 'continuityApply':
-      return null;
     default: {
       const _exhaustive: never = step;
       return _exhaustive;
@@ -1292,8 +1234,6 @@ function getStepTargetSlot(step: Step): ValueSlot | null {
     case 'render':
     case 'stateWrite':
     case 'fieldStateWrite':
-    case 'continuityMapBuild':
-    case 'continuityApply':
       return null;
     default: {
       const _exhaustive: never = step;

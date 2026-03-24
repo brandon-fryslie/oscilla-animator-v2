@@ -7,8 +7,6 @@
 
 import type { EffectiveTime, TimeState } from './timeResolution';
 import { createTimeState } from './timeResolution';
-import type { ContinuityState } from './ContinuityState';
-import { bindContinuityGaugeArena, createContinuityState } from './ContinuityState';
 import type { DebugTap } from './DebugTap';
 import type { ArenaRuntimeLayoutIR, RuntimeScalarArenaAddress } from '../compiler/ir/program';
 import { ExternalChannelSystem } from './ExternalChannel';
@@ -373,14 +371,10 @@ export const RUNTIME_FRAME_SEGMENT_ORDER = [
   'preframe-time-resolve',
   'preframe-event-reset',
   'phase1-value-pre-event',
-  'phase1-continuity-map',
-  'phase1-value-after-map',
-  'phase1-continuity-apply',
   'phase1-event-dispatch',
   'phase1-value-post-event',
   'phase1-debug-materialize',
   'phase2-state-write',
-  'continuity-finalize',
 ] as const;
 
 export type RuntimeFrameSegment = (typeof RUNTIME_FRAME_SEGMENT_ORDER)[number];
@@ -417,18 +411,6 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
     reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
     writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
   },
-  'phase1-continuity-map': {
-    reads: ['continuity.prevDomains'],
-    writes: ['continuity.prevDomains', 'continuity.mappings', 'continuity.changedInstancesThisFrame'],
-  },
-  'phase1-value-after-map': {
-    reads: ['arena', 'state.readBank', 'eventScalars', 'externalChannels.snapshot'],
-    writes: ['arena', 'cache.scalarValueExprValues', 'cache.scalarValueExprStamps'],
-  },
-  'phase1-continuity-apply': {
-    reads: ['continuity.changedInstancesThisFrame', 'continuity.mappings', 'arena'],
-    writes: ['continuity.targets', 'arena'],
-  },
   'phase1-event-dispatch': {
     reads: ['arena', 'eventWrapPredicate'],
     writes: ['eventScalars', 'events', 'eventWrapPredicate'],
@@ -444,15 +426,6 @@ export const RUNTIME_FRAME_SEGMENT_OWNERSHIP: Readonly<
   'phase2-state-write': {
     reads: ['arena', 'state.readBank', 'state mappings'],
     writes: ['state.writeBank'],
-  },
-  'continuity-finalize': {
-    reads: ['time'],
-    writes: [
-      'continuity.lastTModelMs',
-      'continuity.domainChangeThisFrame',
-      'continuity.changedInstancesThisFrame',
-      'continuity.mappings',
-    ],
   },
 } as const;
 
@@ -767,48 +740,6 @@ export function createHealthMetrics(): HealthMetrics {
   };
 }
 
-/**
- * ContinuityConfig - User-configurable continuity parameters
- *
- * Controls the behavior of continuity system transitions.
- * Persisted in RuntimeState to survive hot-swap.
- */
-export interface ContinuityConfig {
-  /** Decay exponent for gauge decay (0.1-2.0, default 0.7) */
-  decayExponent: number;
-
-  /** Global multiplier for all transition times (0.5-3.0, default 1.0) */
-  tauMultiplier: number;
-
-  /** Base tau duration in milliseconds (50-500ms, default 150ms)
-   * Applied as factor: effectiveTau = policyTau × (baseTauMs / 150) × tauMultiplier
-   * This gives an absolute-time feel to the control
-   */
-  baseTauMs: number;
-
-  /** Test pulse request (null when no pulse requested) */
-  testPulseRequest?: {
-    /** Pulse magnitude (e.g., 50 for 50px offset) */
-    magnitude: number;
-    /** Target semantic ('position' | 'radius' | etc., or null for all) */
-    targetSemantic?: string;
-    /** Frame ID when pulse was applied (prevents double-apply) */
-    appliedFrameId?: number;
-  } | null;
-}
-
-/**
- * Create default continuity config
- */
-export function createContinuityConfig(): ContinuityConfig {
-  return {
-    decayExponent: 0.7,
-    tauMultiplier: 1.0,
-    baseTauMs: 150,
-    testPulseRequest: null,
-  };
-}
-
 // =============================================================================
 // Session vs Program State Split
 // =============================================================================
@@ -834,12 +765,6 @@ export interface SessionState {
 
   /** Health monitoring metrics */
   health: HealthMetrics;
-
-  /** Continuity state for smooth transitions (survives hot-swap) */
-  continuity: ContinuityState;
-
-  /** Continuity config for user-controlled parameters */
-  continuityConfig: ContinuityConfig;
 
   /** Optional debug tap for runtime observation */
   tap?: DebugTap;
@@ -986,16 +911,10 @@ export interface RuntimeState {
   /** External channel system (generic input infrastructure) */
   externalChannels: ExternalChannelSystem;
 
-  /** Health monitoring metrics (Sprint 2+) */
+  /** Health monitoring metrics */
   health: HealthMetrics;
 
-  /** Continuity state for smooth transitions (spec topics/11-continuity-system.md) */
-  continuity: ContinuityState;
-
-  /** Continuity config for user-controlled parameters (survives hot-swap) */
-  continuityConfig: ContinuityConfig;
-
-  /** Optional debug tap for runtime observation (Sprint 1: Debug Probe) */
+  /** Optional debug tap for runtime observation */
   tap?: DebugTap;
 }
 
@@ -1007,8 +926,6 @@ export function createSessionState(): SessionState {
     timeState: createTimeState(),
     external: new ExternalChannelSystem(),
     health: createHealthMetrics(),
-    continuity: createContinuityState(),
-    continuityConfig: createContinuityConfig(),
   };
 }
 
@@ -1143,11 +1060,6 @@ export function createRuntimeStateFromSession(
     shapeBankStaticBoundary,
     arenaRuntimeLayout,
   );
-  bindContinuityGaugeArena(
-    session.continuity,
-    program.arena,
-    arenaRuntimeLayout?.gaugeTargets ?? [],
-  );
   return {
     // ProgramState (fresh)
     values: program.values,
@@ -1166,8 +1078,6 @@ export function createRuntimeStateFromSession(
     timeState: session.timeState,
     externalChannels: session.external,
     health: session.health,
-    continuity: session.continuity,
-    continuityConfig: session.continuityConfig,
     tap: session.tap,
   };
 }
@@ -1229,8 +1139,6 @@ export function extractSessionState(state: RuntimeState): SessionState {
     timeState: state.timeState,
     external: state.externalChannels,
     health: state.health,
-    continuity: state.continuity,
-    continuityConfig: state.continuityConfig,
     tap: state.tap,
   };
 }

@@ -335,6 +335,11 @@ impl RenderDispatcher {
         render_pass.set_bind_group(2, &arena.topology_bind_group, &[]);
         // [RECOVER-07] Bind compiler arena buffer for vertex-stage CP reads.
         render_pass.set_bind_group(3, arena.get_arena_render_bind_group(), &[]);
+        // [LAW:one-source-of-truth] Bind TopologyBank as the index buffer for
+        // indexed draws. The same buffer is already bound as storage (group 2,
+        // binding 0) for vertex pulling. first_index in the indirect args is an
+        // absolute u32 word offset into this buffer.
+        render_pass.set_index_buffer(arena.topology_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
         let indexed_stride_words = plan.indexed_stride_words.max(5);
         let non_indexed_stride_words = plan.non_indexed_stride_words.max(4);

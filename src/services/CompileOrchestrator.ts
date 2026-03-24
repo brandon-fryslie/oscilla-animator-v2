@@ -1,8 +1,8 @@
 /**
  * Compile Orchestrator Service
  *
- * Handles patch compilation and program swapping with state migration,
- * continuity preservation, and debug probe setup.
+ * Handles patch compilation and program swapping with state migration
+ * and debug probe setup.
  *
  * This is the SINGLE compile path - used for both initial and recompile.
  */
@@ -34,10 +34,6 @@ import { type ValueSlot } from '../types';
 import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
-import {
-  pruneStaleContinuity,
-  type ContinuityTargetOwnerBinding,
-} from '../runtime/ContinuityState';
 import { getExprAddressTable } from '../runtime/ExprAddressTable';
 import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 
@@ -228,10 +224,9 @@ function assertScheduleContract(schedule: CompiledProgramIR['schedule'] | undefi
  * Handles:
  * - Frontend-first compilation with snapshot storage
  * - State migration with stable StateIds
- * - Continuity preservation
  * - Debug probe setup
  * - Domain change detection
- * - Phase continuity offset reconciliation
+ * - Phase offset reconciliation
  *
  * @param isInitial - True for first compile (hard swap), false for recompile (soft swap)
  */
@@ -356,27 +351,6 @@ export async function compileAndSwap(
   }
 
   const program = result.program;
-  const collectContinuityTargetOwnerBindings = (
-    schedule: ScheduleIR | undefined,
-  ): ContinuityTargetOwnerBinding[] => {
-    if (!schedule) {
-      return [];
-    }
-    const bindings: ContinuityTargetOwnerBinding[] = [];
-    for (const step of schedule.steps) {
-      if (step?.kind !== 'continuityApply') {
-        continue;
-      }
-      if (typeof step.targetKey !== 'string' || typeof step.instanceId !== 'string') {
-        continue;
-      }
-      bindings.push({
-        targetId: step.targetKey as ContinuityTargetOwnerBinding['targetId'],
-        instanceId: step.instanceId,
-      });
-    }
-    return bindings;
-  };
 
   const runtimeAddressTable =
     (program as Partial<Pick<CompiledProgramIR, 'runtimeAddressTable'>>).runtimeAddressTable;
@@ -407,10 +381,6 @@ export async function compileAndSwap(
   const oldSchedule = state.currentProgram ? state.currentProgram.schedule : undefined;
   const oldStateMappings = oldSchedule?.stateMappings ?? [];
   const oldPrimitiveState = state.currentState?.state;
-  const knownTargetOwnerBindings = [
-    ...collectContinuityTargetOwnerBindings(oldSchedule),
-    ...collectContinuityTargetOwnerBindings(newSchedule),
-  ];
 
   // Initialize session state on first compile
   if (isInitial) {
@@ -418,22 +388,19 @@ export async function compileAndSwap(
   }
 
   // Create new RuntimeState from preserved SessionState + fresh ProgramState
+  // [LAW:one-source-of-truth] Physical arena layout is owned by Rust MMU via
+  // memoryManifest — TS RuntimeState no longer carries arena sizing.
   state.currentState = createRuntimeStateFromSession(
     state.sessionState!,
     newStateSlotCount,
     newEventSlotCount,
     newValueExprCount,
-    program.arenaTotalFloats,
-    undefined,
-    undefined,
-    program.arenaRuntimeLayout,
   );
 
   // Handle primitive state migration
   if (!isInitial && oldPrimitiveState && newStateMappings.length > 0) {
-    // Migrate using stable StateIds (sessionState.continuity has lane mappings)
-    const getLaneMapping = (instanceId: string) => {
-      return state.sessionState!.continuity.mappings.get(instanceId) ?? null;
+    const getLaneMapping = (_instanceId: string) => {
+      return null;
     };
 
     const migration = migrateState(
@@ -453,7 +420,7 @@ export async function compileAndSwap(
   // compile boundary so first post-swap frame has deterministic bank ownership.
   prepareStateWriteBank(state.currentState);
 
-  // Reconcile phase offsets when time model periods change (hot-swap continuity)
+  // Reconcile phase offsets when time model periods change (hot-swap)
   if (!isInitial && state.currentProgram?.schedule) {
     const oldTimeModel = state.currentProgram.schedule.timeModel;
     const newTimeModel = program.schedule.timeModel;
@@ -469,9 +436,6 @@ export async function compileAndSwap(
     }
   }
 
-  // Set RuntimeState reference in ContinuityStore
-  store.continuity.setRuntimeStateRef(state.currentState);
-
   // ALWAYS update debug probe (mappings can change even if slot count doesn't)
   setupDebugProbe(store, state.currentState!, patch, program);
 
@@ -485,15 +449,6 @@ export async function compileAndSwap(
       const count = typeof decl.count === 'number' ? decl.count : 0;
       instanceCounts.set(id, count);
     }
-  }
-
-  // Prune stale continuity entries for instances removed from the graph
-  if (!isInitial && state.sessionState) {
-    pruneStaleContinuity(
-      state.sessionState.continuity,
-      new Set(instanceCounts.keys()),
-      knownTargetOwnerBindings,
-    );
   }
 
   // Compilation succeeded - emit CompileEnd with success

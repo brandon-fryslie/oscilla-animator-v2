@@ -1,4 +1,5 @@
 import type { NagaModuleIR } from '../ir/naga-emitter';
+import type { MemoryManifestIR } from '../ir/program';
 import type { WasmInitModuleOrPath } from '../../wasm/init-types';
 import { fetchNagaShimWasmBytes } from './naga-shim-asset';
 
@@ -121,4 +122,18 @@ export function compile_ir(module: NagaModuleIR, maxActiveLanes?: number): ShimC
     return compileInitError('Shim not initialized', 'init');
   }
   return compileImpl(module, maxActiveLanes);
+}
+
+export function compile_ir_with_manifest(
+  module: NagaModuleIR,
+  manifest: MemoryManifestIR,
+  maxActiveLanes?: number,
+): ShimCompilationResult {
+  if (!initialized || !compileImpl) {
+    return compileInitError('Shim not initialized', 'init');
+  }
+  // [LAW:one-source-of-truth] Memory manifest is attached once at the shim
+  // boundary; Rust MMU lowering consumes the canonical compiler manifest.
+  const payload = { ...module, memory_manifest: manifest } as unknown as NagaModuleIR;
+  return compileImpl(payload, maxActiveLanes);
 }

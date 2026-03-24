@@ -1,7 +1,7 @@
 import type { FrontendResult } from '../compiler/frontend';
 import type { CompiledRuntimeInstallContract } from '../compiler/backend/compiled-runtime-install-contract';
 import type { CompileError } from '../compiler/types';
-import type { CompiledProgramIR, GpuReadyCompiledProgramIR } from '../compiler/ir/program';
+import type { CompiledProgramIR, GpuReadyCompiledProgramIR, MemoryManifestIR } from '../compiler/ir/program';
 import type { GpuPassStage } from '../types/gpu-pass-stage';
 
 export type SerializableCompiledProgramIR = Omit<CompiledProgramIR, 'kernelRegistry'>;
@@ -17,6 +17,7 @@ export interface CompiledGpuPassArtifact {
   readonly stage: GpuPassStage;
   readonly entryPoint: string;
   readonly wgsl: string;
+  readonly memoryManifest?: MemoryManifestIR;
 }
 
 export interface CompiledGpuPassSignature {

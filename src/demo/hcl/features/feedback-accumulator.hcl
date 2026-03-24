@@ -80,17 +80,11 @@ patch "Feedback Accumulator" {
 
   block "Modulo" "wrap" {
     outputs {
-      out = [prev-phase.in, feedback-phase.in]
+      out = prev-phase.in
     }
   }
 
-  block "Adapter_ScalarToPhase01" "feedback-phase" {
-    outputs {
-      out = [ring.phase, hue-shift.b]
-    }
-  }
-
-  # --- Visuals: ring of 24 circles with per-element rainbow ---
+  # --- Visuals: ring of 32 circles with per-element rainbow ---
 
   block "Ellipse" "dot" {
     rx = 0.022
@@ -100,24 +94,17 @@ patch "Feedback Accumulator" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 32
     outputs {
-      elements = ring.elements
-      t = hue-shift.a
+      index = ring.index
+      rank = color.h
     }
   }
 
-  block "Add" "hue-shift" {
+  block "ScatterUV" "ring" {
     outputs {
-      out = color.h
-    }
-  }
-
-  block "CircleLayoutUV" "ring" {
-    radius = 0.34
-    outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

@@ -68,7 +68,7 @@ Located under `src/*/wasm/rust/`:
 
 Native headless tests: `native-tests/webgpu-headless/`
 
-### Rust Renderer Architecture (`docs/RUST-RENDERER.md`)
+### Rust Renderer Architecture (`docs/current/renderer/RUST-RENDERER.md`)
 The renderer runs in a `DedicatedWorker` with a strict zero-allocation hot path. Key constraints:
 - `StrictAllocator::lock()/unlock()` brackets every `tick()` — no heap allocs during GPU dispatch
 - `GpuMemoryArena` pre-allocates all VRAM at startup (`INIT`/`REBUILD_PIPELINE` events)

@@ -13,7 +13,7 @@
 
 import type { BlockIRBuilder } from './BlockIRBuilder';
 import type { CanonicalType } from '../../core/canonical-types';
-import type { BlockId } from '../../types/compiler';
+import type { BlockId, PortId, UpdateClass } from '../../types/compiler';
 import type {
   ValueExprId,
   ValueSlot,
@@ -25,7 +25,6 @@ import type { TimeModelIR } from './schedule';
 import type {
   InstanceDecl,
   Step,
-  ContinuityPolicy,
   StableStateId,
   StateMapping,
 } from './types';
@@ -47,10 +46,10 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   // =========================================================================
 
   /** Allocate a typed slot (stride-aware). */
-  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot;
+  allocTypedSlot(type: CanonicalType, label?: string, source?: { blockId: BlockId; portId: PortId }): ValueSlot;
 
-  /** Register a slot's type metadata. */
-  registerSlotType(slot: ValueSlot, type: CanonicalType): void;
+  /** Register a slot's type metadata with optional source identity and update class requirement. */
+  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }, updateClass?: UpdateClass): void;
 
   /** Register a cardinality-one expression -> slot binding. */
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void;
@@ -73,20 +72,6 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
 
   /** Emit a field materialization step. */
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void;
-
-  /** Emit a continuity map build step. */
-  stepContinuityMapBuild(instanceId: InstanceId): void;
-
-  /** Emit a continuity apply step. */
-  stepContinuityApply(
-    targetKey: string,
-    instanceId: InstanceId,
-    policy: ContinuityPolicy,
-    baseSlot: ValueSlot,
-    outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-    stride: number
-  ): void;
 
   // =========================================================================
   // State Slots (orchestrator-only)
@@ -135,7 +120,7 @@ export interface OrchestratorIRBuilder extends BlockIRBuilder {
   getStateMappings(): readonly StateMapping[];
   getStateSlotCount(): number;
   getSlotCount(): number;
-  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string }>;
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string; readonly source?: { readonly blockId: BlockId; readonly portId: PortId }; readonly updateClass: UpdateClass }>;
 
   /** Get a single value expression by ID. */
   getValueExpr(id: ValueExprId): ValueExpr;

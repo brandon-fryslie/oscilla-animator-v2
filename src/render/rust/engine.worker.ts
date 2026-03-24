@@ -10,6 +10,8 @@ import {
   pauseRustRendererEngine,
   rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
+  setRustRendererDebugReadbackHz,
+  setRustRendererSinkPointerMap,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
   uploadRustRendererAtlasData,
@@ -25,6 +27,7 @@ import {
 import type {
   RustRendererEngineError,
   RustRendererIndirectArgsRecord,
+  RustRendererReadbackRenderCounters,
   RustRendererReadbackSnapshot,
   RustRendererRebuildGpuPipelinesFailure,
   RustRendererWorkerInboundMessage,
@@ -33,6 +36,7 @@ import type {
 } from './worker-protocol';
 
 const POLL_INTERVAL_MS = 250;
+const DEBUG_TELEMETRY_READBACK_HZ = 6;
 
 let bootstrapped = false;
 let bootstrapInFlight = false;
@@ -105,6 +109,19 @@ function postDeviceLost(code: string, reason: string): void {
   });
 }
 
+function telemetryReadbackHz(enabled: boolean): number {
+  return enabled ? DEBUG_TELEMETRY_READBACK_HZ : 0;
+}
+
+function applyTelemetryReadbackCadence(): void {
+  if (!bootstrapped) {
+    return;
+  }
+  // [LAW:single-enforcer] Worker telemetry toggle is the only boundary that
+  // controls Rust debug readback cadence.
+  setRustRendererDebugReadbackHz(telemetryReadbackHz(telemetryEnabled));
+}
+
 function isEngineErrorPayload(payload: unknown): payload is RustRendererEngineError {
   if (!payload || typeof payload !== 'object') {
     return false;
@@ -153,6 +170,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     );
     resumeRustRendererEngine();
     bootstrapped = true;
+    applyTelemetryReadbackCadence();
     deviceLostNotified = false;
     runtimePollFatalNotified = false;
     startRuntimePolling();
@@ -201,6 +219,15 @@ function handleResume(): void {
 
 function handleInjectPoisonAlloc(): void {
   injectRustRendererPoisonAlloc();
+}
+
+function handleSetSinkPointerMap(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'SET_SINK_POINTER_MAP' }>,
+): void {
+  // [LAW:single-enforcer] Symbolic sink pointer map install is owned by one
+  // worker->wasm boundary so runtime render loops never patch descriptor layout.
+  setRustRendererSinkPointerMap(JSON.stringify(message.sinkPointerMap));
+  postWorkerMessage({ type: 'SET_SINK_POINTER_MAP_SUCCESS' });
 }
 
 // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
@@ -334,8 +361,10 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
         const r = entry as Record<string, unknown>;
         indirectArgs.push({
           indexCount: typeof r.indexCount === 'number' ? r.indexCount : 0,
+          vertexCount: typeof r.vertexCount === 'number' ? r.vertexCount : undefined,
           instanceCount: typeof r.instanceCount === 'number' ? r.instanceCount : 0,
           firstIndex: typeof r.firstIndex === 'number' ? r.firstIndex : 0,
+          firstVertex: typeof r.firstVertex === 'number' ? r.firstVertex : undefined,
           baseVertex: typeof r.baseVertex === 'number' ? r.baseVertex : 0,
           firstInstance: typeof r.firstInstance === 'number' ? r.firstInstance : 0,
         });
@@ -345,12 +374,53 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
   const instanceProbeValues = candidate.instanceProbeValues instanceof Float32Array
     ? candidate.instanceProbeValues
     : new Float32Array(0);
+  const indirectWordsHead = candidate.indirectWordsHead instanceof Uint32Array
+    ? candidate.indirectWordsHead
+    : undefined;
+  const shapeHeaderSample = candidate.shapeHeaderSample instanceof Uint32Array
+    ? candidate.shapeHeaderSample
+    : undefined;
+  const shapeCpResolutionSample = candidate.shapeCpResolutionSample instanceof Uint32Array
+    ? candidate.shapeCpResolutionSample
+    : undefined;
+  const renderCounters = parseReadbackRenderCounters(candidate.renderCounters);
   return {
     type: 'READBACK_SNAPSHOT',
     frameCount: candidate.frameCount as number,
     capturedAtMs: candidate.capturedAtMs as number,
     indirectArgs,
+    indirectWordsHead,
+    shapeHeaderSample,
+    shapeCpResolutionSample,
     instanceProbeValues,
+    renderCounters,
+  };
+}
+
+function parseReadbackRenderCounters(raw: unknown): RustRendererReadbackRenderCounters {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      expectedIndexedRecordCount: 0,
+      expectedNonIndexedRecordCount: 0,
+      expectedTotalInstanceCount: 0,
+      decodedIndexedRecordCount: 0,
+      decodedNonIndexedRecordCount: 0,
+      decodedIndexedInstanceCount: 0,
+      decodedNonIndexedInstanceCount: 0,
+      decodedNonZeroRecordCount: 0,
+    };
+  }
+  const candidate = raw as Record<string, unknown>;
+  const read = (key: string): number => (typeof candidate[key] === 'number' ? candidate[key] as number : 0);
+  return {
+    expectedIndexedRecordCount: read('expectedIndexedRecordCount'),
+    expectedNonIndexedRecordCount: read('expectedNonIndexedRecordCount'),
+    expectedTotalInstanceCount: read('expectedTotalInstanceCount'),
+    decodedIndexedRecordCount: read('decodedIndexedRecordCount'),
+    decodedNonIndexedRecordCount: read('decodedNonIndexedRecordCount'),
+    decodedIndexedInstanceCount: read('decodedIndexedInstanceCount'),
+    decodedNonIndexedInstanceCount: read('decodedNonIndexedInstanceCount'),
+    decodedNonZeroRecordCount: read('decodedNonZeroRecordCount'),
   };
 }
 
@@ -388,6 +458,14 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   },
   SET_TELEMETRY_ENABLED: (message) => {
     telemetryEnabled = (message as Extract<InboundMessage, { type: 'SET_TELEMETRY_ENABLED' }>).enabled;
+    withFatalBoundary('set_telemetry_failure', 'Rust worker telemetry toggle failure', () => {
+      applyTelemetryReadbackCadence();
+    });
+  },
+  SET_SINK_POINTER_MAP: (message) => {
+    withFatalBoundary('set_sink_pointer_map_failure', 'Rust worker sink-pointer-map install failure', () => {
+      handleSetSinkPointerMap(message as Extract<InboundMessage, { type: 'SET_SINK_POINTER_MAP' }>);
+    });
   },
   // [RECOVER-11] Atlas upload for Type5 MSDF text.
   UPLOAD_ATLAS: (message) => {

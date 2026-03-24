@@ -6,7 +6,7 @@
 
 import { registerBlock, ALL_CONCRETE_PAYLOADS } from '../registry';
 import { requireInst, payloadStride, unitNone, contractClamp01 } from '../../core/canonical-types';
-import { FLOAT, COLOR } from '../../core/canonical-types';
+import { FLOAT, COLOR, INT } from '../../core/canonical-types';
 import { inferType, cardinalityVar } from '../../core/inference-types';
 import { cardinalityVarId } from '../../core/ids';
 import { defaultSourceConst } from '../../types';
@@ -39,7 +39,7 @@ export function register(): void {
       semantics: 'typeSpecific',
     },
     inputs: {
-      elements: { label: 'Elements', type: inferType(FLOAT, { kind: 'none' }, { cardinality: FIELD_CONST_COLOR_CARD_MANY }) },
+      index: { label: 'Index', type: inferType(INT, { kind: 'none' }, { cardinality: FIELD_CONST_COLOR_CARD_MANY }) },
       r: { label: 'Red', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
       g: { label: 'Green', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
       b: { label: 'Blue', type: inferType(FLOAT, unitNone(), { cardinality: FIELD_CONST_COLOR_CARD_FLEX }, contractClamp01()), defaultValue: 1.0, defaultSource: defaultSourceConst(1.0), exposedAsPort: true, uiHint: { kind: 'slider', min: 0, max: 1, step: 0.01 } },
@@ -49,12 +49,11 @@ export function register(): void {
       color: { label: 'Color', type: inferType(COLOR, { kind: 'none' }, { cardinality: FIELD_CONST_COLOR_CARD_MANY }) },
     },
     lower: ({ ctx, inputsById }) => {
-      const elementsInput = inputsById.elements;
-  
+      const elementsInput = inputsById.index;
+
       if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
-        throw new Error('FieldConstColor requires a field input (from Array block)');
-      }
-  
+        throw new Error('FieldConstColor requires a field input');
+      }  
       const instanceId = ctx.inferredInstance;
       if (!instanceId) {
         throw new Error('FieldConstColor requires instance context from upstream Array block');

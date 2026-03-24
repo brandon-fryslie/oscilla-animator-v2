@@ -26,6 +26,7 @@ import type { StateSlotId, EventSlotId, ValueExprId } from './Indices';
 import type { TopologyId } from '../../shapes/types';
 import type {
   IntrinsicPropertyName,
+  DomainPropertyName,
   PlacementFieldName,
   BasisKind,
   PureFn,
@@ -137,6 +138,12 @@ export type ValueExprIntrinsic =
       readonly type: CanonicalType;
       readonly intrinsicKind: 'property';
       readonly intrinsic: IntrinsicPropertyName;
+    }
+  | {
+      readonly kind: 'intrinsic';
+      readonly type: CanonicalType;
+      readonly intrinsicKind: 'domain_property';
+      readonly domainProperty: DomainPropertyName;
     }
   | {
       readonly kind: 'intrinsic';
@@ -258,6 +265,17 @@ export interface ValueExprShapeRef {
    * Stride is derivable via payloadStride(expr.type.payload) at consumer site.
    */
   readonly controlPointField?: ValueExprId;
+  /**
+   * Optional parametric template payload for Type 2 Parametric shapes.
+   *
+   * When present, the compile-time install contract uses
+   * `packParametricShapeBankRecord` instead of the Type 1 rigid header writer.
+   * The payload contains template t-values and optional triangle fan indices.
+   *
+   * // [LAW:one-source-of-truth] The compiler backend builds the template
+   * // payload once; the install contract packs it into ShapeBank.
+   */
+  readonly parametricTemplate?: import('../../shapes/parametric-templates').ParametricTemplatePayload;
 }
 
 /**

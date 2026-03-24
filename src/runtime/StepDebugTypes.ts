@@ -120,7 +120,7 @@ export type Breakpoint =
 export type SessionMode = 'idle' | 'paused' | 'running' | 'completed';
 
 // =============================================================================
-// Lane Identity (F5: Continuity State Integration)
+// Lane Identity
 // =============================================================================
 
 /**
@@ -137,7 +137,7 @@ export interface LaneIdentity {
   readonly laneIndex: number;
   /** Total lane count for this instance */
   readonly totalLanes: number;
-  /** Optional: domain element identity from continuity (e.g., "element #37") */
+  /** Optional: domain element identity (e.g., "element #37") */
   readonly elementId?: string;
 }
 

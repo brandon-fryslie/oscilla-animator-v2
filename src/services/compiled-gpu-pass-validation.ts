@@ -1,7 +1,6 @@
 import type { GeneratedGpuArtifactManifestIR, GpuPassManifestEntryIR } from '../compiler/ir/program';
 import type { CompileError } from '../compiler/types';
 import type { CompiledGpuPassArtifact, CompiledGpuPassBundle } from './compile-worker-protocol';
-import { CANONICAL_FLUID_PASS_STAGES } from './fluid-gpu-bundle';
 import {
   type GpuPassStage,
   isGpuPassStage,
@@ -28,13 +27,6 @@ export type CompiledGpuPassValidationResult =
   | InvalidCompiledGpuPassValidation;
 
 const WGSL_IDENTIFIER_PATTERN = /^[_A-Za-z][_0-9A-Za-z]*$/;
-// [LAW:one-source-of-truth] Derived from CANONICAL_FLUID_PASS_STAGES — no local duplicate.
-const FLUID_PASS_ORDER: readonly string[] = CANONICAL_FLUID_PASS_STAGES.map(
-  (stage) => `fluid.${stage}`,
-);
-const FLUID_PASS_INDEX: ReadonlyMap<string, number> = new Map(
-  FLUID_PASS_ORDER.map((passId, index) => [passId, index]),
-);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -115,47 +107,6 @@ function validateUniquePassIds(passes: readonly IndexedCompiledGpuPass[], errors
   }
 }
 
-function findOutOfOrderFluidPass(fluidPassIds: readonly string[]): string | null {
-  let cursor = -1;
-  for (const passId of fluidPassIds) {
-    const nextIndex = FLUID_PASS_INDEX.get(passId);
-    if (nextIndex === undefined) {
-      continue;
-    }
-    if (nextIndex < cursor) {
-      return passId;
-    }
-    cursor = nextIndex;
-  }
-  return null;
-}
-
-function findUnknownFluidPassId(fluidPassIds: readonly string[]): string | null {
-  for (const passId of fluidPassIds) {
-    if (!FLUID_PASS_INDEX.has(passId)) {
-      return passId;
-    }
-  }
-  return null;
-}
-
-function validateFluidPassOrder(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
-  const fluidPassIds = passes
-    .filter((pass) => pass.passId.startsWith('fluid.'))
-    .map((pass) => pass.passId);
-  if (fluidPassIds.length === 0) {
-    return;
-  }
-  const unknownFluidPassId = findUnknownFluidPassId(fluidPassIds);
-  if (unknownFluidPassId !== null) {
-    errors.push(createBundleError(`Compiler emitted invalid fluid pass bundle: unknown passId "${unknownFluidPassId}"`));
-  }
-  const outOfOrderPassId = findOutOfOrderFluidPass(fluidPassIds);
-  if (outOfOrderPassId !== null) {
-    errors.push(createBundleError(`Compiler emitted invalid fluid pass order at "${outOfOrderPassId}"`));
-  }
-}
-
 function validateComputePassPresence(passes: readonly CompiledGpuPassArtifact[], errors: CompileError[]): void {
   if (!passes.some((pass) => pass.stage === 'compute')) {
     errors.push(createBundleError('Compiler emitted invalid GPU pass bundle: at least one compute pass is required'));
@@ -180,6 +131,7 @@ function normalizePassShape(
     stage,
     entryPoint,
     wgsl,
+    ...(pass.memoryManifest ? { memoryManifest: pass.memoryManifest } : {}),
   };
 }
 
@@ -201,7 +153,7 @@ function buildManifestFromPasses(passes: readonly CompiledGpuPassArtifact[]): Ge
  * Normalizes compiler-emitted GPU pass metadata and builds the runtime manifest.
  *
  * Checks structural shape of each pass (passId, stage, entryPoint, wgsl),
- * enforces bundle-level policies (unique IDs, fluid ordering, compute presence),
+ * enforces bundle-level policies (unique IDs, compute presence),
  * and produces the manifest that the runtime renderer consumes.
  *
  * WGSL content correctness is validated by Naga at compile time — this function
@@ -233,7 +185,6 @@ export function validateCompiledGpuPassBundle(bundle: CompiledGpuPassBundle): Co
     .filter((pass): pass is IndexedCompiledGpuPass => pass !== null);
   const normalizedPasses = normalizedIndexedPasses.map((pass) => pass.pass);
   validateUniquePassIds(normalizedIndexedPasses, errors);
-  validateFluidPassOrder(normalizedPasses, errors);
   validateComputePassPresence(normalizedPasses, errors);
 
   if (errors.length > 0) {

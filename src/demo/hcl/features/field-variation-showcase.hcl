@@ -15,7 +15,7 @@ patch "Field Variation Showcase" {
     periodBMs = 5000
     role = "timeRoot"
     outputs {
-      phaseA = [turns-lfo.phase, hue-shift.b]
+      phaseA = hue-shift.b
       phaseB = jitter-osc.phase
     }
   }
@@ -30,10 +30,10 @@ patch "Field Variation Showcase" {
     }
   }
 
-  block "Array" "guide-instances" {
+  block "InstanceDomain" "guide-instances" {
     count = 160
     outputs {
-      elements = guide-spiral.elements
+      index = guide-spiral.index
     }
   }
 
@@ -45,41 +45,23 @@ patch "Field Variation Showcase" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 160
     outputs {
-      elements = spiral.elements
+      index = spiral.index
     }
   }
 
-  block "Oscillator" "turns-lfo" {
-    mode = 0
+  block "ScatterUV" "spiral" {
     outputs {
-      out = turns-shape.in
+      uv = render.controlPoints
     }
   }
 
-  block "ScaleBias" "turns-shape" {
-    scale = 1.2
-    bias = 5.2
-    outputs {
-      out = spiral.turns
-    }
-  }
+  block "ScatterUV" "guide-spiral" {
 
-  block "SpiralLayout" "spiral" {
-    expansion = 0.72
-    spin = 1.4
     outputs {
-      controlPoints = render.controlPoints
-    }
-  }
-
-  block "SpiralLayout" "guide-spiral" {
-    expansion = 0.72
-    spin = 1.4
-    outputs {
-      controlPoints = guide-render.controlPoints
+      uv = guide-render.controlPoints
     }
   }
 

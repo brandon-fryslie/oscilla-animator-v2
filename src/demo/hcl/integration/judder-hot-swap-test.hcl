@@ -14,8 +14,7 @@ patch "Judder Hot-Swap Test" {
     periodBMs = 5000
     role = "timeRoot"
     outputs {
-      phaseA = spin-osc.phase
-      phaseB = pulse-osc.phase
+      phaseA = pulse-osc.phase
     }
   }
 
@@ -27,58 +26,17 @@ patch "Judder Hot-Swap Test" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 800
     outputs {
-      elements = spiral.elements
-      t = color.h
+      index = spiral.index
+      rank = color.h
     }
   }
 
-  block "Const" "spiral-turns" {
-    value = 7
+  block "ScatterUV" "spiral" {
     outputs {
-      out = spiral.turns
-    }
-  }
-
-  block "Const" "spiral-expansion" {
-    value = 0.65
-    outputs {
-      out = spiral.expansion
-    }
-  }
-
-  block "Oscillator" "spin-osc" {
-    mode = 0
-    outputs {
-      out = spin-map.in
-    }
-  }
-
-  block "Const" "spin-scale" {
-    value = 1.2
-    outputs {
-      out = spin-map.scale
-    }
-  }
-
-  block "Const" "spin-bias" {
-    value = -0.6
-    outputs {
-      out = spin-map.bias
-    }
-  }
-
-  block "ScaleBias" "spin-map" {
-    outputs {
-      out = spiral.spin
-    }
-  }
-
-  block "SpiralLayout" "spiral" {
-    outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

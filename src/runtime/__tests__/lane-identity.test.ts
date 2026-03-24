@@ -1,10 +1,9 @@
 /**
- * Tests for lane identity via continuity state integration (F5).
+ * Tests for lane identity (F5).
  *
  * Verifies that buildLaneIdentityMap correctly:
  * - Maps field slots to per-lane identity entries
  * - Uses instance declarations for element counts
- * - Enriches with element IDs from continuity prevDomains
  * - Resolves human-readable instance labels from debugIndex
  * - Handles edge cases (dynamic count, missing instance, empty registry)
  */
@@ -14,7 +13,6 @@ import { buildLaneIdentityMap } from '../ValueInspector';
 import type { CompiledProgramIR, FieldSlotEntry } from '../../compiler/ir/program';
 import { EMPTY_PROGRAM_TOPOLOGY_TABLE } from '../../compiler/ir/program-topology';
 import type { InstanceDecl } from '../../compiler/ir/types';
-import type { ContinuityState } from '../ContinuityState';
 import { valueSlot, valueExprId } from '../../compiler/ir/Indices';
 import { instanceId } from '../../core/ids';
 import type { InstanceId } from '../../core/ids';
@@ -70,9 +68,7 @@ function makeMinimalProgram(opts: {
     renderGlobals: [],
     kernelRegistry: {} as any,
     topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
-    arenaLayout: [],
-    arenaPayloadFloats: 0,
-    arenaTotalFloats: 0,
+    memoryManifest: { resources: [] },
     runtimeAddressTable: {
       slotLookup: new Map(),
       fieldExprToSlot: new Map(),
@@ -113,23 +109,8 @@ function makeMinimalProgram(opts: {
         hardDrops: [],
       },
     },
+    fastPathOffsets: {},
   } as CompiledProgramIR;
-}
-
-function makeEmptyContinuity(): ContinuityState {
-  return {
-    targets: new Map(),
-    gaugeArena: null,
-    gaugeLayouts: new Map(),
-    targetOwners: new Map(),
-    mappings: new Map(),
-    prevDomains: new Map(),
-    placementBasis: new Map(),
-    lastTModelMs: 0,
-    domainChangeThisFrame: false,
-    changedInstancesThisFrame: new Set(),
-    dormantInstanceMisses: new Map(),
-  };
 }
 
 // =============================================================================
@@ -143,7 +124,7 @@ describe('buildLaneIdentityMap', () => {
       instances: new Map(),
     });
 
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
     expect(result.size).toBe(0);
   });
 
@@ -158,7 +139,7 @@ describe('buildLaneIdentityMap', () => {
     instances.set(instId, makeInstanceDecl(instId, 5));
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
 
     expect(result.size).toBe(1);
     const lanes = result.get(slot)!;
@@ -168,65 +149,8 @@ describe('buildLaneIdentityMap', () => {
       expect(lanes[i].instanceId).toBe(instId);
       expect(lanes[i].laneIndex).toBe(i);
       expect(lanes[i].totalLanes).toBe(5);
-      // No continuity data → no elementId
       expect(lanes[i].elementId).toBeUndefined();
     }
-  });
-
-  it('enriches with element IDs from continuity prevDomains', () => {
-    const instId = instanceId('grid-instance');
-    const slot = valueSlot(20);
-
-    const fieldReg = new Map<any, FieldSlotEntry>();
-    fieldReg.set(slot, { fieldId: valueExprId(2), instanceId: instId });
-
-    const instances = new Map<InstanceId, InstanceDecl>();
-    instances.set(instId, makeInstanceDecl(instId, 3));
-
-    const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-
-    // Set up continuity with element IDs
-    const continuity = makeEmptyContinuity();
-    continuity.prevDomains.set(instId as string, {
-      count: 3,
-      elementId: new Uint32Array([100, 200, 300]),
-      identityMode: 'stable',
-    });
-
-    const result = buildLaneIdentityMap(program, continuity);
-    const lanes = result.get(slot)!;
-
-    expect(lanes).toHaveLength(3);
-    expect(lanes[0].elementId).toBe('element #100');
-    expect(lanes[1].elementId).toBe('element #200');
-    expect(lanes[2].elementId).toBe('element #300');
-  });
-
-  it('does not enrich when continuity has identityMode=none', () => {
-    const instId = instanceId('unstable-instance');
-    const slot = valueSlot(30);
-
-    const fieldReg = new Map<any, FieldSlotEntry>();
-    fieldReg.set(slot, { fieldId: valueExprId(3), instanceId: instId });
-
-    const instances = new Map<InstanceId, InstanceDecl>();
-    instances.set(instId, makeInstanceDecl(instId, 2));
-
-    const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-
-    const continuity = makeEmptyContinuity();
-    continuity.prevDomains.set(instId as string, {
-      count: 2,
-      elementId: new Uint32Array(0),
-      identityMode: 'none',
-    });
-
-    const result = buildLaneIdentityMap(program, continuity);
-    const lanes = result.get(slot)!;
-
-    expect(lanes).toHaveLength(2);
-    expect(lanes[0].elementId).toBeUndefined();
-    expect(lanes[1].elementId).toBeUndefined();
   });
 
   it('skips slots where instance is not found in schedule', () => {
@@ -240,7 +164,7 @@ describe('buildLaneIdentityMap', () => {
     const instances = new Map<InstanceId, InstanceDecl>();
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
 
     expect(result.size).toBe(0);
   });
@@ -260,7 +184,7 @@ describe('buildLaneIdentityMap', () => {
     blockMap.set(1, 'golden-spiral-block');
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances, blockMap });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
     const lanes = result.get(slot)!;
 
     // instanceId "inst_golden-spiral-block" contains "golden-spiral-block"
@@ -278,7 +202,7 @@ describe('buildLaneIdentityMap', () => {
     instances.set(instId, makeInstanceDecl(instId, 1));
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
     const lanes = result.get(slot)!;
 
     expect(lanes[0].instanceLabel).toBe('orphan-instance');
@@ -299,7 +223,7 @@ describe('buildLaneIdentityMap', () => {
     instances.set(inst2, makeInstanceDecl(inst2, 7));
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
 
     expect(result.size).toBe(2);
     expect(result.get(slot1)!).toHaveLength(3);
@@ -323,7 +247,7 @@ describe('buildLaneIdentityMap', () => {
     instances.set(instId, makeInstanceDecl(instId, 10));
 
     const program = makeMinimalProgram({ fieldSlotRegistry: fieldReg, instances });
-    const result = buildLaneIdentityMap(program, null);
+    const result = buildLaneIdentityMap(program);
     const lanes = result.get(slot)!;
 
     for (const lane of lanes) {

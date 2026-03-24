@@ -260,7 +260,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   instance_words[base + 3u] = rotation;
   instance_words[base + 4u] = scale2_x;
   instance_words[base + 5u] = scale2_y;
-  instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
+  // [LAW:one-source-of-truth] Encode shape_word_offset as numeric f32.
+  // Bitcasting small u32 handles creates denormals that some GPUs flush to 0.
+  instance_words[base + 6u] = f32(shape_word_offset);
   instance_words[base + 7u] = 0.0;
   instance_words[base + 8u] = color_r;
   instance_words[base + 9u] = color_g;
@@ -322,7 +324,13 @@ const TYPE5_WORD_DISTANCE_RANGE: u32 = 12u;
 
 // [LAW:one-type-per-behavior] ShapeClass discriminant values.
 const SHAPE_CLASS_TYPE1_RIGID: u32 = 1u;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2u;
 const SHAPE_CLASS_TYPE5_TEXT: u32 = 5u;
+
+// Type2 Parametric ShapeBank header word offsets (must match parametric-templates.ts ABI).
+const SHAPE_WORD_TOPOLOGY_TYPE: u32 = 1u;
+const SHAPE_WORD_FIRST_VERTEX: u32 = 8u;
+const SHAPE_WORD_PARAM_STRIDE: u32 = 9u;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -368,6 +376,175 @@ fn safe_color_from_instance(inst: InstanceData) -> vec4<f32> {
   let safeA = clamp(select(1.0, rawA, rawA == rawA), 0.0, 1.0);
   let safeRgb = clamp(oklch_to_linear_srgb(safeH, safeC, safeL), vec3<f32>(0.0), vec3<f32>(1.0));
   return vec4<f32>(safeRgb, safeA);
+}
+
+// [LAW:one-source-of-truth] Canonical hardened Bezier evaluation for all
+// ParametricTemplates families (ribbon, closed-loop). Central-difference
+// fallback replaces the old epsilon-skew tangent hack.
+// Returns vec3<f32>(pos.x, pos.y, tangent_angle).
+fn get_hardened_bezier_data(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec3<f32> {
+    let u = 1.0 - t;
+    let u2 = u * u;
+    let t2 = t * t;
+
+    let pos = (u2*u)*p0 + (3.0*u2*t)*p1 + (3.0*u*t2)*p2 + (t2*t)*p3;
+    let analytical_tan = (3.0*u2)*(p1 - p0) + (6.0*u*t)*(p2 - p1) + (3.0*t2)*(p3 - p2);
+    let tan_len = length(analytical_tan);
+
+    var final_tangent: vec2<f32>;
+
+    if (tan_len > 1e-5) {
+        final_tangent = analytical_tan / tan_len;
+    } else {
+        // Fallback: Central Difference
+        let t_a = clamp(t + 0.001, 0.0, 1.0);
+        let t_b = clamp(t - 0.001, 0.0, 1.0);
+
+        let u_a = 1.0 - t_a;
+        let pos_a = (u_a*u_a*u_a)*p0 + (3.0*u_a*u_a*t_a)*p1 + (3.0*u_a*t_a*t_a)*p2 + (t_a*t_a*t_a)*p3;
+
+        let u_b = 1.0 - t_b;
+        let pos_b = (u_b*u_b*u_b)*p0 + (3.0*u_b*u_b*t_b)*p1 + (3.0*u_b*t_b*t_b)*p2 + (t_b*t_b*t_b)*p3;
+
+        let secant = pos_a - pos_b;
+        let secant_len = length(secant);
+
+        if (secant_len > 1e-5) {
+            final_tangent = secant / secant_len;
+        } else {
+            final_tangent = vec2<f32>(1.0, 0.0); // Absolute collapse guard
+        }
+    }
+
+    return vec3<f32>(pos.x, pos.y, atan2(final_tangent.y, final_tangent.x));
+}
+
+// [LAW:one-source-of-truth] Ribbon half-width constant (local-space units).
+// Ribbon quads are expanded ± this distance along the surface normal.
+const RIBBON_HALF_WIDTH: f32 = 0.005;
+
+// TopologyType discriminant values (must match TypeScript TopologyType enum).
+const TOPOLOGY_TYPE_NON_INDEXED: u32 = 0u;
+const TOPOLOGY_TYPE_INDEXED: u32 = 1u;
+
+// Type2 Parametric vertex shader: reads template t-values from topologyBank
+// and control-point data from arenaWords, evaluates cubic Bezier via the
+// shared get_hardened_bezier_data function.
+// [LAW:one-source-of-truth] instanceIndex selects the per-instance lane for
+// control-point reads. Without it every instance reads Lane 0.
+fn vs_type2(
+  inst: InstanceData,
+  topologyWordOffset: u32,
+  vertexIndex: u32,
+  instanceIndex: u32,
+) -> VertexOutput {
+  // Read CP arena addressing from header.
+  let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+  let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
+  let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+
+  // Per-instance lane offset into the arena for control-point data.
+  // [LAW:one-source-of-truth] Each instance has its OWN control points at:
+  //   arenaWords[cpArenaBase + instanceIndex * cpArenaLaneStride + component * cpArenaComponentStride]
+  let laneBase = cpArenaBase + instanceIndex * cpArenaLaneStride;
+
+  // Read topology type (ribbon vs closed-blob) from header.
+  let topologyType = topologyBank[topologyWordOffset + SHAPE_WORD_TOPOLOGY_TYPE];
+
+  // Read relative firstVertex offset from header (word offset where t-values begin).
+  let firstVertex = topologyBank[topologyWordOffset + SHAPE_WORD_FIRST_VERTEX];
+
+  // Read cubic Bezier control points (p0..p3) from arena, per-instance.
+  // ParamStride layout: [p0.x, p0.y, p1.x, p1.y, p2.x, p2.y, p3.x, p3.y] per lane.
+  let p0 = vec2<f32>(
+    bitcast<f32>(arenaWords[laneBase + 0u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 1u * cpArenaComponentStride]),
+  );
+  let p1 = vec2<f32>(
+    bitcast<f32>(arenaWords[laneBase + 2u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 3u * cpArenaComponentStride]),
+  );
+  let p2 = vec2<f32>(
+    bitcast<f32>(arenaWords[laneBase + 4u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 5u * cpArenaComponentStride]),
+  );
+  let p3 = vec2<f32>(
+    bitcast<f32>(arenaWords[laneBase + 6u * cpArenaComponentStride]),
+    bitcast<f32>(arenaWords[laneBase + 7u * cpArenaComponentStride]),
+  );
+
+  // --- Ribbon path (NonIndexed): 6 vertices per segment, quad expansion ---
+  // Lookup tables for the 6 vertices of each quad (two triangles: 0-2-1, 1-2-3).
+  // t_offset_lut: which segment endpoint (0 = start, 1 = end).
+  // side_lut: which side of the ribbon normal (-1 = left, +1 = right).
+  let t_offset_lut = array<u32, 6>(0u, 0u, 1u, 1u, 0u, 1u);
+  let side_lut = array<f32, 6>(-1.0, 1.0, -1.0, 1.0, 1.0, -1.0);
+
+  // --- Indexed path (ClosedBlob): centroid + perimeter fan ---
+  // [LAW:dataflow-not-control-flow] Both ribbon and blob data are computed;
+  // topologyType selects which result to use.
+  let isRibbon = topologyType == TOPOLOGY_TYPE_NON_INDEXED;
+
+  // Ribbon: derive segment and local vertex from vertexIndex.
+  // For non-indexed draws, vertexIndex = absoluteFirstVertex + localDrawVertex.
+  let absoluteFirstVertex = topologyWordOffset + firstVertex;
+  let localDrawVertex = vertexIndex - absoluteFirstVertex;
+  let seg = localDrawVertex / 6u;
+  let vi = localDrawVertex % 6u;
+  let ribbonTIndex = seg + t_offset_lut[vi];
+  let ribbonTBits = topologyBank[absoluteFirstVertex + ribbonTIndex];
+  let ribbonT = clamp(bitcast<f32>(ribbonTBits), 0.0, 1.0);
+  let ribbonBezier = get_hardened_bezier_data(p0, p1, p2, p3, ribbonT);
+  // Normal from tangent_angle: rotate tangent 90° CCW.
+  let tangentAngle = ribbonBezier.z;
+  let normalX = -sin(tangentAngle);
+  let normalY = cos(tangentAngle);
+  let ribbonLocalX = ribbonBezier.x + normalX * RIBBON_HALF_WIDTH * side_lut[vi];
+  let ribbonLocalY = ribbonBezier.y + normalY * RIBBON_HALF_WIDTH * side_lut[vi];
+
+  // Blob: read t-value directly (indexed draw, vertexIndex = baseVertex + local_index).
+  let blobTBits = topologyBank[topologyWordOffset + firstVertex + vertexIndex];
+  let blobT = bitcast<f32>(blobTBits);
+  let isCentroid = blobT < -0.5;
+  let safeBlobT = clamp(blobT, 0.0, 1.0);
+  let blobBezier = get_hardened_bezier_data(p0, p1, p2, p3, safeBlobT);
+  let centroid = (p0 + p1 + p2 + p3) * 0.25;
+  let blobLocalX = select(blobBezier.x, centroid.x, isCentroid);
+  let blobLocalY = select(blobBezier.y, centroid.y, isCentroid);
+
+  // [LAW:dataflow-not-control-flow] Select result based on topology type.
+  let localX = select(blobLocalX, ribbonLocalX, isRibbon);
+  let localY = select(blobLocalY, ribbonLocalY, isRibbon);
+
+  // Instance transform (same as Type1Rigid).
+  let rawCenterX = inst.transform0.x;
+  let rawCenterY = inst.transform0.y;
+  let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
+  let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawScaleX = inst.transform0.z * inst.transform1.x;
+  let rawScaleY = inst.transform0.z * inst.transform1.y;
+  let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
+  let scaleY = clamp(abs(select(1.0, rawScaleY, rawScaleY == rawScaleY)), 0.001, 1024.0);
+  let rawRotation = inst.transform0.w;
+  let safeRotation = select(0.0, rawRotation, rawRotation == rawRotation);
+
+  let c = cos(safeRotation);
+  let s = sin(safeRotation);
+  let model = mat4x4<f32>(
+    vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
+    vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
+    vec4<f32>(0.0, 0.0, 1.0, 0.0),
+    vec4<f32>(centerX, centerY, 0.0, 1.0),
+  );
+
+  let worldPos = model * vec4<f32>(localX, localY, 0.0, 1.0);
+
+  var out: VertexOutput;
+  out.position = frame_header.view_proj * worldPos;
+  out.color = safe_color_from_instance(inst);
+  out.uv = vec2<f32>(0.0, 0.0);
+  out.shape_class = SHAPE_CLASS_TYPE2_PARAMETRIC;
+  return out;
 }
 
 // [RECOVER-11] Type5 text vertex shader: generates a unit quad (6 vertices)
@@ -428,14 +605,17 @@ fn vs_type5(
   @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
-  // [RECOVER-04] Assembly shader stores shape_word_offset via bitcast<f32>(u32).
-  // Recover the original u32 bit pattern — numeric f32→u32 truncates denorms to 0.
-  let topologyWordOffset = bitcast<u32>(inst.transform1.z);
+  // [LAW:one-source-of-truth] shape_word_offset is stored as numeric f32 in
+  // instance assembly; decode with rounded numeric conversion in vertex stage.
+  let topologyWordOffset = u32(max(inst.transform1.z, 0.0) + 0.5);
 
   // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
   if (shapeClass == SHAPE_CLASS_TYPE5_TEXT) {
     return vs_type5(inst, topologyWordOffset, vertexIndex);
+  }
+  if (shapeClass == SHAPE_CLASS_TYPE2_PARAMETRIC) {
+    return vs_type2(inst, topologyWordOffset, vertexIndex, instanceIndex);
   }
 
   // --- Type1Rigid path (existing behavior) ---
@@ -446,13 +626,18 @@ fn vs_type5(
   let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
   let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
   let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+  let relativeFirstVertex = topologyBank[topologyWordOffset + SHAPE_WORD_FIRST_VERTEX];
+  let absoluteFirstVertex = topologyWordOffset + relativeFirstVertex;
+  // [LAW:one-source-of-truth] drawIndirect supplies absolute vertex_index.
+  // Shape CP pulls are indexed in local shape space, so normalize once here.
+  let localVertexIndex = select(0u, vertexIndex - absoluteFirstVertex, vertexIndex >= absoluteFirstVertex);
 
   // [LAW:dataflow-not-control-flow] Both fan and sequential control-point
   // indices are computed; the flags data selects which one is used.
-  let tri = vertexIndex / 3u;
-  let loc = vertexIndex % 3u;
+  let tri = localVertexIndex / 3u;
+  let loc = localVertexIndex % 3u;
   let fanCpIndex = select(tri + loc, 0u, loc == 0u);
-  let cpIndex = select(vertexIndex, fanCpIndex, isClosed);
+  let cpIndex = select(localVertexIndex, fanCpIndex, isClosed);
 
   // [RECOVER-07] Read CP positions from compiler arena (GPU-computed data).
   let xAddr = cpArenaBase + cpIndex * cpArenaLaneStride;

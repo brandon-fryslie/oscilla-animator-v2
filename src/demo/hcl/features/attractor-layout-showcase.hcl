@@ -66,20 +66,19 @@ patch "Attractor Layout Showcase" {
   }
 
   # One instance set drives all branches so only layout math differs.
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 196
     outputs {
-      elements = [grid.elements, base-color.elements, soft-color.elements, hard-color.elements]
+      index = [grid.index, base-color.index, soft-color.index, hard-color.index]
     }
   }
 
   # Baseline spatial distribution.
-  block "GridLayoutUV" "grid" {
-    rows = 14
-    cols = 14
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = base-render.controlPoints
-      controlPoints = [soft-attract.points, hard-attract.points]
+      uv = base-render.controlPoints
+      uv = [soft-attract.points, hard-attract.points]
     }
   }
 

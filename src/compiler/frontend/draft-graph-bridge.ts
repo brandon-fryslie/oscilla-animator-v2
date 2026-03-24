@@ -315,8 +315,9 @@ function buildInputPortPolicies(
     for (const [portId, inputDef] of Object.entries(blockDef.inputs)) {
       if (inputDef.exposedAsPort === false) continue;
       const combineMode = sourcePatchBlock?.inputPorts.get(portId)?.combineMode ?? 'last';
+      const updateClass = inputDef.updateClass ?? 'FrameTime';
       const key = `${blockIdx}:${portId}:in` as PortKey;
-      policies.set(key, { combineMode });
+      policies.set(key, { combineMode, updateClass });
     }
   }
 

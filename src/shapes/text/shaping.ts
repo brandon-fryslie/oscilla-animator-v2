@@ -9,7 +9,7 @@
  * // [LAW:one-source-of-truth] Text shaping is CPU-side (spec Section I).
  * // The output is a GlyphRunResult consumed by Type5 materialization.
  *
- * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md §I
+ * Spec: docs/current/webgpu-specs/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md §I
  */
 
 import type { FontAtlasDescriptor, GlyphRunResult, ShapedGlyph, GlyphMetrics } from './types';

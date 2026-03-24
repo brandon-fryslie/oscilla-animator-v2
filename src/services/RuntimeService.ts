@@ -21,7 +21,7 @@ import {
   clearRenderIssues,
 } from '../render';
 import type { RootStore } from '../stores';
-import { runInAction } from 'mobx';
+import { reaction, runInAction } from 'mobx';
 import {
   clearPatchFromStorage,
   loadPatchFromStorage,
@@ -167,6 +167,7 @@ export class RuntimeService {
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
+  private debugTelemetrySyncDisposer: (() => void) | null = null;
   private compilerServicesState: CompilerServicesState = { kind: 'inactive' };
   private swapInFlight = false;
   private swapRafId: number | null = null;
@@ -219,6 +220,33 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
+  }
+
+  private disposeRendererDebugTelemetryBridge(): void {
+    this.debugTelemetrySyncDisposer?.();
+    this.debugTelemetrySyncDisposer = null;
+  }
+
+  private syncRendererDebugTelemetry(enabled: boolean): void {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime || this.rendererExecutionState !== 'active') {
+      return;
+    }
+    runtime.renderer.setTelemetryEnabled(enabled);
+  }
+
+  private bindRendererDebugTelemetryBridge(): void {
+    this.disposeRendererDebugTelemetryBridge();
+    // [LAW:one-source-of-truth] Worker telemetry toggle is derived from the
+    // canonical debug settings token only.
+    const readEnabled = (): boolean => Boolean(this.store.settings.get(debugSettings).enabled);
+    this.syncRendererDebugTelemetry(readEnabled());
+    this.debugTelemetrySyncDisposer = reaction(
+      () => this.store.settings.get(debugSettings).enabled,
+      (enabled) => {
+        this.syncRendererDebugTelemetry(Boolean(enabled));
+      },
+    );
   }
 
   private requireCanvas(): HTMLCanvasElement {
@@ -378,7 +406,7 @@ export class RuntimeService {
       if (expectedProgram && this.compileState.currentProgram === expectedProgram && next.compiledGpuBundle) {
         // [RECOVER-08] Publish the worker-owned static install contract directly.
         // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
-        this.installRendererCanonicalAssets(next.compiledGpuBundle);
+        await this.installRendererCanonicalAssets(next.compiledGpuBundle);
       }
       this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapComplete();
     } catch (err) {
@@ -400,7 +428,7 @@ export class RuntimeService {
   // table descriptors only. No CPU materialization, no instance count
   // resolution, no ShapeBank allocator. The compile-time topology install
   // stage is the single GPU-visible runtime stage for shape-handle production.
-  private installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): void {
+  private async installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): Promise<void> {
     const runtime = this.readActiveRuntimeResources();
     if (!runtime || this.rendererExecutionState !== 'active') {
       return;
@@ -416,6 +444,8 @@ export class RuntimeService {
     const zoom = viewport?.zoom ?? 1;
     const panX = viewport?.pan?.x ?? 0;
     const panY = viewport?.pan?.y ?? 0;
+
+    await renderer.installDrawPrepSinkPointerMap(installContract.drawPrep.sinkPointerMap);
 
     renderer.render({
       shapeBank: {
@@ -729,6 +759,7 @@ export class RuntimeService {
 
       // Register settings tokens (before any compile call)
       store.settings.register(appSettings);
+      store.settings.register(debugSettings);
       store.settings.register(compilerFlagsSettings);
 
       // [LAW:single-enforcer] RuntimeService is the only startup boundary that
@@ -743,6 +774,7 @@ export class RuntimeService {
           arena,
         });
         this.rendererExecutionState = 'active';
+        this.bindRendererDebugTelemetryBridge();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
@@ -791,14 +823,9 @@ export class RuntimeService {
       store.patch.startPersistence();
 
       // Set up live recompile reaction.
-      // [LAW:one-source-of-truth] The worker-owned compile/swap bundle is the
-      // only runtime artifact authority. Main-thread program-only patching does
-      // not update the installed renderer bundle, so value edits must flow
-      // through the canonical async compile path until a worker-owned patch
-      // protocol exists.
       this.liveRecompile.setup(store, async () => {
         this.requireCompilerServices('scheduling a live recompile').compiler.scheduleCompile(this.buildCompileRequest());
-      }, undefined, (err) => {
+      }, (err) => {
         // [LAW:single-enforcer] RuntimeService is the sole boundary for recompile failures.
         const message = err instanceof Error ? err.message : String(err);
         store.diagnostics.log({
@@ -884,6 +911,7 @@ export class RuntimeService {
     this.compilerServicesState = { kind: 'inactive' };
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;
+    this.disposeRendererDebugTelemetryBridge();
     compilerServices?.client.dispose();
     this.store.patch.stopPersistence();
     this.domainChangeDetector.cleanup();
