@@ -40,6 +40,26 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     })
 }
 
+fn read_optional_memory_manifest_field(
+    value: &JsValue,
+    field: &str,
+) -> Result<Option<MemoryManifest>, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    if raw.is_undefined() || raw.is_null() {
+        return Ok(None);
+    }
+    let json = js_sys::JSON::stringify(&raw)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("GPU pass memoryManifest must be JSON-serializable"))?;
+    let manifest: MemoryManifest = serde_json::from_str(&json).map_err(|error| {
+        JsValue::from_str(
+            format!("GPU pass field '{}' is not a valid MemoryManifest: {}", field, error)
+                .as_str(),
+        )
+    })?;
+    Ok(Some(manifest))
+}
+
 fn pipeline_rebuild_failure_to_js_value(error: PipelineRebuildFailure) -> JsValue {
     let object = Object::new();
     let _ = Reflect::set(
@@ -87,6 +107,7 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
                     pass_id: read_required_string_field(&item, "passId")?,
                     entry_point: read_required_string_field(&item, "entryPoint")?,
                     wgsl: read_required_string_field(&item, "wgsl")?,
+                    memory_manifest: read_optional_memory_manifest_field(&item, "memoryManifest")?,
                 });
             }
             _ => {

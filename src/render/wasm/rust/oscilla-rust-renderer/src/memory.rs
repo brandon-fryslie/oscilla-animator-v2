@@ -1,4 +1,5 @@
 use bytemuck::{bytes_of, cast_slice, Pod, Zeroable};
+use serde_json::Value as JsonValue;
 
 pub const INDIRECT_WORDS_PER_RECORD: usize = 5;
 pub const INSTANCE_FLOATS_PER_RECORD: usize = 12;
@@ -76,7 +77,7 @@ pub struct MemoryResource {
     pub cardinality: u32,
     pub packing: MemoryPacking,
     #[serde(rename = "type")]
-    pub resource_type: String, // e.g. "f32", "vec2", "vec4"
+    pub resource_type: JsonValue,
     #[serde(default)]
     pub update_class: String,
     /// Resource kind: "buffer" (default) or "texture2d".
@@ -196,6 +197,31 @@ fn parse_texture_format(format: &str) -> wgpu::TextureFormat {
     }
 }
 
+fn resource_type_name(resource_type: &JsonValue) -> Option<&str> {
+    if let Some(name) = resource_type.as_str() {
+        return Some(name);
+    }
+    resource_type
+        .get("payload")
+        .and_then(|payload| payload.get("kind"))
+        .and_then(|kind| kind.as_str())
+}
+
+fn component_count_for_resource_type(resource_type: &JsonValue) -> u32 {
+    match resource_type_name(resource_type) {
+        Some("f32" | "u32" | "i32" | "bool" | "float" | "int" | "shape") => 1,
+        Some("vec2") => 2,
+        Some("vec3") => 3,
+        Some("vec4" | "color") => 4,
+        Some("mat4" | "cameraProjection") => 16,
+        Some(other) => panic!("Unknown memory manifest resource type '{}'", other),
+        None => panic!(
+            "Invalid memory manifest resource type payload: {}",
+            resource_type
+        ),
+    }
+}
+
 pub struct SymbolResolver {
     pub map: std::collections::HashMap<String, ResolvedResource>,
     pub total_arena_bytes: u32,
@@ -295,14 +321,7 @@ impl SymbolResolver {
             // [LAW:single-enforcer] All std430/std140 alignment rules are
             // enforced here in the Rust MMU.
             let component_size_bytes = 4; // Assuming f32/u32 for now
-            let component_count = match resource.resource_type.as_str() {
-                "f32" | "u32" | "i32" | "bool" => 1,
-                "vec2" => 2,
-                "vec3" => 3,
-                "vec4" => 4,
-                "mat4" => 16,
-                _ => 1,
-            };
+            let component_count = component_count_for_resource_type(&resource.resource_type);
 
             // std430 alignment: align to size of the first element (max 16)
             let alignment = (component_count * component_size_bytes).min(16).max(4);

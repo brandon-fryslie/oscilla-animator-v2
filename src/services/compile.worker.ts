@@ -42,7 +42,10 @@ function toBackendError(errors: readonly CompileError[]): CompileWorkerBackendRe
   };
 }
 
-function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuPassBundle {
+function buildCanonicalSimulationPassBundle(
+  wgsl: string,
+  memoryManifest: SerializableCompiledProgramIR['memoryManifest'],
+): CompiledGpuPassBundle {
   return {
     schemaVersion: 1,
     passes: [{
@@ -50,6 +53,9 @@ function buildCanonicalSimulationPassBundle(wgsl: string): CompiledGpuPassBundle
       stage: 'compute',
       entryPoint: 'compute_main',
       wgsl,
+      // [LAW:one-source-of-truth] Rust renderer MMU resolution consumes the
+      // same compile-owned memory manifest used by Naga lowering.
+      memoryManifest,
     }],
   };
 }
@@ -76,7 +82,10 @@ async function toBackendResult(
   if (nagaCompilation.kind === 'error') {
     return toBackendError(attachPreNagaWarnings(nagaCompilation.errors, result.warnings));
   }
-  const compiledGpuBundle = buildCanonicalSimulationPassBundle(nagaCompilation.wgsl);
+  const compiledGpuBundle = buildCanonicalSimulationPassBundle(
+    nagaCompilation.wgsl,
+    result.program.memoryManifest,
+  );
 
   const passValidation = validateCompiledGpuPassBundle(compiledGpuBundle);
   if (passValidation.kind === 'error') {
