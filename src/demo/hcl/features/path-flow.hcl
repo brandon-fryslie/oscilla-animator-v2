@@ -54,9 +54,6 @@ patch "Path Flow" {
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 8000
     role = "timeRoot"
-    outputs {
-      phaseA = [path-layout.offset, polygon-wobble.phase]
-    }
   }
 
   # --- Pentagon path definition ---
@@ -69,22 +66,7 @@ patch "Path Flow" {
     radiusX = 0.2
     radiusY = 0.2
     outputs {
-      controlPoints = polygon-wobble.controlPoints
-    }
-  }
-
-  block "ShapeWobble2D" "polygon-wobble" {
-    amount = 0.02
-    frequency = 5
-    outputs {
-      points = assembler.controlPoints
-    }
-  }
-
-  block "MakeShape2D" "assembler" {
-    closed = true
-    outputs {
-      shape = path-layout.shape
+      controlPoints = path-layout.controlPoints
     }
   }
 
@@ -100,11 +82,10 @@ patch "Path Flow" {
 
   # --- Instance array: 40 elements ---
 
-  block "Array" "arr" {
+  block "InstanceDomain" "arr" {
     count = 40
     outputs {
-      elements = path-layout.elements
-      t = color.h
+      rank = [path-layout.t, color.h]
     }
   }
 
@@ -112,9 +93,9 @@ patch "Path Flow" {
   # spacing=1 (default) → elements span exactly one path length
   # offset ← animated 0→1 ramp from clock → continuous flow
 
-  block "PathLayout" "path-layout" {
+  block "SamplePath" "path-layout" {
     outputs {
-      controlPoints = center-path.refs
+      position = center-path.refs
     }
   }
 
@@ -122,8 +103,8 @@ patch "Path Flow" {
     expression = <<-EXPR
       // PathLayout samples the pentagon in origin space.
       // Visual: offset the flowing necklace into centered UV space without collapsing its radius.
-      x = path_layout.controlPoints.x + 0.5
-      y = path_layout.controlPoints.y + 0.5
+      x = path_layout.position.x + 0.5
+      y = path_layout.position.y + 0.5
       vec2(x, y)
     EXPR
     outputs {

@@ -23,19 +23,18 @@ patch "Expression Operator Showcase" {
     }
   }
 
-  block "Array" "points" {
+  block "InstanceDomain" "points" {
     count = 160
     outputs {
-      elements = layout.elements
-      t = [pos.refs, scale.refs, color.h]
+      index = layout.index
+      rank = [pos.refs, scale.refs, color.h]
     }
   }
 
-  block "GridLayoutUV" "layout" {
-    rows = 16
-    cols = 10
+  block "ScatterUV" "layout" {
+
     outputs {
-      controlPoints = pos.refs
+      uv = pos.refs
     }
   }
 
@@ -47,24 +46,24 @@ patch "Expression Operator Showcase" {
 
       // Broadcast phase to each element lane.
       // Visual: shared time signal combines with lane-local offsets.
-      global_phase_field = mapField(global_phase, points.t)
+      global_phase_field = mapField(global_phase, points.rank)
 
       // Lane angle around the orbit ring.
       // Visual: evenly distributes points and keeps them in motion.
-      angle = points.t * 18.8496 + global_phase_field
+      angle = points.rank * 18.8496 + global_phase_field
 
       // Select opposite x offsets for the two halves of the field.
       // Visual: creates mirrored left/right swirl behavior.
-      side_x = points.t > 0.5 ? 0.15 : -0.15
+      side_x = points.rank > 0.5 ? 0.15 : -0.15
 
       // Select opposite y offsets for the two halves of the field.
       // Visual: complements x mirroring to form a braided pattern.
-      side_y = points.t > 0.5 ? -0.15 : 0.15
+      side_y = points.rank > 0.5 ? -0.15 : 0.15
 
       // Apply local orbit displacement around layout anchors.
       // Visual: each point circles around its grid cell center.
-      x = layout.controlPoints.x + side_x * sin(angle)
-      y = layout.controlPoints.y + side_y * cos(angle)
+      x = layout.uv.x + side_x * sin(angle)
+      y = layout.uv.y + side_y * cos(angle)
 
       // Output final position.
       // Visual: keeps all motion on the 2D plane.
@@ -91,11 +90,11 @@ patch "Expression Operator Showcase" {
 
       // Map one phase value across lanes.
       // Visual: all points pulse on the same tempo with lane offsets.
-      global_phase_field = mapField(global_phase, points.t)
+      global_phase_field = mapField(global_phase, points.rank)
 
       // Lane-specific pulse phase.
       // Visual: creates traveling phase differences through the grid.
-      pulse_angle = points.t * 12.5664 + global_phase_field
+      pulse_angle = points.rank * 12.5664 + global_phase_field
 
       // Final scale signal.
       // Visual: results in rolling size waves across instances.

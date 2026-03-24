@@ -9,7 +9,7 @@ patch "Simple" {
     periodAMs = 4000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, dot-wobble.phase, hue-shift.b]
+      phaseA = [ dot-wobble.phase, hue-shift.b]
     }
   }
 
@@ -36,18 +36,17 @@ patch "Simple" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 12
     outputs {
-      elements = layout.elements
-      t = hue-shift.a
+      index = layout.index
+      rank = hue-shift.a
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.26
+  block "ScatterUV" "layout" {
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 
@@ -57,7 +56,7 @@ patch "Simple" {
     }
   }
 
-  # Per-element rainbow: each dot gets its own hue from Array.t
+  # Per-element rainbow: each dot gets its own hue from Array.rank
   block "MakeColorOKLCH" "color" {
     s = 0.92
     l = 0.74

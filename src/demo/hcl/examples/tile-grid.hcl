@@ -37,19 +37,18 @@ patch "Tile Grid" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 484
     outputs {
-      elements = grid.elements
-      t = hue-shift.a
+      index = grid.index
+      rank = hue-shift.a
     }
   }
 
-  block "GridLayoutUV" "grid" {
-    rows = 22
-    cols = 22
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

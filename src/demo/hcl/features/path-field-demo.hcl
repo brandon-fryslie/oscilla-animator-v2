@@ -71,8 +71,7 @@ patch "Path Field Demo" {
   block "ProceduralStar" "star" {
     points = 5
     outputs {
-      controlPoints = path-field.controlPoints
-      shape = path-layout.shape
+      controlPoints = [path-field.controlPoints, path-layout.controlPoints]
     }
   }
 
@@ -112,18 +111,16 @@ patch "Path Field Demo" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 80
     outputs {
-      elements = path-layout.elements
-      t = hue-shift.a
+      rank = [path-layout.t, hue-shift.a]
     }
   }
 
-  block "PathLayout" "path-layout" {
-    spacing = 1.0
+  block "SamplePath" "path-layout" {
     outputs {
-      controlPoints = center-path.refs
+      position = center-path.refs
     }
   }
 
@@ -131,8 +128,8 @@ patch "Path Field Demo" {
     expression = <<-EXPR
       // Path producers author around the origin.
       // Visual: move the sampled star field into viewport UV space so the animated path is visible.
-      x = path_layout.controlPoints.x + 0.5
-      y = path_layout.controlPoints.y + 0.5
+      x = path_layout.position.x + 0.5
+      y = path_layout.position.y + 0.5
       vec2(x, y)
     EXPR
     outputs {

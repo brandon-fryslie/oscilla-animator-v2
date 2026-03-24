@@ -13,7 +13,6 @@ patch "Feedback Rotation" {
     role = "timeRoot"
     outputs {
       phaseA = speed-osc.phase
-      phaseB = inner-layout.phase
     }
   }
 
@@ -75,13 +74,7 @@ patch "Feedback Rotation" {
 
   block "Modulo" "phase-wrap" {
     outputs {
-      out = [phase-delay.in, feedback-phase.in]
-    }
-  }
-
-  block "Adapter_ScalarToPhase01" "feedback-phase" {
-    outputs {
-      out = [outer-layout.phase, outer-hue.b]
+      out = phase-delay.in
     }
   }
 
@@ -118,18 +111,17 @@ patch "Feedback Rotation" {
     }
   }
 
-  block "Array" "outer-instances" {
+  block "InstanceDomain" "outer-instances" {
     count = 36
     outputs {
-      elements = outer-layout.elements
-      t = outer-hue.a
+      index = outer-layout.index
+      rank = outer-color.h
     }
   }
 
-  block "CircleLayoutUV" "outer-layout" {
-    radius = 0.35
+  block "ScatterUV" "outer-layout" {
     outputs {
-      controlPoints = render-outer.controlPoints
+      uv = render-outer.controlPoints
     }
   }
 
@@ -139,12 +131,6 @@ patch "Feedback Rotation" {
     a = 0.95
     outputs {
       color = render-outer.color
-    }
-  }
-
-  block "Add" "outer-hue" {
-    outputs {
-      out = outer-color.h
     }
   }
 
@@ -160,17 +146,16 @@ patch "Feedback Rotation" {
     }
   }
 
-  block "Array" "inner-instances" {
+  block "InstanceDomain" "inner-instances" {
     count = 20
     outputs {
-      elements = inner-layout.elements
+      index = inner-layout.index
     }
   }
 
-  block "CircleLayoutUV" "inner-layout" {
-    radius = 0.18
+  block "ScatterUV" "inner-layout" {
     outputs {
-      controlPoints = render-inner.controlPoints
+      uv = render-inner.controlPoints
     }
   }
 

@@ -12,7 +12,7 @@ patch "Debug Lens Coverage" {
     periodBMs = 5000
     role = "timeRoot"
     outputs {
-      phaseA = [turns-lfo.phase, spiral.phase, hue-shift.b]
+      phaseA = hue-shift.b
       phaseB = [scale-lfo.phase, sat-lfo.phase]
     }
   }
@@ -27,68 +27,19 @@ patch "Debug Lens Coverage" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 180
     outputs {
-      elements = spiral.elements
-      t = hue-shift.a
+      index = spiral.index
+      rank = hue-shift.a
     }
   }
 
-  # --- Layout with lens-attached turns control ---
+  # --- Layout ---
 
-  block "Oscillator" "turns-lfo" {
-    mode = 0
+  block "ScatterUV" "spiral" {
     outputs {
-      out = turns-shape.in
-    }
-  }
-
-  block "Const" "turns-scale" {
-    value = 8.0
-    outputs {
-      out = turns-shape.scale
-    }
-  }
-
-  block "Const" "turns-bias" {
-    value = 8.0
-    outputs {
-      out = turns-shape.bias
-    }
-  }
-
-  block "ScaleBias" "turns-shape" {
-    outputs {
-      out = spiral.turns
-    }
-  }
-
-  block "Const" "spin-amount" {
-    value = 1.15
-    outputs {
-      out = spiral.spin
-    }
-  }
-
-  block "SpiralLayout" "spiral" {
-    expansion = 0.72
-    outputs {
-      controlPoints = render.controlPoints
-      rotation = alpha-shape.in
-    }
-
-    lens "Clamp" {
-      port = "turns"
-      sourceAddress = "v1:blocks.turns-shape.outputs.out"
-      min = 2.0
-      max = 16.0
-    }
-
-    lens "StepQuantize" {
-      port = "turns"
-      sourceAddress = "v1:blocks.turns-shape.outputs.out"
-      step = 0.25
+      uv = render.controlPoints
     }
   }
 

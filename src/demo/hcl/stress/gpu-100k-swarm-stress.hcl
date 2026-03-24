@@ -27,19 +27,18 @@ patch "GPU 100K Swarm Stress" {
     }
   }
 
-  block "Array" "swarm" {
+  block "InstanceDomain" "swarm" {
     count = 100000
     outputs {
-      elements = lattice.elements
-      t = [position.refs, scale.refs, hue-shift.b]
+      index = lattice.index
+      rank = [position.refs, scale.refs, hue-shift.b]
     }
   }
 
-  block "GridLayoutUV" "lattice" {
-    rows = 250
-    cols = 400
+  block "ScatterUV" "lattice" {
+
     outputs {
-      controlPoints = [position.refs, scale.refs]
+      uv = [position.refs, scale.refs]
     }
   }
 
@@ -47,12 +46,12 @@ patch "GPU 100K Swarm Stress" {
     expression = <<-EXPR
       phase_a = clock.phaseA * 6.2832
       phase_b = clock.phaseB * 6.2832
-      phase_a_field = mapField(phase_a, swarm.t)
-      phase_b_field = mapField(phase_b, swarm.t)
+      phase_a_field = mapField(phase_a, swarm.rank)
+      phase_b_field = mapField(phase_b, swarm.rank)
 
-      x0 = lattice.controlPoints.x - 0.5
-      y0 = lattice.controlPoints.y - 0.5
-      lane = swarm.t
+      x0 = lattice.uv.x - 0.5
+      y0 = lattice.uv.y - 0.5
+      lane = swarm.rank
 
       wave_x = sin(x0 * 14.0 + phase_a_field * 2.3 + lane * 55.0)
       wave_y = cos(y0 * 15.0 - phase_b_field * 3.1 + lane * 47.0)
@@ -77,12 +76,12 @@ patch "GPU 100K Swarm Stress" {
     expression = <<-EXPR
       phase_a = clock.phaseA * 6.2832
       phase_b = clock.phaseB * 6.2832
-      phase_a_field = mapField(phase_a, swarm.t)
-      phase_b_field = mapField(phase_b, swarm.t)
+      phase_a_field = mapField(phase_a, swarm.rank)
+      phase_b_field = mapField(phase_b, swarm.rank)
 
-      lane = swarm.t
-      x0 = lattice.controlPoints.x - 0.5
-      y0 = lattice.controlPoints.y - 0.5
+      lane = swarm.rank
+      x0 = lattice.uv.x - 0.5
+      y0 = lattice.uv.y - 0.5
       base = 0.75 + 0.25 * sin(lane * 240.0 + phase_a_field * 8.0)
       detail = 0.5 + 0.5 * cos((x0 + y0) * 36.0 + phase_b_field * 7.0)
       0.18 + 0.42 * base * detail
