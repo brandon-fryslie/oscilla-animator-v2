@@ -46,15 +46,15 @@ describe('CubicBezierRibbon2D per-instance color', () => {
     const patch = buildPatch((b) => {
       b.addBlock('InfiniteTimeRoot');
 
-      // Create an Array to provide instance context
+      // Create an InstanceDomain to provide instance context
       const ellipse = b.addBlock('Ellipse');
-      const array = b.addBlock('Array');
-      b.setPortDefault(array, 'count', 4);
-      b.wire(ellipse, 'shape', array, 'element');
+      const domain = b.addBlock('InstanceDomain');
+      b.setPortDefault(domain, 'count', 4);
+      b.wire(ellipse, 'shape', domain, 'element');
 
-      // Per-instance hue from Array.t → MakeColorOKLCH → ribbon.color
+      // Per-instance hue from InstanceDomain.rank → MakeColorOKLCH → ribbon.color
       const color = b.addBlock('MakeColorOKLCH');
-      b.wire(array, 't', color, 'h');
+      b.wire(domain, 'rank', color, 'h');
 
       const render = b.addBlock('CubicBezierRibbon2D');
       b.wire(color, 'color', render, 'color');

@@ -32,7 +32,7 @@ describe('createCardinalityAdapterObligations', () => {
   }
 
   const clampOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'sig', blockType: 'Sig', rule: 'policy.clampOne' };
-  const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'Array', rule: 'policy.forceMany' };
+  const manyOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'arr', blockType: 'InstanceDomain', rule: 'policy.forceMany' };
   const zipOrigin: ConstraintOrigin = { kind: 'blockRule', blockId: 'add', blockType: 'Add', rule: 'policy.promoteToMany' };
 
   it('returns empty for no conflicts', () => {
@@ -255,21 +255,21 @@ describe('createCardinalityAdapterObligations', () => {
 // =============================================================================
 
 describe('cardinality adapter fixpoint integration', () => {
-  it('InfiniteTimeRoot → Phasor → Add ← Array: no cardinality conflicts', () => {
+  it('InfiniteTimeRoot → Phasor → Add ← InstanceDomain: no cardinality conflicts', () => {
     // promoteToMany constraint only includes axisVar ports, not concrete output ports.
     // This prevents many evidence from propagating to clampOne groups.
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');
       const add = b.addBlock('Add');
-      const arr = b.addBlock('Array');
+      const domain = b.addBlock('InstanceDomain');
 
       // One-cardinality chain: InfiniteTimeRoot → Phasor (time input)
       b.wire(timeRoot, 'time', phasor, 'time');
       // Phasor output → Add input a
       b.wire(phasor, 'phase', add, 'a');
-      // Array (transform, creates field) → Add input b
-      b.wire(arr, 'elements', add, 'b');
+      // InstanceDomain (creates field) → Add input b
+      b.wire(domain, 'rank', add, 'b');
     });
 
     const { graph: dg } = buildDraftGraph(patch);
@@ -286,21 +286,21 @@ describe('cardinality adapter fixpoint integration', () => {
   });
 
   it('mixed cardinality: clampOne ports stay at one in promoteToMany group with many evidence', () => {
-    // InfiniteTimeRoot → Phasor → Add ← Array
+    // InfiniteTimeRoot → Phasor → Add ← InstanceDomain
     // InfiniteTimeRoot:time is clampOne (oneOnly acceptance)
-    // Array:elements is forceMany (transform)
+    // InstanceDomain:rank is forceMany (domain identity)
     // Add has promoteToMany policy → mixed cardinality over all ports
-    // Result: Add:a (from Phasor) stays at one, Add:b (from Array) resolves to many
+    // Result: Add:a (from Phasor) stays at one, Add:b (from InstanceDomain) resolves to many
     // Runtime uses kernelZipPromote for mixed cardinality — no Broadcast adapter needed
     const patch = buildPatch((b) => {
       const timeRoot = b.addBlock('InfiniteTimeRoot');
       const phasor = b.addBlock('Phasor');
       const add = b.addBlock('Add');
-      const arr = b.addBlock('Array');
+      const domain = b.addBlock('InstanceDomain');
 
       b.wire(timeRoot, 'time', phasor, 'time');
       b.wire(phasor, 'phase', add, 'a');
-      b.wire(arr, 'elements', add, 'b');
+      b.wire(domain, 'rank', add, 'b');
     });
 
     const { graph: dg } = buildDraftGraph(patch);

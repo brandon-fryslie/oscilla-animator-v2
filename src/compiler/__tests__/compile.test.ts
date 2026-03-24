@@ -80,18 +80,18 @@ describe('compile', () => {
   });
 
   describe('instance compilation', () => {
-    it('compiles instance with count using Array block', () => {
+    it('compiles instance with count using InstanceDomain block', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
-        // Array block creates instances (layout handled separately via field kernels)
-        const array = b.addBlock('Array');
-        b.setPortDefault(array, 'count', 100);
+        // InstanceDomain block creates instances (layout handled separately via field kernels)
+        const domain = b.addBlock('InstanceDomain');
+        b.setPortDefault(domain, 'count', 100);
       });
 
       const result = compile(patch);
 
       if (result.kind === 'error') {
-        console.error('COMPILE ERROR (Array):', JSON.stringify(result.errors, null, 2));
+        console.error('COMPILE ERROR (InstanceDomain):', JSON.stringify(result.errors, null, 2));
       }
 
       expect(result.kind).toBe('ok');
@@ -289,5 +289,5 @@ describe('Debug Probe Support', () => {
     );
     expect(hasStateWriteStore).toBe(true);
   });
-});
 
+});
