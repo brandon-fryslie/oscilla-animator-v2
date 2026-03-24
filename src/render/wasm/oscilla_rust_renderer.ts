@@ -7,8 +7,6 @@ interface RendererWasmModule {
   ) => Promise<unknown>;
   readonly init_engine?: (
     canvas: OffscreenCanvas,
-    maxParticles: number,
-    maxShapes: number,
     debugReadbackHz: number,
     initialWidth: number,
     initialHeight: number,
@@ -140,8 +138,6 @@ export async function initRustRendererEngine(
   }
   await initEngineImpl(
     canvas,
-    config.maxParticles,
-    config.maxShapes,
     config.debugReadbackHz,
     initialWidth,
     initialHeight,
