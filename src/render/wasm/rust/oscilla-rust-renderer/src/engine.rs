@@ -202,11 +202,143 @@ fn create_msaa_color_target(
 
 // [RECOVER-07] Descriptor word offsets for total_instance_count derivation.
 // RECOVER-05 zeroed all record fields; instance counts live in descriptors.
+const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: usize = 0;
+const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: usize = 1;
+const DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE: usize = 2;
+const DESCRIPTOR_WORD_COLOR_BASE_OFFSET: usize = 3;
+const DESCRIPTOR_WORD_COLOR_LANE_STRIDE: usize = 4;
+const DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE: usize = 5;
+const DESCRIPTOR_WORD_SCALE_BASE_OFFSET: usize = 6;
+const DESCRIPTOR_WORD_SCALE_LANE_STRIDE: usize = 7;
+const DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE: usize = 8;
+const DESCRIPTOR_WORD_ROTATION_MODE: usize = 9;
+const DESCRIPTOR_WORD_ROTATION_BASE_OFFSET: usize = 10;
+const DESCRIPTOR_WORD_ROTATION_LANE_STRIDE: usize = 11;
+const DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE: usize = 12;
+const DESCRIPTOR_WORD_SCALE2_MODE: usize = 14;
+const DESCRIPTOR_WORD_SCALE2_BASE_OFFSET: usize = 15;
+const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: usize = 16;
+const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: usize = 17;
+const DESCRIPTOR_WORD_SHAPE_SLOT_BASE_OFFSET: usize = 20;
+const DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE: usize = 21;
+const DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE: usize = 22;
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
+const OPTIONAL_MODE_SLOT: u32 = 1;
 
 impl Engine {
+    fn resolve_slot_to_physical_words(
+        &self,
+        slot_id: u32,
+        context: &str,
+    ) -> (u32, u32, u32) {
+        let resource_id = format!("arena:slot:{}", slot_id);
+        let resolved = self
+            .arena
+            .symbol_resolver
+            .resolve(&resource_id)
+            .unwrap_or_else(|| panic!("sink table {} references unknown slot {}", context, slot_id));
+        match resolved.storage_location {
+            crate::memory::ResourceStorageLocation::Arena => {}
+            // [LAW:no-silent-fallbacks] Draw-prep descriptors target render
+            // input slots only; non-arena resources are invalid here.
+            crate::memory::ResourceStorageLocation::State => {
+                panic!(
+                    "sink table {} slot {} resolves to state storage (expected arena)",
+                    context, slot_id
+                );
+            }
+            crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                panic!(
+                    "sink table {} slot {} resolves to GlobalControlUbo (expected arena)",
+                    context, slot_id
+                );
+            }
+            crate::memory::ResourceStorageLocation::Texture2D => {
+                panic!(
+                    "sink table {} slot {} resolves to Texture2D (expected arena)",
+                    context, slot_id
+                );
+            }
+        }
+        (
+            resolved.base_offset_bytes / 4,
+            resolved.lane_stride_bytes / 4,
+            resolved.component_stride_bytes / 4,
+        )
+    }
+
+    fn resolve_sink_descriptor_slots(
+        &self,
+        plane_words: &mut [u32],
+        total_record_count: usize,
+    ) {
+        // [LAW:single-enforcer] Sink descriptor physical address resolution is
+        // owned by Rust MMU at the renderer boundary.
+        let descriptor_region_base =
+            SINK_TABLE_HEADER_WORDS + total_record_count * SINK_TABLE_RECORD_WORDS;
+        for record in 0..total_record_count {
+            let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            if descriptor_base + SINK_TABLE_DESCRIPTOR_WORDS > plane_words.len() {
+                break;
+            }
+
+            let position_slot = plane_words[descriptor_base + DESCRIPTOR_WORD_POSITION_BASE_OFFSET];
+            let (position_base, position_lane, position_component) =
+                self.resolve_slot_to_physical_words(position_slot, "position");
+            plane_words[descriptor_base + DESCRIPTOR_WORD_POSITION_BASE_OFFSET] = position_base;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_POSITION_LANE_STRIDE] = position_lane;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE] =
+                position_component;
+
+            let color_slot = plane_words[descriptor_base + DESCRIPTOR_WORD_COLOR_BASE_OFFSET];
+            let (color_base, color_lane, color_component) =
+                self.resolve_slot_to_physical_words(color_slot, "color");
+            plane_words[descriptor_base + DESCRIPTOR_WORD_COLOR_BASE_OFFSET] = color_base;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_COLOR_LANE_STRIDE] = color_lane;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE] = color_component;
+
+            let scale_slot = plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE_BASE_OFFSET];
+            let (scale_base, scale_lane, scale_component) =
+                self.resolve_slot_to_physical_words(scale_slot, "scale");
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE_BASE_OFFSET] = scale_base;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE_LANE_STRIDE] = scale_lane;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE] = scale_component;
+
+            let rotation_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_MODE];
+            if rotation_mode == OPTIONAL_MODE_SLOT {
+                let rotation_slot =
+                    plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_BASE_OFFSET];
+                let (rotation_base, rotation_lane, rotation_component) =
+                    self.resolve_slot_to_physical_words(rotation_slot, "rotation");
+                plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_BASE_OFFSET] = rotation_base;
+                plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_LANE_STRIDE] = rotation_lane;
+                plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE] =
+                    rotation_component;
+            }
+
+            let scale2_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE];
+            if scale2_mode == OPTIONAL_MODE_SLOT {
+                let scale2_slot = plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_BASE_OFFSET];
+                let (scale2_base, scale2_lane, scale2_component) =
+                    self.resolve_slot_to_physical_words(scale2_slot, "scale2");
+                plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_BASE_OFFSET] = scale2_base;
+                plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_LANE_STRIDE] = scale2_lane;
+                plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE] =
+                    scale2_component;
+            }
+
+            let shape_slot = plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_BASE_OFFSET];
+            let (shape_base, shape_lane, shape_component) =
+                self.resolve_slot_to_physical_words(shape_slot, "shape");
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_BASE_OFFSET] = shape_base;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE] = shape_lane;
+            plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE] =
+                shape_component;
+        }
+    }
+
     pub async fn new(
         canvas: OffscreenCanvas,
         config: EngineConfig,
@@ -550,6 +682,17 @@ impl Engine {
     ) -> Result<(), PipelineRebuildFailure> {
         // [LAW:single-enforcer] Compiler-owned GPU pass artifacts are published
         // at one engine boundary so runtime hot path never recompiles ad hoc.
+        if let Some(memory_manifest) = pass_specs
+            .iter()
+            .find_map(|spec| spec.memory_manifest.as_ref())
+        {
+            // [LAW:one-source-of-truth] Draw-prep descriptor resolution uses
+            // the same compile-owned memory manifest used for shader lowering.
+            let resolver = crate::memory::SymbolResolver::build_from_manifest(memory_manifest);
+            self.arena
+                .rebuild_buffers_from_resolver(&self.device, &resolver);
+            self.arena.symbol_resolver = resolver;
+        }
         let staged = self
             .compute
             .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs, self.max_particles)
@@ -954,13 +1097,14 @@ impl Engine {
             );
         }
 
-        let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
+        let total_record_count_usize = total_record_count as usize;
+        let mut plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
+        self.resolve_sink_descriptor_slots(&mut plane_words, total_record_count_usize);
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
         // [RECOVER-07] Sum instance counts from descriptors, not zeroed record fields.
         // RECOVER-05 zeroed all record fields; StaticInstanceCount in descriptors
         // is the canonical source for assembly dispatch sizing.
-        let total_record_count_usize = total_record_count as usize;
         let descriptor_region_base =
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
         let mut total_instance_count: u32 = 0;

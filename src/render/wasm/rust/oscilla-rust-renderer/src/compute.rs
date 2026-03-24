@@ -1281,6 +1281,7 @@ pub struct CompilerComputePassSpec {
     pub pass_id: String,
     pub entry_point: String,
     pub wgsl: String,
+    pub memory_manifest: Option<crate::memory::MemoryManifest>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1556,6 +1557,7 @@ impl ComputeDispatcher {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: simulation_wgsl.to_string(),
+                memory_manifest: None,
             },
         )
         .expect("default simulation shader must satisfy canonical compute-program contract");
@@ -1994,6 +1996,7 @@ mod tests {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: "@compute @workgroup_size(64) fn other_main() {}".to_string(),
+                memory_manifest: None,
             },
         );
         assert!(result

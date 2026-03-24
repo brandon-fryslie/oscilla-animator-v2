@@ -131,6 +131,7 @@ function normalizePassShape(
     stage,
     entryPoint,
     wgsl,
+    ...(pass.memoryManifest ? { memoryManifest: pass.memoryManifest } : {}),
   };
 }
 

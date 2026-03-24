@@ -1,7 +1,6 @@
 import type { CompiledProgramIR, DrawPrepSinkIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { Step, StepRender } from '../compiler/ir/types';
-import { resolveArenaAddress } from './ArenaValueStore';
 import {
   DRAW_PREP_SINK_DESCRIPTOR_WORDS,
   DRAW_PREP_SINK_TABLE_HEADER_WORDS,
@@ -59,9 +58,7 @@ function requireRenderStep(program: CompiledProgramIR, renderStepIndex: number):
 }
 
 interface PackedArenaAddress {
-  readonly baseOffset: number;
-  readonly laneStride: number;
-  readonly componentStride: number;
+  readonly slotId: number;
 }
 
 const OPTIONAL_MODE_CONSTANT = 0;
@@ -80,11 +77,10 @@ function resolveSlotArenaAddress(
       'DrawPrepSinkTablePacker: missing runtimeAddressTable slotToArena descriptor for ' + context,
     );
   }
-  const address = resolveArenaAddress(descriptor);
   return {
-    baseOffset: assertFiniteUint32(address.baseOffset, `${context}.baseOffset`),
-    laneStride: assertFiniteUint32(address.laneStride, `${context}.laneStride`),
-    componentStride: assertFiniteUint32(address.componentStride, `${context}.componentStride`),
+    // [LAW:one-source-of-truth] Sink descriptors carry symbolic slot IDs.
+    // Physical address resolution is owned by the Rust MMU boundary.
+    slotId: assertFiniteUint32(Number(slot), `${context}.slotId`),
   };
 }
 
@@ -111,7 +107,7 @@ function orderedSinkIndicesByDrawMode(sinks: readonly DrawPrepSinkIR[]): number[
  * // (RECOVER-06) derives these from canonical GPU-resident state.
  *
  * // [LAW:one-source-of-truth] The sink table now contains only compile-time
- * // metadata: header, per-record drawMode, and descriptor arena addresses.
+ * // metadata: header, per-record drawMode, and symbolic descriptor slot IDs.
  */
 export function packDrawPrepSinkTableV1(
   program: CompiledProgramIR,
@@ -156,7 +152,9 @@ export function packDrawPrepSinkTableV1(
       materialId: 0,
     });
 
-    // --- Static descriptor: arena addresses for render inputs ---
+    // --- Static descriptor: symbolic slot IDs for render inputs ---
+    // [LAW:single-enforcer] Rust renderer MMU resolves these IDs to physical
+    // addresses once when sink-table installs are applied.
     const descriptorBase = descriptorBaseWord + recordWriteIndex * DRAW_PREP_SINK_DESCRIPTOR_WORDS;
     const positionAddress = resolveSlotArenaAddress(
       program,
@@ -190,28 +188,28 @@ export function packDrawPrepSinkTableV1(
         )
         : null;
 
-    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionBaseOffset] = positionAddress.baseOffset;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionLaneStride] = positionAddress.laneStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionComponentStride] = positionAddress.componentStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorBaseOffset] = colorAddress.baseOffset;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorLaneStride] = colorAddress.laneStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorComponentStride] = colorAddress.componentStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleBaseOffset] = scaleSlotAddress.baseOffset;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleLaneStride] = scaleSlotAddress.laneStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleComponentStride] = scaleSlotAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionBaseOffset] = positionAddress.slotId;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionComponentStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorBaseOffset] = colorAddress.slotId;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ColorComponentStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleBaseOffset] = scaleSlotAddress.slotId;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ScaleComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationMode] = rotationSlotAddress
       ? OPTIONAL_MODE_SLOT
       : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationBaseOffset] = rotationSlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = rotationSlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = rotationSlotAddress?.componentStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationBaseOffset] = rotationSlotAddress?.slotId ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.RotationComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.RotationDefaultBits] = float32ToUint32Bits(0);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2Mode] = scale2SlotAddress
       ? OPTIONAL_MODE_SLOT
       : OPTIONAL_MODE_CONSTANT;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.baseOffset ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = scale2SlotAddress?.laneStride ?? 0;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = scale2SlotAddress?.componentStride ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2BaseOffset] = scale2SlotAddress?.slotId ?? 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2LaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
 
@@ -221,9 +219,9 @@ export function packDrawPrepSinkTableV1(
       renderStep.shape.slot,
       `shapeSlot sink(instance=${String(renderStep.instanceId)})`,
     );
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset] = shapeSlotAddress.baseOffset;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride] = shapeSlotAddress.laneStride;
-    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride] = shapeSlotAddress.componentStride;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset] = shapeSlotAddress.slotId;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride] = 0;
     if (sink.instanceCountMode !== 'static') {
       // [LAW:single-enforcer] Draw-prep sink packing is the single boundary
       // that rejects unsupported runtime-owned dynamic instance counts until

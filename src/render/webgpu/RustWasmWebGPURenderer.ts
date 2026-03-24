@@ -277,12 +277,14 @@ function buildValidatedGpuPassPayload(
   stage: GpuPassStage,
   entryPoint: string,
   wgsl: string,
+  memoryManifest: RustRendererGpuPass['memoryManifest'],
 ): RustRendererGpuPass {
   return {
     passId,
     stage,
     entryPoint,
     wgsl,
+    ...(memoryManifest ? { memoryManifest } : {}),
   };
 }
 
@@ -313,7 +315,7 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   const stage = requireGpuPassStage(pass, passId);
   const entryPoint = requireGpuPassEntryPoint(pass, passId);
   const wgsl = requireGpuPassWgsl(pass, passId);
-  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl);
+  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl, pass.memoryManifest);
 }
 
 /**
@@ -521,6 +523,7 @@ export class WebGPURenderer {
   // [RECOVER-10] [LAW:single-enforcer] Latest structured readback snapshot
   // from the worker, replacing the stubbed readIndirectArgsDebugView.
   private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
+  private readbackDebugLogged = false;
 
   private reportEngineError(
     source: string,
@@ -1788,6 +1791,19 @@ export class WebGPURenderer {
     if (payload.type === 'READBACK_SNAPSHOT') {
       this.validateReadbackSnapshotHealth(payload);
       this.latestReadbackSnapshot = payload;
+      if (
+        this.shouldEmitRuntimeConsole()
+        && !this.readbackDebugLogged
+        && payload.renderCounters.expectedTotalInstanceCount > 0
+      ) {
+        this.readbackDebugLogged = true;
+        this.emitRuntimeConsoleInfo({
+          kind: 'readback-snapshot-sample',
+          renderCounters: payload.renderCounters,
+          firstIndirectArgs: payload.indirectArgs[0] ?? null,
+          instanceProbeSample: Array.from(payload.instanceProbeValues.slice(0, 8)),
+        });
+      }
     }
   };
 }

@@ -196,6 +196,8 @@ function buildCanonicalTopologyHeaders(
       // from @builtin(vertex_index). For closed paths with N control points, the
       // fan produces (N-2) triangles × 3 vertices each. For open paths, vertices
       // are consumed sequentially (triangle list from CPs).
+      // [LAW:one-source-of-truth] Vertex cardinality comes from topology
+      // metadata for both path and non-path records.
       const cpCount = isPath ? topology.totalControlPoints : 0;
       const vertexCount = isPath && topology.closed && cpCount >= 3
         ? (cpCount - 2) * 3
