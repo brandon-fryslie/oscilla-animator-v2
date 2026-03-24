@@ -1801,7 +1801,13 @@ export class WebGPURenderer {
           kind: 'readback-snapshot-sample',
           renderCounters: payload.renderCounters,
           firstIndirectArgs: payload.indirectArgs[0] ?? null,
-          instanceProbeSample: Array.from(payload.instanceProbeValues.slice(0, 8)),
+          indirectWordsHead: payload.indirectWordsHead
+            ? Array.from(payload.indirectWordsHead.slice(0, 16))
+            : [],
+          shapeHeaderSample: payload.shapeHeaderSample
+            ? Array.from(payload.shapeHeaderSample.slice(0, 16))
+            : [],
+          instanceProbeSample: Array.from(payload.instanceProbeValues.slice(0, 64)),
         });
       }
     }

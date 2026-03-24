@@ -19,7 +19,6 @@ import type { ValueSlot } from '../ir/Indices';
 import type { Step } from '../ir/types';
 import type { ValueExpr, ValueExprShapeRef } from '../ir/value-expr';
 import { getProgramTopology } from '../ir/program-topology';
-import { resolveArenaAddress } from '../../runtime/ArenaValueStore';
 import { packDrawPrepSinkTableV1 } from '../../runtime/DrawPrepSinkTablePacker';
 import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 import {
@@ -154,9 +153,8 @@ function buildCanonicalTopologyHeaders(
     const { target, expr } = shapeRefSteps[stepIdx]!;
     const topology = topologies[stepIdx]!;
 
-    // Resolve CP arena addressing from compile-time address table.
-    // GPU simulation compute writes CP field values at this address;
-    // vertex shader reads them via the ShapeBank header.
+    // [LAW:one-source-of-truth] ShapeBank CP header words carry symbolic slot IDs.
+    // Rust MMU is the single boundary that resolves physical base/stride words.
     let cpArenaBaseOffset = 0;
     let cpArenaLaneStride = 0;
     let cpArenaComponentStride = 0;
@@ -165,13 +163,10 @@ function buildCanonicalTopologyHeaders(
         expr.controlPointField as number,
       );
       if (slot !== undefined) {
-        const cpDescriptor = program.runtimeAddressTable.slotToArena.get(slot);
-        if (cpDescriptor) {
-          const cpAddress = resolveArenaAddress(cpDescriptor);
-          cpArenaBaseOffset = cpAddress.baseOffset;
-          cpArenaLaneStride = cpAddress.laneStride;
-          cpArenaComponentStride = cpAddress.componentStride;
-        }
+        cpArenaBaseOffset = assertFiniteUint32(
+          Number(slot),
+          `shapeRef(${String(expr.topologyId)}).controlPointSlotId`,
+        );
       }
     }
 

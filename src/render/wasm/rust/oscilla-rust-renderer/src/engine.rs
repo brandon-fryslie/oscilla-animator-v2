@@ -94,6 +94,7 @@ pub struct Engine {
     draw_regions: IndirectRegionPlan,
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
+    last_shape_header_sample: Vec<u32>,
     last_install_revision: u32,
     pending_fatal_gpu_error: Arc<AtomicBool>,
     // [LAW:one-source-of-truth] Worker-owned animation time. The worker's own
@@ -224,8 +225,19 @@ const DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE: usize = 21;
 const DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE: usize = 22;
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: usize = 25;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 const OPTIONAL_MODE_SLOT: u32 = 1;
+
+const SHAPE_WORD_KIND: usize = 0;
+const SHAPE_WORD_TOPOLOGY_MODE: usize = 1;
+const SHAPE_WORD_CP_ARENA_BASE_OFFSET: usize = 11;
+const SHAPE_WORD_CP_ARENA_LANE_STRIDE: usize = 14;
+const SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE: usize = 15;
+
+const SHAPE_CLASS_TYPE1_RIGID: u32 = 1;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2;
+const TOPOLOGY_MODE_NON_PATH: u32 = 0;
 
 impl Engine {
     fn resolve_slot_to_physical_words(
@@ -336,6 +348,53 @@ impl Engine {
             plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE] = shape_lane;
             plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE] =
                 shape_component;
+        }
+    }
+
+    fn resolve_shape_bank_control_point_slots(
+        &self,
+        shape_bank_words: &mut [u32],
+        shape_word_offsets: &[u32],
+    ) {
+        // [LAW:single-enforcer] ShapeBank control-point address resolution is
+        // owned by Rust MMU at renderer install boundary.
+        let mut offsets: Vec<usize> = shape_word_offsets
+            .iter()
+            .map(|offset| *offset as usize)
+            .collect();
+        offsets.sort_unstable();
+        offsets.dedup();
+
+        for shape_word_offset in offsets {
+            if shape_word_offset + SHAPE_BANK_HEADER_WORDS > shape_bank_words.len() {
+                panic!(
+                    "shape bank handle {} out of bounds for {} words",
+                    shape_word_offset,
+                    shape_bank_words.len()
+                );
+            }
+
+            let kind = shape_bank_words[shape_word_offset + SHAPE_WORD_KIND];
+            if kind != SHAPE_CLASS_TYPE1_RIGID && kind != SHAPE_CLASS_TYPE2_PARAMETRIC {
+                continue;
+            }
+
+            let topology_mode = shape_bank_words[shape_word_offset + SHAPE_WORD_TOPOLOGY_MODE];
+            let needs_control_points =
+                kind == SHAPE_CLASS_TYPE2_PARAMETRIC || topology_mode != TOPOLOGY_MODE_NON_PATH;
+            if !needs_control_points {
+                continue;
+            }
+
+            let control_point_slot_id =
+                shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+            let context = format!("shape-bank cp header @{}", shape_word_offset);
+            let (base_words, lane_words, component_words) =
+                self.resolve_slot_to_physical_words(control_point_slot_id, &context);
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_BASE_OFFSET] = base_words;
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_LANE_STRIDE] = lane_words;
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE] =
+                component_words;
         }
     }
 
@@ -516,6 +575,7 @@ impl Engine {
             draw_regions: IndirectRegionPlan::default(),
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
+            last_shape_header_sample: Vec::new(),
             last_install_revision: 0,
             pending_fatal_gpu_error,
             prev_tick_timestamp_ms: 0.0,
@@ -620,6 +680,7 @@ impl Engine {
         self.draw_regions = IndirectRegionPlan::default();
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
+        self.last_shape_header_sample.clear();
         self.last_install_revision = 0;
 
         Ok(())
@@ -667,6 +728,7 @@ impl Engine {
         self.draw_regions = IndirectRegionPlan::default();
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
+        self.last_shape_header_sample.clear();
         self.last_install_revision = 0;
     }
 
@@ -1021,7 +1083,7 @@ impl Engine {
         )
     }
 
-    fn sync_shape_bank_plane(&mut self, shape_bank_words: u32) {
+    fn sync_shape_bank_plane(&mut self, shape_bank_words: u32, shape_word_offsets: &[u32]) {
         let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() else {
             return;
         };
@@ -1038,7 +1100,16 @@ impl Engine {
         // [RECOVER-04] Upload canonical ShapeBank words directly to topologyBank.
         // GPU vertex pulling reads control points from the topology buffer —
         // no CPU mesh realization needed.
-        let canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        let mut canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        self.resolve_shape_bank_control_point_slots(&mut canonical_words, shape_word_offsets);
+        self.last_shape_header_sample.clear();
+        if let Some(first_shape_word_offset) = shape_word_offsets.first() {
+            let offset = *first_shape_word_offset as usize;
+            if offset + SHAPE_BANK_HEADER_WORDS <= canonical_words.len() {
+                self.last_shape_header_sample
+                    .extend_from_slice(&canonical_words[offset..(offset + SHAPE_BANK_HEADER_WORDS)]);
+            }
+        }
         self.arena
             .write_shape_bank_words(&self.device, &self.queue, &canonical_words);
     }
@@ -1046,12 +1117,12 @@ impl Engine {
     fn sync_sink_table_plane_and_parse_regions(
         &mut self,
         sink_table_words: u32,
-    ) -> IndirectRegionPlan {
+    ) -> (IndirectRegionPlan, Vec<u32>) {
         let Some(shared_sink_table) = self.shared_sink_table.as_ref() else {
-            return IndirectRegionPlan::default();
+            return (IndirectRegionPlan::default(), Vec::new());
         };
         if sink_table_words == 0 {
-            return IndirectRegionPlan::default();
+            return (IndirectRegionPlan::default(), Vec::new());
         }
 
         let available_words = shared_sink_table.length();
@@ -1107,12 +1178,14 @@ impl Engine {
         // is the canonical source for assembly dispatch sizing.
         let descriptor_region_base =
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
+        let mut shape_word_offsets = Vec::with_capacity(total_record_count_usize);
         let mut total_instance_count: u32 = 0;
         for record in 0..total_record_count_usize {
             let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
-            if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
+            if descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET >= plane_words.len() {
                 break;
             }
+            shape_word_offsets.push(plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET]);
             let mode = plane_words[descriptor_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
             if mode == INSTANCE_COUNT_MODE_STATIC {
                 total_instance_count = total_instance_count.saturating_add(
@@ -1122,15 +1195,18 @@ impl Engine {
         }
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.
-        IndirectRegionPlan {
-            total_instance_count,
-            indexed_record_count,
-            non_indexed_record_count,
-            indexed_region_base_words,
-            non_indexed_region_base_words,
-            indexed_stride_words,
-            non_indexed_stride_words,
-        }
+        (
+            IndirectRegionPlan {
+                total_instance_count,
+                indexed_record_count,
+                non_indexed_record_count,
+                indexed_region_base_words,
+                non_indexed_region_base_words,
+                indexed_stride_words,
+                non_indexed_stride_words,
+            },
+            shape_word_offsets,
+        )
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
@@ -1258,8 +1334,10 @@ impl Engine {
                 }
                 self.last_shape_bank_words = shape_bank_words;
                 self.last_sink_table_words = sink_table_words;
-                self.sync_shape_bank_plane(shape_bank_words);
-                self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                let (draw_regions, shape_word_offsets) =
+                    self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                self.sync_shape_bank_plane(shape_bank_words, &shape_word_offsets);
+                self.draw_regions = draw_regions;
                 self.last_install_revision = install_revision;
             }
         } else {
@@ -1273,6 +1351,7 @@ impl Engine {
             header.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
+            self.last_shape_header_sample.clear();
             self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
@@ -1300,6 +1379,7 @@ impl Engine {
         let non_indexed_region_base_words = self.draw_regions.non_indexed_region_base_words as usize;
         let indexed_stride_words = self.draw_regions.indexed_stride_words.max(1) as usize;
         let non_indexed_stride_words = self.draw_regions.non_indexed_stride_words.max(1) as usize;
+        let shape_header_sample = self.last_shape_header_sample.clone();
         let pending_readback = self.pending_readback.clone();
 
         // [LAW:dataflow-not-control-flow] Both readback paths are evaluated
@@ -1342,6 +1422,7 @@ impl Engine {
             let slice = self.arena.indirect_staging_buffer().slice(..);
             let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
                 let mut records = Vec::new();
+                let mut indirect_words_head = Vec::new();
                 let mut decoded_indexed_record_count = 0u32;
                 let mut decoded_non_indexed_record_count = 0u32;
                 let mut decoded_indexed_instance_count = 0u32;
@@ -1350,6 +1431,16 @@ impl Engine {
                 if result.is_ok() {
                     let mapped = indirect_staging_for_callback.slice(..).get_mapped_range();
                     let u32_count = mapped.len() / std::mem::size_of::<u32>();
+                    let head_word_count = u32_count.min(16);
+                    for word_index in 0..head_word_count {
+                        let byte_idx = word_index * std::mem::size_of::<u32>();
+                        indirect_words_head.push(u32::from_le_bytes([
+                            mapped[byte_idx],
+                            mapped[byte_idx + 1],
+                            mapped[byte_idx + 2],
+                            mapped[byte_idx + 3],
+                        ]));
+                    }
                     // Decode indexed records (5 words each)
                     for i in 0..indexed_record_count {
                         let base = indexed_region_base_words + i * indexed_stride_words;
@@ -1368,8 +1459,10 @@ impl Engine {
                         let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: word(0),
+                            vertex_count: 0,
                             instance_count,
                             first_index: word(2),
+                            first_vertex: 0,
                             base_vertex: word(3) as i32,
                             first_instance: word(4),
                         });
@@ -1401,8 +1494,10 @@ impl Engine {
                         let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: 0,
+                            vertex_count: word(0),
                             instance_count,
                             first_index: 0,
+                            first_vertex: word(2),
                             base_vertex: 0,
                             first_instance: word(3),
                         });
@@ -1430,6 +1525,8 @@ impl Engine {
                     frame_count,
                     captured_at_ms,
                     indirect_args: records,
+                    indirect_words_head,
+                    shape_header_sample: shape_header_sample.clone(),
                     instance_probe_values,
                     render_counters: ReadbackRenderCounters {
                         expected_indexed_record_count,

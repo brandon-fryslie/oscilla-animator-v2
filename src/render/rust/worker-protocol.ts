@@ -189,8 +189,10 @@ export interface RustRendererRuntimeEvent {
 // structured GPU-to-host observability data published by the worker.
 export interface RustRendererIndirectArgsRecord {
   readonly indexCount: number;
+  readonly vertexCount?: number;
   readonly instanceCount: number;
   readonly firstIndex: number;
+  readonly firstVertex?: number;
   readonly baseVertex: number;
   readonly firstInstance: number;
 }
@@ -211,6 +213,8 @@ export interface RustRendererReadbackSnapshot {
   readonly frameCount: number;
   readonly capturedAtMs: number;
   readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
+  readonly indirectWordsHead?: Uint32Array;
+  readonly shapeHeaderSample?: Uint32Array;
   readonly instanceProbeValues: Float32Array;
   readonly renderCounters: RustRendererReadbackRenderCounters;
 }
