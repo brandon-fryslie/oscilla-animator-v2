@@ -10,6 +10,7 @@ import {
   pauseRustRendererEngine,
   rebuildRustRendererGpuPipelines,
   resumeRustRendererEngine,
+  setRustRendererDebugReadbackHz,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
   uploadRustRendererAtlasData,
@@ -25,6 +26,7 @@ import {
 import type {
   RustRendererEngineError,
   RustRendererIndirectArgsRecord,
+  RustRendererReadbackRenderCounters,
   RustRendererReadbackSnapshot,
   RustRendererRebuildGpuPipelinesFailure,
   RustRendererWorkerInboundMessage,
@@ -33,6 +35,7 @@ import type {
 } from './worker-protocol';
 
 const POLL_INTERVAL_MS = 250;
+const DEBUG_TELEMETRY_READBACK_HZ = 6;
 
 let bootstrapped = false;
 let bootstrapInFlight = false;
@@ -105,6 +108,19 @@ function postDeviceLost(code: string, reason: string): void {
   });
 }
 
+function telemetryReadbackHz(enabled: boolean): number {
+  return enabled ? DEBUG_TELEMETRY_READBACK_HZ : 0;
+}
+
+function applyTelemetryReadbackCadence(): void {
+  if (!bootstrapped) {
+    return;
+  }
+  // [LAW:single-enforcer] Worker telemetry toggle is the only boundary that
+  // controls Rust debug readback cadence.
+  setRustRendererDebugReadbackHz(telemetryReadbackHz(telemetryEnabled));
+}
+
 function isEngineErrorPayload(payload: unknown): payload is RustRendererEngineError {
   if (!payload || typeof payload !== 'object') {
     return false;
@@ -153,6 +169,7 @@ async function handleBootstrap(message: Extract<RustRendererWorkerInboundMessage
     );
     resumeRustRendererEngine();
     bootstrapped = true;
+    applyTelemetryReadbackCadence();
     deviceLostNotified = false;
     runtimePollFatalNotified = false;
     startRuntimePolling();
@@ -345,12 +362,41 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
   const instanceProbeValues = candidate.instanceProbeValues instanceof Float32Array
     ? candidate.instanceProbeValues
     : new Float32Array(0);
+  const renderCounters = parseReadbackRenderCounters(candidate.renderCounters);
   return {
     type: 'READBACK_SNAPSHOT',
     frameCount: candidate.frameCount as number,
     capturedAtMs: candidate.capturedAtMs as number,
     indirectArgs,
     instanceProbeValues,
+    renderCounters,
+  };
+}
+
+function parseReadbackRenderCounters(raw: unknown): RustRendererReadbackRenderCounters {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      expectedIndexedRecordCount: 0,
+      expectedNonIndexedRecordCount: 0,
+      expectedTotalInstanceCount: 0,
+      decodedIndexedRecordCount: 0,
+      decodedNonIndexedRecordCount: 0,
+      decodedIndexedInstanceCount: 0,
+      decodedNonIndexedInstanceCount: 0,
+      decodedNonZeroRecordCount: 0,
+    };
+  }
+  const candidate = raw as Record<string, unknown>;
+  const read = (key: string): number => (typeof candidate[key] === 'number' ? candidate[key] as number : 0);
+  return {
+    expectedIndexedRecordCount: read('expectedIndexedRecordCount'),
+    expectedNonIndexedRecordCount: read('expectedNonIndexedRecordCount'),
+    expectedTotalInstanceCount: read('expectedTotalInstanceCount'),
+    decodedIndexedRecordCount: read('decodedIndexedRecordCount'),
+    decodedNonIndexedRecordCount: read('decodedNonIndexedRecordCount'),
+    decodedIndexedInstanceCount: read('decodedIndexedInstanceCount'),
+    decodedNonIndexedInstanceCount: read('decodedNonIndexedInstanceCount'),
+    decodedNonZeroRecordCount: read('decodedNonZeroRecordCount'),
   };
 }
 
@@ -388,6 +434,9 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   },
   SET_TELEMETRY_ENABLED: (message) => {
     telemetryEnabled = (message as Extract<InboundMessage, { type: 'SET_TELEMETRY_ENABLED' }>).enabled;
+    withFatalBoundary('set_telemetry_failure', 'Rust worker telemetry toggle failure', () => {
+      applyTelemetryReadbackCadence();
+    });
   },
   // [RECOVER-11] Atlas upload for Type5 MSDF text.
   UPLOAD_ATLAS: (message) => {

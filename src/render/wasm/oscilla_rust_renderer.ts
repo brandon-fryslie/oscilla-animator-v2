@@ -18,6 +18,7 @@ interface RendererWasmModule {
   readonly attach_shared_sink_table?: (sharedSinkTable: SharedArrayBuffer) => void;
   readonly pause_engine?: () => void;
   readonly resume_engine?: () => void;
+  readonly set_debug_readback_hz?: (debugReadbackHz: number) => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_frame_pacing_packet?: () => unknown;
   readonly take_readback_snapshot?: () => unknown;
@@ -36,6 +37,7 @@ let attachSharedShapeBankImpl: RendererWasmModule['attach_shared_shape_bank'] | 
 let attachSharedSinkTableImpl: RendererWasmModule['attach_shared_sink_table'] | null = null;
 let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
+let setDebugReadbackHzImpl: RendererWasmModule['set_debug_readback_hz'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
 let takeReadbackSnapshotImpl: RendererWasmModule['take_readback_snapshot'] | null = null;
@@ -82,6 +84,9 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       if (typeof wasmModule.resume_engine !== 'function') {
         throw new Error('Rust renderer wasm module missing resume_engine export');
       }
+      if (typeof wasmModule.set_debug_readback_hz !== 'function') {
+        throw new Error('Rust renderer wasm module missing set_debug_readback_hz export');
+      }
       if (typeof wasmModule.inject_poison_alloc !== 'function') {
         throw new Error('Rust renderer wasm module missing inject_poison_alloc export');
       }
@@ -97,6 +102,7 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       attachSharedSinkTableImpl = wasmModule.attach_shared_sink_table.bind(wasmModule);
       pauseEngineImpl = wasmModule.pause_engine.bind(wasmModule);
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
+      setDebugReadbackHzImpl = wasmModule.set_debug_readback_hz.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
       takeReadbackSnapshotImpl = wasmModule.take_readback_snapshot.bind(wasmModule);
@@ -169,6 +175,13 @@ export function resumeRustRendererEngine(): void {
     throw new Error('Rust renderer wasm is not initialized');
   }
   resumeEngineImpl();
+}
+
+export function setRustRendererDebugReadbackHz(debugReadbackHz: number): void {
+  if (!initialized || !setDebugReadbackHzImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  setDebugReadbackHzImpl(debugReadbackHz);
 }
 
 export function injectRustRendererPoisonAlloc(): void {

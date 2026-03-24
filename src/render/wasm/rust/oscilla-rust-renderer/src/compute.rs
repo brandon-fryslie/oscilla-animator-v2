@@ -1125,15 +1125,13 @@ fn emit_module_to_wgsl(
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
 // geometry source. Descriptors carry static metadata resolved at pack time.
 const DEFAULT_DRAW_PREP_WGSL: &str = r#"
-// [LAW:one-source-of-truth] TopologyType values must match shapes/types.ts TopologyType enum.
-const TOPOLOGY_TYPE_NON_INDEXED: u32 = 0u;
-const TOPOLOGY_TYPE_INDEXED: u32 = 1u;
-
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
 const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
 const DEFAULT_INDEXED_STRIDE_WORDS: u32 = 5u;
 const DEFAULT_NON_INDEXED_STRIDE_WORDS: u32 = 4u;
+const DRAW_MODE_INDEXED: u32 = 0u;
+const DRAW_MODE_NON_INDEXED: u32 = 1u;
 
 const TABLE_WORD_TOTAL_RECORD_COUNT: u32 = 1u;
 const TABLE_WORD_INDEXED_COUNT: u32 = 2u;
@@ -1141,6 +1139,7 @@ const TABLE_WORD_INDEXED_REGION_BASE_WORDS: u32 = 4u;
 const TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS: u32 = 5u;
 const TABLE_WORD_INDEXED_STRIDE_WORDS: u32 = 6u;
 const TABLE_WORD_NON_INDEXED_STRIDE_WORDS: u32 = 7u;
+const RECORD_WORD_DRAW_MODE: u32 = 0u;
 
 // Descriptor word offsets for instance-count and shape metadata
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
@@ -1150,8 +1149,6 @@ const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: u32 = 25u;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0u;
 
 // ShapeHeaderV1 word offsets (must match RuntimeState.ts ShapeBankHeaderWord)
-// [LAW:one-source-of-truth] Word 1 = TopologyMode, used as TopologyType discriminant.
-const SHAPE_WORD_TOPOLOGY_TYPE: u32 = 1u;
 const SHAPE_WORD_INDEX_COUNT: u32 = 4u;
 const SHAPE_WORD_FIRST_INDEX: u32 = 5u;
 const SHAPE_WORD_BASE_VERTEX: u32 = 6u;
@@ -1209,14 +1206,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     firstInstance = firstInstance + select(0u, sinkTableWords[prevDescBase + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT], prevMode == INSTANCE_COUNT_MODE_STATIC);
   }
 
-  // [LAW:one-source-of-truth] Read topology type from the canonical topology
-  // bank header (word 1 = TopologyMode). This is the bifurcated dispatch
-  // discriminant — indexed vs non-indexed families.
-  // See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
   let shapeWordOffset = sinkTableWords[descriptorBase + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET];
-  let topologyType = readTopology(shapeWordOffset + SHAPE_WORD_TOPOLOGY_TYPE);
+  // [LAW:one-source-of-truth] Draw mode is authored once by compile-time sink
+  // classification; draw-prep dispatch must branch on this canonical record field.
+  let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
 
-  if (topologyType == TOPOLOGY_TYPE_INDEXED) {
+  if (drawMode == DRAW_MODE_INDEXED) {
     if (recordIndex >= indexedRecordCount) {
       return;
     }
@@ -1242,7 +1237,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  if (topologyType != TOPOLOGY_TYPE_NON_INDEXED || recordIndex < indexedRecordCount) {
+  if (drawMode != DRAW_MODE_NON_INDEXED || recordIndex < indexedRecordCount) {
     return;
   }
   // Derive non-indexed draw args from ShapeHeaderV1

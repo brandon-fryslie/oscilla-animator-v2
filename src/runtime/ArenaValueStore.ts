@@ -22,6 +22,12 @@ export interface ArenaSlotDescriptor {
   readonly laneCount: number;  // 1=one-cardinality, N=many-cardinality
   readonly length: number;     // = stride * laneCount (stored for fast bounds/subarray)
   /**
+   * Optional symbolic resource ID used by MMU-aware compiler lowering.
+   * // [LAW:one-source-of-truth] Symbolic identity and physical layout travel
+   * // together in one canonical descriptor payload.
+   */
+  readonly resourceId?: string;
+  /**
    * Back-compat component-channel offsets relative to `offset`.
    * Used by legacy SoA-style test descriptors.
    */

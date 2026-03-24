@@ -41,8 +41,6 @@ import { payloadStride, requireInst, requireManyInstance, isMany } from '../core
 import type { CanonicalType } from '../core/canonical-types';
 import {
   deriveStorageLayout,
-  deriveArenaZonePlan,
-  DEFAULT_ARENA_ALIGNMENT_POLICY,
   resolveInstanceCount,
 } from './ir/storage-class';
 import type { ArenaSlotDescriptor } from '../runtime/ArenaValueStore';
@@ -676,27 +674,25 @@ function convertLinkedIRToProgram(
 
   const memoryManifest: MemoryManifestIR = { resources: manifestResources };
 
-  // Update runtimeSlots with symbolic arena descriptors (offsets/strides are now symbolic)
+  // [LAW:one-source-of-truth] Runtime slot descriptors mirror the same
+  // slot-offset basis used by generated simulation WGSL.
   const runtimeSlots: RuntimeSlotEntry[] = runtimeSlotEntries.map((entry) => {
     const card = requireInst(entry.type.extent.cardinality, 'cardinality');
     const laneCount = isMany(card)
       ? resolveInstanceCount(card.instance.instanceId, instances)
       : 1;
-
     return {
       ...entry,
       arena: {
         resourceId: `arena:slot:${entry.slot}`,
-        // These fields are legacy and will be removed in hardening pass.
-        // We set them to dummy values to satisfy the existing type.
-        offset: 0,
-        stride: 1, // dummy
+        offset: entry.offset,
+        stride: entry.stride,
         laneCount,
-        length: 0,
+        length: entry.stride * laneCount,
         packing: 'soa',
-        laneStride: 0,
-        componentStride: 0,
-      } as any,
+        laneStride: 1,
+        componentStride: laneCount,
+      },
     };
   });
 

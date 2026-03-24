@@ -117,6 +117,16 @@ export function resume_engine() {
 }
 
 /**
+ * @param {number} debug_readback_hz
+ */
+export function set_debug_readback_hz(debug_readback_hz) {
+    const ret = wasm.set_debug_readback_hz(debug_readback_hz);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
  * @returns {any}
  */
 export function take_frame_pacing_packet() {
@@ -1262,7 +1272,7 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 77, function: Function { arguments: [F64], shim_idx: 78, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 83, function: Function { arguments: [F64], shim_idx: 84, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hac389948b8d10e82, wasm_bindgen__convert__closures_____invoke__h08519952343379dd);
             return ret;
         },

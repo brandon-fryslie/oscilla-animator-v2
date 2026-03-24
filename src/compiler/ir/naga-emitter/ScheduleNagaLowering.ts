@@ -443,8 +443,14 @@ function toSlotAddressPlan(runtimeAddressTable: RuntimeAddressTableIR, slot: Val
   const arena = runtimeAddressTable.slotToArena.get(slot);
   const lookup = runtimeAddressTable.slotLookup.get(slot);
   if (!arena || !lookup) return null;
+  const resourceId = arena.resourceId;
+  if (typeof resourceId !== 'string' || resourceId.length === 0) {
+    // [LAW:no-silent-fallbacks] Symbolic lowering requires a resourceId for
+    // every slot-backed arena descriptor.
+    throw new Error(`Missing symbolic resourceId for runtime slot ${String(slot)}`);
+  }
   return {
-    resourceId: (arena as any).resourceId as string,
+    resourceId,
     laneCount: arena.laneCount,
     stride: arena.stride,
     storage: lookup.storage,
@@ -2225,10 +2231,10 @@ function lowerStateWrite(args: {
             ctx: args.ctx,
             builtins: args.builtins,
             laneExpr: args.laneExpr,
-            exprId: args.step.value as number,
+            exprId: args.step.value,
             schedule: args.schedule,
             runtimeAddressTable: args.runtimeAddressTable,
-            valueExprs: { nodes: args.valueExprs },
+            valueExprs: args.valueExprs,
             source: args.source,
             targetPlan,
             componentIndex,
