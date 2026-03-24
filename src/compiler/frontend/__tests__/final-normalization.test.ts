@@ -291,11 +291,11 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
     expect(aHint?.canonical?.payload.kind).toBe('float');
   });
 
-  it('Array → Add: Add input becomes many (field)', () => {
+  it('InstanceDomain → Add: Add input becomes many (field)', () => {
     const patch = buildPatch((b) => {
-      const arr = b.addBlock('Array');
+      const domain = b.addBlock('InstanceDomain');
       const add = b.addBlock('Add');
-      b.wire(arr, 'elements', add, 'a');
+      b.wire(domain, 'rank', add, 'a');
     });
 
     const { graph: g } = buildDraftGraph(patch);
@@ -311,15 +311,15 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       const card = aHint!.canonical.extent.cardinality;
       expect(isAxisInst(card)).toBe(true);
       if (isAxisInst(card)) {
-        // Add's 'a' input should be many because connected to Array.elements
+        // Add's 'a' input should be many because connected to InstanceDomain.rank
         expect(isMany(card.value)).toBe(true);
       }
     }
   });
 
-  it('TypeFacts.instances populated correctly for Array outputs', () => {
+  it('TypeFacts.instances populated correctly for InstanceDomain outputs', () => {
     const patch = buildPatch((b) => {
-      b.addBlock('Array');
+      b.addBlock('InstanceDomain');
     });
 
     const { graph: g } = buildDraftGraph(patch);
@@ -327,10 +327,10 @@ describe('finalizeNormalizationFixpoint (cardinality solving)', () => {
       maxIterations: 10,
     });
 
-    // Array block creates instances with domainType DOMAIN_CIRCLE
-    // instance index should contain at least one entry for the Array's domain
+    // InstanceDomain block creates instances with domainType DOMAIN_CIRCLE
+    // instance index should contain at least one entry for the InstanceDomain's domain
     if (result.facts.instances.size > 0) {
-      // At least one instance should have the Array block's domain type
+      // At least one instance should have the InstanceDomain block's domain type
       let foundArrayInstance = false;
       for (const [, entry] of result.facts.instances) {
         if (entry.ref.domainTypeId === DOMAIN_CIRCLE) {
