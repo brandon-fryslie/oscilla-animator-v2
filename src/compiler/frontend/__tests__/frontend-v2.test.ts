@@ -86,9 +86,9 @@ describe('Frontend edge cases', () => {
       b.setPortDefault(ellipse, 'rx', 0.04);
       b.setPortDefault(ellipse, 'ry', 0.04);
 
-      const array = b.addBlock('Array');
-      b.setPortDefault(array, 'count', 4);
-      b.wire(ellipse, 'shape', array, 'element');
+      const domain = b.addBlock('InstanceDomain');
+      b.setPortDefault(domain, 'count', 4);
+      b.wire(ellipse, 'shape', domain, 'element');
     });
 
     // Should not throw — always returns FrontendResult

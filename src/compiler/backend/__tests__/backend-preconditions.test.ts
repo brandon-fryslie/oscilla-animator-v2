@@ -63,9 +63,7 @@ function testProgramConverter(
     renderGlobals: [],
     kernelRegistry: createDefaultRegistry(),
     topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
-    arenaLayout: [],
-    arenaPayloadFloats: 0,
-    arenaTotalFloats: 0,
+    memoryManifest: { resources: [] },
     drawPrepProgram: {
       totalRecordCount: 0,
       indexedRecordCount: 0,
@@ -100,6 +98,7 @@ function testProgramConverter(
         hardDrops: [],
       },
     },
+    fastPathOffsets: {},
   };
 }
 

@@ -10,7 +10,6 @@ patch "Spiral Garden" {
     periodBMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = spiral.phase
       phaseB = scale-osc.phase
     }
   }
@@ -35,21 +34,20 @@ patch "Spiral Garden" {
 
   # --- Instance array ---
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 80
     outputs {
-      elements = spiral.elements
-      t = color.h
+      index = spiral.index
+      rank = color.h
     }
   }
 
   # --- Spiral layout ---
 
-  block "SpiralLayout" "spiral" {
-    turns = 3
-    expansion = 0.8
+  block "ScatterUV" "spiral" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

@@ -10,7 +10,7 @@ patch "Rect Mosaic" {
     periodBMs = 3000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, pulse.phase, tile-wobble.phase]
+      phaseA = [ pulse.phase, tile-wobble.phase]
     }
   }
 
@@ -37,18 +37,17 @@ patch "Rect Mosaic" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 400
     outputs {
-      elements = layout.elements
-      t = color.h
+      index = layout.index
+      rank = color.h
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.45
+  block "ScatterUV" "layout" {
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

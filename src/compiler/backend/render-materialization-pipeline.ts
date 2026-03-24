@@ -249,7 +249,7 @@ function collectRenderTargets(
   const renderBlocks = findRenderBlocks(blocks);
 
   for (const { block, index } of renderBlocks) {
-    if (block.type === 'WebGPUType1Sink') {
+    if (block.type === 'WebGPUType1Sink' || block.type === 'CubicBezierRibbon2D') {
       // TODO: This code is wrong.  Figure out the right way to fix this
       const positionRef = getOutputRef(index, '_position', blockOutputs);
       // TODO: This code is wrong.  Figure out the right way to fix this

@@ -1,18 +1,1137 @@
-use crate::memory::GpuMemoryArena;
+use crate::memory::{GpuMemoryArena, SymbolResolver};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::Module;
+use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NagaScalarKindIR {
+    F32,
+    U32,
+    Bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum NagaArraySizeIR {
+    Dynamic(String),
+    Fixed(u32),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NagaTypeIR {
+    Scalar {
+        scalar: NagaScalarKindIR,
+        width: u8,
+    },
+    Vector {
+        size: u8,
+        scalar: NagaScalarKindIR,
+        width: u8,
+    },
+    Array {
+        base: usize,
+        size: NagaArraySizeIR,
+    },
+    Struct {
+        name: String,
+        fields: Vec<NagaStructFieldIR>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaStructFieldIR {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaConstantIR {
+    #[serde(rename = "type")]
+    pub type_index: usize,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaBindingIR {
+    pub group: u32,
+    pub binding: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaGlobalVariableIR {
+    pub name: String,
+    #[serde(rename = "storageClass")]
+    pub storage_class: String,
+    pub access: String,
+    pub binding: NagaBindingIR,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaFunctionArgumentIR {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_index: usize,
+    pub builtin: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NagaBinaryOpIR {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[allow(non_camel_case_types)]
+pub enum NagaExpressionIR_TS {
+    Argument {
+        argument: usize,
+    },
+    Constant {
+        constant: usize,
+    },
+    AccessIndex {
+        base: usize,
+        index: usize,
+    },
+    Binary {
+        op: NagaBinaryOpIR,
+        left: usize,
+        right: usize,
+    },
+    LoadSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
+    },
+    LoadUniform {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        index: usize,
+    },
+    As {
+        to: NagaScalarKindIR,
+        expr: usize,
+    },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum NagaExpressionIR {
+    Argument {
+        argument: usize,
+    },
+    Constant {
+        constant: usize,
+    },
+    AccessIndex {
+        base: usize,
+        index: usize,
+    },
+    Binary {
+        op: NagaBinaryOpIR,
+        left: usize,
+        right: usize,
+    },
+    LiteralU32 {
+        value: u32,
+    },
+    BufferLoad {
+        buffer: String,
+        index: usize,
+    },
+    LoadUniform {
+        index: usize,
+    },
+    As {
+        to: NagaScalarKindIR,
+        expr: usize,
+    },
+    Call {
+        function: String,
+        args: Vec<usize>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NagaStatementIR {
+    StoreSymbolic {
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        lane: usize,
+        component: usize,
+        value: usize,
+        comment: Option<String>,
+    },
+    Comment {
+        text: String,
+    },
+    If {
+        condition: usize,
+        accept: Vec<usize>,
+        reject: Vec<usize>,
+    },
+    Loop {
+        body: Vec<usize>,
+    },
+    Break,
+    Continue,
+    Return,
+}
+
+#[derive(Debug, Clone)]
+pub struct NagaFunctionIR {
+    pub name: String,
+    pub arguments: Vec<NagaFunctionArgumentIR>,
+    pub expressions: Vec<NagaExpressionIR>,
+    pub statements: Vec<NagaStatementIR>,
+    pub body: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(non_camel_case_types)]
+pub struct NagaFunctionIR_TS {
+    pub name: String,
+    pub arguments: Vec<NagaFunctionArgumentIR>,
+    pub expressions: Vec<NagaExpressionIR_TS>,
+    pub statements: Vec<NagaStatementIR>,
+    pub body: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NagaEntryPointIR {
+    pub stage: String,
+    pub function: String,
+    #[serde(rename = "workgroupSize")]
+    pub workgroup_size: [u32; 3],
+}
+
+#[derive(Debug, Clone)]
+pub struct NagaModuleIR {
+    pub types: Vec<NagaTypeIR>,
+    pub constants: Vec<NagaConstantIR>,
+    pub global_variables: Vec<NagaGlobalVariableIR>,
+    pub functions: Vec<NagaFunctionIR>,
+    pub entry_points: Vec<NagaEntryPointIR>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(non_camel_case_types)]
+pub struct NagaModuleIR_TS {
+    pub types: Vec<NagaTypeIR>,
+    pub constants: Vec<NagaConstantIR>,
+    #[serde(rename = "global_variables")]
+    pub global_variables: Vec<NagaGlobalVariableIR>,
+    pub functions: Vec<NagaFunctionIR_TS>,
+    #[serde(rename = "entry_points")]
+    pub entry_points: Vec<NagaEntryPointIR>,
+}
+
+// ---------------------------------------------------------------------------
+// NagaEmitterInstruction — Typed instructions from the TS compiler.
+// [LAW:one-type-per-behavior] All dispatch variants live in one enum so match
+// arms are exhaustive and new ops require explicit Rust handling.
+// ---------------------------------------------------------------------------
+
+/// Instruction emitted by the TS Naga lowering pipeline.
+/// Deserialized from JSON sent across the JS↔Wasm boundary.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "op")]
+pub enum NagaEmitterInstruction {
+    /// Trigger a pre-compiled static WGSL kernel.
+    /// `kernel_id` indexes into `KernelRegistry`; `arguments` maps parameter
+    /// names to Symbolic IDs resolved by the MMU at dispatch time.
+    DispatchKernel {
+        #[serde(rename = "kernelId")]
+        kernel_id: String,
+        arguments: HashMap<String, String>,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// KernelRegistry — Static kernel pipeline store.
+// [LAW:one-source-of-truth] The registry is the single owner of pre-compiled
+// kernel pipelines; no other path compiles or caches kernels.
+// ---------------------------------------------------------------------------
+
+/// A pre-compiled compute kernel ready for dispatch.
+pub struct CompiledKernel {
+    pub pipeline: wgpu::ComputePipeline,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub workgroup_size: [u32; 3],
+    /// Maps parameter names to binding indices in `bind_group_layout`.
+    /// [LAW:one-source-of-truth] This is the single authority for which
+    /// binding slot each named argument occupies.
+    pub param_bindings: HashMap<String, u32>,
+}
+
+/// Registry of pre-compiled static WGSL kernels keyed by kernel ID.
+pub struct KernelRegistry {
+    kernels: HashMap<String, CompiledKernel>,
+}
+
+impl KernelRegistry {
+    pub fn new() -> Self {
+        Self {
+            kernels: HashMap::new(),
+        }
+    }
+
+    /// Register a pre-compiled kernel under the given ID.
+    pub fn register(&mut self, kernel_id: String, kernel: CompiledKernel) {
+        self.kernels.insert(kernel_id, kernel);
+    }
+
+    /// Look up a kernel by ID. Returns None if unregistered.
+    pub fn get(&self, kernel_id: &str) -> Option<&CompiledKernel> {
+        self.kernels.get(kernel_id)
+    }
+}
+
+impl NagaEmitterInstruction {
+    /// Execute this instruction against the GPU.
+    ///
+    /// [LAW:single-enforcer] Instruction dispatch is the single boundary where
+    /// Symbolic IDs are resolved to physical buffer offsets and kernels are
+    /// dispatched — no other code path performs this translation.
+    pub fn execute(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        registry: &KernelRegistry,
+        resolver: &SymbolResolver,
+        arena: &GpuMemoryArena,
+        particle_count: u32,
+    ) -> Result<(), String> {
+        match self {
+            NagaEmitterInstruction::DispatchKernel {
+                kernel_id,
+                arguments,
+            } => {
+                let kernel = registry.get(kernel_id).ok_or_else(|| {
+                    format!(
+                        "DispatchKernel: kernel '{}' not found in registry",
+                        kernel_id
+                    )
+                })?;
+
+                // [LAW:no-silent-fallbacks] Every symbolic argument must resolve;
+                // unresolved IDs are hard errors, not silent skips.
+                // Build dynamic bind group entries from resolved arguments.
+                let mut entries: Vec<wgpu::BindGroupEntry> = Vec::with_capacity(arguments.len());
+                // Hold references alive for the bind group creation scope.
+                let mut texture_views: Vec<&wgpu::TextureView> = Vec::new();
+
+                for (param_name, symbolic_id) in arguments {
+                    let resolved = resolver.resolve(symbolic_id).ok_or_else(|| {
+                        format!(
+                            "DispatchKernel({}): argument '{}' symbolic ID '{}' not found in MMU",
+                            kernel_id, param_name, symbolic_id
+                        )
+                    })?;
+
+                    let binding =
+                        *kernel
+                            .param_bindings
+                            .get(param_name.as_str())
+                            .ok_or_else(|| {
+                                format!(
+                            "DispatchKernel({}): parameter '{}' has no binding index in kernel",
+                            kernel_id, param_name
+                        )
+                            })?;
+
+                    // [LAW:dataflow-not-control-flow] Resource type determines
+                    // binding resource — dispatch on storage_location, not ID prefixes.
+                    match &resolved.storage_location {
+                        crate::memory::ResourceStorageLocation::Texture2D => {
+                            let tex = arena.get_texture(symbolic_id).ok_or_else(|| {
+                                format!(
+                                    "DispatchKernel({}): Texture2D resource '{}' not allocated in arena",
+                                    kernel_id, symbolic_id
+                                )
+                            })?;
+                            texture_views.push(&tex.view);
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::TextureView(
+                                    texture_views.last().unwrap(),
+                                ),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::Arena => {
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: arena.read_arena_buffer(),
+                                    offset: resolved.base_offset_bytes as u64,
+                                    size: std::num::NonZeroU64::new(resolved.total_bytes as u64),
+                                }),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::State => {
+                            entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: arena.read_state_buffer(),
+                                    offset: resolved.base_offset_bytes as u64,
+                                    size: std::num::NonZeroU64::new(resolved.total_bytes as u64),
+                                }),
+                            });
+                        }
+                        crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                            return Err(format!(
+                                "DispatchKernel({}): GlobalControlUbo resources cannot be bound as kernel arguments — use uniform buffer group 0 instead",
+                                kernel_id
+                            ));
+                        }
+                    }
+                }
+
+                // Sort entries by binding index for deterministic bind group creation.
+                entries.sort_by_key(|e| e.binding);
+
+                let args_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("DispatchKernel.DynamicArgs"),
+                    layout: &kernel.bind_group_layout,
+                    entries: &entries,
+                });
+
+                // [LAW:dataflow-not-control-flow] Workgroup dispatch dimensionality
+                // is derived from kernel workgroup_size: 2D kernels (y > 1) derive
+                // dispatch size from the first Texture2D argument; 1D kernels use
+                // particle_count.
+                let (wg_x, wg_y) = if kernel.workgroup_size[1] > 1 {
+                    // 2D kernel — derive grid dimensions from first texture argument.
+                    let first_tex_id = arguments.values().find(|sym_id| {
+                        resolver
+                            .resolve(sym_id)
+                            .map(|r| {
+                                matches!(
+                                    r.storage_location,
+                                    crate::memory::ResourceStorageLocation::Texture2D
+                                )
+                            })
+                            .unwrap_or(false)
+                    });
+                    match first_tex_id.and_then(|id| arena.get_texture(id)) {
+                        Some(tex) => (
+                            (tex.desc.width.saturating_add(kernel.workgroup_size[0] - 1))
+                                / kernel.workgroup_size[0],
+                            (tex.desc.height.saturating_add(kernel.workgroup_size[1] - 1))
+                                / kernel.workgroup_size[1],
+                        ),
+                        None => {
+                            return Err(format!(
+                                "DispatchKernel({}): 2D kernel requires at least one Texture2D argument",
+                                kernel_id
+                            ));
+                        }
+                    }
+                } else {
+                    // 1D kernel — dispatch from particle_count.
+                    let count_x = ((particle_count
+                        .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
+                        / kernel.workgroup_size[0])
+                        .max(1);
+                    (count_x, 1)
+                };
+
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("DispatchKernel"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&kernel.pipeline);
+                // Group 0: standard simulation resources (arena/state ping-pong)
+                pass.set_bind_group(
+                    0,
+                    arena.get_compiler_simulation_bind_group_for_index(arena.ping_pong_index()),
+                    &[],
+                );
+                // Group 1: dynamic arguments resolved from symbolic IDs
+                pass.set_bind_group(1, &args_bind_group, &[]);
+                pass.dispatch_workgroups(wg_x, wg_y, 1);
+
+                Ok(())
+            }
+        }
+    }
+}
+
+fn require_lowered_handle(
+    lowered_by_ts_index: &[usize],
+    ts_expr: usize,
+    current_ts_expr: usize,
+    label: &str,
+) -> Result<usize, String> {
+    if ts_expr >= current_ts_expr {
+        return Err(format!(
+            "{} expression [{}] must be lowered before expression [{}]",
+            label, ts_expr, current_ts_expr
+        ));
+    }
+    lowered_by_ts_index
+        .get(ts_expr)
+        .copied()
+        .ok_or_else(|| format!("{} expression handle not found: {}", label, ts_expr))
+}
+
+fn push_literal_u32(expressions: &mut Vec<NagaExpressionIR>, value: u32) -> usize {
+    let idx = expressions.len();
+    expressions.push(NagaExpressionIR::LiteralU32 { value });
+    idx
+}
+
+// [LAW:single-enforcer] Symbolic resource IDs are lowered to physical address
+// math at one MMU boundary so WGSL emission never resolves symbolic IDs.
+fn translate_and_lower_expressions(
+    ts_expressions: &[NagaExpressionIR_TS],
+    symbol_resolver: &crate::memory::SymbolResolver,
+) -> Result<(Vec<NagaExpressionIR>, Vec<usize>), String> {
+    let mut lowered_expressions: Vec<NagaExpressionIR> = Vec::new();
+    let mut lowered_by_ts_index: Vec<usize> = vec![0; ts_expressions.len()];
+
+    for (ts_index, expr_ts) in ts_expressions.iter().enumerate() {
+        let lowered_index = match expr_ts {
+            NagaExpressionIR_TS::Argument { argument } => {
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Argument {
+                    argument: *argument,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Constant { constant } => {
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Constant {
+                    constant: *constant,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::AccessIndex { base, index } => {
+                let base_idx = require_lowered_handle(
+                    &lowered_by_ts_index,
+                    *base,
+                    ts_index,
+                    "access_index base",
+                )?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::AccessIndex {
+                    base: base_idx,
+                    index: *index,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Binary { op, left, right } => {
+                let left_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *left, ts_index, "binary left")?;
+                let right_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *right, ts_index, "binary right")?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Binary {
+                    op: *op,
+                    left: left_idx,
+                    right: right_idx,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::LoadSymbolic {
+                resource_id,
+                lane,
+                component,
+            } => {
+                let resolved = symbol_resolver
+                    .resolve(resource_id)
+                    .ok_or_else(|| format!("Symbolic resource not found: {}", resource_id))?;
+                match resolved.storage_location {
+                    crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                        // [LAW:one-source-of-truth] UBO vec4/component addressing
+                        // comes from MMU resolution, never caller-provided math.
+                        let vec_index =
+                            push_literal_u32(&mut lowered_expressions, resolved.ubo_vec4_index);
+                        let uniform_load = lowered_expressions.len();
+                        lowered_expressions
+                            .push(NagaExpressionIR::LoadUniform { index: vec_index });
+                        let component_load = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::AccessIndex {
+                            base: uniform_load,
+                            index: resolved.ubo_component as usize,
+                        });
+                        component_load
+                    }
+                    crate::memory::ResourceStorageLocation::Texture2D => {
+                        return Err(format!(
+                            "Symbolic resource '{}' resolves to Texture2D and cannot be lowered as scalar buffer load",
+                            resource_id
+                        ));
+                    }
+                    _ => {
+                        let lane_idx = require_lowered_handle(
+                            &lowered_by_ts_index,
+                            *lane,
+                            ts_index,
+                            "load_symbolic lane",
+                        )?;
+                        let component_idx = require_lowered_handle(
+                            &lowered_by_ts_index,
+                            *component,
+                            ts_index,
+                            "load_symbolic component",
+                        )?;
+
+                        // [LAW:dataflow-not-control-flow] Load lowering always
+                        // emits the same address pipeline; values drive offsets.
+                        let base_words = resolved.base_offset_bytes / 4;
+                        let lane_stride_words = resolved.lane_stride_bytes / 4;
+                        let component_stride_words = resolved.component_stride_bytes / 4;
+                        let base_const = push_literal_u32(&mut lowered_expressions, base_words);
+                        let lane_stride_const =
+                            push_literal_u32(&mut lowered_expressions, lane_stride_words);
+                        let component_stride_const =
+                            push_literal_u32(&mut lowered_expressions, component_stride_words);
+
+                        let lane_offset_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Mul,
+                            left: lane_idx,
+                            right: lane_stride_const,
+                        });
+
+                        let component_offset_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Mul,
+                            left: component_idx,
+                            right: component_stride_const,
+                        });
+
+                        let lane_address_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Add,
+                            left: base_const,
+                            right: lane_offset_idx,
+                        });
+
+                        let final_index_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::Binary {
+                            op: NagaBinaryOpIR::Add,
+                            left: lane_address_idx,
+                            right: component_offset_idx,
+                        });
+
+                        let buffer_load_idx = lowered_expressions.len();
+                        lowered_expressions.push(NagaExpressionIR::BufferLoad {
+                            buffer: resolved.read_buffer_name().to_string(),
+                            index: final_index_idx,
+                        });
+                        buffer_load_idx
+                    }
+                }
+            }
+            NagaExpressionIR_TS::LoadUniform { resource_id, index } => {
+                if resource_id.is_empty() {
+                    return Err("load_uniform resourceId must be non-empty".to_string());
+                }
+                let index_idx = require_lowered_handle(
+                    &lowered_by_ts_index,
+                    *index,
+                    ts_index,
+                    "load_uniform index",
+                )?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::LoadUniform { index: index_idx });
+                idx
+            }
+            NagaExpressionIR_TS::As { to, expr } => {
+                let expr_idx =
+                    require_lowered_handle(&lowered_by_ts_index, *expr, ts_index, "as expr")?;
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::As {
+                    to: *to,
+                    expr: expr_idx,
+                });
+                idx
+            }
+            NagaExpressionIR_TS::Call { function, args } => {
+                let mut lowered_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    lowered_args.push(require_lowered_handle(
+                        &lowered_by_ts_index,
+                        *arg,
+                        ts_index,
+                        "call arg",
+                    )?);
+                }
+                let idx = lowered_expressions.len();
+                lowered_expressions.push(NagaExpressionIR::Call {
+                    function: function.clone(),
+                    args: lowered_args,
+                });
+                idx
+            }
+        };
+        lowered_by_ts_index[ts_index] = lowered_index;
+    }
+
+    Ok((lowered_expressions, lowered_by_ts_index))
+}
+
+fn remap_statement_expression_handles(
+    statement: &NagaStatementIR,
+    lowered_by_ts_index: &[usize],
+) -> Result<NagaStatementIR, String> {
+    let remap = |handle: usize, label: &str| {
+        lowered_by_ts_index
+            .get(handle)
+            .copied()
+            .ok_or_else(|| format!("{} expression handle not found: {}", label, handle))
+    };
+    match statement {
+        NagaStatementIR::StoreSymbolic {
+            resource_id,
+            lane,
+            component,
+            value,
+            comment,
+        } => Ok(NagaStatementIR::StoreSymbolic {
+            resource_id: resource_id.clone(),
+            lane: remap(*lane, "store_symbolic lane")?,
+            component: remap(*component, "store_symbolic component")?,
+            value: remap(*value, "store_symbolic value")?,
+            comment: comment.clone(),
+        }),
+        NagaStatementIR::If {
+            condition,
+            accept,
+            reject,
+        } => Ok(NagaStatementIR::If {
+            condition: remap(*condition, "if condition")?,
+            accept: accept.clone(),
+            reject: reject.clone(),
+        }),
+        NagaStatementIR::Comment { text } => Ok(NagaStatementIR::Comment { text: text.clone() }),
+        NagaStatementIR::Loop { body } => Ok(NagaStatementIR::Loop { body: body.clone() }),
+        NagaStatementIR::Break => Ok(NagaStatementIR::Break),
+        NagaStatementIR::Continue => Ok(NagaStatementIR::Continue),
+        NagaStatementIR::Return => Ok(NagaStatementIR::Return),
+    }
+}
+
+pub(crate) fn lower_naga_module_ir(
+    module_ts: &NagaModuleIR_TS,
+    symbol_resolver: &crate::memory::SymbolResolver,
+) -> Result<NagaModuleIR, String> {
+    let mut lowered_functions = Vec::with_capacity(module_ts.functions.len());
+    for function_ts in &module_ts.functions {
+        let (lowered_expressions, lowered_by_ts_index) =
+            translate_and_lower_expressions(&function_ts.expressions, symbol_resolver)?;
+
+        let mut lowered_statements = Vec::with_capacity(function_ts.statements.len());
+        for statement in &function_ts.statements {
+            lowered_statements.push(remap_statement_expression_handles(
+                statement,
+                &lowered_by_ts_index,
+            )?);
+        }
+
+        let mut lowered_body = Vec::with_capacity(function_ts.body.len());
+        for statement_handle in &function_ts.body {
+            if *statement_handle >= lowered_statements.len() {
+                return Err(format!(
+                    "Function '{}' body statement handle out of bounds: {}",
+                    function_ts.name, statement_handle
+                ));
+            }
+            lowered_body.push(*statement_handle);
+        }
+
+        lowered_functions.push(NagaFunctionIR {
+            name: function_ts.name.clone(),
+            arguments: function_ts.arguments.clone(),
+            expressions: lowered_expressions,
+            statements: lowered_statements,
+            body: lowered_body,
+        });
+    }
+
+    Ok(NagaModuleIR {
+        types: module_ts.types.clone(),
+        constants: module_ts.constants.clone(),
+        global_variables: module_ts.global_variables.clone(),
+        functions: lowered_functions,
+        entry_points: module_ts.entry_points.clone(),
+    })
+}
+
+struct ExpressionEmitter<'a> {
+    function_ir: &'a NagaFunctionIR,
+    module_ir: &'a NagaModuleIR,
+    resolver: &'a crate::memory::SymbolResolver,
+    cache: HashMap<usize, String>,
+    stack: HashSet<usize>,
+}
+
+impl<'a> ExpressionEmitter<'a> {
+    fn new(
+        function_ir: &'a NagaFunctionIR,
+        module_ir: &'a NagaModuleIR,
+        resolver: &'a crate::memory::SymbolResolver,
+    ) -> Self {
+        Self {
+            function_ir,
+            module_ir,
+            resolver,
+            cache: HashMap::new(),
+            stack: HashSet::new(),
+        }
+    }
+
+    fn emit(&mut self, expr_id: usize) -> Result<String, String> {
+        if let Some(value) = self.cache.get(&expr_id) {
+            return Ok(value.clone());
+        }
+        if self.stack.contains(&expr_id) {
+            return Err(format!("Expression cycle detected at [{}]", expr_id));
+        }
+
+        let expr = self
+            .function_ir
+            .expressions
+            .get(expr_id)
+            .ok_or_else(|| format!("Expression handle not found: {}", expr_id))?;
+
+        self.stack.insert(expr_id);
+
+        let emitted = match expr {
+            NagaExpressionIR::Argument { argument } => {
+                let arg = self
+                    .function_ir
+                    .arguments
+                    .get(*argument)
+                    .ok_or_else(|| "Argument not found")?;
+                arg.name.clone()
+            }
+            NagaExpressionIR::Constant { constant } => {
+                let constant_ir = self
+                    .module_ir
+                    .constants
+                    .get(*constant)
+                    .ok_or_else(|| "Constant not found")?;
+                let scalar = match self.module_ir.types.get(constant_ir.type_index) {
+                    Some(NagaTypeIR::Scalar { scalar, .. }) => scalar,
+                    _ => return Err("Constant scalar type missing".to_string()),
+                };
+                format_scalar_literal(constant_ir.value, *scalar)
+            }
+            NagaExpressionIR::AccessIndex { base, index } => {
+                let base_expr = self.emit(*base)?;
+                let component = match index {
+                    0 => "x",
+                    1 => "y",
+                    2 => "z",
+                    3 => "w",
+                    _ => return Err("access_index out of range".to_string()),
+                };
+                format!("{base_expr}.{component}")
+            }
+            NagaExpressionIR::Binary { op, left, right } => {
+                let left_expr = self.emit(*left)?;
+                let right_expr = self.emit(*right)?;
+                let op_token = match op {
+                    NagaBinaryOpIR::Add => "+",
+                    NagaBinaryOpIR::Sub => "-",
+                    NagaBinaryOpIR::Mul => "*",
+                    NagaBinaryOpIR::Div => "/",
+                    NagaBinaryOpIR::Mod => "%",
+                    NagaBinaryOpIR::Lt => "<",
+                    NagaBinaryOpIR::Le => "<=",
+                    NagaBinaryOpIR::Gt => ">",
+                    NagaBinaryOpIR::Ge => ">=",
+                    NagaBinaryOpIR::Eq => "==",
+                    NagaBinaryOpIR::Ne => "!=",
+                };
+                format!("({left_expr} {op_token} {right_expr})")
+            }
+            NagaExpressionIR::LiteralU32 { value } => format!("{value}u"),
+            NagaExpressionIR::BufferLoad { buffer, index } => {
+                let index_expr = self.emit(*index)?;
+                format!("{buffer}[{index_expr}]")
+            }
+            NagaExpressionIR::LoadUniform { index } => {
+                let idx_expr = self.emit(*index)?;
+                // [PHASE 1] For now, uniforms target the global control buffer (group 0, binding 4)
+                format!("global_controls[{}]", idx_expr)
+            }
+            NagaExpressionIR::As { to, expr } => {
+                let source = self.emit(*expr)?;
+                match to {
+                    NagaScalarKindIR::Bool => format!("({source} != 0u)"),
+                    _ => format!("bitcast<{}>({source})", scalar_to_wgsl(*to)),
+                }
+            }
+            NagaExpressionIR::Call { function, args } => {
+                let mut emitted_args = Vec::new();
+                for arg in args {
+                    emitted_args.push(self.emit(*arg)?);
+                }
+                format!("{}({})", function, emitted_args.join(", "))
+            }
+        };
+
+        self.stack.remove(&expr_id);
+        self.cache.insert(expr_id, emitted.clone());
+        Ok(emitted)
+    }
+}
+
+fn scalar_to_wgsl(scalar: NagaScalarKindIR) -> &'static str {
+    match scalar {
+        NagaScalarKindIR::F32 => "f32",
+        NagaScalarKindIR::U32 => "u32",
+        NagaScalarKindIR::Bool => "bool",
+    }
+}
+
+fn format_scalar_literal(value: f64, scalar: NagaScalarKindIR) -> String {
+    match scalar {
+        NagaScalarKindIR::U32 => format!("{}u", value.trunc() as u32),
+        NagaScalarKindIR::Bool => {
+            if value == 0.0 {
+                "false".to_string()
+            } else {
+                "true".to_string()
+            }
+        }
+        NagaScalarKindIR::F32 => {
+            if value.fract() == 0.0 {
+                format!("{value:.1}")
+            } else {
+                value.to_string()
+            }
+        }
+    }
+}
+
+fn emit_statement_block(
+    function_ir: &NagaFunctionIR,
+    module_ir: &NagaModuleIR,
+    emitter: &mut ExpressionEmitter,
+    statement_handles: &[usize],
+    indent_level: usize,
+    statement_stack: &mut HashSet<usize>,
+) -> Result<Vec<String>, String> {
+    let mut lines: Vec<String> = Vec::new();
+
+    for statement_handle in statement_handles {
+        if statement_stack.contains(statement_handle) {
+            return Err(format!(
+                "Statement cycle detected at [{}]",
+                statement_handle
+            ));
+        }
+
+        let statement = function_ir
+            .statements
+            .get(*statement_handle)
+            .ok_or_else(|| "Statement not found")?;
+        statement_stack.insert(*statement_handle);
+        let indent = "  ".repeat(indent_level);
+
+        match statement {
+            NagaStatementIR::StoreSymbolic {
+                resource_id,
+                lane,
+                component,
+                value,
+                comment,
+            } => {
+                let lane_expr = emitter.emit(*lane)?;
+                let component_expr = emitter.emit(*component)?;
+                let value_expr = emitter.emit(*value)?;
+                let resolved = emitter
+                    .resolver
+                    .resolve(resource_id)
+                    .ok_or_else(|| format!("Unresolved symbol: {}", resource_id))?;
+
+                // [LAW:single-enforcer] Buffer name is determined by the MMU's
+                // storage_location, not by inspecting resource ID prefixes.
+                let base_words = resolved.base_offset_bytes / 4;
+                let lane_stride_words = resolved.lane_stride_bytes / 4;
+                let component_stride_words = resolved.component_stride_bytes / 4;
+                let buffer_name = resolved.write_buffer_name();
+
+                let mut line = format!(
+                    "{indent}{}[{}u + ({} * {}u) + ({} * {}u)] = {};",
+                    buffer_name,
+                    base_words,
+                    lane_expr,
+                    lane_stride_words,
+                    component_expr,
+                    component_stride_words,
+                    value_expr
+                );
+                if let Some(c) = comment {
+                    line.push_str(" // ");
+                    line.push_str(c);
+                }
+                lines.push(line);
+            }
+            NagaStatementIR::Comment { text } => {
+                lines.push(format!("{indent}// {text}"));
+            }
+            NagaStatementIR::If {
+                condition,
+                accept,
+                reject,
+            } => {
+                let condition_expr = emitter.emit(*condition)?;
+                lines.push(format!("{indent}if ({condition_expr}) {{"));
+                lines.extend(emit_statement_block(
+                    function_ir,
+                    module_ir,
+                    emitter,
+                    accept,
+                    indent_level + 1,
+                    statement_stack,
+                )?);
+                if !reject.is_empty() {
+                    lines.push(format!("{indent}}} else {{"));
+                    lines.extend(emit_statement_block(
+                        function_ir,
+                        module_ir,
+                        emitter,
+                        reject,
+                        indent_level + 1,
+                        statement_stack,
+                    )?);
+                }
+                lines.push(format!("{indent}}}"));
+            }
+            NagaStatementIR::Loop { body } => {
+                lines.push(format!("{indent}loop {{"));
+                lines.extend(emit_statement_block(
+                    function_ir,
+                    module_ir,
+                    emitter,
+                    body,
+                    indent_level + 1,
+                    statement_stack,
+                )?);
+                lines.push(format!("{indent}}}"));
+            }
+            NagaStatementIR::Break => lines.push(format!("{indent}break;")),
+            NagaStatementIR::Continue => lines.push(format!("{indent}continue;")),
+            NagaStatementIR::Return => lines.push(format!("{indent}return;")),
+        }
+        statement_stack.remove(statement_handle);
+    }
+    Ok(lines)
+}
+
+fn emit_module_to_wgsl(
+    module_ir: &NagaModuleIR,
+    resolver: &crate::memory::SymbolResolver,
+    max_active_lanes: Option<u32>,
+) -> Result<String, String> {
+    // Basic WGSL scaffolding for the compute shader.
+    let mut lines = Vec::new();
+
+    // [LAW:one-source-of-truth] Bindings match ComputeDispatcher::create_compiler_simulation_layout
+    lines.push("@group(0) @binding(0) var<storage, read> arena_in: array<u32>;".to_string());
+    lines.push("@group(0) @binding(1) var<storage, read_write> arena_out: array<u32>;".to_string());
+    lines.push("@group(0) @binding(2) var<storage, read> state_in: array<u32>;".to_string());
+    lines.push("@group(0) @binding(3) var<storage, read_write> state_out: array<u32>;".to_string());
+    lines.push(
+        "@group(0) @binding(4) var<uniform> global_controls: array<vec4<f32>, 16>;".to_string(),
+    );
+    lines.push(String::new());
+
+    let compute_entry = module_ir
+        .entry_points
+        .iter()
+        .find(|e| e.stage == "compute")
+        .ok_or("Missing compute entry")?;
+    let function_ir = module_ir
+        .functions
+        .iter()
+        .find(|f| f.name == compute_entry.function)
+        .ok_or("Entry function not found")?;
+
+    let mut arg_parts = Vec::new();
+    for argument in &function_ir.arguments {
+        if let Some(builtin) = &argument.builtin {
+            arg_parts.push(format!("@builtin({builtin}) {}: vec3<u32>", argument.name));
+        }
+    }
+
+    if let Some(max_lanes) = max_active_lanes {
+        lines.push(format!("const MAX_ACTIVE_LANES: u32 = {}u;", max_lanes));
+    }
+
+    lines.push(format!(
+        "@compute @workgroup_size({}, {}, {})",
+        compute_entry.workgroup_size[0],
+        compute_entry.workgroup_size[1],
+        compute_entry.workgroup_size[2]
+    ));
+    lines.push(format!("fn main({}) {{", arg_parts.join(", ")));
+
+    if let Some(_max_lanes) = max_active_lanes {
+        let gid_name = function_ir
+            .arguments
+            .iter()
+            .find(|a| a.builtin.as_deref() == Some("global_invocation_id"))
+            .map(|a| a.name.as_str())
+            .unwrap_or("gid");
+        lines.push(format!("  let lane = {}.x;", gid_name));
+        lines.push("  if (lane >= MAX_ACTIVE_LANES) { return; }".to_string());
+    }
+
+    let mut emitter = ExpressionEmitter::new(function_ir, module_ir, resolver);
+    let mut statement_stack = HashSet::new();
+    lines.extend(emit_statement_block(
+        function_ir,
+        module_ir,
+        &mut emitter,
+        &function_ir.body,
+        1,
+        &mut statement_stack,
+    )?);
+
+    lines.push("}".to_string());
+    Ok(lines.join("\n"))
+}
 
 // [RECOVER-06] Draw-prep compute derives indirect args from canonical GPU state.
 // [LAW:one-source-of-truth] Topology bank (ShapeHeaderV1) is the canonical
 // geometry source. Descriptors carry static metadata resolved at pack time.
 const DEFAULT_DRAW_PREP_WGSL: &str = r#"
-const DRAW_MODE_INDEXED: u32 = 0u;
-const DRAW_MODE_NON_INDEXED: u32 = 1u;
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
 const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
 const DEFAULT_INDEXED_STRIDE_WORDS: u32 = 5u;
 const DEFAULT_NON_INDEXED_STRIDE_WORDS: u32 = 4u;
+const DRAW_MODE_INDEXED: u32 = 0u;
+const DRAW_MODE_NON_INDEXED: u32 = 1u;
 
 const TABLE_WORD_TOTAL_RECORD_COUNT: u32 = 1u;
 const TABLE_WORD_INDEXED_COUNT: u32 = 2u;
@@ -20,7 +1139,6 @@ const TABLE_WORD_INDEXED_REGION_BASE_WORDS: u32 = 4u;
 const TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS: u32 = 5u;
 const TABLE_WORD_INDEXED_STRIDE_WORDS: u32 = 6u;
 const TABLE_WORD_NON_INDEXED_STRIDE_WORDS: u32 = 7u;
-
 const RECORD_WORD_DRAW_MODE: u32 = 0u;
 
 // Descriptor word offsets for instance-count and shape metadata
@@ -65,14 +1183,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
   let indexedRecordCount = sinkTableWords[TABLE_WORD_INDEXED_COUNT];
   let indexedRegionBaseWords = sinkTableWords[TABLE_WORD_INDEXED_REGION_BASE_WORDS];
   let nonIndexedRegionBaseWords = sinkTableWords[TABLE_WORD_NON_INDEXED_REGION_BASE_WORDS];
   let indexedStrideWords = max(sinkTableWords[TABLE_WORD_INDEXED_STRIDE_WORDS], DEFAULT_INDEXED_STRIDE_WORDS);
   let nonIndexedStrideWords = max(sinkTableWords[TABLE_WORD_NON_INDEXED_STRIDE_WORDS], DEFAULT_NON_INDEXED_STRIDE_WORDS);
 
-  // [RECOVER-06] Read descriptor for this record
+  // [RECOVER-06] Read descriptor for this record (moved before topology type
+  // read so shapeWordOffset is available for the bifurcated dispatch).
   let descriptorsBase = SINK_TABLE_HEADER_WORDS + totalRecordCount * SINK_TABLE_RECORD_WORDS;
   let descriptorBase = descriptorsBase + recordIndex * SINK_TABLE_DESCRIPTOR_WORDS;
 
@@ -88,8 +1206,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     firstInstance = firstInstance + select(0u, sinkTableWords[prevDescBase + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT], prevMode == INSTANCE_COUNT_MODE_STATIC);
   }
 
-  // Read shape word offset from descriptor and derive geometry from topology bank
   let shapeWordOffset = sinkTableWords[descriptorBase + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET];
+  // [LAW:one-source-of-truth] Draw mode is authored once by compile-time sink
+  // classification; draw-prep dispatch must branch on this canonical record field.
+  let drawMode = sinkTableWords[recordBase + RECORD_WORD_DRAW_MODE];
 
   if (drawMode == DRAW_MODE_INDEXED) {
     if (recordIndex >= indexedRecordCount) {
@@ -97,8 +1217,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     // Derive indexed draw args from ShapeHeaderV1
     let count = readTopology(shapeWordOffset + SHAPE_WORD_INDEX_COUNT);
-    let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_INDEX);
+    let relativeFirstIndex = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_INDEX);
     let baseVertex = readTopology(shapeWordOffset + SHAPE_WORD_BASE_VERTEX);
+    // [LAW:one-source-of-truth] FirstIndex in the header is a relative word
+    // offset within the shape record. drawIndexedIndirect needs an absolute
+    // index into the bound index buffer (== TopologyBank), so add the record
+    // base. See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
+    let absoluteFirstIndex = shapeWordOffset + relativeFirstIndex;
 
     let base = indexedRegionBaseWords + recordIndex * indexedStrideWords;
     if (base + 4u >= arrayLength(&indirectWords)) {
@@ -106,7 +1231,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     atomicStore(&indirectWords[base + 0u], count);
     atomicAdd(&indirectWords[base + 1u], instanceCount);
-    atomicStore(&indirectWords[base + 2u], first);
+    atomicStore(&indirectWords[base + 2u], absoluteFirstIndex);
     atomicStore(&indirectWords[base + 3u], baseVertex);
     atomicStore(&indirectWords[base + 4u], firstInstance);
     return;
@@ -117,7 +1242,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   // Derive non-indexed draw args from ShapeHeaderV1
   let count = readTopology(shapeWordOffset + SHAPE_WORD_VERTEX_COUNT);
-  let first = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_VERTEX);
+  let relativeFirstVertex = readTopology(shapeWordOffset + SHAPE_WORD_FIRST_VERTEX);
+  // [LAW:one-source-of-truth] FirstVertex in the header is a relative word
+  // offset within the shape record. drawIndirect needs an absolute vertex
+  // index into the bound topology buffer, so add the record base.
+  // See docs/AGENT_ENGINEERING_STANDARDS.md §3 (Absolute vs. Relative).
+  let absoluteFirstVertex = shapeWordOffset + relativeFirstVertex;
 
   let nonIndexedRecordIndex = recordIndex - indexedRecordCount;
   let base = nonIndexedRegionBaseWords + nonIndexedRecordIndex * nonIndexedStrideWords;
@@ -126,7 +1256,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   atomicStore(&indirectWords[base + 0u], count);
   atomicAdd(&indirectWords[base + 1u], instanceCount);
-  atomicStore(&indirectWords[base + 2u], first);
+  atomicStore(&indirectWords[base + 2u], absoluteFirstVertex);
   atomicStore(&indirectWords[base + 3u], firstInstance);
 }
 "#;
@@ -140,6 +1270,10 @@ pub struct ComputeDispatcher {
     pub state_layout: wgpu::BindGroupLayout,
     pub assembly_layout: wgpu::BindGroupLayout,
     pub draw_prep_layout: wgpu::BindGroupLayout,
+    pub kernel_registry: KernelRegistry,
+    /// Dispatch instructions from TS compiler (e.g., fluid sim kernel chain).
+    /// [LAW:one-source-of-truth] Set during rebuild; executed every frame.
+    pending_dispatch_instructions: Vec<NagaEmitterInstruction>,
 }
 
 #[derive(Clone, Debug)]
@@ -147,6 +1281,7 @@ pub struct CompilerComputePassSpec {
     pub pass_id: String,
     pub entry_point: String,
     pub wgsl: String,
+    pub memory_manifest: Option<crate::memory::MemoryManifest>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -422,6 +1557,7 @@ impl ComputeDispatcher {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: simulation_wgsl.to_string(),
+                memory_manifest: None,
             },
         )
         .expect("default simulation shader must satisfy canonical compute-program contract");
@@ -471,6 +1607,16 @@ impl ComputeDispatcher {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 
+        // [LAW:single-enforcer] Fluid kernels are registered once at
+        // engine init, keyed by the same IDs that TS DispatchKernel
+        // instructions reference.
+        let mut kernel_registry = KernelRegistry::new();
+        crate::fluid_kernels::register_fluid_kernels(
+            device,
+            &compiler_simulation_layout,
+            &mut kernel_registry,
+        );
+
         Self {
             simulation_pipelines,
             instance_assembly_pipeline,
@@ -480,6 +1626,8 @@ impl ComputeDispatcher {
             state_layout,
             assembly_layout,
             draw_prep_layout,
+            kernel_registry,
+            pending_dispatch_instructions: Vec::new(),
         }
     }
 
@@ -661,6 +1809,50 @@ impl ComputeDispatcher {
         Ok(())
     }
 
+    pub fn rebuild_simulation_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        resolver: &crate::memory::SymbolResolver,
+        lowered_module: NagaModuleIR,
+        max_active_lanes: u32,
+        dispatch_instructions: Vec<NagaEmitterInstruction>,
+    ) -> Result<(), String> {
+        let wgsl = emit_module_to_wgsl(&lowered_module, resolver, Some(max_active_lanes))?;
+
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Compute.DynamicSimulation.Shader"),
+            source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute.DynamicSimulation.PipelineLayout"),
+            bind_group_layouts: &[&self.compiler_simulation_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute.DynamicSimulation.Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("main"),
+            cache: None,
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+        });
+
+        // For Phase 1, we replace the first simulation pipeline
+        self.simulation_pipelines = vec![CompiledComputePassPipeline {
+            _pass_id: "dynamic".to_string(),
+            pipeline,
+            workgroup_count: (max_active_lanes + 63) / 64,
+        }];
+
+        // [LAW:one-source-of-truth] Dispatch instructions are stored once at
+        // rebuild time and executed every frame in encode_simulation_and_assembly.
+        self.pending_dispatch_instructions = dispatch_instructions;
+
+        Ok(())
+    }
+
     pub fn compiler_simulation_layout(&self) -> &wgpu::BindGroupLayout {
         &self.compiler_simulation_layout
     }
@@ -678,6 +1870,7 @@ impl ComputeDispatcher {
 
     pub fn encode_simulation_and_assembly(
         &self,
+        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
         assembly_instance_count: u32,
@@ -696,6 +1889,26 @@ impl ComputeDispatcher {
             );
             compute_pass.dispatch_workgroups(compiled_pass.workgroup_count, 1, 1);
             read_index = (read_index + 1) & 1;
+        }
+
+        // Execute DispatchKernel instructions (e.g., fluid sim kernel chain)
+        // after simulation passes, before instance assembly.
+        if !self.pending_dispatch_instructions.is_empty() {
+            let particle_count = self
+                .simulation_pipelines
+                .first()
+                .map(|p| p.workgroup_count * 64)
+                .unwrap_or(0);
+            if let Err(e) = self.execute_instructions(
+                device,
+                encoder,
+                &self.pending_dispatch_instructions,
+                &arena.symbol_resolver,
+                arena,
+                particle_count,
+            ) {
+                web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(&e));
+            }
         }
 
         {
@@ -722,6 +1935,31 @@ impl ComputeDispatcher {
         arena.set_ping_pong_index(read_index);
     }
 
+    /// Execute a batch of NagaEmitterInstructions from the TS compiler.
+    /// [LAW:single-enforcer] This is the single boundary where emitter
+    /// instructions are dispatched to the GPU.
+    pub fn execute_instructions(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        instructions: &[NagaEmitterInstruction],
+        resolver: &SymbolResolver,
+        arena: &GpuMemoryArena,
+        particle_count: u32,
+    ) -> Result<(), String> {
+        for instruction in instructions {
+            instruction.execute(
+                device,
+                encoder,
+                &self.kernel_registry,
+                resolver,
+                arena,
+                particle_count,
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn encode_draw_prep(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -743,7 +1981,11 @@ impl ComputeDispatcher {
 
 #[cfg(test)]
 mod tests {
-    use super::{CompilerComputePassSpec, ComputeDispatcher, WorkgroupSize};
+    use super::{
+        translate_and_lower_expressions, CompilerComputePassSpec, ComputeDispatcher,
+        NagaBinaryOpIR, NagaExpressionIR, NagaExpressionIR_TS, NagaModuleIR_TS, WorkgroupSize,
+    };
+    use crate::memory::{ResolvedResource, ResourceStorageLocation, SymbolResolver};
 
     #[test]
     fn validate_compute_program_contract_rejects_missing_entry_point() {
@@ -754,6 +1996,7 @@ mod tests {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: "@compute @workgroup_size(64) fn other_main() {}".to_string(),
+                memory_manifest: None,
             },
         );
         assert!(result
@@ -809,5 +2052,134 @@ mod tests {
         assert!(result
             .err()
             .is_some_and(|message| message.contains("must be 1D")));
+    }
+
+    #[test]
+    fn naga_module_ir_ts_deserializes_load_symbolic_shape() {
+        let json = r#"{
+          "types": [{"kind":"scalar","scalar":"u32","width":4}],
+          "constants": [],
+          "global_variables": [],
+          "functions": [{
+            "name": "main",
+            "arguments": [{"name":"gid","type":0,"builtin":"global_invocation_id"}],
+            "expressions": [
+              {"kind":"argument","argument":0},
+              {"kind":"access_index","base":0,"index":0},
+              {"kind":"constant","constant":0},
+              {"kind":"load_symbolic","resourceId":"arena:slot:1","lane":1,"component":2}
+            ],
+            "statements": [],
+            "body": []
+          }],
+          "entry_points": [{"stage":"compute","function":"main","workgroupSize":[64,1,1]}]
+        }"#;
+        let parsed: Result<NagaModuleIR_TS, _> = serde_json::from_str(json);
+        assert!(parsed.is_ok(), "expected load_symbolic JSON to deserialize");
+    }
+
+    #[test]
+    fn translate_and_lower_expressions_load_symbolic_lowers_to_address_math() {
+        let mut resolver = SymbolResolver::new();
+        resolver.map.insert(
+            "arena:slot:1".to_string(),
+            ResolvedResource {
+                base_offset_bytes: 64,     // 16 words
+                lane_stride_bytes: 8,      // 2 words
+                component_stride_bytes: 4, // 1 word
+                total_bytes: 256,
+                storage_location: ResourceStorageLocation::Arena,
+                ubo_vec4_index: 0,
+                ubo_component: 0,
+                texture_desc: None,
+            },
+        );
+
+        let ts_expressions = vec![
+            NagaExpressionIR_TS::Argument { argument: 0 }, // lane
+            NagaExpressionIR_TS::Argument { argument: 1 }, // component
+            NagaExpressionIR_TS::LoadSymbolic {
+                resource_id: "arena:slot:1".to_string(),
+                lane: 0,
+                component: 1,
+            },
+        ];
+
+        let (lowered, lowered_map) =
+            translate_and_lower_expressions(&ts_expressions, &resolver).expect("lowering succeeds");
+
+        let final_expr = lowered
+            .get(lowered_map[2])
+            .expect("mapped symbolic load expression exists");
+        let final_index = match final_expr {
+            NagaExpressionIR::BufferLoad { buffer, index } => {
+                assert_eq!(buffer, "arena_in");
+                *index
+            }
+            other => panic!("expected BufferLoad, got {:?}", other),
+        };
+
+        let (lane_addr_idx, component_mul_idx) = match lowered
+            .get(final_index)
+            .expect("final index expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Add,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected final Add expression, got {:?}", other),
+        };
+
+        let (base_words_idx, lane_mul_idx) = match lowered
+            .get(lane_addr_idx)
+            .expect("lane address expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Add,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected base + lane_offset Add, got {:?}", other),
+        };
+
+        assert!(matches!(
+            lowered.get(base_words_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 16 })
+        ));
+
+        let (lane_source_idx, lane_stride_idx) = match lowered
+            .get(lane_mul_idx)
+            .expect("lane mul expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Mul,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected lane mul expression, got {:?}", other),
+        };
+        assert_eq!(lane_source_idx, lowered_map[0]);
+        assert!(matches!(
+            lowered.get(lane_stride_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 2 })
+        ));
+
+        let (component_source_idx, component_stride_idx) = match lowered
+            .get(component_mul_idx)
+            .expect("component mul expression exists")
+        {
+            NagaExpressionIR::Binary {
+                op: NagaBinaryOpIR::Mul,
+                left,
+                right,
+            } => (*left, *right),
+            other => panic!("expected component mul expression, got {:?}", other),
+        };
+        assert_eq!(component_source_idx, lowered_map[1]);
+        assert!(matches!(
+            lowered.get(component_stride_idx),
+            Some(NagaExpressionIR::LiteralU32 { value: 1 })
+        ));
     }
 }

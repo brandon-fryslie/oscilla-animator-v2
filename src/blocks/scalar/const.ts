@@ -95,9 +95,8 @@ export function register(): void {
               out: { id, slot: undefined, type: outType, stride },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'int': {
           if (typeof rawValue !== 'number') {
@@ -109,9 +108,8 @@ export function register(): void {
               out: { id, slot: undefined, type: outType, stride },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'bool': {
           if (typeof rawValue !== 'boolean' && typeof rawValue !== 'number') {
@@ -123,9 +121,8 @@ export function register(): void {
               out: { id, slot: undefined, type: outType, stride },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'vec2': {
           if (!Array.isArray(rawValue) || rawValue.length !== 2 ||
@@ -144,9 +141,8 @@ export function register(): void {
               out: { id: vec2Sig, slot: undefined, type: outType, stride, components: [xSig, ySig] },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'vec3': {
           if (!Array.isArray(rawValue) || rawValue.length !== 3 ||
@@ -165,9 +161,8 @@ export function register(): void {
               out: { id: vec3Sig, slot: undefined, type: outType, stride, components: [x3Sig, y3Sig, z3Sig] },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'vec4': {
           if (!Array.isArray(rawValue) || rawValue.length !== 4 ||
@@ -188,9 +183,8 @@ export function register(): void {
               out: { id: vec4Sig, slot: undefined, type: outType, stride, components: [x4Sig, y4Sig, z4Sig, w4Sig] },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'color': {
           const val = rawValue as { r?: number; g?: number; b?: number; a?: number };
@@ -214,9 +208,8 @@ export function register(): void {
               out: { id: colorSig, slot: undefined, type: outType, stride, components: [rSig, gSig, bSig, aSig] },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         case 'cameraProjection': {
           if (typeof rawValue !== 'string') {
@@ -228,9 +221,8 @@ export function register(): void {
               out: { id, slot: undefined, type: outType, stride },
             },
             effects: {
-              slotRequests: [{ portId: 'out', type: outType }],
-            },
-          };
+              // Zero-allocation: Constants are evaluated inline
+            },          };
         }
         default: {
           const payloadKind: PayloadType['kind'] = payloadType.kind;

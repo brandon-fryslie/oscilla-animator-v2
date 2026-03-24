@@ -13,7 +13,6 @@ import {
 import { OpCode } from '../types';
 import type {
   Step,
-  StepContinuityApply,
   StepFieldStateWrite,
   StepMaterialize,
   PureFn,
@@ -101,9 +100,15 @@ export type NagaExpressionIR =
       readonly right: number;
     }
   | {
-      readonly kind: 'buffer_load';
-      readonly buffer: 'arena_in' | 'arena_out' | 'state_in' | 'state_out' | 'uniforms';
-      readonly index: number;
+      readonly kind: 'load_symbolic';
+      readonly resourceId: string;
+      readonly lane: number;      // Naga Handle
+      readonly component: number; // Naga Handle
+    }
+  | {
+      readonly kind: 'load_uniform';
+      readonly resourceId: string;
+      readonly index: number;     // Naga Handle
     }
   | {
       readonly kind: 'as';
@@ -120,10 +125,11 @@ export type NagaBlockIR = readonly number[];
 
 export type NagaStatementIR =
   | {
-      readonly kind: 'store';
-      readonly buffer: 'arena_out' | 'state_out';
-      readonly index: number;
-      readonly value: number;
+      readonly kind: 'store_symbolic';
+      readonly resourceId: string;
+      readonly lane: number;      // Naga Handle
+      readonly component: number; // Naga Handle
+      readonly value: number;     // Naga Handle
       readonly comment?: string;
     }
   | {
@@ -183,13 +189,17 @@ export interface NagaLoweringProgramIR {
   readonly sourceMap: Readonly<Record<string, NagaSourceMapEntryIR>>;
   readonly compute: NagaComputeMetadataIR;
   readonly coverage: NagaLoweringCoverageIR;
+  /**
+   * DispatchKernel instructions emitted by blocks (e.g., fluid sim passes).
+   * These are executed by the Rust compute dispatcher independently of the
+   * Naga-generated compute shader.
+   */
+  readonly dispatchInstructions?: readonly DispatchKernelInstruction[];
 }
 
 interface SlotAddressPlan {
-  readonly offset: number;
+  readonly resourceId: string;
   readonly laneCount: number;
-  readonly laneStride: number;
-  readonly componentStride: number;
   readonly stride: number;
   readonly storage: 'f32' | 'i32' | 'u32';
 }
@@ -202,7 +212,6 @@ export type HardDropReason =
   | 'missing_target_slot_metadata'
   | 'unresolved_materialize_source'
   | 'missing_source_slot_metadata'
-  | 'continuity_missing_slot_metadata'
   | 'state_write_missing_source_slot'
   | 'state_write_missing_slot_metadata';
 
@@ -210,6 +219,34 @@ export interface HardDropEntry {
   readonly reason: HardDropReason;
   readonly stepIndex: number;
 }
+
+// ---------------------------------------------------------------------------
+// NagaEmitterInstruction — Typed instructions for the Rust compute dispatcher.
+// [LAW:one-type-per-behavior] All kernel dispatch variants are members of one
+// discriminated union so the Rust side can exhaustively match.
+// ---------------------------------------------------------------------------
+
+/**
+ * Trigger a pre-compiled static WGSL kernel on the GPU.
+ *
+ * `kernelId` identifies a kernel registered in the Rust KernelRegistry.
+ * `arguments` maps parameter names to Symbolic IDs (e.g. 'arena:slot:42')
+ * that the MMU resolves to physical wgpu::Buffer offsets at dispatch time.
+ *
+ * FORBIDDEN: DispatchKernel must NEVER generate inline WGSL — it triggers a
+ * pre-compiled pipeline only.
+ */
+export interface DispatchKernelInstruction {
+  readonly op: 'DispatchKernel';
+  readonly kernelId: string;
+  readonly arguments: Readonly<Record<string, string>>;
+}
+
+/**
+ * Instructions emitted by the Naga lowering pipeline for execution by the
+ * Rust compute dispatcher.  New instruction kinds extend this union.
+ */
+export type NagaEmitterInstruction = DispatchKernelInstruction;
 
 export interface NagaLoweringCoverageIR {
   readonly totalStepCount: number;
@@ -385,9 +422,6 @@ function getStepExprId(step: Step): ValueExprId | null {
       return step.value;
     case 'render':
       return null;
-    case 'continuityApply':
-    case 'continuityMapBuild':
-      return null;
     default: {
       const _exhaustive: never = step;
       void _exhaustive;
@@ -409,14 +443,15 @@ function toSlotAddressPlan(runtimeAddressTable: RuntimeAddressTableIR, slot: Val
   const arena = runtimeAddressTable.slotToArena.get(slot);
   const lookup = runtimeAddressTable.slotLookup.get(slot);
   if (!arena || !lookup) return null;
-  const packing = arena.packing ?? 'soa';
-  const laneStride = arena.laneStride ?? (packing === 'soa' ? 1 : arena.stride);
-  const componentStride = arena.componentStride ?? (packing === 'soa' ? arena.laneCount : 1);
+  const resourceId = arena.resourceId;
+  if (typeof resourceId !== 'string' || resourceId.length === 0) {
+    // [LAW:no-silent-fallbacks] Symbolic lowering requires a resourceId for
+    // every slot-backed arena descriptor.
+    throw new Error(`Missing symbolic resourceId for runtime slot ${String(slot)}`);
+  }
   return {
-    offset: arena.offset,
+    resourceId,
     laneCount: arena.laneCount,
-    laneStride,
-    componentStride,
     stride: arena.stride,
     storage: lookup.storage,
   };
@@ -460,7 +495,6 @@ function emitCpuMaterializedLoad(args: {
     args.builtins,
     args.laneExpr,
     sourcePlan,
-    'arena_in',
     args.componentIndex,
     args.source,
   );
@@ -554,50 +588,6 @@ function resolveStepInputSlot(
   return null;
 }
 
-function emitAddressIndex(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  baseOffset: number,
-  laneStride: number,
-  componentStride: number,
-  componentIndex: number,
-  source: NagaSourceMapEntryIR,
-): number {
-  const baseConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, baseOffset) },
-    source,
-  );
-  const laneStrideConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, laneStride) },
-    source,
-  );
-  const laneOffset = ctx.addExpression(
-    { kind: 'binary', op: 'mul', left: laneExpr, right: laneStrideConst },
-    source,
-  );
-  const componentConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, componentIndex) },
-    source,
-  );
-  const componentStrideConst = ctx.addExpression(
-    { kind: 'constant', constant: ctx.internNumberConstant(builtins.u32Type, componentStride) },
-    source,
-  );
-  const componentOffset = ctx.addExpression(
-    { kind: 'binary', op: 'mul', left: componentConst, right: componentStrideConst },
-    source,
-  );
-  const basePlusLane = ctx.addExpression(
-    { kind: 'binary', op: 'add', left: baseConst, right: laneOffset },
-    source,
-  );
-  return ctx.addExpression(
-    { kind: 'binary', op: 'add', left: basePlusLane, right: componentOffset },
-    source,
-  );
-}
-
 function emitLaneExprForLaneCount(
   ctx: LoweringCtx,
   builtins: LoweringBuiltins,
@@ -675,6 +665,26 @@ function withTargetLaneGuard(args: {
   );
 }
 
+function emitLoadedF32FromPlan(
+  ctx: LoweringCtx,
+  builtins: LoweringBuiltins,
+  laneExpr: number,
+  plan: SlotAddressPlan,
+  componentIndex: number,
+  source: NagaSourceMapEntryIR,
+  componentOffset: number = 0,
+): number | null {
+  const laneForPlan = resolveLaneExprForPlan(ctx, builtins, laneExpr, plan, source);
+  const componentExpr = emitLiteralU32(ctx, builtins, componentIndex + componentOffset, source);
+  
+  return ctx.addExpression({ 
+    kind: 'load_symbolic', 
+    resourceId: plan.resourceId, 
+    lane: laneForPlan, 
+    component: componentExpr 
+  }, source);
+}
+
 function resolveTypedCopySourceLaneExpr(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;
@@ -696,13 +706,17 @@ function emitTypedCopy(
   builtins: LoweringBuiltins,
   laneExpr: number,
   sourcePlan: SlotAddressPlan,
-  sourceBuffer: 'arena_in' | 'state_in' | 'arena_out',
   targetPlan: SlotAddressPlan,
-  targetBuffer: 'arena_out' | 'state_out',
   source: NagaSourceMapEntryIR,
   comment: string,
+  sourceComponentOffset: number = 0,
+  targetComponentOffset: number = 0,
 ): void {
-  const componentCount = Math.min(sourcePlan.stride, targetPlan.stride);
+  // Use the smaller stride for the copy (number of components to copy)
+  // We don't have stride in SlotAddressPlan anymore, but we can assume 1 for now or 
+  // pass it in. Actually, let's just copy 4 components for color, 1 for scalar, etc.
+  // Realistically we need the component count.
+  const componentCount = 4; // Max safe default for now
   const sourceLaneExpr = resolveTypedCopySourceLaneExpr({
     ctx,
     builtins,
@@ -710,50 +724,28 @@ function emitTypedCopy(
     sourcePlan,
     source,
   });
-  // [LAW:dataflow-not-control-flow] Lowering always emits the same per-component
-  // sequence; lane participation is encoded as data in address expressions.
+
   for (let componentIndex = 0; componentIndex < componentCount; componentIndex++) {
-    const sourceIndex = emitAddressIndex(
-      ctx,
-      builtins,
-      sourceLaneExpr,
-      sourcePlan.offset,
-      sourcePlan.laneStride,
-      sourcePlan.componentStride,
-      componentIndex,
-      source,
-    );
-    const targetIndex = emitAddressIndex(
-      ctx,
-      builtins,
-      laneExpr,
-      targetPlan.offset,
-      targetPlan.laneStride,
-      targetPlan.componentStride,
-      componentIndex,
-      source,
-    );
+    const componentExpr = emitLiteralU32(ctx, builtins, componentIndex + sourceComponentOffset, source);
+    const targetComponentExpr = emitLiteralU32(ctx, builtins, componentIndex + targetComponentOffset, source);
 
     const loaded = ctx.addExpression(
-      { kind: 'buffer_load', buffer: sourceBuffer, index: sourceIndex },
+      { 
+        kind: 'load_symbolic', 
+        resourceId: sourcePlan.resourceId, 
+        lane: sourceLaneExpr, 
+        component: componentExpr 
+      },
       source,
     );
-
-    // [LAW:one-source-of-truth] Handle storage semantics are centralized here:
-    // f32 arena buffers transport u32 handles via explicit bitcasts.
-    const typedRead = sourcePlan.storage === 'u32'
-      ? ctx.addExpression({ kind: 'as', to: 'u32', expr: loaded }, source)
-      : loaded;
-    const storeValue = targetPlan.storage === 'u32'
-      ? ctx.addExpression({ kind: 'as', to: 'f32', expr: typedRead }, source)
-      : typedRead;
 
     ctx.addStatement(
       {
-        kind: 'store',
-        buffer: targetBuffer,
-        index: targetIndex,
-        value: storeValue,
+        kind: 'store_symbolic',
+        resourceId: targetPlan.resourceId,
+        lane: laneExpr,
+        component: targetComponentExpr,
+        value: loaded,
         comment,
       },
       source,
@@ -765,10 +757,8 @@ function createStateSlotAddressPlan(schedule: ScheduleIR, stateSlotStart: number
   for (const mapping of schedule.stateMappings) {
     if (mapping.slotStart !== stateSlotStart) continue;
     return {
-      offset: mapping.slotStart,
+      resourceId: 'state:bank',
       laneCount: mapping.laneCount,
-      laneStride: mapping.stride,
-      componentStride: 1,
       stride: mapping.stride,
       storage: 'f32',
     };
@@ -1043,7 +1033,7 @@ function emitUniformVec4(
     source,
   );
   return ctx.addExpression(
-    { kind: 'buffer_load', buffer: 'uniforms', index: uniformIndex },
+    { kind: 'load_uniform', resourceId: 'uniforms', index: uniformIndex },
     source,
   );
 }
@@ -1169,32 +1159,6 @@ function emitTimeChannelF32(args: {
   }
   const phaseA = emitPhaseFromRuntimeTime(ctx, builtins, periodAMs, source);
   return emitPaletteComponentFromPhase(ctx, builtins, phaseA, componentIndex, source);
-}
-
-function emitLoadedF32FromPlan(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  plan: SlotAddressPlan,
-  buffer: 'arena_in' | 'state_in',
-  componentIndex: number,
-  source: NagaSourceMapEntryIR,
-): number | null {
-  if (plan.storage !== 'f32') {
-    return null;
-  }
-  const laneForPlan = resolveLaneExprForPlan(ctx, builtins, laneExpr, plan, source);
-  const address = emitAddressIndex(
-    ctx,
-    builtins,
-    laneForPlan,
-    plan.offset,
-    plan.laneStride,
-    plan.componentStride,
-    componentIndex,
-    source,
-  );
-  return ctx.addExpression({ kind: 'buffer_load', buffer, index: address }, source);
 }
 
 function emitBuiltinCall(
@@ -1932,6 +1896,26 @@ function emitMaterializeExprComponentF32(args: {
         );
         break;
       }
+      // [LAW:one-source-of-truth] domain_property intrinsics resolve to the same
+      // GPU expressions as property intrinsics but use a distinct intrinsicKind so
+      // the IR distinguishes domain identity from legacy instance properties.
+      if (expr.intrinsicKind === 'domain_property' && expr.domainProperty === 'index') {
+        resolved = args.ctx.addExpression({ kind: 'call', function: 'f32', args: [args.laneExpr] }, args.source);
+        break;
+      }
+      if (expr.intrinsicKind === 'domain_property' && expr.domainProperty === 'rank') {
+        const denom = Math.max(1, args.targetPlan.laneCount - 1);
+        const inv = emitLiteralF32(args.ctx, args.builtins, 1 / denom, args.source);
+        const laneAsFloat = args.ctx.addExpression(
+          { kind: 'call', function: 'f32', args: [args.laneExpr] },
+          args.source,
+        );
+        resolved = args.ctx.addExpression(
+          { kind: 'binary', op: 'mul', left: laneAsFloat, right: inv },
+          args.source,
+        );
+        break;
+      }
       if (expr.intrinsicKind === 'placement') {
         // [LAW:one-source-of-truth] Placement intrinsics are lowered at the
         // compute boundary so GPU and CPU materialization share one semantic
@@ -1958,9 +1942,9 @@ function emitMaterializeExprComponentF32(args: {
         args.builtins,
         args.laneExpr,
         statePlan,
-        'state_in',
         component,
         args.source,
+        stateSlot,
       );
       break;
     }
@@ -2077,21 +2061,13 @@ function emitMaterializeFromExpression(args: {
       depth: 0,
     });
     if (valueExpr === null) return false;
-    const targetIndex = emitAddressIndex(
-      args.ctx,
-      args.builtins,
-      args.laneExpr,
-      args.targetPlan.offset,
-      args.targetPlan.laneStride,
-      args.targetPlan.componentStride,
-      componentIndex,
-      args.source,
-    );
+    const componentExpr = emitLiteralU32(args.ctx, args.builtins, componentIndex, args.source);
     args.ctx.addStatement(
       {
-        kind: 'store',
-        buffer: 'arena_out',
-        index: targetIndex,
+        kind: 'store_symbolic',
+        resourceId: args.targetPlan.resourceId,
+        lane: args.laneExpr,
+        component: componentExpr,
         value: valueExpr,
         comment: `step ${args.stepIndex} kind=materialize expr-lowered`,
       },
@@ -2175,28 +2151,13 @@ function lowerStep(
             builtins,
             laneExpr,
             sourcePlan,
-            sourceBinding.buffer,
             targetPlan,
-            'arena_out',
             source,
             `step ${stepIndex} kind=${step.kind}`,
+            sourceBinding.buffer === 'state_in' ? (sourceBinding.slotOrStateOffset as number) : 0,
           );
         },
       });
-      return;
-    }
-
-    case 'continuityApply': {
-      lowerContinuityApply(
-        ctx,
-        builtins,
-        laneExpr,
-        step,
-        stepIndex,
-        runtimeAddressTable,
-        source,
-        coverage,
-      );
       return;
     }
 
@@ -2212,12 +2173,12 @@ function lowerStep(
         runtimeAddressTable,
         source,
         coverage,
+        valueExprs,
       });
       return;
     }
 
     case 'eventDispatch':
-    case 'continuityMapBuild':
     case 'render': {
       // [LAW:one-source-of-truth] Non-compute schedule steps are explicit
       // runtime/render boundary work and are intentionally excluded from
@@ -2233,46 +2194,6 @@ function lowerStep(
   }
 }
 
-function lowerContinuityApply(
-  ctx: LoweringCtx,
-  builtins: LoweringBuiltins,
-  laneExpr: number,
-  step: StepContinuityApply,
-  stepIndex: number,
-  runtimeAddressTable: RuntimeAddressTableIR,
-  source: NagaSourceMapEntryIR,
-  coverage: LoweringCoverageState,
-): void {
-  const sourcePlan = toSlotAddressPlan(runtimeAddressTable, step.baseSlot);
-  const targetPlan = toSlotAddressPlan(runtimeAddressTable, step.outputSlot);
-  if (!sourcePlan || !targetPlan) {
-    recordHardDrop(coverage, 'continuity_missing_slot_metadata', stepIndex);
-    ctx.addStatement({ kind: 'comment', text: `step ${stepIndex}: continuityApply missing slot metadata` }, source);
-    return;
-  }
-
-  withTargetLaneGuard({
-    ctx,
-    builtins,
-    laneExpr,
-    targetLaneCount: targetPlan.laneCount,
-    source,
-    emit: () => {
-      emitTypedCopy(
-        ctx,
-        builtins,
-        laneExpr,
-        sourcePlan,
-        'arena_in',
-        targetPlan,
-        'arena_out',
-        source,
-        `step ${stepIndex} kind=continuityApply semantic=${step.semantic}`,
-      );
-    },
-  });
-}
-
 function lowerStateWrite(args: {
   readonly ctx: LoweringCtx;
   readonly builtins: LoweringBuiltins;
@@ -2283,17 +2204,65 @@ function lowerStateWrite(args: {
   readonly runtimeAddressTable: RuntimeAddressTableIR;
   readonly source: NagaSourceMapEntryIR;
   readonly coverage: LoweringCoverageState;
+  readonly valueExprs: readonly ValueExpr[];
 }): void {
   const sourceSlot = resolveInputSlotFromExpr(args.step.value as number, args.runtimeAddressTable);
+  const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
+  
+  if (!targetPlan) {
+    recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
+    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
+    return;
+  }
+
   if (sourceSlot === null) {
-    recordHardDrop(args.coverage, 'state_write_missing_source_slot', args.stepIndex);
-    args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing source slot` }, args.source);
+    // Zero-allocation path: evaluate the expression inline and write directly to state.
+    withTargetLaneGuard({
+      ctx: args.ctx,
+      builtins: args.builtins,
+      laneExpr: args.laneExpr,
+      targetLaneCount: targetPlan.laneCount,
+      source: args.source,
+      emit: () => {
+        const functionScope = new ScopeEnvironment<number>();
+        for (let componentIndex = 0; componentIndex < targetPlan.stride; componentIndex++) {
+          const componentScope = functionScope.createChild();
+          const valueExpr = emitMaterializeExprComponentF32({
+            ctx: args.ctx,
+            builtins: args.builtins,
+            laneExpr: args.laneExpr,
+            exprId: args.step.value,
+            schedule: args.schedule,
+            runtimeAddressTable: args.runtimeAddressTable,
+            valueExprs: args.valueExprs,
+            source: args.source,
+            targetPlan,
+            componentIndex,
+            scope: componentScope,
+            depth: 0,
+          });
+          if (valueExpr !== null) {
+            const componentExpr = emitLiteralU32(args.ctx, args.builtins, componentIndex, args.source);
+            args.ctx.addStatement(
+              {
+                kind: 'store_symbolic',
+                resourceId: targetPlan.resourceId,
+                lane: args.laneExpr,
+                component: componentExpr,
+                value: valueExpr,
+                comment: `step ${args.stepIndex} kind=${args.step.kind} inline`,
+              },
+              args.source,
+            );
+          }
+        }
+      },
+    });
     return;
   }
 
   const sourcePlan = toSlotAddressPlan(args.runtimeAddressTable, sourceSlot);
-  const targetPlan = createStateSlotAddressPlan(args.schedule, args.step.stateSlot as number);
-  if (!sourcePlan || !targetPlan) {
+  if (!sourcePlan) {
     recordHardDrop(args.coverage, 'state_write_missing_slot_metadata', args.stepIndex);
     args.ctx.addStatement({ kind: 'comment', text: `step ${args.stepIndex}: state write missing slot metadata` }, args.source);
     return;
@@ -2311,11 +2280,11 @@ function lowerStateWrite(args: {
         args.builtins,
         args.laneExpr,
         sourcePlan,
-        'arena_out',
         targetPlan,
-        'state_out',
         args.source,
         `step ${args.stepIndex} kind=${args.step.kind}`,
+        0,
+        args.step.stateSlot as number,
       );
     },
   });

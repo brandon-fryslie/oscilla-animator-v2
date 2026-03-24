@@ -16,7 +16,6 @@ import { SelectionStore } from './SelectionStore';
 import { ViewportStore } from './ViewportStore';
 import { PlaybackStore } from './PlaybackStore';
 import { DiagnosticsStore } from './DiagnosticsStore';
-import { ContinuityStore } from './ContinuityStore';
 import { PortHighlightStore } from './PortHighlightStore';
 import { DebugStore } from './DebugStore';
 import { LayoutStore } from './LayoutStore';
@@ -135,7 +134,6 @@ export class RootStore {
   readonly viewport: ViewportStore;
   readonly playback: PlaybackStore;
   readonly diagnostics: DiagnosticsStore;
-  readonly continuity: ContinuityStore;
   readonly portHighlight: PortHighlightStore;
   readonly debug: DebugStore;
   readonly layout: LayoutStore;
@@ -187,9 +185,6 @@ export class RootStore {
         message: `EventHub listener failure (${scope}:${eventType}): ${message}`,
       });
     });
-    // Create ContinuityStore
-    this.continuity = new ContinuityStore();
-
     // [LAW:single-enforcer] Route settings persistence/load failures through
     // diagnostics to keep runtime issue reporting at one boundary.
     this.settings = new SettingsStore((issue) => {

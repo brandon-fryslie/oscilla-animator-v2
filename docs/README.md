@@ -1,108 +1,111 @@
 # Oscilla Animator v2 Documentation
 
-This directory contains technical documentation for maintainers and contributors working on the Oscilla Animator v2 codebase.
+## Directory Structure
 
-## Purpose
+```
+docs/
+  current/                          Active, authoritative documentation
+    compiler/                       Compiler pipeline, type system, passes
+    renderer/                       Rust/WASM renderer and verification
+    runtime/                        Execution model, coordinates, hot-path gates
+    webgpu-specs/                   Comprehensive WebGPU implementation specs
+    agent-workflow/                  Agent loop definitions
+    ...                             Other active docs (debug-viz, patch-dsl, etc.)
+  legacy/                           Superseded, outdated, or historical docs (pending review)
+  README.md                         This file
 
-These documents provide deep technical explanations of core architectural patterns, design decisions, and implementation details. They complement the canonical specification in `design-docs/CANONICAL-oscilla-v2.5-20260109/` by:
+design-docs/
+  CANONICAL-oscilla-v2.5-20260109/  The canonical specification (DO NOT MOVE)
+  gemini-plan/                      GPU architecture plan from Gemini planning session
+```
 
-- Explaining **why** specific patterns were chosen (design rationale)
-- Documenting **how** invariants are enforced mechanically (implementation details)
-- Providing **examples** of correct and incorrect usage patterns
-- Offering **guidance** for maintainers making changes or additions
+## Current Documentation
 
-## Target Audience
+### GPU Architecture Plan (`design-docs/gemini-plan/`)
 
-This documentation assumes:
-- Familiarity with the Oscilla domain (blocks, graphs, signals, fields)
-- Understanding of the type system (domains, payloads, cardinality)
-- Experience reading and modifying runtime or compiler code
-- Working knowledge of TypeScript and modern JavaScript
+| Document | Description |
+|----------|-------------|
+| `GPU-ARCHITECTURE-PLAN.md` | **The master plan.** Full phased roadmap for the Strangler Fig refactor: Symbolic Memory, Rust MMU, Live Parameters, DispatchKernel, Domains, 2.5D, Physics, MSDF Text. |
+| `AGENT_ENGINEERING_STANDARDS.md` | Hard technical invariants for agents: zero-alloc, ABI safety, SoA addressing, Naga AST firewall. |
+| `NEW_LAYOUT_SYSTEM.md` | Decoupled Domain Topology Mapping spec: InstanceDomain, ScatterUV, SamplePath. |
+| `Dual_Representation_for_Shapes-*.md` | Shape taxonomy deep dive (Types 1-5), 2.5D projection, MSDF text, fluid dynamics. |
 
-**New contributors** should start with:
-1. `design-docs/CANONICAL-oscilla-v2.5-20260109/ESSENTIAL-SPEC.md` (conceptual foundation)
-2. `CLAUDE.md` (architecture overview and navigation)
-3. Then dive into specific topics here as needed
+### Compiler
 
-## Organization
+| Document | Description |
+|----------|-------------|
+| `current/compiler/CANONICAL-TYPES.md` | Authoritative type system reference (CanonicalType, PayloadType, UnitType, Extent). |
+| `current/compiler/ONE-TRUE-EMITTER.md` | Scoped IR → Naga Arena lowering boundary. |
+| `current/compiler/frontend-passes/` | All frontend compiler pass specifications (00 through 20). |
+| `current/compiler/cardinality-solver.md` | Cardinality constraint solver design. |
+| `current/compiler/final-normalization-fixpoint-spec.md` | Fixpoint normalization loop spec. |
+| `current/compiler/Polymorphic-Cardinality-Spec.md` | Polymorphic cardinality design. |
+| `current/compiler/unit-audit.md` | Unit typing audit results. |
 
-Documentation is organized by subsystem:
+### Renderer
 
-### `runtime/`
-Deep technical documentation of the runtime execution model:
-- `execution-model.md` - Frame execution lifecycle and two-phase pattern
-- `coordinate-system-canonical-spec.md` - Canonical world/clip/screen contract and camera orientation constants
+| Document | Description |
+|----------|-------------|
+| `current/renderer/RUST-RENDERER.md` | Full Rust/WASM renderer spec: memory, compute, render pipeline, execution loop. |
+| `current/renderer/rust-renderer-verification-matrix.md` | 4-gate verification matrix (headless, zero-alloc, visual snapshot, jitter). |
+| `current/renderer/RUST-WASM-DEBUG-ABI.md` | Debug probe ABI for edge/port inspection. |
 
-### Patch DSL
-- `patch-dsl-hcl2-support.md` - Supported HCL2 subset, unsupported features, and string interpolation policy
+### Runtime
 
-### `WebGPU-Complete/` (canonical WebGPU design source)
-Canonical WebGPU architecture and migration design lives in:
-- `./WebGPU-Complete/`
+| Document | Description |
+|----------|-------------|
+| `current/runtime/execution-model.md` | Two-phase frame execution lifecycle. |
+| `current/runtime/coordinate-system-canonical-spec.md` | World/clip/screen coordinate contract. |
+| `current/runtime/shape-hot-path-no-alloc-gate.md` | Shape handle zero-allocation enforcement gate. |
 
-Outside `docs/WebGPU-Complete/`, WebGPU documents are historical pointers only and must not define competing architecture or readiness criteria.
+### WebGPU Specs
 
-### `WebGPU-Future/` (post-stabilization architecture direction)
-Longer-horizon renderer architecture notes live in:
-- `./WebGPU-Future/`
+| Document | Description |
+|----------|-------------|
+| `current/webgpu-specs/` | 20+ documents covering GPU-native architecture from memory layout through physics. |
+| `current/webgpu-specs/shapes/` | Shape taxonomy implementation blueprints (Types 0-5). |
+| `current/webgpu-specs/workstreams/` | Implementation workstream indices and slice definitions (S01-S06). |
 
-`WebGPU-Future/` is intentionally not a competing delivery spec. It documents where we may want to take the renderer architecture after the current `current code -> WebGPU-Complete` migration is finished and stable.
+### Other
 
-### Guardrail Test Gate
+| Document | Description |
+|----------|-------------|
+| `current/FOUNDATIONAL-SPEC.md` | Core system invariants (non-negotiable). |
+| `current/DEBUG-VISUALIZATION.md` | Debug viz system architecture. |
+| `current/patch-dsl-hcl2-support.md` | Patch DSL HCL2 syntax support matrix. |
+| `current/TEST-REMOVAL-LEDGER-2026-02-25.md` | Tracks functionality from deleted test files. |
+| `current/agent-workflow/` | Agent loop definitions for WebGPU implementation. |
 
-Canonical architecture guardrails live in:
-- `src/__tests__/architecture-guardrails.test.ts`
-- `src/__tests__/forbidden-patterns.test.ts` (v3 hard rules)
-- `src/compiler/__tests__/no-legacy-types.test.ts` (compiler/runtime legacy-type gate)
-- `src/services/__tests__/AnimationLoop.test.ts` (canonical frame-order/runtime hot-path invariants)
+## Legacy Documentation
 
-Canonical v3 architecture source:
-- `design-docs/OSCILLA-WEBGPU-V3-REFERENCE-ARCHITECTURE.md`
-- `docs/WebGPU-Complete/P0-3__Refactoring_to_Handle-Based_Architecture.md`
+`docs/legacy/` contains documents that have been superseded by the current architecture plan or are historical snapshots. These are preserved for reference but should not be treated as authoritative.
 
-### WebGPU Matrix Harness
+Key categories:
+- **WebGPU-Future/**: Pre-Strangler-Fig architecture explorations (superseded by `GPU-ARCHITECTURE-PLAN.md`)
+- **WebGPU-Top-Priority/**: Previous priority work items (superseded by phased plan)
+- **design-archive/**: Archived canonical types output from earlier spec iterations
+- **design-new/**: Mixed design explorations (3D, events, debugger, kernels, etc.)
+- **PROMPT-***: Old agent loop prompts
+- **V2-ARCH, V3-ARCH-PLAN**: Previous architecture documents
 
-WebGPU browser conformance/perf harness:
-- `scripts/webgpu-browser-matrix.mjs`
+## Relationship to Canonical Spec
 
-Common runs:
-- Chromium gating only (default): `pnpm run test:webgpu-matrix`
-- Chromium + Playwright WebKit telemetry:
-  - `WEBGPU_MATRIX_INCLUDE_WEBKIT=1 pnpm run test:webgpu-matrix`
-- Chromium + real Safari telemetry (macOS):
-  - `WEBGPU_MATRIX_INCLUDE_SAFARI=1 pnpm run test:webgpu-matrix`
-- Full matrix (Chromium + WebKit + Safari):
-  - `WEBGPU_MATRIX_INCLUDE_WEBKIT=1 WEBGPU_MATRIX_INCLUDE_SAFARI=1 pnpm run test:webgpu-matrix`
+| Location | Purpose |
+|----------|---------|
+| `design-docs/CANONICAL-oscilla-v2.5-20260109/` | The canonical specification (master authority) |
+| `docs/current/` | Active technical docs (implementation details, plans, deep dives) |
+| `docs/legacy/` | Historical docs (superseded, for reference only) |
+| `CLAUDE.md` / `.claude/CLAUDE.md` | Architecture overview and navigation for agents |
+| `.claude/rules/` | Hard constraints and patterns for agents |
 
-Report output:
-- `artifacts/webgpu-browser-matrix.json`
+## Source-Embedded Documentation
 
-### Naming Conventions
+Some documentation lives alongside its implementation:
 
-- Use **kebab-case** for filenames (e.g., `execution-model.md`, not `ExecutionModel.md`)
-- Avoid numbered prefixes (e.g., `01-execution.md`) - use descriptive names instead
-- One document per major concept/pattern
-- Keep documents focused (5-10k tokens each)
-
-## Relationship to Other Documentation
-
-| Location | Purpose | Audience |
-|----------|---------|----------|
-| `design-docs/CANONICAL-oscilla-v2.5-20260109/` | Canonical specification | All contributors |
-| `docs/` (this directory) | Technical deep dives | Maintainers |
-| `CLAUDE.md` | Architecture overview | All contributors |
-| `.claude/rules/` | Hard constraints and patterns | Claude Code agent |
-| Code comments | Implementation details | Developers |
-
-## Contributing
-
-When adding new documentation:
-1. Ensure it doesn't duplicate existing spec content (link to spec instead)
-2. Focus on **why** and **how**, not just **what** (code already shows what)
-3. Include concrete examples (correct and incorrect patterns)
-4. Link to relevant implementation files
-5. Keep documents evergreen (prefer function names over line numbers)
-
-## Static Site Generation
-
-Currently, these are raw Markdown files. A static site generator (Hugo, Docusaurus, etc.) may be added in the future to improve navigation and cross-referencing.
+| Location | Description |
+|----------|-------------|
+| `src/compiler/backend/DEBUGGING.md` | Step-through schedule debugger |
+| `src/diagnostics/README.md` | Diagnostics system architecture |
+| `src/expr/README.md` | Expression DSL module |
+| `src/demo/README.md` | Demo library guide |
+| `src/render/wasm/rust/oscilla-rust-renderer/README.md` | Rust renderer crate |

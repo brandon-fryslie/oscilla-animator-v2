@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -24,8 +25,8 @@ use crate::render::{
 use crate::scheduler::WorkerScheduler;
 use crate::telemetry::{
     build_scheduler_telemetry as build_scheduler_telemetry_packet, IndirectArgsRecord,
-    ReadbackSnapshot, SchedulerState, SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs,
-    WorkerObservabilityPacket,
+    ReadbackRenderCounters, ReadbackSnapshot, SchedulerState, SchedulerTelemetry,
+    SchedulerTelemetryInputs, StageTimingsMs, WorkerObservabilityPacket,
 };
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -40,6 +41,16 @@ const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_INSTALL_REVISION: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
+
+fn debug_readback_interval_frames_from_hz(debug_readback_hz: u32) -> u64 {
+    // [LAW:one-source-of-truth] Debug readback cadence conversion is defined
+    // once so bootstrap and runtime toggles cannot drift.
+    if debug_readback_hz == 0 {
+        0
+    } else {
+        (60 / debug_readback_hz.max(1)).max(1) as u64
+    }
+}
 
 pub struct EngineConfig {
     pub max_particles: usize,
@@ -84,6 +95,9 @@ pub struct Engine {
     draw_regions: IndirectRegionPlan,
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
+    last_shape_header_sample: Vec<u32>,
+    last_shape_cp_resolution_sample: Vec<u32>,
+    sink_pointer_map: HashMap<SinkPointerKey, String>,
     last_install_revision: u32,
     pending_fatal_gpu_error: Arc<AtomicBool>,
     // [LAW:one-source-of-truth] Worker-owned animation time. The worker's own
@@ -192,12 +206,385 @@ fn create_msaa_color_target(
 
 // [RECOVER-07] Descriptor word offsets for total_instance_count derivation.
 // RECOVER-05 zeroed all record fields; instance counts live in descriptors.
+const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: usize = 0;
+const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: usize = 1;
+const DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE: usize = 2;
+const DESCRIPTOR_WORD_COLOR_BASE_OFFSET: usize = 3;
+const DESCRIPTOR_WORD_COLOR_LANE_STRIDE: usize = 4;
+const DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE: usize = 5;
+const DESCRIPTOR_WORD_SCALE_BASE_OFFSET: usize = 6;
+const DESCRIPTOR_WORD_SCALE_LANE_STRIDE: usize = 7;
+const DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE: usize = 8;
+const DESCRIPTOR_WORD_ROTATION_MODE: usize = 9;
+const DESCRIPTOR_WORD_ROTATION_BASE_OFFSET: usize = 10;
+const DESCRIPTOR_WORD_ROTATION_LANE_STRIDE: usize = 11;
+const DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE: usize = 12;
+const DESCRIPTOR_WORD_SCALE2_MODE: usize = 14;
+const DESCRIPTOR_WORD_SCALE2_BASE_OFFSET: usize = 15;
+const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: usize = 16;
+const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: usize = 17;
+const DESCRIPTOR_WORD_SHAPE_SLOT_BASE_OFFSET: usize = 20;
+const DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE: usize = 21;
+const DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE: usize = 22;
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
+const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: usize = 25;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
+const OPTIONAL_MODE_SLOT: u32 = 1;
+
+const SHAPE_WORD_KIND: usize = 0;
+const SHAPE_WORD_TOPOLOGY_MODE: usize = 1;
+const SHAPE_WORD_CP_ARENA_BASE_OFFSET: usize = 11;
+const SHAPE_WORD_CP_ARENA_LANE_STRIDE: usize = 14;
+const SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE: usize = 15;
+
+const SHAPE_CLASS_TYPE1_RIGID: u32 = 1;
+const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2;
+const TOPOLOGY_MODE_NON_PATH: u32 = 0;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum SinkPointerSemantic {
+    Position,
+    Color,
+    Scale,
+    Rotation,
+    Scale2,
+    Shape,
+}
+
+impl SinkPointerSemantic {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "position" => Some(Self::Position),
+            "color" => Some(Self::Color),
+            "scale" => Some(Self::Scale),
+            "rotation" => Some(Self::Rotation),
+            "scale2" => Some(Self::Scale2),
+            "shape" => Some(Self::Shape),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Position => "position",
+            Self::Color => "color",
+            Self::Scale => "scale",
+            Self::Rotation => "rotation",
+            Self::Scale2 => "scale2",
+            Self::Shape => "shape",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct SinkPointerKey {
+    record_index: usize,
+    semantic: SinkPointerSemantic,
+}
 
 impl Engine {
-    pub async fn new(canvas: OffscreenCanvas, config: EngineConfig, initial_width: u32, initial_height: u32) -> Result<Self, JsValue> {
+    fn resolve_resource_to_physical_words(
+        &self,
+        resource_id: &str,
+        context: &str,
+    ) -> (u32, u32, u32) {
+        let resolved = self
+            .arena
+            .symbol_resolver
+            .resolve(resource_id)
+            .unwrap_or_else(|| panic!("sink table {} references unknown resource {}", context, resource_id));
+        match resolved.storage_location {
+            crate::memory::ResourceStorageLocation::Arena => {}
+            // [LAW:no-silent-fallbacks] Draw-prep descriptors target render
+            // input slots only; non-arena resources are invalid here.
+            crate::memory::ResourceStorageLocation::State => {
+                panic!(
+                    "sink table {} resource {} resolves to state storage (expected arena)",
+                    context, resource_id
+                );
+            }
+            crate::memory::ResourceStorageLocation::GlobalControlUbo => {
+                panic!(
+                    "sink table {} resource {} resolves to GlobalControlUbo (expected arena)",
+                    context, resource_id
+                );
+            }
+            crate::memory::ResourceStorageLocation::Texture2D => {
+                panic!(
+                    "sink table {} resource {} resolves to Texture2D (expected arena)",
+                    context, resource_id
+                );
+            }
+        }
+        (
+            resolved.base_offset_bytes / 4,
+            resolved.lane_stride_bytes / 4,
+            resolved.component_stride_bytes / 4,
+        )
+    }
+
+    fn resolve_slot_to_physical_words(
+        &self,
+        slot_id: u32,
+        context: &str,
+    ) -> (u32, u32, u32) {
+        let resource_id = format!("arena:slot:{}", slot_id);
+        self.resolve_resource_to_physical_words(&resource_id, context)
+    }
+
+    fn parse_sink_pointer_key(raw_key: &str) -> Result<SinkPointerKey, String> {
+        let mut parts = raw_key.split(':');
+        let record_part = parts
+            .next()
+            .ok_or_else(|| format!("sink pointer key '{}' is missing record index", raw_key))?;
+        let semantic_part = parts
+            .next()
+            .ok_or_else(|| format!("sink pointer key '{}' is missing semantic", raw_key))?;
+        if parts.next().is_some() {
+            return Err(format!(
+                "sink pointer key '{}' must use '<record>:<semantic>' format",
+                raw_key
+            ));
+        }
+        let record_index = record_part.parse::<usize>().map_err(|_| {
+            format!(
+                "sink pointer key '{}' has invalid record index '{}'",
+                raw_key, record_part
+            )
+        })?;
+        let semantic = SinkPointerSemantic::parse(semantic_part).ok_or_else(|| {
+            format!(
+                "sink pointer key '{}' has unknown semantic '{}'",
+                raw_key, semantic_part
+            )
+        })?;
+        Ok(SinkPointerKey {
+            record_index,
+            semantic,
+        })
+    }
+
+    pub fn set_sink_pointer_map(
+        &mut self,
+        sink_pointer_map: HashMap<String, String>,
+    ) -> Result<(), String> {
+        let mut parsed: HashMap<SinkPointerKey, String> = HashMap::new();
+        for (raw_key, raw_resource_id) in sink_pointer_map {
+            let key = Self::parse_sink_pointer_key(raw_key.as_str())?;
+            let resource_id = raw_resource_id.trim();
+            if resource_id.is_empty() {
+                return Err(format!(
+                    "sink pointer key '{}' maps to empty resource ID",
+                    raw_key
+                ));
+            }
+            if parsed.insert(key, resource_id.to_string()).is_some() {
+                return Err(format!("sink pointer key '{}' is duplicated", raw_key));
+            }
+        }
+        // [LAW:one-source-of-truth] Sink descriptor symbolic pointer ownership
+        // is centralized in engine state and consumed by one MMU patch boundary.
+        self.sink_pointer_map = parsed;
+        Ok(())
+    }
+
+    fn sink_pointer_resource_id(
+        &self,
+        record_index: usize,
+        semantic: SinkPointerSemantic,
+    ) -> Result<&str, String> {
+        let key = SinkPointerKey {
+            record_index,
+            semantic,
+        };
+        self.sink_pointer_map
+            .get(&key)
+            .map(|resource_id| resource_id.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "sink pointer map missing key '{}:{}'",
+                    record_index,
+                    semantic.as_str()
+                )
+            })
+    }
+
+    fn patch_sink_descriptor_triplet(
+        &self,
+        plane_words: &mut [u32],
+        descriptor_base: usize,
+        base_word: usize,
+        lane_word: usize,
+        component_word: usize,
+        record_index: usize,
+        semantic: SinkPointerSemantic,
+    ) -> Result<(), String> {
+        let resource_id = self.sink_pointer_resource_id(record_index, semantic)?;
+        let (base, lane, component) = self.resolve_resource_to_physical_words(resource_id, semantic.as_str());
+        plane_words[descriptor_base + base_word] = base;
+        plane_words[descriptor_base + lane_word] = lane;
+        plane_words[descriptor_base + component_word] = component;
+        Ok(())
+    }
+
+    fn resolve_sink_descriptor_symbols(
+        &self,
+        plane_words: &mut [u32],
+        total_record_count: usize,
+    ) -> Result<(), String> {
+        // [LAW:single-enforcer] Sink descriptor physical address resolution is
+        // owned by Rust MMU at the renderer boundary.
+        let descriptor_region_base =
+            SINK_TABLE_HEADER_WORDS + total_record_count * SINK_TABLE_RECORD_WORDS;
+        for record in 0..total_record_count {
+            let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
+            if descriptor_base + SINK_TABLE_DESCRIPTOR_WORDS > plane_words.len() {
+                break;
+            }
+
+            self.patch_sink_descriptor_triplet(
+                plane_words,
+                descriptor_base,
+                DESCRIPTOR_WORD_POSITION_BASE_OFFSET,
+                DESCRIPTOR_WORD_POSITION_LANE_STRIDE,
+                DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE,
+                record,
+                SinkPointerSemantic::Position,
+            )?;
+
+            self.patch_sink_descriptor_triplet(
+                plane_words,
+                descriptor_base,
+                DESCRIPTOR_WORD_COLOR_BASE_OFFSET,
+                DESCRIPTOR_WORD_COLOR_LANE_STRIDE,
+                DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE,
+                record,
+                SinkPointerSemantic::Color,
+            )?;
+
+            self.patch_sink_descriptor_triplet(
+                plane_words,
+                descriptor_base,
+                DESCRIPTOR_WORD_SCALE_BASE_OFFSET,
+                DESCRIPTOR_WORD_SCALE_LANE_STRIDE,
+                DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE,
+                record,
+                SinkPointerSemantic::Scale,
+            )?;
+
+            let rotation_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_MODE];
+            if rotation_mode == OPTIONAL_MODE_SLOT {
+                self.patch_sink_descriptor_triplet(
+                    plane_words,
+                    descriptor_base,
+                    DESCRIPTOR_WORD_ROTATION_BASE_OFFSET,
+                    DESCRIPTOR_WORD_ROTATION_LANE_STRIDE,
+                    DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE,
+                    record,
+                    SinkPointerSemantic::Rotation,
+                )?;
+            }
+
+            let scale2_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE];
+            if scale2_mode == OPTIONAL_MODE_SLOT {
+                self.patch_sink_descriptor_triplet(
+                    plane_words,
+                    descriptor_base,
+                    DESCRIPTOR_WORD_SCALE2_BASE_OFFSET,
+                    DESCRIPTOR_WORD_SCALE2_LANE_STRIDE,
+                    DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE,
+                    record,
+                    SinkPointerSemantic::Scale2,
+                )?;
+            }
+
+            self.patch_sink_descriptor_triplet(
+                plane_words,
+                descriptor_base,
+                DESCRIPTOR_WORD_SHAPE_SLOT_BASE_OFFSET,
+                DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE,
+                DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE,
+                record,
+                SinkPointerSemantic::Shape,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn resolve_shape_bank_control_point_slots(
+        &self,
+        shape_bank_words: &mut [u32],
+        shape_word_offsets: &[u32],
+    ) -> Option<[u32; 5]> {
+        // [LAW:single-enforcer] ShapeBank control-point address resolution is
+        // owned by Rust MMU at renderer install boundary.
+        let mut first_resolution_sample: Option<[u32; 5]> = None;
+        let mut offsets: Vec<usize> = shape_word_offsets
+            .iter()
+            .map(|offset| *offset as usize)
+            .collect();
+        offsets.sort_unstable();
+        offsets.dedup();
+
+        for shape_word_offset in offsets {
+            if shape_word_offset + SHAPE_BANK_HEADER_WORDS > shape_bank_words.len() {
+                panic!(
+                    "shape bank handle {} out of bounds for {} words",
+                    shape_word_offset,
+                    shape_bank_words.len()
+                );
+            }
+
+            let kind = shape_bank_words[shape_word_offset + SHAPE_WORD_KIND];
+            if kind != SHAPE_CLASS_TYPE1_RIGID && kind != SHAPE_CLASS_TYPE2_PARAMETRIC {
+                continue;
+            }
+
+            let topology_mode = shape_bank_words[shape_word_offset + SHAPE_WORD_TOPOLOGY_MODE];
+            let needs_control_points =
+                kind == SHAPE_CLASS_TYPE2_PARAMETRIC || topology_mode != TOPOLOGY_MODE_NON_PATH;
+            if !needs_control_points {
+                continue;
+            }
+
+            let control_point_slot_id =
+                shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+            if first_resolution_sample.is_none() {
+                first_resolution_sample = Some([
+                    shape_word_offset as u32,
+                    control_point_slot_id,
+                    u32::MAX,
+                    0,
+                    0,
+                ]);
+            }
+            let context = format!("shape-bank cp header @{}", shape_word_offset);
+            let (base_words, lane_words, component_words) =
+                self.resolve_slot_to_physical_words(control_point_slot_id, &context);
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_BASE_OFFSET] = base_words;
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_LANE_STRIDE] = lane_words;
+            shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE] =
+                component_words;
+            if first_resolution_sample.is_some() {
+                first_resolution_sample = Some([
+                    shape_word_offset as u32,
+                    control_point_slot_id,
+                    base_words,
+                    lane_words,
+                    component_words,
+                ]);
+            }
+        }
+        first_resolution_sample
+    }
+
+    pub async fn new(
+        canvas: OffscreenCanvas,
+        config: EngineConfig,
+        initial_width: u32,
+        initial_height: u32,
+    ) -> Result<Self, JsValue> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
@@ -338,11 +725,8 @@ impl Engine {
             surface_config.height,
             sample_count,
         );
-        let debug_readback_interval_frames = if config.debug_readback_hz == 0 {
-            0
-        } else {
-            (60 / config.debug_readback_hz.max(1)).max(1) as u64
-        };
+        let debug_readback_interval_frames =
+            debug_readback_interval_frames_from_hz(config.debug_readback_hz);
         let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
 
         Ok(Self {
@@ -372,6 +756,9 @@ impl Engine {
             draw_regions: IndirectRegionPlan::default(),
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
+            last_shape_header_sample: Vec::new(),
+            last_shape_cp_resolution_sample: Vec::new(),
+            sink_pointer_map: HashMap::new(),
             last_install_revision: 0,
             pending_fatal_gpu_error,
             prev_tick_timestamp_ms: 0.0,
@@ -434,49 +821,9 @@ impl Engine {
         self.scheduler.mark_running(worker_monotonic_now_ms());
     }
 
-    pub fn rebuild_pipeline(
-        &mut self,
-        simulation_wgsl: &str,
-        assembly_wgsl: &str,
-        uber_shader_wgsl: &str,
-        particle_count: u32,
-        shape_count: u32,
-    ) {
-        // [LAW:one-source-of-truth] Pipeline compilation occurs only at rebuild
-        // boundary; hot-path tick only executes precompiled pipeline objects.
-        self.compute = ComputeDispatcher::new(
-            &self.device,
-            simulation_wgsl,
-            assembly_wgsl,
-            particle_count,
-            shape_count,
-        );
-        self.render = RenderDispatcher::new(
-            &self.device,
-            uber_shader_wgsl,
-            self.surface_format,
-            self.sample_count,
-            &self.compute.uniform_layout,
-        );
-        let arena = GpuMemoryArena::new(
-            &self.device,
-            &self.compute.uniform_layout,
-            &self.compute.state_layout,
-            self.compute.compiler_simulation_layout(),
-            &self.compute.assembly_layout,
-            &self.compute.draw_prep_layout,
-            &self.render.instance_layout,
-            &self.render.topology_layout,
-            &self.render.arena_render_layout,
-            particle_count as usize,
-            shape_count as usize,
-        );
-        arena.clear_simulation_planes(&self.queue);
-        self.arena = arena;
-        self.draw_regions = IndirectRegionPlan::default();
-        self.last_shape_bank_words = 0;
-        self.last_sink_table_words = 0;
-        self.last_install_revision = 0;
+    pub fn set_debug_readback_hz(&mut self, debug_readback_hz: u32) {
+        self.debug_readback_interval_frames =
+            debug_readback_interval_frames_from_hz(debug_readback_hz);
     }
 
     // [RECOVER-11] Upload MSDF atlas data to the GPU atlas storage buffer.
@@ -491,6 +838,18 @@ impl Engine {
     ) -> Result<(), PipelineRebuildFailure> {
         // [LAW:single-enforcer] Compiler-owned GPU pass artifacts are published
         // at one engine boundary so runtime hot path never recompiles ad hoc.
+        if let Some(memory_manifest) = pass_specs
+            .iter()
+            .find_map(|spec| spec.memory_manifest.as_ref())
+        {
+            // [LAW:one-source-of-truth] Draw-prep descriptor resolution uses
+            // the same compile-owned memory manifest used for shader lowering.
+            let resolver = crate::memory::SymbolResolver::build_from_manifest(memory_manifest);
+            self.arena
+                .rebuild_buffers_from_resolver(&self.device, &resolver);
+            self.arena.symbol_resolver = resolver;
+            self.sink_pointer_map.clear();
+        }
         let staged = self
             .compute
             .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs, self.max_particles)
@@ -567,6 +926,8 @@ impl Engine {
         enum HotPathOutcome {
             Success {
                 debug_tick: bool,
+                instance_readback_armed: bool,
+                indirect_readback_armed: bool,
                 frame_count: u64,
                 stage_timings: StageTimingsMs,
             },
@@ -598,6 +959,7 @@ impl Engine {
 
                 let simulation_stage_start_ms = worker_monotonic_now_ms();
                 self.compute.encode_simulation_and_assembly(
+                    &self.device,
                     &mut encoder,
                     &mut self.arena,
                     self.draw_regions.total_instance_count,
@@ -635,33 +997,48 @@ impl Engine {
 
                 let is_debug_tick = self.debug_readback_interval_frames > 0
                     && self.frame_count % self.debug_readback_interval_frames == 0;
+                let mut instance_readback_armed = false;
+                let mut indirect_readback_armed = false;
                 if is_debug_tick {
+                    instance_readback_armed = self
+                        .debug_readback_in_flight
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok();
+                    indirect_readback_armed = self
+                        .indirect_readback_in_flight
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok();
+
                     // [RECOVER-10] Copy instance buffer to instance staging.
-                    let instance_copy_bytes = self
-                        .arena
-                        .debug_staging_buffer()
-                        .size()
-                        .min(self.arena.instance_buffer.size());
-                    encoder.copy_buffer_to_buffer(
-                        &self.arena.instance_buffer,
-                        0,
-                        self.arena.debug_staging_buffer(),
-                        0,
-                        instance_copy_bytes,
-                    );
+                    if instance_readback_armed {
+                        let instance_copy_bytes = self
+                            .arena
+                            .debug_staging_buffer()
+                            .size()
+                            .min(self.arena.instance_buffer.size());
+                        encoder.copy_buffer_to_buffer(
+                            &self.arena.instance_buffer,
+                            0,
+                            self.arena.debug_staging_buffer(),
+                            0,
+                            instance_copy_bytes,
+                        );
+                    }
                     // [RECOVER-10] Copy indirect args buffer to indirect staging.
-                    let indirect_copy_bytes = self
-                        .arena
-                        .indirect_staging_buffer()
-                        .size()
-                        .min(self.arena.indirect_buffer.size());
-                    encoder.copy_buffer_to_buffer(
-                        &self.arena.indirect_buffer,
-                        0,
-                        self.arena.indirect_staging_buffer(),
-                        0,
-                        indirect_copy_bytes,
-                    );
+                    if indirect_readback_armed {
+                        let indirect_copy_bytes = self
+                            .arena
+                            .indirect_staging_buffer()
+                            .size()
+                            .min(self.arena.indirect_buffer.size());
+                        encoder.copy_buffer_to_buffer(
+                            &self.arena.indirect_buffer,
+                            0,
+                            self.arena.indirect_staging_buffer(),
+                            0,
+                            indirect_copy_bytes,
+                        );
+                    }
                 }
 
                 let swap_stage_start_ms = worker_monotonic_now_ms();
@@ -673,6 +1050,8 @@ impl Engine {
 
                 HotPathOutcome::Success {
                     debug_tick: is_debug_tick,
+                    instance_readback_armed,
+                    indirect_readback_armed,
                     frame_count: self.frame_count,
                     stage_timings,
                 }
@@ -691,13 +1070,15 @@ impl Engine {
         match outcome {
             HotPathOutcome::Success {
                 debug_tick,
+                instance_readback_armed,
+                indirect_readback_armed,
                 frame_count,
                 stage_timings,
             } => {
                 // [LAW:single-enforcer] Async map callbacks can allocate in
                 // browser glue and therefore run only after lock scope exits.
                 if debug_tick {
-                    self.trigger_debug_readback();
+                    self.trigger_debug_readback(instance_readback_armed, indirect_readback_armed);
                 }
                 let now_ms = worker_monotonic_now_ms();
                 let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
@@ -797,7 +1178,7 @@ impl Engine {
         )
     }
 
-    fn sync_shape_bank_plane(&mut self, shape_bank_words: u32) {
+    fn sync_shape_bank_plane(&mut self, shape_bank_words: u32, shape_word_offsets: &[u32]) {
         let Some(shared_shape_bank) = self.shared_shape_bank.as_ref() else {
             return;
         };
@@ -814,7 +1195,21 @@ impl Engine {
         // [RECOVER-04] Upload canonical ShapeBank words directly to topologyBank.
         // GPU vertex pulling reads control points from the topology buffer —
         // no CPU mesh realization needed.
-        let canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        let mut canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
+        self.last_shape_cp_resolution_sample.clear();
+        if let Some(sample) =
+            self.resolve_shape_bank_control_point_slots(&mut canonical_words, shape_word_offsets)
+        {
+            self.last_shape_cp_resolution_sample.extend_from_slice(&sample);
+        }
+        self.last_shape_header_sample.clear();
+        if let Some(first_shape_word_offset) = shape_word_offsets.first() {
+            let offset = *first_shape_word_offset as usize;
+            if offset + SHAPE_BANK_HEADER_WORDS <= canonical_words.len() {
+                self.last_shape_header_sample
+                    .extend_from_slice(&canonical_words[offset..(offset + SHAPE_BANK_HEADER_WORDS)]);
+            }
+        }
         self.arena
             .write_shape_bank_words(&self.device, &self.queue, &canonical_words);
     }
@@ -822,12 +1217,12 @@ impl Engine {
     fn sync_sink_table_plane_and_parse_regions(
         &mut self,
         sink_table_words: u32,
-    ) -> IndirectRegionPlan {
+    ) -> (IndirectRegionPlan, Vec<u32>) {
         let Some(shared_sink_table) = self.shared_sink_table.as_ref() else {
-            return IndirectRegionPlan::default();
+            return (IndirectRegionPlan::default(), Vec::new());
         };
         if sink_table_words == 0 {
-            return IndirectRegionPlan::default();
+            return (IndirectRegionPlan::default(), Vec::new());
         }
 
         let available_words = shared_sink_table.length();
@@ -873,21 +1268,25 @@ impl Engine {
             );
         }
 
-        let plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
+        let total_record_count_usize = total_record_count as usize;
+        let mut plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
+        self.resolve_sink_descriptor_symbols(&mut plane_words, total_record_count_usize)
+            .unwrap_or_else(|error| panic!("sink pointer map resolution failed: {}", error));
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
         // [RECOVER-07] Sum instance counts from descriptors, not zeroed record fields.
         // RECOVER-05 zeroed all record fields; StaticInstanceCount in descriptors
         // is the canonical source for assembly dispatch sizing.
-        let total_record_count_usize = total_record_count as usize;
         let descriptor_region_base =
             SINK_TABLE_HEADER_WORDS + total_record_count_usize * SINK_TABLE_RECORD_WORDS;
+        let mut shape_word_offsets = Vec::with_capacity(total_record_count_usize);
         let mut total_instance_count: u32 = 0;
         for record in 0..total_record_count_usize {
             let descriptor_base = descriptor_region_base + record * SINK_TABLE_DESCRIPTOR_WORDS;
-            if descriptor_base + DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT >= plane_words.len() {
+            if descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET >= plane_words.len() {
                 break;
             }
+            shape_word_offsets.push(plane_words[descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET]);
             let mode = plane_words[descriptor_base + DESCRIPTOR_WORD_INSTANCE_COUNT_MODE];
             if mode == INSTANCE_COUNT_MODE_STATIC {
                 total_instance_count = total_instance_count.saturating_add(
@@ -897,15 +1296,18 @@ impl Engine {
         }
         // [LAW:single-enforcer] Indirect args are authored by the canonical
         // GPU draw-prep pass; CPU mirror writes are intentionally removed.
-        IndirectRegionPlan {
-            total_instance_count,
-            indexed_record_count,
-            non_indexed_record_count,
-            indexed_region_base_words,
-            non_indexed_region_base_words,
-            indexed_stride_words,
-            non_indexed_stride_words,
-        }
+        (
+            IndirectRegionPlan {
+                total_instance_count,
+                indexed_record_count,
+                non_indexed_record_count,
+                indexed_region_base_words,
+                non_indexed_region_base_words,
+                indexed_stride_words,
+                non_indexed_stride_words,
+            },
+            shape_word_offsets,
+        )
     }
 
     fn input_marshal_phase(&mut self, timestamp_ms: f64) {
@@ -1033,8 +1435,10 @@ impl Engine {
                 }
                 self.last_shape_bank_words = shape_bank_words;
                 self.last_sink_table_words = sink_table_words;
-                self.sync_shape_bank_plane(shape_bank_words);
-                self.draw_regions = self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                let (draw_regions, shape_word_offsets) =
+                    self.sync_sink_table_plane_and_parse_regions(sink_table_words);
+                self.sync_shape_bank_plane(shape_bank_words, &shape_word_offsets);
+                self.draw_regions = draw_regions;
                 self.last_install_revision = install_revision;
             }
         } else {
@@ -1048,6 +1452,8 @@ impl Engine {
             header.view_proj[3][3] = 1.0;
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
+            self.last_shape_header_sample.clear();
+            self.last_shape_cp_resolution_sample.clear();
             self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
@@ -1059,21 +1465,28 @@ impl Engine {
     // [RECOVER-10] [LAW:single-enforcer] Canonical structured readback replaces
     // the ad hoc console-only instance preview. Both instance probe and indirect
     // args are read back through this one boundary.
-    fn trigger_debug_readback(&self) {
+    fn trigger_debug_readback(
+        &self,
+        instance_gate_acquired: bool,
+        indirect_gate_acquired: bool,
+    ) {
         let frame_count = self.frame_count;
         let captured_at_ms = worker_monotonic_now_ms();
-        let indexed_record_count = self.draw_regions.indexed_record_count as usize;
-        let non_indexed_record_count = self.draw_regions.non_indexed_record_count as usize;
+        let expected_indexed_record_count = self.draw_regions.indexed_record_count;
+        let expected_non_indexed_record_count = self.draw_regions.non_indexed_record_count;
+        let expected_total_instance_count = self.draw_regions.total_instance_count;
+        let indexed_record_count = expected_indexed_record_count as usize;
+        let non_indexed_record_count = expected_non_indexed_record_count as usize;
+        let indexed_region_base_words = self.draw_regions.indexed_region_base_words as usize;
+        let non_indexed_region_base_words = self.draw_regions.non_indexed_region_base_words as usize;
+        let indexed_stride_words = self.draw_regions.indexed_stride_words.max(1) as usize;
+        let non_indexed_stride_words = self.draw_regions.non_indexed_stride_words.max(1) as usize;
+        let shape_header_sample = self.last_shape_header_sample.clone();
+        let shape_cp_resolution_sample = self.last_shape_cp_resolution_sample.clone();
         let pending_readback = self.pending_readback.clone();
 
-        // --- Instance probe readback ---
-        let instance_gate_acquired = self
-            .debug_readback_in_flight
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok();
-
-        // [LAW:dataflow-not-control-flow] Both readbacks are initiated unconditionally;
-        // variability is in whether the in-flight gate was acquired.
+        // [LAW:dataflow-not-control-flow] Both readback paths are evaluated
+        // each debug tick; variability is represented by gate-acquired inputs.
         let instance_values: Arc<std::sync::Mutex<Vec<f32>>> =
             Arc::new(std::sync::Mutex::new(Vec::new()));
 
@@ -1106,24 +1519,34 @@ impl Engine {
             });
         }
 
-        // --- Indirect args readback ---
-        let indirect_gate_acquired = self
-            .indirect_readback_in_flight
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok();
-
         if indirect_gate_acquired {
             let indirect_gate = self.indirect_readback_in_flight.clone();
             let indirect_staging_for_callback = self.arena.indirect_staging_buffer().clone();
             let slice = self.arena.indirect_staging_buffer().slice(..);
             let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
                 let mut records = Vec::new();
+                let mut indirect_words_head = Vec::new();
+                let mut decoded_indexed_record_count = 0u32;
+                let mut decoded_non_indexed_record_count = 0u32;
+                let mut decoded_indexed_instance_count = 0u32;
+                let mut decoded_non_indexed_instance_count = 0u32;
+                let mut decoded_non_zero_record_count = 0u32;
                 if result.is_ok() {
                     let mapped = indirect_staging_for_callback.slice(..).get_mapped_range();
                     let u32_count = mapped.len() / std::mem::size_of::<u32>();
+                    let head_word_count = u32_count.min(16);
+                    for word_index in 0..head_word_count {
+                        let byte_idx = word_index * std::mem::size_of::<u32>();
+                        indirect_words_head.push(u32::from_le_bytes([
+                            mapped[byte_idx],
+                            mapped[byte_idx + 1],
+                            mapped[byte_idx + 2],
+                            mapped[byte_idx + 3],
+                        ]));
+                    }
                     // Decode indexed records (5 words each)
                     for i in 0..indexed_record_count {
-                        let base = i * INDIRECT_INDEXED_STRIDE_WORDS;
+                        let base = indexed_region_base_words + i * indexed_stride_words;
                         if base + 4 >= u32_count {
                             break;
                         }
@@ -1136,20 +1559,29 @@ impl Engine {
                                 mapped[byte_idx + 3],
                             ])
                         };
+                        let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: word(0),
-                            instance_count: word(1),
+                            vertex_count: 0,
+                            instance_count,
                             first_index: word(2),
+                            first_vertex: 0,
                             base_vertex: word(3) as i32,
                             first_instance: word(4),
                         });
+                        decoded_indexed_record_count =
+                            decoded_indexed_record_count.saturating_add(1);
+                        decoded_indexed_instance_count =
+                            decoded_indexed_instance_count.saturating_add(instance_count);
+                        if instance_count > 0 {
+                            decoded_non_zero_record_count =
+                                decoded_non_zero_record_count.saturating_add(1);
+                        }
                     }
                     // Decode non-indexed records (4 words each) — they start
-                    // after the indexed region in the indirect buffer.
-                    let non_indexed_base_words =
-                        indexed_record_count * INDIRECT_INDEXED_STRIDE_WORDS;
+                    // at the non-indexed base region declared in the sink table.
                     for i in 0..non_indexed_record_count {
-                        let base = non_indexed_base_words + i * INDIRECT_NON_INDEXED_STRIDE_WORDS;
+                        let base = non_indexed_region_base_words + i * non_indexed_stride_words;
                         if base + 3 >= u32_count {
                             break;
                         }
@@ -1162,13 +1594,24 @@ impl Engine {
                                 mapped[byte_idx + 3],
                             ])
                         };
+                        let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: 0,
-                            instance_count: word(1),
+                            vertex_count: word(0),
+                            instance_count,
                             first_index: 0,
+                            first_vertex: word(2),
                             base_vertex: 0,
                             first_instance: word(3),
                         });
+                        decoded_non_indexed_record_count =
+                            decoded_non_indexed_record_count.saturating_add(1);
+                        decoded_non_indexed_instance_count =
+                            decoded_non_indexed_instance_count.saturating_add(instance_count);
+                        if instance_count > 0 {
+                            decoded_non_zero_record_count =
+                                decoded_non_zero_record_count.saturating_add(1);
+                        }
                     }
                     drop(mapped);
                 }
@@ -1185,7 +1628,20 @@ impl Engine {
                     frame_count,
                     captured_at_ms,
                     indirect_args: records,
+                    indirect_words_head,
+                    shape_header_sample: shape_header_sample.clone(),
+                    shape_cp_resolution_sample: shape_cp_resolution_sample.clone(),
                     instance_probe_values,
+                    render_counters: ReadbackRenderCounters {
+                        expected_indexed_record_count,
+                        expected_non_indexed_record_count,
+                        expected_total_instance_count,
+                        decoded_indexed_record_count,
+                        decoded_non_indexed_record_count,
+                        decoded_indexed_instance_count,
+                        decoded_non_indexed_instance_count,
+                        decoded_non_zero_record_count,
+                    },
                 };
                 if let Ok(mut slot) = pending_readback.lock() {
                     *slot = Some(snapshot);

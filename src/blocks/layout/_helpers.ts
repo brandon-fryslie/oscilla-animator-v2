@@ -16,10 +16,11 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
   switch (expr.kind) {
     case 'const':
     case 'external':
-    case 'intrinsic':
     case 'state':
     case 'time':
     case 'eventRead':
+      return [];
+    case 'intrinsic':
       return [];
     case 'shapeRef':
       return expr.paramArgs;
@@ -64,13 +65,10 @@ function valueExprChildren(expr: ValueExpr): readonly ValueExprId[] {
     default:
       return [];
   }
-
-  // [LAW:single-enforcer] Child traversal helper must never return undefined.
-  return [];
 }
 
 /**
- * Resolve shapeRef expression data from a shape one-cardinality input input.
+ * Resolve shapeRef expression data from a shape one-cardinality input.
  *
  * Searches the IR expression table for a shapeRef that matches the given
  * expression ID, returning the controlPointField and topologyId.

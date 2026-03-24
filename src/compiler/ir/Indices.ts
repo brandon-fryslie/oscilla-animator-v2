@@ -62,6 +62,9 @@ export type StateId = string & { readonly __brand: 'StateId' };
 /** Stable string ID for slots. */
 export type SlotId = string & { readonly __brand: 'SlotId' };
 
+/** Symbolic ID for a memory resource in the manifest. */
+export type MemoryResourceId = string & { readonly __brand: 'MemoryResourceId' };
+
 // =============================================================================
 // Factory Functions (Zero-cost casts)
 // =============================================================================
@@ -158,4 +161,8 @@ export const SCALAR_INSTANCE_ID = '__scalar__' as InstanceId;
 
 export function slotId(s: string): SlotId {
   return s as SlotId;
+}
+
+export function memoryResourceId(s: string): MemoryResourceId {
+  return s as MemoryResourceId;
 }

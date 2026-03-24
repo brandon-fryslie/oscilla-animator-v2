@@ -81,18 +81,17 @@ patch "Smooth Chase" {
     }
   }
 
-  block "Array" "outer-instances" {
+  block "InstanceDomain" "outer-instances" {
     count = 24
     outputs {
-      elements = outer-ring.elements
-      t = outer-color.h
+      index = outer-ring.index
+      rank = outer-color.h
     }
   }
 
-  block "CircleLayoutUV" "outer-ring" {
-    radius = 0.35
+  block "ScatterUV" "outer-ring" {
     outputs {
-      controlPoints = render-raw.controlPoints
+      uv = render-raw.controlPoints
     }
   }
 
@@ -121,18 +120,17 @@ patch "Smooth Chase" {
     }
   }
 
-  block "Array" "inner-instances" {
+  block "InstanceDomain" "inner-instances" {
     count = 12
     outputs {
-      elements = inner-ring.elements
-      t = inner-color.h
+      index = inner-ring.index
+      rank = inner-color.h
     }
   }
 
-  block "CircleLayoutUV" "inner-ring" {
-    radius = 0.18
+  block "ScatterUV" "inner-ring" {
     outputs {
-      controlPoints = render-smooth.controlPoints
+      uv = render-smooth.controlPoints
     }
   }
 

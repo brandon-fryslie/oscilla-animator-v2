@@ -1,6 +1,7 @@
 // [LAW:one-source-of-truth] Rust worker message ABI is declared in one module
 // so worker, renderer facade, and tests consume one canonical contract.
 import type { GpuPassStage } from '../../types/gpu-pass-stage';
+import type { MemoryManifestIR } from '../../compiler/ir/program';
 export interface RustRendererBootstrapConfig {
   readonly maxParticles: number;
   readonly maxShapes: number;
@@ -10,7 +11,7 @@ export interface RustRendererBootstrapConfig {
 export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
-export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 20;
+export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 26;
 
 export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
   return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
@@ -44,6 +45,7 @@ export interface RustRendererGpuPass {
   readonly stage: GpuPassStage;
   readonly entryPoint: string;
   readonly wgsl: string;
+  readonly memoryManifest?: MemoryManifestIR;
 }
 
 export interface RustRendererRebuildGpuPipelinesMessage {
@@ -75,6 +77,13 @@ export interface RustRendererSetTelemetryEnabledMessage {
   readonly enabled: boolean;
 }
 
+export type RustRendererSinkPointerMap = Readonly<Record<string, string>>;
+
+export interface RustRendererSetSinkPointerMapMessage {
+  readonly type: 'SET_SINK_POINTER_MAP';
+  readonly sinkPointerMap: RustRendererSinkPointerMap;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -83,7 +92,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererResumeMessage
   | RustRendererInjectPoisonAllocMessage
   | RustRendererUploadAtlasMessage
-  | RustRendererSetTelemetryEnabledMessage;
+  | RustRendererSetTelemetryEnabledMessage
+  | RustRendererSetSinkPointerMapMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';
@@ -112,6 +122,10 @@ export interface RustRendererRebuildGpuPipelinesFailure {
   readonly code: string;
   readonly passId: string;
   readonly message: string;
+}
+
+export interface RustRendererSetSinkPointerMapSuccess {
+  readonly type: 'SET_SINK_POINTER_MAP_SUCCESS';
 }
 
 export interface RustRendererDeviceLost {
@@ -187,10 +201,23 @@ export interface RustRendererRuntimeEvent {
 // structured GPU-to-host observability data published by the worker.
 export interface RustRendererIndirectArgsRecord {
   readonly indexCount: number;
+  readonly vertexCount?: number;
   readonly instanceCount: number;
   readonly firstIndex: number;
+  readonly firstVertex?: number;
   readonly baseVertex: number;
   readonly firstInstance: number;
+}
+
+export interface RustRendererReadbackRenderCounters {
+  readonly expectedIndexedRecordCount: number;
+  readonly expectedNonIndexedRecordCount: number;
+  readonly expectedTotalInstanceCount: number;
+  readonly decodedIndexedRecordCount: number;
+  readonly decodedNonIndexedRecordCount: number;
+  readonly decodedIndexedInstanceCount: number;
+  readonly decodedNonIndexedInstanceCount: number;
+  readonly decodedNonZeroRecordCount: number;
 }
 
 export interface RustRendererReadbackSnapshot {
@@ -198,7 +225,11 @@ export interface RustRendererReadbackSnapshot {
   readonly frameCount: number;
   readonly capturedAtMs: number;
   readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
+  readonly indirectWordsHead?: Uint32Array;
+  readonly shapeHeaderSample?: Uint32Array;
+  readonly shapeCpResolutionSample?: Uint32Array;
   readonly instanceProbeValues: Float32Array;
+  readonly renderCounters: RustRendererReadbackRenderCounters;
 }
 
 export type RustRendererWorkerOutboundMessage =
@@ -207,6 +238,7 @@ export type RustRendererWorkerOutboundMessage =
   | RustRendererFatalError
   | RustRendererRebuildGpuPipelinesSuccess
   | RustRendererRebuildGpuPipelinesFailure
+  | RustRendererSetSinkPointerMapSuccess
   | RustRendererDeviceLost
   | RustRendererSchedulerHeartbeat
   | RustRendererRuntimeEvent

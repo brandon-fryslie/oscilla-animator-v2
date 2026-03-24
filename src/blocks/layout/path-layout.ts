@@ -1,8 +1,8 @@
 /**
  * PathLayout Block
  *
- * Type B Relation: distributes elements along a path using arc-length
- * parameterized sampling via the pathSample kernel.
+ * Distributes elements along a path using arc-length parameterized sampling
+ * via the pathSample kernel. Convenience block built on the domain topology primitives.
  *
  * Inputs:
  *   elements — Field<T> from upstream Array (required)
@@ -58,58 +58,53 @@ export function register(): void {
     },
     lower: ({ ctx, inputsById }) => {
       const elementsInput = inputsById.elements;
-  
+
       if (!elementsInput || !('type' in elementsInput && requireInst(elementsInput.type.extent.cardinality, 'cardinality').kind === 'many')) {
         throw new Error('PathLayout requires a field input (from Array block)');
       }
-  
+
       const instanceId = ctx.inferredInstance;
       if (!instanceId) {
         throw new Error('PathLayout requires instance context from upstream Array block');
       }
-  
-      // [LAW:one-source-of-truth] Path layout emits controlPoints as canonical spatial output.
+
       const controlPointsType = rewriteFieldType(ctx.outTypes[0], instanceId, ctx.instances);
       const rotationType = rewriteFieldType(ctx.outTypes[1], instanceId, ctx.instances);
       const floatFieldType = rotationType;
       const vec2FieldType = controlPointsType;
-  
-      // Post-normalization: all inputs guaranteed wired
-      // [LAW:one-source-of-truth] inputs are the single source
+
       const shapeInput = inputsById.shape;
       if (!shapeInput) throw new Error('PathLayout: shape input not wired — it is required (no defaulting)');
       const spacingInput = inputsById.spacing;
       if (!spacingInput) throw new Error('PathLayout: spacing input not wired — normalization bug');
       const offsetInput = inputsById.offset;
       if (!offsetInput) throw new Error('PathLayout: offset input not wired — normalization bug');
-  
+
       // Resolve shapeRef from shape input → get controlPointField + topologyId
       const { controlPointField, topologyId } = resolveShapeRef(ctx.b, shapeInput.id);
-  
+
       // Placement basis for UV → extract u component
-      const basisKind: import('../../compiler/ir/types').BasisKind = 'halton2D';
-      const uvField = ctx.b.placement('uv', basisKind, vec2FieldType);
+      const uvField = ctx.b.placement('uv', 'halton2D', vec2FieldType);
       const u = ctx.b.extract(uvField, 0, floatFieldType);
-  
-      // Opcodes
+
       const mul = ctx.b.opcode(OpCode.Mul);
       const add = ctx.b.opcode(OpCode.Add);
       const wrap01 = ctx.b.opcode(OpCode.Wrap01);
-  
+
       // t = wrap01(u * spacing + offset)
       const u_scaled = ctx.b.zipAuto([u, spacingInput.id], mul, floatFieldType);
       const u_offset = ctx.b.zipAuto([u_scaled, offsetInput.id], add, floatFieldType);
       const t = ctx.b.mapAuto(u_offset, wrap01, floatFieldType);
-  
+
       // Position sampling: pathSample with 'position' op → vec2 control points.
       const posVec2 = ctx.b.pathSample(controlPointField, t, topologyId, 'position', vec2FieldType);
       const px = ctx.b.extract(posVec2, 0, floatFieldType);
       const py = ctx.b.extract(posVec2, 1, floatFieldType);
       const controlPointsField = ctx.b.constructAuto([px, py], controlPointsType);
-  
+
       // Rotation: pathSample with 'tangentAngle' op → float
       const rotationField = ctx.b.pathSample(controlPointField, t, topologyId, 'tangentAngle', rotationType);
-  
+
       return {
         outputsById: {
           controlPoints: { id: controlPointsField, slot: undefined, type: controlPointsType, stride: payloadStride(controlPointsType.payload) },

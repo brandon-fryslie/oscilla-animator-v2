@@ -3,13 +3,13 @@
  */
 
 import type { AcyclicOrLegalGraph, BlockIndex, DepGraph, SCC } from "../ir/patches";
-import type { BlockId } from "../../types/compiler";
+import type { BlockId, PortId } from "../../types/compiler";
+import { blockId as toBlockId, portId as toPortId } from "../../types/compiler";
 import type { CompilerGraphBlock as Block } from "../ir/CompilerGraph";
 
 import type { OrchestratorIRBuilder } from "../ir/OrchestratorIRBuilder";
 import { IRBuilderImpl } from "../ir/IRBuilderImpl";
 import type { CompileError } from "../types";
-import type { ConstantProvenanceEntry, InstanceCountProvenanceEntry } from "../ir/program";
 import { isExprRef, type ValueRefExpr, type CollectInputEntry } from "../ir/lowerTypes";
 import type { InstanceId, StateSlotId } from "../ir/Indices";
 import type { StableStateId } from "../ir/types";
@@ -103,11 +103,19 @@ export interface UnlinkedIRFragments {
   /** Non-fatal compile warnings encountered during lowering */
   warnings: CompileError[];
 
-  /** Maps user-facing port key ("blockId:portId") → component ValueExprIds for patchable constants */
-  constantProvenance: Map<string, ConstantProvenanceEntry>;
+  /**
+   * Additional memory resources declared by blocks (e.g., Texture2D for fluid sims).
+   * Collected from LowerEffects.memoryResources during pass 6 and forwarded to
+   * the MemoryManifest in compile.ts.
+   */
+  additionalMemoryResources: import('../ir/program').MemoryResourceIR[];
 
-  /** Maps user-facing port key ("blockId:portId") → instance whose count is patchable */
-  instanceCountProvenance: Map<string, InstanceCountProvenanceEntry>;
+  /**
+   * DispatchKernel instructions emitted by blocks.
+   * Collected from LowerEffects.dispatchInstructions during pass 6 and forwarded
+   * to the NagaLoweringProgramIR.
+   */
+  dispatchInstructions: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[];
 }
 
 /**
@@ -527,7 +535,9 @@ function lowerBlockInstance(
   timeModelState: TimeModelState,
   existingOutputs?: Partial<LowerResult>,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
-  failedBlocks?: ReadonlySet<BlockIndex>
+  failedBlocks?: ReadonlySet<BlockIndex>,
+  additionalMemoryResources?: import('../ir/program').MemoryResourceIR[],
+  dispatchInstructions?: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[],
 ): Map<string, ValueRefExpr> {
   const outputRefs = new Map<string, ValueRefExpr>();
   const blockDef = getBlockDefinition(block.type);
@@ -588,6 +598,18 @@ function lowerBlockInstance(
           where: { blockId: block.id },
         });
         hasUnresolvedInputs = true;
+      }
+    }
+
+    // [LAW:single-enforcer] Register consumer updateClass requirements on upstream slots.
+    // The intersection in registerSlotType ensures the most restrictive consumer wins.
+    for (const [portId, ref] of Object.entries(inputsById)) {
+      if (isExprRef(ref) && ref.slot !== undefined) {
+        const key = portKey(blockIndex, portId, 'in');
+        const policy = inputPortPolicies.get(key);
+        if (policy) {
+          builder.registerSlotType(ref.slot, ref.type, undefined, policy.updateClass);
+        }
       }
     }
 
@@ -843,6 +865,14 @@ function lowerBlockInstance(
     // Apply binding (mechanical execution)
     applyBinding(builder, binding, blockEffects);
 
+    // Collect additional memory resources and dispatch instructions from effects
+    if (blockEffects.memoryResources && additionalMemoryResources) {
+      additionalMemoryResources.push(...blockEffects.memoryResources);
+    }
+    if (blockEffects.dispatchInstructions && dispatchInstructions) {
+      dispatchInstructions.push(...blockEffects.dispatchInstructions);
+    }
+
     // Bind outputs using the new helper
     const boundOutputsMap = bindOutputs(
       result.outputsById,
@@ -870,39 +900,35 @@ function lowerBlockInstance(
       }
 
 
-      // Handle missing slot metadata uniformly for all blocks.
+      // Zero-allocation (virtual) outputs may legitimately have undefined slots.
       let finalRef = ref;
-      if (isExprRef(ref) && ref.slot === undefined) {
-        errors.push({
-          code: "IRValidationFailed",
-          message: `Block ${ctx.blockType}#${ctx.instanceId} output '${portId}' missing slot (must provide effect slotRequest or explicit slot)`,
-          where: { blockId: block.id },
-        });
-        continue;
-      }
 
       // Register slot for one/many/event outputs
       // Check extent directly instead of using deriveKind
+      // [LAW:one-source-of-truth] Source identity tracks which block/port owns each slot.
+      const slotSource = { blockId: toBlockId(block.id), portId: toPortId(portId) };
       if (isExprRef(finalRef)) {
         const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
         const isEvent = temp.kind === 'discrete';
 
-        if (!isEvent) {
-          const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
-          const isField = card.kind === 'many';
+        if (finalRef.slot !== undefined) {
+          if (!isEvent) {
+            const card = requireInst(finalRef.type.extent.cardinality, 'cardinality');
+            const isField = card.kind === 'many';
 
-          if (isField) {
-            // Field — register field slot and slot type
-            builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type);
+            if (isField) {
+              // Field — register field slot and slot type
+              builder.registerFieldSlot(finalRef.id, finalRef.slot);
+              builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
+            } else {
+              // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
+              builder.registerScalarSlot(finalRef.id, finalRef.slot);
+              builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
+            }
           } else {
-            // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
-            builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-            builder.registerSlotType(finalRef.slot!, finalRef.type);
+            // Event — register slot type only
+            builder.registerSlotType(finalRef.slot, finalRef.type, slotSource);
           }
-        } else {
-          // Event — register slot type only
-          builder.registerSlotType(finalRef.slot!, finalRef.type);
         }
       }
       outputRefs.set(portId, finalRef);
@@ -971,7 +997,9 @@ function lowerSCCTwoPass(
   timeModelState: TimeModelState,
   options?: Pass6Options,
   collectEdgeTypes?: ReadonlyMap<CollectEdgeKey, CanonicalType>,
-  failedBlocks?: Set<BlockIndex>
+  failedBlocks?: Set<BlockIndex>,
+  additionalMemoryResources?: import('../ir/program').MemoryResourceIR[],
+  dispatchInstructions?: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[],
 ): void {
   // Storage for phase 1 results
   // Phase 1 returns symbolic outputs + effects; binding happens before registration
@@ -1060,7 +1088,9 @@ function lowerSCCTwoPass(
         );
 
         // Register slot types - same logic as in lowerBlockInstance
-        for (const [, finalRef] of boundOutputsMap.entries()) {
+        for (const [portName, finalRef] of boundOutputsMap.entries()) {
+          // [LAW:one-source-of-truth] Source identity tracks which block/port owns each slot.
+          const sccSlotSource = { blockId: toBlockId(block.id), portId: toPortId(portName) };
           if (isExprRef(finalRef)) {
             const temp = requireInst(finalRef.type.extent.temporality, 'temporality');
             const isEvent = temp.kind === 'discrete';
@@ -1072,15 +1102,15 @@ function lowerSCCTwoPass(
               if (isField) {
                 // Field — register field slot and slot type
                 builder.registerFieldSlot(finalRef.id, finalRef.slot!);
-                builder.registerSlotType(finalRef.slot!, finalRef.type);
+                builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
               } else {
                 // [LAW:one-source-of-truth] All cardinality-one outputs must be scalar-slot addressable.
                 builder.registerScalarSlot(finalRef.id, finalRef.slot!);
-                builder.registerSlotType(finalRef.slot!, finalRef.type);
+                builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
               }
             } else {
               // Event — register slot type only
-              builder.registerSlotType(finalRef.slot!, finalRef.type);
+              builder.registerSlotType(finalRef.slot!, finalRef.type, sccSlotSource);
             }
           }
         }
@@ -1133,7 +1163,9 @@ function lowerSCCTwoPass(
       timeModelState,
       existingOutputs,
       collectEdgeTypes,
-      failedBlocks
+      failedBlocks,
+      additionalMemoryResources,
+      dispatchInstructions,
     );
 
     // Update blockOutputs (may overwrite phase 1 results, but should be identical)
@@ -1247,100 +1279,6 @@ function lowerSCCTwoPass(
   for (const blockIndex of statefulBlockIndices) {
     lowerSingleBlock(blockIndex);
   }
-}
-
-// =============================================================================
-// Post-Lowering Provenance Maps (Source-Agnostic)
-// =============================================================================
-
-/**
- * Build constant and instance-count provenance maps by scanning edges post-lowering.
- *
- * Source-agnostic: works with any lowered edge topology.
- * Multi-edge guard: ports with >1 incoming edge are not patchable (combine semantics).
- *
- * For constant provenance:
- * - Single-source edges whose source output is a `const` or `construct` ValueExpr
- *   are recorded keyed by "targetBlockId:targetPortId".
- * - Ports on cardinality-transform blocks that have `semantic: 'instanceCount'`
- *   are excluded from constant provenance (they go into instanceCountProvenance instead).
- *
- * For instance count provenance:
- * - Single-source edges targeting a port with `semantic: 'instanceCount'` on a block
- *   that created an instance → record `{ instanceId }`.
- */
-function buildProvenanceMaps(
-  blocks: readonly Block[],
-  edges: readonly NormalizedEdge[],
-  blockOutputs: Map<BlockIndex, Map<string, ValueRefExpr>>,
-  instanceContextByBlock: Map<BlockIndex, InstanceId>,
-  builder: OrchestratorIRBuilder,
-): {
-  constantProvenance: Map<string, ConstantProvenanceEntry>;
-  instanceCountProvenance: Map<string, InstanceCountProvenanceEntry>;
-} {
-  const constantProvenance = new Map<string, ConstantProvenanceEntry>();
-  const instanceCountProvenance = new Map<string, InstanceCountProvenanceEntry>();
-
-  // Count incoming edges per target port to detect multi-edge (combine) targets
-  const edgeCountByTarget = new Map<string, number>();
-  for (const edge of edges) {
-    const targetKey = `${edge.toBlock}:${edge.toPort}`;
-    edgeCountByTarget.set(targetKey, (edgeCountByTarget.get(targetKey) ?? 0) + 1);
-  }
-
-  for (const edge of edges) {
-    const targetKey = `${edge.toBlock}:${edge.toPort}`;
-
-    // Multi-edge guard: skip ports with >1 incoming edge (combine semantics)
-    if ((edgeCountByTarget.get(targetKey) ?? 0) > 1) continue;
-
-    const targetBlock = blocks[edge.toBlock];
-    if (!targetBlock) continue;
-
-    const targetDef = getBlockDefinition(targetBlock.type);
-    if (!targetDef) continue;
-
-    const targetInputDef = targetDef.inputs[edge.toPort];
-    if (!targetInputDef) continue;
-
-    const portKey = `${targetBlock.id}:${edge.toPort}`;
-
-    // Look up source block's output ref
-    const sourceOutputs = blockOutputs.get(edge.fromBlock);
-    const sourceRef = sourceOutputs?.get(edge.fromPort);
-    if (!sourceRef) continue;
-
-    // Instance count provenance: port has semantic: 'instanceCount' and target block created an instance
-    if (targetInputDef.semantic === 'instanceCount') {
-      const instanceId = instanceContextByBlock.get(edge.toBlock);
-      if (instanceId !== undefined) {
-        const instanceDecl = builder.getInstances().get(instanceId);
-        if (instanceDecl && typeof instanceDecl.count === 'number') {
-          instanceCountProvenance.set(portKey, { instanceId });
-        }
-      }
-      // instanceCount ports are not added to constantProvenance
-      continue;
-    }
-
-    // Constant provenance: source output is const or construct
-    const topExpr = builder.getValueExpr(sourceRef.id);
-
-    if (topExpr.kind === 'construct') {
-      constantProvenance.set(portKey, {
-        componentExprIds: [...topExpr.components],
-        payloadKind: topExpr.type.payload.kind,
-      });
-    } else if (topExpr.kind === 'const') {
-      constantProvenance.set(portKey, {
-        componentExprIds: [sourceRef.id],
-        payloadKind: topExpr.type.payload.kind,
-      });
-    }
-  }
-
-  return { constantProvenance, instanceCountProvenance };
 }
 
 /**
@@ -1524,6 +1462,8 @@ export function pass6BlockLowering(
   const errors: CompileError[] = [];
   const warnings: CompileError[] = [];
   const timeModelState: TimeModelState = {};
+  const additionalMemoryResources: import('../ir/program').MemoryResourceIR[] = [];
+  const dispatchInstructions: import('../ir/naga-emitter/ScheduleNagaLowering').DispatchKernelInstruction[] = [];
 
   // Track blocks that failed to lower — downstream blocks skip cascade errors
   const failedBlocks = new Set<BlockIndex>();
@@ -1544,8 +1484,8 @@ export function pass6BlockLowering(
       blockOutputs,
       errors,
       warnings,
-      constantProvenance: new Map<string, ConstantProvenanceEntry>(),
-      instanceCountProvenance: new Map<string, InstanceCountProvenanceEntry>(),
+      additionalMemoryResources,
+      dispatchInstructions,
     };
   }
 
@@ -1574,7 +1514,9 @@ export function pass6BlockLowering(
         timeModelState,
         options,
         validated.collectEdgeTypes,
-        failedBlocks
+        failedBlocks,
+        additionalMemoryResources,
+        dispatchInstructions,
       );
     } else {
       // Single-pass lowering for trivial SCCs (no cycles)
@@ -1615,7 +1557,9 @@ export function pass6BlockLowering(
           timeModelState,
           undefined, // existingOutputs
           validated.collectEdgeTypes,
-          failedBlocks
+          failedBlocks,
+          additionalMemoryResources,
+          dispatchInstructions,
         );
 
         if (outputRefs.size > 0) {
@@ -1671,21 +1615,12 @@ export function pass6BlockLowering(
     });
   }
 
-  // Build provenance maps post-lowering (source-agnostic, scans edges)
-  const { constantProvenance, instanceCountProvenance } = buildProvenanceMaps(
-    blocks,
-    edges,
-    blockOutputs,
-    instanceContextByBlock,
-    builder,
-  );
-
   return {
     builder,
     blockOutputs,
     errors,
     warnings,
-    constantProvenance,
-    instanceCountProvenance,
+    additionalMemoryResources,
+    dispatchInstructions,
   };
 }

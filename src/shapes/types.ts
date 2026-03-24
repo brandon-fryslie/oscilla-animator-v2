@@ -21,7 +21,7 @@
  * // (topology source, dominant cost, command stream ABI). Each class maps to a
  * // concrete data contract across compile → runtime → draw-prep → render.
  *
- * Spec: docs/WebGPU-Complete/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
+ * Spec: docs/current/webgpu-specs/shapes/Shapes 0_ Shape Taxonomy_ A Rendering Overview.md
  *
  * Values are u32-compatible for direct ShapeBankHeaderWord.Kind storage.
  */
@@ -33,6 +33,19 @@ export enum ShapeClass {
    * - Draw-prep buckets by compatible indexed topology
    */
   Type1Rigid = 1,
+
+  /**
+   * Type 2: Parametric (Template Instancing)
+   * - Template topology in ShapeBank (t-values + optional indices)
+   * - Per-instance control points in Arena (SoA param channels)
+   * - GPU vertex shader evaluates curve analytically from template + CPs
+   * - Supports both non-indexed (ribbon) and indexed (blob/fan) families
+   *
+   * // [LAW:one-type-per-behavior] Type 2 has a fundamentally different data
+   * // contract from Type 1: template topology + analytical evaluation vs
+   * // rigid mesh + transform.
+   */
+  Type2Parametric = 2,
 
   // Future classes will be added as RECOVER tickets progress:
   // Type3Ribbon = 3,
@@ -48,7 +61,7 @@ export enum ShapeClass {
    * // [LAW:one-type-per-behavior] Text has a fundamentally different ownership
    * // split from rigid/path geometry: CPU owns shaping, GPU owns rendering.
    *
-   * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
+   * Spec: docs/current/webgpu-specs/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
    */
   Type5TextHybrid = 5,
 }
@@ -63,6 +76,23 @@ export enum TopologyMode {
   NonPath = 0,
   /** Path-based topology with verb sequence and control points */
   Path = 1,
+}
+
+/**
+ * TopologyType — Bifurcated dispatch discriminant for Type 2 Parametric shapes.
+ *
+ * Stored in ShapeBankHeaderWord.TopologyMode (word 1) for Type 2 shapes.
+ * Determines whether the shape uses non-indexed (strip/ribbon) or indexed
+ * (fan/blob) draw commands.
+ *
+ * // [LAW:one-type-per-behavior] Non-indexed and indexed parametric families
+ * // have different GPU draw command ABIs (drawIndirect vs drawIndexedIndirect).
+ */
+export enum TopologyType {
+  /** Non-indexed topology (e.g., CubicBezierRibbon2D — triangle strip from t-values) */
+  NonIndexed = 0,
+  /** Indexed topology (e.g., ClosedBlob2D — triangle fan with index buffer) */
+  Indexed = 1,
 }
 
 // =============================================================================

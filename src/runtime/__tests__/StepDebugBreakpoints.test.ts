@@ -34,9 +34,6 @@ function getStepExprId(step: Step): ValueExprId | null {
       return step.value;
     case 'render':
       return null;
-    case 'continuityMapBuild':
-    case 'continuityApply':
-      return null;
     default: {
       const _exhaustive: never = step;
       return _exhaustive;
@@ -73,28 +70,6 @@ describe('getStepExprId', () => {
     expect(getStepExprId(step)).toBe(11);
   });
 
-  it('returns null for continuityMapBuild', () => {
-    const step: Step = {
-      kind: 'continuityMapBuild',
-      instanceId: 'inst-1' as any,
-      outputMapping: 'mapping-1',
-    };
-    expect(getStepExprId(step)).toBeNull();
-  });
-
-  it('returns null for continuityApply', () => {
-    const step: Step = {
-      kind: 'continuityApply',
-      targetKey: 'key-1',
-      instanceId: 'inst-1' as any,
-      policy: { kind: 'none' },
-      baseSlot: 0 as ValueSlot,
-      outputSlot: 1 as ValueSlot,
-      semantic: 'position',
-      stride: 2,
-    };
-    expect(getStepExprId(step)).toBeNull();
-  });
 });
 
 // =============================================================================

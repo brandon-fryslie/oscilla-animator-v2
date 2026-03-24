@@ -3,12 +3,15 @@ mod compute;
 mod default_shaders;
 mod engine;
 mod error_boundary;
+mod fluid_kernels;
 mod memory;
 mod render;
 mod scheduler;
+mod shader_prelude;
 mod telemetry;
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 use js_sys::{Array, Function, Object, Reflect};
 use wasm_bindgen::closure::Closure;
@@ -19,6 +22,7 @@ use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 use crate::compute::CompilerComputePassSpec;
 use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
+use crate::memory::MemoryManifest;
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
@@ -35,6 +39,26 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     raw.as_string().ok_or_else(|| {
         JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str())
     })
+}
+
+fn read_optional_memory_manifest_field(
+    value: &JsValue,
+    field: &str,
+) -> Result<Option<MemoryManifest>, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    if raw.is_undefined() || raw.is_null() {
+        return Ok(None);
+    }
+    let json = js_sys::JSON::stringify(&raw)?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("GPU pass memoryManifest must be JSON-serializable"))?;
+    let manifest: MemoryManifest = serde_json::from_str(&json).map_err(|error| {
+        JsValue::from_str(
+            format!("GPU pass field '{}' is not a valid MemoryManifest: {}", field, error)
+                .as_str(),
+        )
+    })?;
+    Ok(Some(manifest))
 }
 
 fn pipeline_rebuild_failure_to_js_value(error: PipelineRebuildFailure) -> JsValue {
@@ -84,6 +108,7 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
                     pass_id: read_required_string_field(&item, "passId")?,
                     entry_point: read_required_string_field(&item, "entryPoint")?,
                     wgsl: read_required_string_field(&item, "wgsl")?,
+                    memory_manifest: read_optional_memory_manifest_field(&item, "memoryManifest")?,
                 });
             }
             _ => {
@@ -241,25 +266,38 @@ pub fn resume_engine() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn rebuild_pipeline(
-    simulation_wgsl: String,
-    assembly_wgsl: String,
-    uber_shader_wgsl: String,
-    particle_count: u32,
-    shape_count: u32,
-) -> Result<(), JsValue> {
+pub fn set_debug_readback_hz(debug_readback_hz: u32) -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before rebuild_pipeline")
+            JsValue::from_str("Rust engine must be initialized before set_debug_readback_hz")
         })?;
-        engine.rebuild_pipeline(
-            simulation_wgsl.as_str(),
-            assembly_wgsl.as_str(),
-            uber_shader_wgsl.as_str(),
-            particle_count,
-            shape_count,
-        );
+        // [LAW:single-enforcer] Debug readback cadence changes are applied at
+        // one engine boundary so worker telemetry toggles stay deterministic.
+        engine.set_debug_readback_hz(debug_readback_hz);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
+pub fn set_sink_pointer_map(sink_pointer_map_json: String) -> Result<(), JsValue> {
+    let sink_pointer_map: HashMap<String, String> = if sink_pointer_map_json.is_empty()
+        || sink_pointer_map_json == "{}"
+    {
+        HashMap::new()
+    } else {
+        serde_json::from_str(&sink_pointer_map_json)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse sink pointer map: {}", e)))?
+    };
+
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before set_sink_pointer_map")
+        })?;
+        engine
+            .set_sink_pointer_map(sink_pointer_map)
+            .map_err(|e| JsValue::from_str(&e))?;
         Ok(())
     })
 }

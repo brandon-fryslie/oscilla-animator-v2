@@ -78,6 +78,8 @@ export type CollectEdgeKey = `${number}:${string}:${number}`;
  */
 export interface InputPortPolicy {
   readonly combineMode: CombineMode;
+  // [LAW:one-source-of-truth] UpdateClass requirement flows from InputDef through to IRBuilder.
+  readonly updateClass: import('../../types/compiler').UpdateClass;
 }
 
 /**

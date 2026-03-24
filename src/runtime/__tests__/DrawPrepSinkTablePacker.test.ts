@@ -64,9 +64,7 @@ function makeMinimalProgram(
     renderGlobals: [],
     kernelRegistry: {} as never,
     topologyTable: EMPTY_PROGRAM_TOPOLOGY_TABLE,
-    arenaLayout: [],
-    arenaPayloadFloats: 0,
-    arenaTotalFloats: 0,
+    memoryManifest: { resources: [] },
     schedule: {
       instances: new Map(),
       steps,
@@ -148,6 +146,22 @@ function makeShapeWordOffsets(entries: Array<[slot: ValueSlot, wordOffset: numbe
   return new Map(entries);
 }
 
+function makeArenaDescriptor(
+  slot: ValueSlot,
+  offset: number,
+  stride: number,
+  laneCount: number,
+  length: number,
+): ArenaSlotDescriptor {
+  return {
+    offset,
+    stride,
+    laneCount,
+    length,
+    resourceId: `arena:slot:${Number(slot)}`,
+  };
+}
+
 describe('packDrawPrepSinkTableV1 static metadata only', () => {
   it('writes drawMode per record and zeros dynamic fields', () => {
     const slotsA: TestSinkSlotSet = {
@@ -167,14 +181,14 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const steps = [makeRenderStep(instanceA, slotsA), makeRenderStep(instanceB, slotsB)];
 
     const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
-      [slotsA.shape, { offset: 0, stride: 1, laneCount: 2, length: 2 }],
-      [slotsA.controlPoints, { offset: 20, stride: 2, laneCount: 2, length: 4 }],
-      [slotsA.color, { offset: 40, stride: 4, laneCount: 2, length: 8 }],
-      [slotsA.scale, { offset: 60, stride: 1, laneCount: 2, length: 2 }],
-      [slotsB.shape, { offset: 80, stride: 1, laneCount: 3, length: 3 }],
-      [slotsB.controlPoints, { offset: 100, stride: 2, laneCount: 3, length: 6 }],
-      [slotsB.color, { offset: 120, stride: 4, laneCount: 3, length: 12 }],
-      [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 2, 2)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 20, 2, 2, 4)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 40, 4, 2, 8)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 60, 1, 2, 2)],
+      [slotsB.shape, makeArenaDescriptor(slotsB.shape, 80, 1, 3, 3)],
+      [slotsB.controlPoints, makeArenaDescriptor(slotsB.controlPoints, 100, 2, 3, 6)],
+      [slotsB.color, makeArenaDescriptor(slotsB.color, 120, 4, 3, 12)],
+      [slotsB.scale, makeArenaDescriptor(slotsB.scale, 160, 1, 3, 3)],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
     const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
@@ -199,7 +213,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.FirstInstance)).toBe(0);
   });
 
-  it('writes static descriptor arena addresses', () => {
+  it('writes descriptor placeholders and sink pointer map entries', () => {
     const slotsA: TestSinkSlotSet = {
       shape: valueSlot(1),
       controlPoints: valueSlot(2),
@@ -217,14 +231,14 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const steps = [makeRenderStep(instanceA, slotsA), makeRenderStep(instanceB, slotsB)];
 
     const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
-      [slotsA.shape, { offset: 0, stride: 1, laneCount: 2, length: 2 }],
-      [slotsA.controlPoints, { offset: 20, stride: 2, laneCount: 2, length: 4 }],
-      [slotsA.color, { offset: 40, stride: 4, laneCount: 2, length: 8 }],
-      [slotsA.scale, { offset: 60, stride: 1, laneCount: 2, length: 2 }],
-      [slotsB.shape, { offset: 80, stride: 1, laneCount: 3, length: 3 }],
-      [slotsB.controlPoints, { offset: 100, stride: 2, laneCount: 3, length: 6 }],
-      [slotsB.color, { offset: 120, stride: 4, laneCount: 3, length: 12 }],
-      [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 2, 2)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 20, 2, 2, 4)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 40, 4, 2, 8)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 60, 1, 2, 2)],
+      [slotsB.shape, makeArenaDescriptor(slotsB.shape, 80, 1, 3, 3)],
+      [slotsB.controlPoints, makeArenaDescriptor(slotsB.controlPoints, 100, 2, 3, 6)],
+      [slotsB.color, makeArenaDescriptor(slotsB.color, 120, 4, 3, 12)],
+      [slotsB.scale, makeArenaDescriptor(slotsB.scale, 160, 1, 3, 3)],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
     const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
@@ -234,27 +248,38 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
 
-    // Verify descriptor for first sink (slotsA)
-    // SOA packing: laneStride=1, componentStride=laneCount
-    const descA = descriptorBaseWord(totalRecords, 0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(20);
-    expect(words[descA + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(1);
-    expect(words[descA + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(2);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(40);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(1);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(2);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(60);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleLaneStride]).toBe(1);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleComponentStride]).toBe(2);
+    const sinkPointerMap = packed!.sinkPointerMap;
 
-    // Verify descriptor for second sink (slotsB)
+    // Verify descriptor placeholders for first sink (slotsA)
+    // [LAW:one-source-of-truth] JS emits symbolic resource IDs in sidecar map;
+    // Rust MMU resolves and patches descriptor base/lane/component words.
+    const descA = descriptorBaseWord(totalRecords, 0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleComponentStride]).toBe(0);
+    expect(sinkPointerMap['0:position']).toBe(`arena:slot:${Number(slotsA.controlPoints)}`);
+    expect(sinkPointerMap['0:color']).toBe(`arena:slot:${Number(slotsA.color)}`);
+    expect(sinkPointerMap['0:scale']).toBe(`arena:slot:${Number(slotsA.scale)}`);
+    expect(sinkPointerMap['0:shape']).toBe(`arena:slot:${Number(slotsA.shape)}`);
+
+    // Verify descriptor placeholders for second sink (slotsB)
     const descB = descriptorBaseWord(totalRecords, 1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(100);
-    expect(words[descB + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(3);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(120);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(3);
+    expect(words[descB + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(0);
+    expect(sinkPointerMap['1:position']).toBe(`arena:slot:${Number(slotsB.controlPoints)}`);
+    expect(sinkPointerMap['1:color']).toBe(`arena:slot:${Number(slotsB.color)}`);
+    expect(sinkPointerMap['1:scale']).toBe(`arena:slot:${Number(slotsB.scale)}`);
+    expect(sinkPointerMap['1:shape']).toBe(`arena:slot:${Number(slotsB.shape)}`);
   });
 
   it('writes shape-slot address and instance-count metadata in descriptor', () => {
@@ -275,14 +300,14 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const steps = [makeRenderStep(instanceA, slotsA), makeRenderStep(instanceB, slotsB)];
 
     const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
-      [slotsA.shape, { offset: 0, stride: 1, laneCount: 2, length: 2 }],
-      [slotsA.controlPoints, { offset: 20, stride: 2, laneCount: 2, length: 4 }],
-      [slotsA.color, { offset: 40, stride: 4, laneCount: 2, length: 8 }],
-      [slotsA.scale, { offset: 60, stride: 1, laneCount: 2, length: 2 }],
-      [slotsB.shape, { offset: 80, stride: 1, laneCount: 3, length: 3 }],
-      [slotsB.controlPoints, { offset: 100, stride: 2, laneCount: 3, length: 6 }],
-      [slotsB.color, { offset: 120, stride: 4, laneCount: 3, length: 12 }],
-      [slotsB.scale, { offset: 160, stride: 1, laneCount: 3, length: 3 }],
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 2, 2)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 20, 2, 2, 4)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 40, 4, 2, 8)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 60, 1, 2, 2)],
+      [slotsB.shape, makeArenaDescriptor(slotsB.shape, 80, 1, 3, 3)],
+      [slotsB.controlPoints, makeArenaDescriptor(slotsB.controlPoints, 100, 2, 3, 6)],
+      [slotsB.color, makeArenaDescriptor(slotsB.color, 120, 4, 3, 12)],
+      [slotsB.scale, makeArenaDescriptor(slotsB.scale, 160, 1, 3, 3)],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
     const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42], [slotsB.shape, 128]]);
@@ -292,12 +317,11 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
 
-    // [RECOVER-05] Shape-slot address for GPU draw-prep derivation
-    // SOA packing: laneStride=1, componentStride=laneCount
+    // [RECOVER-05] Shape-slot descriptor is patched by Rust from sinkPointerMap.
     const descA = descriptorBaseWord(totalRecords, 0);
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(1);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(2); // laneCount=2
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
     // Instance count metadata: static mode with count=2
     expect(words[descA + DrawPrepSinkDescriptorWord.InstanceCountMode]).toBe(0); // static
     expect(words[descA + DrawPrepSinkDescriptorWord.StaticInstanceCount]).toBe(2);
@@ -305,9 +329,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeWordOffset]).toBe(42);
 
     const descB = descriptorBaseWord(totalRecords, 1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(80);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(3); // laneCount=3
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
     // Instance count metadata: static mode with count=3
     expect(words[descB + DrawPrepSinkDescriptorWord.InstanceCountMode]).toBe(0); // static
     expect(words[descB + DrawPrepSinkDescriptorWord.StaticInstanceCount]).toBe(3);
@@ -343,10 +367,10 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const instanceA = instanceId('instance-a');
     const steps = [makeRenderStep(instanceA, slotsA)];
     const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
-      [slotsA.shape, { offset: 0, stride: 1, laneCount: 1, length: 1 }],
-      [slotsA.controlPoints, { offset: 10, stride: 2, laneCount: 1, length: 2 }],
-      [slotsA.color, { offset: 20, stride: 4, laneCount: 1, length: 4 }],
-      [slotsA.scale, { offset: 30, stride: 1, laneCount: 1, length: 1 }],
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 1, 1)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 10, 2, 1, 2)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 20, 4, 1, 4)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 30, 1, 1, 1)],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
     // Override to single sink
@@ -375,10 +399,10 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const instance = instanceId('instance-dynamic');
     const steps = [makeRenderStep(instance, slots)];
     const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
-      [slots.shape, { offset: 0, stride: 1, laneCount: 1, length: 1 }],
-      [slots.controlPoints, { offset: 10, stride: 2, laneCount: 1, length: 2 }],
-      [slots.color, { offset: 20, stride: 4, laneCount: 1, length: 4 }],
-      [slots.scale, { offset: 30, stride: 1, laneCount: 1, length: 1 }],
+      [slots.shape, makeArenaDescriptor(slots.shape, 0, 1, 1, 1)],
+      [slots.controlPoints, makeArenaDescriptor(slots.controlPoints, 10, 2, 1, 2)],
+      [slots.color, makeArenaDescriptor(slots.color, 20, 4, 1, 4)],
+      [slots.scale, makeArenaDescriptor(slots.scale, 30, 1, 1, 1)],
     ]);
     const program = makeMinimalProgram(steps, slotToArena);
     (program as any).drawPrepProgram = {

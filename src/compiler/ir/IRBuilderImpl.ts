@@ -14,7 +14,8 @@ import type {
   InstanceId,
   DomainTypeId,
 } from './Indices';
-import type { BlockId } from '../../types/compiler';
+import type { BlockId, PortId, UpdateClass } from '../../types/compiler';
+import { intersectUpdateClass } from '../../types/compiler';
 import {
   PathVerb,
   type AbstractTopologyDef,
@@ -31,9 +32,9 @@ import type {
   InstanceCountSpec,
   Step,
   IntrinsicPropertyName,
+  DomainPropertyName,
   PlacementFieldName,
   BasisKind,
-  ContinuityPolicy,
   StableStateId,
   StateMapping,
 } from './types';
@@ -66,7 +67,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   private scalarSlots = new Map<number, ValueSlot>();
   private fieldSlots = new Map<number, ValueSlot>();
   private eventSlots = new Map<ValueExprId, EventSlotId>();
-  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number; label?: string }>();
+  private slotLayoutInputs = new Map<ValueSlot, { type: CanonicalType; stride: number; label?: string; source?: { blockId: BlockId; portId: PortId }; updateClass: UpdateClass }>();
   private schedule: TimeModelIR = { periodAMs: 10000, periodBMs: 10000 };
   private renderGlobals: CameraDeclIR[] = [];
   private _currentBlockId: BlockId | null = null;
@@ -320,6 +321,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'property', intrinsic });
   }
 
+  domainProperty(prop: DomainPropertyName, type: CanonicalType): ValueExprId {
+    return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'domain_property', domainProperty: prop });
+  }
+
   placement(field: PlacementFieldName, basisKind: BasisKind, type: CanonicalType): ValueExprId {
     return this.pushExpr({ kind: 'intrinsic', type, intrinsicKind: 'placement', field, basisKind });
   }
@@ -382,9 +387,10 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     topologyId: TopologyId,
     paramArgs: readonly ValueExprId[],
     type: CanonicalType,
-    controlPointField?: ValueExprId
+    controlPointField?: ValueExprId,
+    parametricTemplate?: import('../../shapes/parametric-templates').ParametricTemplatePayload,
   ): ValueExprId {
-    return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField });
+    return this.pushExpr({ kind: 'shapeRef', type, topologyId, paramArgs, controlPointField, parametricTemplate });
   }
 
   registerTopology(topology: AbstractTopologyDef | PathTopologyDefInput, _debugName?: string): TopologyId {
@@ -532,17 +538,31 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
   // Slot Allocation & Registration (orchestrator-only)
   // ===========================================================================
 
-  allocTypedSlot(type: CanonicalType, label?: string): ValueSlot {
+  allocTypedSlot(type: CanonicalType, label?: string, source?: { blockId: BlockId; portId: PortId }): ValueSlot {
     const slot = this.slotCounter++ as ValueSlot;
     const stride = payloadStride(type.payload);
-    this.slotLayoutInputs.set(slot, { type, stride, label });
+    // [LAW:one-source-of-truth] Default updateClass is FrameTime (least restrictive).
+    this.slotLayoutInputs.set(slot, { type, stride, label, source, updateClass: 'FrameTime' });
     return slot;
   }
 
-  registerSlotType(slot: ValueSlot, type: CanonicalType): void {
+  registerSlotType(slot: ValueSlot, type: CanonicalType, source?: { blockId: BlockId; portId: PortId }, updateClass?: UpdateClass): void {
     const stride = payloadStride(type.payload);
     const existing = this.slotLayoutInputs.get(slot);
-    this.slotLayoutInputs.set(slot, { type, stride, label: existing?.label });
+    // [LAW:single-enforcer] Intersection: most restrictive UpdateClass wins when
+    // multiple consumers register the same slot. When no updateClass is passed,
+    // preserve the existing value — callers that don't assert a requirement
+    // must not inject FrameTime into the intersection.
+    const resolvedUpdateClass = existing && updateClass
+      ? intersectUpdateClass(existing.updateClass, updateClass)
+      : updateClass ?? existing?.updateClass ?? 'FrameTime';
+    this.slotLayoutInputs.set(slot, {
+      type,
+      stride,
+      label: existing?.label,
+      source: source ?? existing?.source,
+      updateClass: resolvedUpdateClass,
+    });
   }
 
   registerScalarSlot(exprId: ValueExprId, slot: ValueSlot): void {
@@ -577,35 +597,6 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
 
   stepMaterialize(field: ValueExprId, instanceId: InstanceId, target: ValueSlot): void {
     this.steps.push({ kind: 'materialize', field, instanceId, target });
-  }
-
-  stepContinuityMapBuild(instanceId: InstanceId): void {
-    this.steps.push({
-      kind: 'continuityMapBuild',
-      instanceId,
-      outputMapping: `continuity-map-${instanceId}`
-    });
-  }
-
-  stepContinuityApply(
-    targetKey: string,
-    instanceId: InstanceId,
-    policy: ContinuityPolicy,
-    baseSlot: ValueSlot,
-    outputSlot: ValueSlot,
-    semantic: 'position' | 'radius' | 'opacity' | 'color' | 'custom',
-    stride: number
-  ): void {
-    this.steps.push({
-      kind: 'continuityApply',
-      targetKey,
-      instanceId,
-      policy,
-      baseSlot,
-      outputSlot,
-      semantic,
-      stride,
-    });
   }
 
   // ===========================================================================
@@ -749,7 +740,7 @@ export class IRBuilderImpl implements OrchestratorIRBuilder {
     return this.slotCounter;
   }
 
-  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string }> {
+  getSlotLayoutInputs(): ReadonlyMap<ValueSlot, { readonly type: CanonicalType; readonly stride: number; readonly label?: string; readonly source?: { readonly blockId: BlockId; readonly portId: PortId }; readonly updateClass: UpdateClass }> {
     return this.slotLayoutInputs;
   }
 

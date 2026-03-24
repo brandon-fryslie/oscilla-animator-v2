@@ -10,7 +10,10 @@ import { registerScalarBlocks } from './scalar';
 import { registerMathBlocks } from './math';
 import { registerFieldBlocks } from './field';
 import { registerShapeBlocks } from './shape';
-import { registerLayoutBlocks } from './layout';
+import { register as registerAttractorLayout } from './layout/attractor-layout';
+import { register as registerPathLayout } from './layout/path-layout';
+import { register as registerSamplePath } from './layout/sample-path';
+import { register as registerScatterUV } from './layout/scatter-uv';
 import { registerColorBlocks } from './color';
 import { registerAdapterBlocks } from './adapter';
 import { registerLensBlocks } from './lens';
@@ -20,8 +23,6 @@ import { registerRenderBlocks } from './render';
 import { registerDomainBlocks } from './domain';
 import { registerInstanceBlocks } from './instance';
 import { registerDevBlocks } from './dev';
-import { registerFluidBlocks } from './fluid';
-
 /**
  * Explicitly activate all declared blocks in the live registry.
  */
@@ -34,7 +35,10 @@ export function registerAllBlocks(): void {
   registerMathBlocks();
   registerFieldBlocks();
   registerShapeBlocks();
-  registerLayoutBlocks();
+  registerAttractorLayout();
+  registerPathLayout();
+  registerSamplePath();
+  registerScatterUV();
   registerColorBlocks();
   registerAdapterBlocks();
   registerLensBlocks();
@@ -43,7 +47,6 @@ export function registerAllBlocks(): void {
   registerRenderBlocks();
   registerDomainBlocks();
   registerInstanceBlocks();
-  registerFluidBlocks();
   registerDevBlocks();
   activateDeclaredBlocks();
 }

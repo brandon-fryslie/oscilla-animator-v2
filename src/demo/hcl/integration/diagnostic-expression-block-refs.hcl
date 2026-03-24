@@ -1,7 +1,7 @@
 # Diagnostic: Expression Block Refs
 #
 # Purpose:
-# - Validates Expression block references to layout outputs (`layout.controlPoints`)
+# - Validates Expression block references to layout outputs (`layout.uv`)
 # - Validates field swizzle reads (`.x` / `.y`)
 # - Validates deterministic lane-dependent branching in field context
 
@@ -22,28 +22,27 @@ patch "Diagnostic - Expression Block Refs" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 180
     outputs {
-      elements = layout.elements
-      t = [offset.refs, scale.refs, color.h]
+      index = layout.index
+      rank = [offset.refs, scale.refs, color.h]
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.34
+  block "ScatterUV" "layout" {
     outputs {
-      controlPoints = offset.refs
+      uv = offset.refs
     }
   }
 
   block "Expression" "offset" {
     expression = <<-EXPR
-      phase = mapField(clock.phaseA * 6.2832, instances.t)
-      lane = instances.t * 25.1328
-      signed = instances.t > 0.5 ? 1.0 : -1.0
-      x = layout.controlPoints.x + signed * 0.035 * sin(phase + lane)
-      y = layout.controlPoints.y + signed * 0.035 * cos(phase + lane)
+      phase = mapField(clock.phaseA * 6.2832, instances.rank)
+      lane = instances.rank * 25.1328
+      signed = instances.rank > 0.5 ? 1.0 : -1.0
+      x = layout.uv.x + signed * 0.035 * sin(phase + lane)
+      y = layout.uv.y + signed * 0.035 * cos(phase + lane)
       vec2(x, y)
     EXPR
     outputs {
@@ -53,8 +52,8 @@ patch "Diagnostic - Expression Block Refs" {
 
   block "Expression" "scale" {
     expression = <<-EXPR
-      phase = mapField(clock.phaseA * 6.2832, instances.t)
-      0.62 + 0.18 * sin(phase + instances.t * 31.4159)
+      phase = mapField(clock.phaseA * 6.2832, instances.rank)
+      0.62 + 0.18 * sin(phase + instances.rank * 31.4159)
     EXPR
     outputs {
       out = render.scale

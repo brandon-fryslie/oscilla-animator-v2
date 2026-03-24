@@ -20,10 +20,10 @@ patch "Expression Vec3 Orbit" {
     }
   }
 
-  block "Array" "points" {
+  block "InstanceDomain" "points" {
     count = 140
     outputs {
-      t = [pos_expr.refs, scale_expr.refs, color.h]
+      rank = [pos_expr.refs, scale_expr.refs, color.h]
     }
   }
 
@@ -32,7 +32,7 @@ patch "Expression Vec3 Orbit" {
     expression = <<-EXPR
       // Base radius grows with lane index.
       // Visual: points farther along the field sit farther from center, creating a spiral spread.
-      radial = 0.2 + 0.3 * points.t
+      radial = 0.2 + 0.3 * points.rank
 
       // Convert normalized time phase into radians.
       // Visual: drives a smooth full-circle rotation over time.
@@ -40,11 +40,11 @@ patch "Expression Vec3 Orbit" {
 
       // Broadcast one-cardinality phase to per-point lanes.
       // Visual: all points share the same time progression while retaining unique lane offsets.
-      global_phase_field = mapField(global_phase, points.t)
+      global_phase_field = mapField(global_phase, points.rank)
 
       // Combine lane winding with global phase.
       // Visual: distributes points around orbit while spinning the whole structure.
-      angle = points.t * 18.8496 + global_phase_field
+      angle = points.rank * 18.8496 + global_phase_field
 
       // Convert polar motion to Cartesian coordinates.
       // Visual: produces circular trajectories in x/y.
@@ -76,11 +76,11 @@ patch "Expression Vec3 Orbit" {
 
       // Map global phase across lanes.
       // Visual: lets each point combine shared time with lane-local phase.
-      global_phase_field = mapField(global_phase, points.t)
+      global_phase_field = mapField(global_phase, points.rank)
 
       // Lane-local oscillator angle.
       // Visual: offsets pulse timing across the point set.
-      pulse_angle = points.t * 12.5664 + global_phase_field
+      pulse_angle = points.rank * 12.5664 + global_phase_field
 
       // Final scale value.
       // Visual: produces traveling scale waves through the orbit.

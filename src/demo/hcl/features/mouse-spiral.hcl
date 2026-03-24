@@ -9,7 +9,7 @@ patch "Mouse Spiral" {
     periodAMs = 4000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, hue-shift.b]
+      phaseA = [ hue-shift.b]
     }
   }
 
@@ -45,18 +45,17 @@ patch "Mouse Spiral" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 32
     outputs {
-      elements = layout.elements
-      t = hue-shift.a
+      index = layout.index
+      rank = hue-shift.a
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.34
+  block "ScatterUV" "layout" {
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

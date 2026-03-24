@@ -323,6 +323,15 @@ export interface InputDef {
    * instead of being unified via union-find.
    */
   readonly collectAccepts?: AcceptsSpec;
+
+  /**
+   * Update class requirement for this input port.
+   * Determines how frequently the value may change:
+   * - 'CompileTime': resolved once at compile time, never changes at runtime
+   * - 'InstallTime': resolved once at pipeline install, stable across frames
+   * - 'FrameTime': may change every frame (default)
+   */
+  readonly updateClass?: import('../types/compiler').UpdateClass;
 }
 
 /**

@@ -5,7 +5,7 @@
  * // for the Type 5 text rendering pipeline. Font atlas, glyph metrics, and
  * // shaped glyph runs all flow through these definitions.
  *
- * Spec: docs/WebGPU-Complete/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
+ * Spec: docs/current/webgpu-specs/shapes/Shapes 5_ Deep Dive_ Text_Glyph Hybrid Rendering.md
  */
 
 // =============================================================================

@@ -133,15 +133,13 @@ describe('severity overrides', () => {
 
   describe('structural resolution diagnostics', () => {
     it('structural diagnostics default to info (visible in diagnostics panel)', () => {
-      // A graph that triggers adapter insertion
+      // A graph that triggers adapter insertion (Const float→Ellipse rx needs unit adapter)
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
-        const arr = b.addBlock('Array');
-        b.setPortDefault(arr, 'count', 4);
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 0.5);
         const ellipse = b.addBlock('Ellipse');
-        b.wire(ellipse, 'shape', arr, 'element');
-        const grid = b.addBlock('GridLayoutUV');
-        b.wire(arr, 'elements', grid, 'elements');
+        b.wire(c, 'out', ellipse, 'rx');
       });
       const result = compileFrontend(patch);
       // Structural diagnostics default to 'info' — they should appear
@@ -156,15 +154,13 @@ describe('severity overrides', () => {
     });
 
     it('structural diagnostics appear as warn when overridden', () => {
-      // A graph that triggers adapter insertion
+      // A graph that triggers adapter insertion (Const float→Ellipse rx needs unit adapter)
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
-        const arr = b.addBlock('Array');
-        b.setPortDefault(arr, 'count', 4);
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 0.5);
         const ellipse = b.addBlock('Ellipse');
-        b.wire(ellipse, 'shape', arr, 'element');
-        const grid = b.addBlock('GridLayoutUV');
-        b.wire(arr, 'elements', grid, 'elements');
+        b.wire(c, 'out', ellipse, 'rx');
       });
       const result = compileFrontend(patch, {
         diagnosticOverrides: {
@@ -185,12 +181,10 @@ describe('severity overrides', () => {
     it('structural diagnostics hidden when overridden to ignore', () => {
       const patch = buildPatch((b) => {
         b.addBlock('InfiniteTimeRoot');
-        const arr = b.addBlock('Array');
-        b.setPortDefault(arr, 'count', 4);
+        const c = b.addBlock('Const');
+        b.setConfig(c, 'value', 0.5);
         const ellipse = b.addBlock('Ellipse');
-        b.wire(ellipse, 'shape', arr, 'element');
-        const grid = b.addBlock('GridLayoutUV');
-        b.wire(arr, 'elements', grid, 'elements');
+        b.wire(c, 'out', ellipse, 'rx');
       });
       const result = compileFrontend(patch, {
         diagnosticOverrides: {

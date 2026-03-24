@@ -71,6 +71,7 @@ export async function compileProgramWithNaga(
     await NagaService.boot();
     const compiled = NagaService.compile(lowering.module, {
       maxActiveLanes: Math.max(1, Math.trunc(maxActiveLanes)),
+      memoryManifest: program.memoryManifest,
     });
     return {
       kind: 'ok',

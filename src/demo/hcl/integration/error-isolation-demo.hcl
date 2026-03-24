@@ -27,19 +27,18 @@ patch "Error Isolation Demo" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 100
     outputs {
-      elements = grid.elements
-      t = color.h
+      index = grid.index
+      rank = color.h
     }
   }
 
-  block "GridLayoutUV" "grid" {
-    rows = 10
-    cols = 10
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 
