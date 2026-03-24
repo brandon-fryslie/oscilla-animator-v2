@@ -415,6 +415,8 @@ pub struct ReadbackSnapshot {
     pub frame_count: u64,
     pub captured_at_ms: f64,
     pub indirect_args: Vec<IndirectArgsRecord>,
+    pub indirect_words_head: Vec<u32>,
+    pub shape_header_sample: Vec<u32>,
     pub instance_probe_values: Vec<f32>,
     pub render_counters: ReadbackRenderCounters,
 }
@@ -422,8 +424,10 @@ pub struct ReadbackSnapshot {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IndirectArgsRecord {
     pub index_count: u32,
+    pub vertex_count: u32,
     pub instance_count: u32,
     pub first_index: u32,
+    pub first_vertex: u32,
     pub base_vertex: i32,
     pub first_instance: u32,
 }
@@ -447,6 +451,10 @@ impl ReadbackSnapshot {
         set_number(&payload, "capturedAtMs", self.captured_at_ms)?;
         let indirect_args_js = serialize_indirect_args_records(&self.indirect_args)?;
         set_value(&payload, "indirectArgs", &indirect_args_js)?;
+        let indirect_words_js = serialize_u32_array(&self.indirect_words_head);
+        set_value(&payload, "indirectWordsHead", &indirect_words_js)?;
+        let shape_header_js = serialize_u32_array(&self.shape_header_sample);
+        set_value(&payload, "shapeHeaderSample", &shape_header_js)?;
         let probe_js = serialize_f32_array(&self.instance_probe_values);
         set_value(&payload, "instanceProbeValues", &probe_js)?;
         let render_counters_js = serialize_readback_render_counters(self.render_counters)?;
@@ -460,8 +468,10 @@ fn serialize_indirect_args_records(records: &[IndirectArgsRecord]) -> Result<JsV
     for record in records {
         let object = Object::new();
         set_number(&object, "indexCount", record.index_count as f64)?;
+        set_number(&object, "vertexCount", record.vertex_count as f64)?;
         set_number(&object, "instanceCount", record.instance_count as f64)?;
         set_number(&object, "firstIndex", record.first_index as f64)?;
+        set_number(&object, "firstVertex", record.first_vertex as f64)?;
         set_number(&object, "baseVertex", record.base_vertex as f64)?;
         set_number(&object, "firstInstance", record.first_instance as f64)?;
         array.push(&object.into());
@@ -471,6 +481,14 @@ fn serialize_indirect_args_records(records: &[IndirectArgsRecord]) -> Result<JsV
 
 fn serialize_f32_array(values: &[f32]) -> JsValue {
     let array = js_sys::Float32Array::new_with_length(values.len() as u32);
+    for (i, &v) in values.iter().enumerate() {
+        array.set_index(i as u32, v);
+    }
+    array.into()
+}
+
+fn serialize_u32_array(values: &[u32]) -> JsValue {
+    let array = js_sys::Uint32Array::new_with_length(values.len() as u32);
     for (i, &v) in values.iter().enumerate() {
         array.set_index(i as u32, v);
     }

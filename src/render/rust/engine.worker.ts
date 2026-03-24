@@ -351,8 +351,10 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
         const r = entry as Record<string, unknown>;
         indirectArgs.push({
           indexCount: typeof r.indexCount === 'number' ? r.indexCount : 0,
+          vertexCount: typeof r.vertexCount === 'number' ? r.vertexCount : undefined,
           instanceCount: typeof r.instanceCount === 'number' ? r.instanceCount : 0,
           firstIndex: typeof r.firstIndex === 'number' ? r.firstIndex : 0,
+          firstVertex: typeof r.firstVertex === 'number' ? r.firstVertex : undefined,
           baseVertex: typeof r.baseVertex === 'number' ? r.baseVertex : 0,
           firstInstance: typeof r.firstInstance === 'number' ? r.firstInstance : 0,
         });
@@ -362,12 +364,20 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
   const instanceProbeValues = candidate.instanceProbeValues instanceof Float32Array
     ? candidate.instanceProbeValues
     : new Float32Array(0);
+  const indirectWordsHead = candidate.indirectWordsHead instanceof Uint32Array
+    ? candidate.indirectWordsHead
+    : undefined;
+  const shapeHeaderSample = candidate.shapeHeaderSample instanceof Uint32Array
+    ? candidate.shapeHeaderSample
+    : undefined;
   const renderCounters = parseReadbackRenderCounters(candidate.renderCounters);
   return {
     type: 'READBACK_SNAPSHOT',
     frameCount: candidate.frameCount as number,
     capturedAtMs: candidate.capturedAtMs as number,
     indirectArgs,
+    indirectWordsHead,
+    shapeHeaderSample,
     instanceProbeValues,
     renderCounters,
   };
