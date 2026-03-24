@@ -448,12 +448,15 @@ impl Engine {
         dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction>,
     ) -> Result<(), String> {
         let resolver = crate::memory::SymbolResolver::build_from_manifest(&manifest);
+        let physical_ir = crate::compute::lower_naga_module_ir(&lowering, &resolver)?;
 
-        // [LAW:one-source-of-truth] Rust MMU is now the sole authority for physical layout.
-        self.compute.rebuild_simulation_pipeline_with_manifest(
+        // [LAW:one-source-of-truth] Rust MMU lowering is executed once at the
+        // engine rebuild boundary and the resulting physical IR is the only
+        // simulation pipeline input.
+        self.compute.rebuild_simulation_pipeline(
             &self.device,
             &resolver,
-            lowering,
+            physical_ir,
             max_active_lanes,
             dispatch_instructions,
         )?;

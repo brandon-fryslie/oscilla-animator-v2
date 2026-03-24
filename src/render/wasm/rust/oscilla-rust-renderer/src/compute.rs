@@ -736,12 +736,12 @@ fn remap_statement_expression_handles(
     }
 }
 
-fn lower_naga_module_ir(
-    module_ts: NagaModuleIR_TS,
+pub(crate) fn lower_naga_module_ir(
+    module_ts: &NagaModuleIR_TS,
     symbol_resolver: &crate::memory::SymbolResolver,
 ) -> Result<NagaModuleIR, String> {
     let mut lowered_functions = Vec::with_capacity(module_ts.functions.len());
-    for function_ts in module_ts.functions {
+    for function_ts in &module_ts.functions {
         let (lowered_expressions, lowered_by_ts_index) =
             translate_and_lower_expressions(&function_ts.expressions, symbol_resolver)?;
 
@@ -765,8 +765,8 @@ fn lower_naga_module_ir(
         }
 
         lowered_functions.push(NagaFunctionIR {
-            name: function_ts.name,
-            arguments: function_ts.arguments,
+            name: function_ts.name.clone(),
+            arguments: function_ts.arguments.clone(),
             expressions: lowered_expressions,
             statements: lowered_statements,
             body: lowered_body,
@@ -774,11 +774,11 @@ fn lower_naga_module_ir(
     }
 
     Ok(NagaModuleIR {
-        types: module_ts.types,
-        constants: module_ts.constants,
-        global_variables: module_ts.global_variables,
+        types: module_ts.types.clone(),
+        constants: module_ts.constants.clone(),
+        global_variables: module_ts.global_variables.clone(),
         functions: lowered_functions,
-        entry_points: module_ts.entry_points,
+        entry_points: module_ts.entry_points.clone(),
     })
 }
 
@@ -1812,15 +1812,14 @@ impl ComputeDispatcher {
         Ok(())
     }
 
-    pub fn rebuild_simulation_pipeline_with_manifest(
+    pub fn rebuild_simulation_pipeline(
         &mut self,
         device: &wgpu::Device,
         resolver: &crate::memory::SymbolResolver,
-        lowering: NagaModuleIR_TS,
+        lowered_module: NagaModuleIR,
         max_active_lanes: u32,
         dispatch_instructions: Vec<NagaEmitterInstruction>,
     ) -> Result<(), String> {
-        let lowered_module = lower_naga_module_ir(lowering, resolver)?;
         let wgsl = emit_module_to_wgsl(&lowered_module, resolver, Some(max_active_lanes))?;
 
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
