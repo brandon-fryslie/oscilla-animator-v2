@@ -19,7 +19,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
-use crate::compute::{CompilerComputePassSpec, NagaModuleIR_TS};
+use crate::compute::CompilerComputePassSpec;
 use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
 use crate::memory::MemoryManifest;
@@ -298,71 +298,6 @@ pub fn set_sink_pointer_map(sink_pointer_map_json: String) -> Result<(), JsValue
         engine
             .set_sink_pointer_map(sink_pointer_map)
             .map_err(|e| JsValue::from_str(&e))?;
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn rebuild_with_symbolic_manifest(
-    manifest_json: String,
-    lowering_json: String,
-    max_active_lanes: u32,
-    uber_shader_wgsl: String,
-    dispatch_instructions_json: String,
-) -> Result<(), JsValue> {
-    let manifest: MemoryManifest = serde_json::from_str(&manifest_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse MemoryManifest: {}", e)))?;
-    let lowering: NagaModuleIR_TS = serde_json::from_str(&lowering_json)
-        .map_err(|e| JsValue::from_str(&format!("Failed to parse NagaModuleIR_TS: {}", e)))?;
-    let dispatch_instructions: Vec<crate::compute::NagaEmitterInstruction> =
-        if dispatch_instructions_json.is_empty() || dispatch_instructions_json == "[]" {
-            Vec::new()
-        } else {
-            serde_json::from_str(&dispatch_instructions_json).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse dispatch instructions: {}", e))
-            })?
-        };
-
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str(
-                "Rust engine must be initialized before rebuild_with_symbolic_manifest",
-            )
-        })?;
-        engine
-            .rebuild_with_symbolic_manifest(
-                manifest,
-                lowering,
-                max_active_lanes,
-                &uber_shader_wgsl,
-                dispatch_instructions,
-            )
-            .map_err(|e| JsValue::from_str(&e))?;
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn rebuild_pipeline(
-    simulation_wgsl: String,
-    assembly_wgsl: String,
-    uber_shader_wgsl: String,
-    particle_count: u32,
-    shape_count: u32,
-) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before rebuild_pipeline")
-        })?;
-        engine.rebuild_pipeline(
-            simulation_wgsl.as_str(),
-            assembly_wgsl.as_str(),
-            uber_shader_wgsl.as_str(),
-            particle_count,
-            shape_count,
-        );
         Ok(())
     })
 }
