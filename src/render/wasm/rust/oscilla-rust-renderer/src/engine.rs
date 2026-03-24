@@ -95,6 +95,7 @@ pub struct Engine {
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
     last_shape_header_sample: Vec<u32>,
+    last_shape_cp_resolution_sample: Vec<u32>,
     last_install_revision: u32,
     pending_fatal_gpu_error: Arc<AtomicBool>,
     // [LAW:one-source-of-truth] Worker-owned animation time. The worker's own
@@ -355,9 +356,10 @@ impl Engine {
         &self,
         shape_bank_words: &mut [u32],
         shape_word_offsets: &[u32],
-    ) {
+    ) -> Option<[u32; 5]> {
         // [LAW:single-enforcer] ShapeBank control-point address resolution is
         // owned by Rust MMU at renderer install boundary.
+        let mut first_resolution_sample: Option<[u32; 5]> = None;
         let mut offsets: Vec<usize> = shape_word_offsets
             .iter()
             .map(|offset| *offset as usize)
@@ -388,6 +390,15 @@ impl Engine {
 
             let control_point_slot_id =
                 shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
+            if first_resolution_sample.is_none() {
+                first_resolution_sample = Some([
+                    shape_word_offset as u32,
+                    control_point_slot_id,
+                    u32::MAX,
+                    0,
+                    0,
+                ]);
+            }
             let context = format!("shape-bank cp header @{}", shape_word_offset);
             let (base_words, lane_words, component_words) =
                 self.resolve_slot_to_physical_words(control_point_slot_id, &context);
@@ -395,7 +406,17 @@ impl Engine {
             shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_LANE_STRIDE] = lane_words;
             shape_bank_words[shape_word_offset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE] =
                 component_words;
+            if first_resolution_sample.is_some() {
+                first_resolution_sample = Some([
+                    shape_word_offset as u32,
+                    control_point_slot_id,
+                    base_words,
+                    lane_words,
+                    component_words,
+                ]);
+            }
         }
+        first_resolution_sample
     }
 
     pub async fn new(
@@ -576,6 +597,7 @@ impl Engine {
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
             last_shape_header_sample: Vec::new(),
+            last_shape_cp_resolution_sample: Vec::new(),
             last_install_revision: 0,
             pending_fatal_gpu_error,
             prev_tick_timestamp_ms: 0.0,
@@ -681,6 +703,7 @@ impl Engine {
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
         self.last_shape_header_sample.clear();
+        self.last_shape_cp_resolution_sample.clear();
         self.last_install_revision = 0;
 
         Ok(())
@@ -729,6 +752,7 @@ impl Engine {
         self.last_shape_bank_words = 0;
         self.last_sink_table_words = 0;
         self.last_shape_header_sample.clear();
+        self.last_shape_cp_resolution_sample.clear();
         self.last_install_revision = 0;
     }
 
@@ -1101,7 +1125,12 @@ impl Engine {
         // GPU vertex pulling reads control points from the topology buffer —
         // no CPU mesh realization needed.
         let mut canonical_words = shared_shape_bank.subarray(0, shape_bank_words).to_vec();
-        self.resolve_shape_bank_control_point_slots(&mut canonical_words, shape_word_offsets);
+        self.last_shape_cp_resolution_sample.clear();
+        if let Some(sample) =
+            self.resolve_shape_bank_control_point_slots(&mut canonical_words, shape_word_offsets)
+        {
+            self.last_shape_cp_resolution_sample.extend_from_slice(&sample);
+        }
         self.last_shape_header_sample.clear();
         if let Some(first_shape_word_offset) = shape_word_offsets.first() {
             let offset = *first_shape_word_offset as usize;
@@ -1352,6 +1381,7 @@ impl Engine {
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
             self.last_shape_header_sample.clear();
+            self.last_shape_cp_resolution_sample.clear();
             self.last_install_revision = 0;
             self.draw_regions = IndirectRegionPlan::default();
         }
@@ -1380,6 +1410,7 @@ impl Engine {
         let indexed_stride_words = self.draw_regions.indexed_stride_words.max(1) as usize;
         let non_indexed_stride_words = self.draw_regions.non_indexed_stride_words.max(1) as usize;
         let shape_header_sample = self.last_shape_header_sample.clone();
+        let shape_cp_resolution_sample = self.last_shape_cp_resolution_sample.clone();
         let pending_readback = self.pending_readback.clone();
 
         // [LAW:dataflow-not-control-flow] Both readback paths are evaluated
@@ -1527,6 +1558,7 @@ impl Engine {
                     indirect_args: records,
                     indirect_words_head,
                     shape_header_sample: shape_header_sample.clone(),
+                    shape_cp_resolution_sample: shape_cp_resolution_sample.clone(),
                     instance_probe_values,
                     render_counters: ReadbackRenderCounters {
                         expected_indexed_record_count,

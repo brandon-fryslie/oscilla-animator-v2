@@ -78,7 +78,7 @@ pub struct MemoryResource {
     pub packing: MemoryPacking,
     #[serde(rename = "type")]
     pub resource_type: JsonValue,
-    #[serde(default)]
+    #[serde(default, rename = "updateClass")]
     pub update_class: String,
     /// Resource kind: "buffer" (default) or "texture2d".
     #[serde(default = "default_resource_kind", rename = "resourceKind")]
@@ -1291,7 +1291,10 @@ impl GpuMemoryArena {
 
 #[cfg(test)]
 mod tests {
-    use super::{BufferClearPlan, CLEAR_BUFFER_CHUNK_BYTES};
+    use super::{
+        BufferClearPlan, MemoryManifest, ResourceStorageLocation, SymbolResolver,
+        CLEAR_BUFFER_CHUNK_BYTES,
+    };
 
     #[test]
     fn clear_plan_empty_buffer_has_no_chunks() {
@@ -1323,5 +1326,45 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|(_, chunk_len)| *chunk_len <= CLEAR_BUFFER_CHUNK_BYTES));
+    }
+
+    #[test]
+    fn manifest_update_class_camel_case_maps_frame_time_scalars_to_ubo() {
+        // [LAW:one-source-of-truth] MemoryManifest JSON uses `updateClass`.
+        // This regression guard ensures Rust MMU deserializes that canonical key.
+        let manifest_json = r#"
+        {
+          "resources": [
+            {
+              "id": "time_seconds",
+              "cardinality": 1,
+              "packing": "soa",
+              "type": { "payload": { "kind": "f32" } },
+              "updateClass": "FrameTime"
+            },
+            {
+              "id": "arena:slot:1",
+              "cardinality": 64,
+              "packing": "soa",
+              "type": { "payload": { "kind": "vec2" } },
+              "updateClass": "CompileTime"
+            }
+          ]
+        }
+        "#;
+        let manifest: MemoryManifest =
+            serde_json::from_str(manifest_json).expect("manifest JSON should deserialize");
+        let resolver = SymbolResolver::build_from_manifest(&manifest);
+        let time_seconds = resolver
+            .resolve("time_seconds")
+            .expect("time_seconds must resolve");
+        assert_eq!(
+            time_seconds.storage_location,
+            ResourceStorageLocation::GlobalControlUbo
+        );
+        let slot = resolver
+            .resolve("arena:slot:1")
+            .expect("arena slot should resolve");
+        assert_eq!(slot.base_offset_bytes / 4, 0);
     }
 }

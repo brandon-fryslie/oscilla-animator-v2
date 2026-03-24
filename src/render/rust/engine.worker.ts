@@ -370,6 +370,9 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
   const shapeHeaderSample = candidate.shapeHeaderSample instanceof Uint32Array
     ? candidate.shapeHeaderSample
     : undefined;
+  const shapeCpResolutionSample = candidate.shapeCpResolutionSample instanceof Uint32Array
+    ? candidate.shapeCpResolutionSample
+    : undefined;
   const renderCounters = parseReadbackRenderCounters(candidate.renderCounters);
   return {
     type: 'READBACK_SNAPSHOT',
@@ -378,6 +381,7 @@ function parseReadbackSnapshot(raw: unknown): RustRendererReadbackSnapshot | nul
     indirectArgs,
     indirectWordsHead,
     shapeHeaderSample,
+    shapeCpResolutionSample,
     instanceProbeValues,
     renderCounters,
   };
