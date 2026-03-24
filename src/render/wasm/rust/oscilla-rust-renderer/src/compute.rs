@@ -1,4 +1,4 @@
-use crate::memory::{GpuMemoryArena, SymbolResolver};
+use crate::memory::{GpuMemoryArena, MemoryManifest, SymbolResolver};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::Module;
 use serde::Deserialize;
@@ -322,7 +322,7 @@ impl NagaEmitterInstruction {
         registry: &KernelRegistry,
         resolver: &SymbolResolver,
         arena: &GpuMemoryArena,
-        particle_count: u32,
+        active_lane_count: u32,
     ) -> Result<(), String> {
         match self {
             NagaEmitterInstruction::DispatchKernel {
@@ -421,7 +421,7 @@ impl NagaEmitterInstruction {
                 // [LAW:dataflow-not-control-flow] Workgroup dispatch dimensionality
                 // is derived from kernel workgroup_size: 2D kernels (y > 1) derive
                 // dispatch size from the first Texture2D argument; 1D kernels use
-                // particle_count.
+                // active_lane_count.
                 let (wg_x, wg_y) = if kernel.workgroup_size[1] > 1 {
                     // 2D kernel — derive grid dimensions from first texture argument.
                     let first_tex_id = arguments.values().find(|sym_id| {
@@ -450,8 +450,8 @@ impl NagaEmitterInstruction {
                         }
                     }
                 } else {
-                    // 1D kernel — dispatch from particle_count.
-                    let count_x = ((particle_count
+                    // 1D kernel — dispatch from active_lane_count.
+                    let count_x = ((active_lane_count
                         .saturating_add(kernel.workgroup_size[0].saturating_sub(1)))
                         / kernel.workgroup_size[0])
                         .max(1);
@@ -1310,6 +1310,8 @@ pub struct StagedSimulationPipelines {
 }
 
 impl ComputeDispatcher {
+    const DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT: u32 = 1;
+
     fn validate_workgroup_size(
         limits: &wgpu::Limits,
         pass_id: &str,
@@ -1359,11 +1361,35 @@ impl ComputeDispatcher {
     }
 
     fn simulation_dispatch_count_for_workgroup_size(
-        particle_count: u32,
+        active_lane_count: u32,
         workgroup_size: WorkgroupSize,
     ) -> u32 {
-        ((particle_count.saturating_add(workgroup_size.x.saturating_sub(1))) / workgroup_size.x)
+        ((active_lane_count.saturating_add(workgroup_size.x.saturating_sub(1))) / workgroup_size.x)
             .max(1)
+    }
+
+    fn active_lane_count_from_manifest(manifest: &MemoryManifest) -> u32 {
+        // [LAW:one-source-of-truth] Dispatch lane sizing is derived from the
+        // compiler-owned manifest cardinalities, not runtime bootstrap caps.
+        manifest
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_kind != "texture2d")
+            .filter(|resource| {
+                !(resource.update_class == "FrameTime" && resource.cardinality == 1)
+            })
+            .map(|resource| resource.cardinality.max(1))
+            .max()
+            .unwrap_or(Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT)
+    }
+
+    fn resolve_active_lane_count(pass_specs: &[CompilerComputePassSpec]) -> u32 {
+        pass_specs
+            .iter()
+            .filter_map(|spec| spec.memory_manifest.as_ref())
+            .map(Self::active_lane_count_from_manifest)
+            .max()
+            .unwrap_or(Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT)
     }
 
     fn find_compute_entry_point(
@@ -1402,7 +1428,7 @@ impl ComputeDispatcher {
 
     fn validate_compute_program_contract(
         limits: &wgpu::Limits,
-        particle_count: u32,
+        active_lane_count: u32,
         spec: &CompilerComputePassSpec,
     ) -> Result<ValidatedComputePassProgram, String> {
         // [LAW:single-enforcer] Candidate shader admission is derived from the
@@ -1429,7 +1455,7 @@ impl ComputeDispatcher {
         )?;
         Self::validate_workgroup_size(limits, spec.pass_id.as_str(), workgroup_size)?;
         let workgroup_count =
-            Self::simulation_dispatch_count_for_workgroup_size(particle_count, workgroup_size)
+            Self::simulation_dispatch_count_for_workgroup_size(active_lane_count, workgroup_size)
                 .max(1);
         if workgroup_count > limits.max_compute_workgroups_per_dimension {
             return Err(format!(
@@ -1449,8 +1475,6 @@ impl ComputeDispatcher {
         device: &wgpu::Device,
         simulation_wgsl: &str,
         assembly_wgsl: &str,
-        particle_count: u32,
-        _shape_count: u32,
     ) -> Self {
         // [LAW:one-source-of-truth] This layout defines the uniform transport
         // binding for FrameHeader. The canonical source is the arena header
@@ -1552,7 +1576,7 @@ impl ComputeDispatcher {
         let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
         let default_program = Self::validate_compute_program_contract(
             &device.limits(),
-            particle_count,
+            Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT,
             &CompilerComputePassSpec {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
@@ -1772,7 +1796,6 @@ impl ComputeDispatcher {
         &self,
         device: &wgpu::Device,
         pass_specs: &[CompilerComputePassSpec],
-        particle_count: u32,
     ) -> Result<StagedSimulationPipelines, String> {
         if pass_specs.is_empty() {
             return Err(
@@ -1782,9 +1805,11 @@ impl ComputeDispatcher {
         // [LAW:one-source-of-truth] Stage decisions come from WGSL program
         // contents plus device limits, not application-owned runtime planes.
         let limits = device.limits();
+        let active_lane_count = Self::resolve_active_lane_count(pass_specs);
         let mut programs = Vec::with_capacity(pass_specs.len());
         for spec in pass_specs {
-            let program = Self::validate_compute_program_contract(&limits, particle_count, spec)?;
+            let program =
+                Self::validate_compute_program_contract(&limits, active_lane_count, spec)?;
             Self::validate_program_only_pipeline_compilation(device, &program).await?;
             programs.push(program);
         }
@@ -1894,7 +1919,7 @@ impl ComputeDispatcher {
         // Execute DispatchKernel instructions (e.g., fluid sim kernel chain)
         // after simulation passes, before instance assembly.
         if !self.pending_dispatch_instructions.is_empty() {
-            let particle_count = self
+            let active_lane_count = self
                 .simulation_pipelines
                 .first()
                 .map(|p| p.workgroup_count * 64)
@@ -1905,7 +1930,7 @@ impl ComputeDispatcher {
                 &self.pending_dispatch_instructions,
                 &arena.symbol_resolver,
                 arena,
-                particle_count,
+                active_lane_count,
             ) {
                 web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(&e));
             }
@@ -1945,7 +1970,7 @@ impl ComputeDispatcher {
         instructions: &[NagaEmitterInstruction],
         resolver: &SymbolResolver,
         arena: &GpuMemoryArena,
-        particle_count: u32,
+        active_lane_count: u32,
     ) -> Result<(), String> {
         for instruction in instructions {
             instruction.execute(
@@ -1954,7 +1979,7 @@ impl ComputeDispatcher {
                 &self.kernel_registry,
                 resolver,
                 arena,
-                particle_count,
+                active_lane_count,
             )?;
         }
         Ok(())
