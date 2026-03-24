@@ -416,6 +416,7 @@ pub struct ReadbackSnapshot {
     pub captured_at_ms: f64,
     pub indirect_args: Vec<IndirectArgsRecord>,
     pub instance_probe_values: Vec<f32>,
+    pub render_counters: ReadbackRenderCounters,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -427,6 +428,18 @@ pub struct IndirectArgsRecord {
     pub first_instance: u32,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ReadbackRenderCounters {
+    pub expected_indexed_record_count: u32,
+    pub expected_non_indexed_record_count: u32,
+    pub expected_total_instance_count: u32,
+    pub decoded_indexed_record_count: u32,
+    pub decoded_non_indexed_record_count: u32,
+    pub decoded_indexed_instance_count: u32,
+    pub decoded_non_indexed_instance_count: u32,
+    pub decoded_non_zero_record_count: u32,
+}
+
 impl ReadbackSnapshot {
     pub fn to_js_value(&self) -> Result<JsValue, JsValue> {
         let payload = Object::new();
@@ -436,6 +449,8 @@ impl ReadbackSnapshot {
         set_value(&payload, "indirectArgs", &indirect_args_js)?;
         let probe_js = serialize_f32_array(&self.instance_probe_values);
         set_value(&payload, "instanceProbeValues", &probe_js)?;
+        let render_counters_js = serialize_readback_render_counters(self.render_counters)?;
+        set_value(&payload, "renderCounters", &render_counters_js)?;
         Ok(payload.into())
     }
 }
@@ -460,6 +475,53 @@ fn serialize_f32_array(values: &[f32]) -> JsValue {
         array.set_index(i as u32, v);
     }
     array.into()
+}
+
+fn serialize_readback_render_counters(
+    counters: ReadbackRenderCounters,
+) -> Result<JsValue, JsValue> {
+    let object = Object::new();
+    set_number(
+        &object,
+        "expectedIndexedRecordCount",
+        counters.expected_indexed_record_count as f64,
+    )?;
+    set_number(
+        &object,
+        "expectedNonIndexedRecordCount",
+        counters.expected_non_indexed_record_count as f64,
+    )?;
+    set_number(
+        &object,
+        "expectedTotalInstanceCount",
+        counters.expected_total_instance_count as f64,
+    )?;
+    set_number(
+        &object,
+        "decodedIndexedRecordCount",
+        counters.decoded_indexed_record_count as f64,
+    )?;
+    set_number(
+        &object,
+        "decodedNonIndexedRecordCount",
+        counters.decoded_non_indexed_record_count as f64,
+    )?;
+    set_number(
+        &object,
+        "decodedIndexedInstanceCount",
+        counters.decoded_indexed_instance_count as f64,
+    )?;
+    set_number(
+        &object,
+        "decodedNonIndexedInstanceCount",
+        counters.decoded_non_indexed_instance_count as f64,
+    )?;
+    set_number(
+        &object,
+        "decodedNonZeroRecordCount",
+        counters.decoded_non_zero_record_count as f64,
+    )?;
+    Ok(object.into())
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ export const rebuild_gpu_pipelines: (a: any) => any;
 export const rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
 export const rebuild_with_symbolic_manifest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
 export const resume_engine: () => [number, number];
+export const set_debug_readback_hz: (a: number) => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const take_readback_snapshot: () => [number, number, number];
 export const upload_atlas_data: (a: any) => [number, number];

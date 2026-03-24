@@ -21,6 +21,8 @@ export function rebuild_with_symbolic_manifest(manifest_json: string, lowering_j
 
 export function resume_engine(): void;
 
+export function set_debug_readback_hz(debug_readback_hz: number): void;
+
 export function take_frame_pacing_packet(): any;
 
 export function take_readback_snapshot(): any;
@@ -41,6 +43,7 @@ export interface InitOutput {
     readonly rebuild_pipeline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly rebuild_with_symbolic_manifest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly resume_engine: () => [number, number];
+    readonly set_debug_readback_hz: (a: number) => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];
     readonly upload_atlas_data: (a: any) => [number, number];

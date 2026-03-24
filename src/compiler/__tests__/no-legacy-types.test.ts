@@ -62,5 +62,16 @@ describe('no-legacy-types gate', () => {
     // descriptors; compiler slot planning must not emit AoS descriptors.
     const nonSoaSlots = program.runtimeSlots.filter((slot) => slot.arena.packing !== 'soa');
     expect(nonSoaSlots).toEqual([]);
+
+    // [LAW:single-enforcer] Compiler runtime-slot emission is the boundary that
+    // guarantees valid descriptor strides and symbolic IDs for MMU lowering.
+    expect(
+      program.runtimeSlots.every((slot) =>
+        typeof slot.arena.resourceId === 'string'
+        && slot.arena.resourceId.length > 0
+        && (slot.arena.laneStride ?? 0) >= 1
+        && (slot.arena.componentStride ?? 0) >= 1,
+      ),
+    ).toBe(true);
   });
 });

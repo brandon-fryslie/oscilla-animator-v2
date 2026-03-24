@@ -16,6 +16,7 @@ import { reportRenderIssue } from '../render-issues';
 import {
   computeRustRendererShapeBankWordCapacity,
   computeRustRendererSinkTableWordCapacity,
+  RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS,
   type RustRendererBootstrapConfig,
   type RustRendererGpuPass,
   type RustRendererReadbackSnapshot,
@@ -373,7 +374,7 @@ function readRequiredSinkTableWord(
 }
 
 function isIgnorableAckType(type: RustRendererWorkerOutboundMessage['type']): boolean {
-  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT';
+  return type === 'SCHEDULER_HEARTBEAT' || type === 'RUNTIME_EVENT' || type === 'READBACK_SNAPSHOT';
 }
 
 function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
@@ -1332,7 +1333,7 @@ export class WebGPURenderer {
   private buildSinkTableDebugSample(sinkTableWords: Uint32Array, wordCount: number): SinkTableDebugSample {
     const headerWords = 8;
     const recordWords = 8;
-    const descriptorWords = 20;
+    const descriptorWords = RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS;
     const totalRecords = readRequiredSinkTableWord(
       sinkTableWords,
       wordCount,
@@ -1638,6 +1639,41 @@ export class WebGPURenderer {
     }
   }
 
+  private validateReadbackSnapshotHealth(
+    payload: Extract<RustRendererWorkerOutboundMessage, { type: 'READBACK_SNAPSHOT' }>,
+  ): void {
+    const counters = payload.renderCounters;
+    const expectedRecordCount = counters.expectedIndexedRecordCount + counters.expectedNonIndexedRecordCount;
+    const decodedRecordCount = counters.decodedIndexedRecordCount + counters.decodedNonIndexedRecordCount;
+    const expectedInstanceCount = counters.expectedTotalInstanceCount;
+    const decodedInstanceCount =
+      counters.decodedIndexedInstanceCount + counters.decodedNonIndexedInstanceCount;
+
+    if (expectedRecordCount > 0 && decodedRecordCount === 0) {
+      this.emitRuntimeHealthWarning('indirect_records_missing_from_readback', {
+        expectedRecordCount,
+        decodedRecordCount,
+      });
+    }
+    if (expectedInstanceCount > 0 && decodedInstanceCount === 0) {
+      this.emitRuntimeHealthWarning('indirect_instances_missing_from_readback', {
+        expectedInstanceCount,
+        decodedInstanceCount,
+        decodedNonZeroRecordCount: counters.decodedNonZeroRecordCount,
+      });
+    }
+    if (expectedInstanceCount !== decodedInstanceCount) {
+      this.emitRuntimeHealthWarning('indirect_instance_count_mismatch', {
+        expectedInstanceCount,
+        decodedInstanceCount,
+        expectedIndexedRecordCount: counters.expectedIndexedRecordCount,
+        expectedNonIndexedRecordCount: counters.expectedNonIndexedRecordCount,
+        decodedIndexedRecordCount: counters.decodedIndexedRecordCount,
+        decodedNonIndexedRecordCount: counters.decodedNonIndexedRecordCount,
+      });
+    }
+  }
+
   private shouldIgnoreRuntimeMessage(
     payload: RustRendererWorkerOutboundMessage,
   ): boolean {
@@ -1750,6 +1786,7 @@ export class WebGPURenderer {
     }
     // [RECOVER-10] Store latest readback snapshot for debug consumers.
     if (payload.type === 'READBACK_SNAPSHOT') {
+      this.validateReadbackSnapshotHealth(payload);
       this.latestReadbackSnapshot = payload;
     }
   };

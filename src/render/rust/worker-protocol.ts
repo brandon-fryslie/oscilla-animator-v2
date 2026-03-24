@@ -10,7 +10,7 @@ export interface RustRendererBootstrapConfig {
 export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
-export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 20;
+export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 26;
 
 export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
   return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
@@ -193,12 +193,24 @@ export interface RustRendererIndirectArgsRecord {
   readonly firstInstance: number;
 }
 
+export interface RustRendererReadbackRenderCounters {
+  readonly expectedIndexedRecordCount: number;
+  readonly expectedNonIndexedRecordCount: number;
+  readonly expectedTotalInstanceCount: number;
+  readonly decodedIndexedRecordCount: number;
+  readonly decodedNonIndexedRecordCount: number;
+  readonly decodedIndexedInstanceCount: number;
+  readonly decodedNonIndexedInstanceCount: number;
+  readonly decodedNonZeroRecordCount: number;
+}
+
 export interface RustRendererReadbackSnapshot {
   readonly type: 'READBACK_SNAPSHOT';
   readonly frameCount: number;
   readonly capturedAtMs: number;
   readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
   readonly instanceProbeValues: Float32Array;
+  readonly renderCounters: RustRendererReadbackRenderCounters;
 }
 
 export type RustRendererWorkerOutboundMessage =

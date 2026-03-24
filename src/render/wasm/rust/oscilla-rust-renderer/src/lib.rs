@@ -244,6 +244,20 @@ pub fn resume_engine() -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
+pub fn set_debug_readback_hz(debug_readback_hz: u32) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before set_debug_readback_hz")
+        })?;
+        // [LAW:single-enforcer] Debug readback cadence changes are applied at
+        // one engine boundary so worker telemetry toggles stay deterministic.
+        engine.set_debug_readback_hz(debug_readback_hz);
+        Ok(())
+    })
+}
+
+#[wasm_bindgen]
 pub fn rebuild_with_symbolic_manifest(
     manifest_json: String,
     lowering_json: String,

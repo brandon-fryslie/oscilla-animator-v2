@@ -21,7 +21,7 @@ import {
   clearRenderIssues,
 } from '../render';
 import type { RootStore } from '../stores';
-import { runInAction } from 'mobx';
+import { reaction, runInAction } from 'mobx';
 import {
   clearPatchFromStorage,
   loadPatchFromStorage,
@@ -167,6 +167,7 @@ export class RuntimeService {
 
   private animationLoop: AnimationLoopController | null = null;
   private unsubCompileEnd: (() => void) | null = null;
+  private debugTelemetrySyncDisposer: (() => void) | null = null;
   private compilerServicesState: CompilerServicesState = { kind: 'inactive' };
   private swapInFlight = false;
   private swapRafId: number | null = null;
@@ -219,6 +220,33 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
+  }
+
+  private disposeRendererDebugTelemetryBridge(): void {
+    this.debugTelemetrySyncDisposer?.();
+    this.debugTelemetrySyncDisposer = null;
+  }
+
+  private syncRendererDebugTelemetry(enabled: boolean): void {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime || this.rendererExecutionState !== 'active') {
+      return;
+    }
+    runtime.renderer.setTelemetryEnabled(enabled);
+  }
+
+  private bindRendererDebugTelemetryBridge(): void {
+    this.disposeRendererDebugTelemetryBridge();
+    // [LAW:one-source-of-truth] Worker telemetry toggle is derived from the
+    // canonical debug settings token only.
+    const readEnabled = (): boolean => Boolean(this.store.settings.get(debugSettings).enabled);
+    this.syncRendererDebugTelemetry(readEnabled());
+    this.debugTelemetrySyncDisposer = reaction(
+      () => this.store.settings.get(debugSettings).enabled,
+      (enabled) => {
+        this.syncRendererDebugTelemetry(Boolean(enabled));
+      },
+    );
   }
 
   private requireCanvas(): HTMLCanvasElement {
@@ -729,6 +757,7 @@ export class RuntimeService {
 
       // Register settings tokens (before any compile call)
       store.settings.register(appSettings);
+      store.settings.register(debugSettings);
       store.settings.register(compilerFlagsSettings);
 
       // [LAW:single-enforcer] RuntimeService is the only startup boundary that
@@ -743,6 +772,7 @@ export class RuntimeService {
           arena,
         });
         this.rendererExecutionState = 'active';
+        this.bindRendererDebugTelemetryBridge();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
@@ -879,6 +909,7 @@ export class RuntimeService {
     this.compilerServicesState = { kind: 'inactive' };
     this.unsubCompileEnd?.();
     this.unsubCompileEnd = null;
+    this.disposeRendererDebugTelemetryBridge();
     compilerServices?.client.dispose();
     this.store.patch.stopPersistence();
     this.domainChangeDetector.cleanup();

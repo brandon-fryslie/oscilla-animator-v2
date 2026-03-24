@@ -24,8 +24,8 @@ use crate::render::{
 use crate::scheduler::WorkerScheduler;
 use crate::telemetry::{
     build_scheduler_telemetry as build_scheduler_telemetry_packet, IndirectArgsRecord,
-    ReadbackSnapshot, SchedulerState, SchedulerTelemetry, SchedulerTelemetryInputs, StageTimingsMs,
-    WorkerObservabilityPacket,
+    ReadbackRenderCounters, ReadbackSnapshot, SchedulerState, SchedulerTelemetry,
+    SchedulerTelemetryInputs, StageTimingsMs, WorkerObservabilityPacket,
 };
 
 const INPUT_WORD_WIDTH: usize = 0;
@@ -40,6 +40,16 @@ const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_INSTALL_REVISION: usize = 15;
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
+
+fn debug_readback_interval_frames_from_hz(debug_readback_hz: u32) -> u64 {
+    // [LAW:one-source-of-truth] Debug readback cadence conversion is defined
+    // once so bootstrap and runtime toggles cannot drift.
+    if debug_readback_hz == 0 {
+        0
+    } else {
+        (60 / debug_readback_hz.max(1)).max(1) as u64
+    }
+}
 
 pub struct EngineConfig {
     pub max_particles: usize,
@@ -343,11 +353,8 @@ impl Engine {
             surface_config.height,
             sample_count,
         );
-        let debug_readback_interval_frames = if config.debug_readback_hz == 0 {
-            0
-        } else {
-            (60 / config.debug_readback_hz.max(1)).max(1) as u64
-        };
+        let debug_readback_interval_frames =
+            debug_readback_interval_frames_from_hz(config.debug_readback_hz);
         let scheduler = WorkerScheduler::new(worker_monotonic_now_ms());
 
         Ok(Self {
@@ -437,6 +444,11 @@ impl Engine {
         // first post-resume tick uses nominal dt instead of the pause gap.
         self.prev_tick_timestamp_ms = 0.0;
         self.scheduler.mark_running(worker_monotonic_now_ms());
+    }
+
+    pub fn set_debug_readback_hz(&mut self, debug_readback_hz: u32) {
+        self.debug_readback_interval_frames =
+            debug_readback_interval_frames_from_hz(debug_readback_hz);
     }
 
     pub fn rebuild_with_symbolic_manifest(
@@ -614,6 +626,8 @@ impl Engine {
         enum HotPathOutcome {
             Success {
                 debug_tick: bool,
+                instance_readback_armed: bool,
+                indirect_readback_armed: bool,
                 frame_count: u64,
                 stage_timings: StageTimingsMs,
             },
@@ -683,33 +697,48 @@ impl Engine {
 
                 let is_debug_tick = self.debug_readback_interval_frames > 0
                     && self.frame_count % self.debug_readback_interval_frames == 0;
+                let mut instance_readback_armed = false;
+                let mut indirect_readback_armed = false;
                 if is_debug_tick {
+                    instance_readback_armed = self
+                        .debug_readback_in_flight
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok();
+                    indirect_readback_armed = self
+                        .indirect_readback_in_flight
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok();
+
                     // [RECOVER-10] Copy instance buffer to instance staging.
-                    let instance_copy_bytes = self
-                        .arena
-                        .debug_staging_buffer()
-                        .size()
-                        .min(self.arena.instance_buffer.size());
-                    encoder.copy_buffer_to_buffer(
-                        &self.arena.instance_buffer,
-                        0,
-                        self.arena.debug_staging_buffer(),
-                        0,
-                        instance_copy_bytes,
-                    );
+                    if instance_readback_armed {
+                        let instance_copy_bytes = self
+                            .arena
+                            .debug_staging_buffer()
+                            .size()
+                            .min(self.arena.instance_buffer.size());
+                        encoder.copy_buffer_to_buffer(
+                            &self.arena.instance_buffer,
+                            0,
+                            self.arena.debug_staging_buffer(),
+                            0,
+                            instance_copy_bytes,
+                        );
+                    }
                     // [RECOVER-10] Copy indirect args buffer to indirect staging.
-                    let indirect_copy_bytes = self
-                        .arena
-                        .indirect_staging_buffer()
-                        .size()
-                        .min(self.arena.indirect_buffer.size());
-                    encoder.copy_buffer_to_buffer(
-                        &self.arena.indirect_buffer,
-                        0,
-                        self.arena.indirect_staging_buffer(),
-                        0,
-                        indirect_copy_bytes,
-                    );
+                    if indirect_readback_armed {
+                        let indirect_copy_bytes = self
+                            .arena
+                            .indirect_staging_buffer()
+                            .size()
+                            .min(self.arena.indirect_buffer.size());
+                        encoder.copy_buffer_to_buffer(
+                            &self.arena.indirect_buffer,
+                            0,
+                            self.arena.indirect_staging_buffer(),
+                            0,
+                            indirect_copy_bytes,
+                        );
+                    }
                 }
 
                 let swap_stage_start_ms = worker_monotonic_now_ms();
@@ -721,6 +750,8 @@ impl Engine {
 
                 HotPathOutcome::Success {
                     debug_tick: is_debug_tick,
+                    instance_readback_armed,
+                    indirect_readback_armed,
                     frame_count: self.frame_count,
                     stage_timings,
                 }
@@ -739,13 +770,15 @@ impl Engine {
         match outcome {
             HotPathOutcome::Success {
                 debug_tick,
+                instance_readback_armed,
+                indirect_readback_armed,
                 frame_count,
                 stage_timings,
             } => {
                 // [LAW:single-enforcer] Async map callbacks can allocate in
                 // browser glue and therefore run only after lock scope exits.
                 if debug_tick {
-                    self.trigger_debug_readback();
+                    self.trigger_debug_readback(instance_readback_armed, indirect_readback_armed);
                 }
                 let now_ms = worker_monotonic_now_ms();
                 let tick_elapsed_ms = (now_ms - tick_start_ms).max(0.0);
@@ -1107,21 +1140,26 @@ impl Engine {
     // [RECOVER-10] [LAW:single-enforcer] Canonical structured readback replaces
     // the ad hoc console-only instance preview. Both instance probe and indirect
     // args are read back through this one boundary.
-    fn trigger_debug_readback(&self) {
+    fn trigger_debug_readback(
+        &self,
+        instance_gate_acquired: bool,
+        indirect_gate_acquired: bool,
+    ) {
         let frame_count = self.frame_count;
         let captured_at_ms = worker_monotonic_now_ms();
-        let indexed_record_count = self.draw_regions.indexed_record_count as usize;
-        let non_indexed_record_count = self.draw_regions.non_indexed_record_count as usize;
+        let expected_indexed_record_count = self.draw_regions.indexed_record_count;
+        let expected_non_indexed_record_count = self.draw_regions.non_indexed_record_count;
+        let expected_total_instance_count = self.draw_regions.total_instance_count;
+        let indexed_record_count = expected_indexed_record_count as usize;
+        let non_indexed_record_count = expected_non_indexed_record_count as usize;
+        let indexed_region_base_words = self.draw_regions.indexed_region_base_words as usize;
+        let non_indexed_region_base_words = self.draw_regions.non_indexed_region_base_words as usize;
+        let indexed_stride_words = self.draw_regions.indexed_stride_words.max(1) as usize;
+        let non_indexed_stride_words = self.draw_regions.non_indexed_stride_words.max(1) as usize;
         let pending_readback = self.pending_readback.clone();
 
-        // --- Instance probe readback ---
-        let instance_gate_acquired = self
-            .debug_readback_in_flight
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok();
-
-        // [LAW:dataflow-not-control-flow] Both readbacks are initiated unconditionally;
-        // variability is in whether the in-flight gate was acquired.
+        // [LAW:dataflow-not-control-flow] Both readback paths are evaluated
+        // each debug tick; variability is represented by gate-acquired inputs.
         let instance_values: Arc<std::sync::Mutex<Vec<f32>>> =
             Arc::new(std::sync::Mutex::new(Vec::new()));
 
@@ -1154,24 +1192,23 @@ impl Engine {
             });
         }
 
-        // --- Indirect args readback ---
-        let indirect_gate_acquired = self
-            .indirect_readback_in_flight
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok();
-
         if indirect_gate_acquired {
             let indirect_gate = self.indirect_readback_in_flight.clone();
             let indirect_staging_for_callback = self.arena.indirect_staging_buffer().clone();
             let slice = self.arena.indirect_staging_buffer().slice(..);
             let _ = slice.map_async(wgpu::MapMode::Read, move |result| {
                 let mut records = Vec::new();
+                let mut decoded_indexed_record_count = 0u32;
+                let mut decoded_non_indexed_record_count = 0u32;
+                let mut decoded_indexed_instance_count = 0u32;
+                let mut decoded_non_indexed_instance_count = 0u32;
+                let mut decoded_non_zero_record_count = 0u32;
                 if result.is_ok() {
                     let mapped = indirect_staging_for_callback.slice(..).get_mapped_range();
                     let u32_count = mapped.len() / std::mem::size_of::<u32>();
                     // Decode indexed records (5 words each)
                     for i in 0..indexed_record_count {
-                        let base = i * INDIRECT_INDEXED_STRIDE_WORDS;
+                        let base = indexed_region_base_words + i * indexed_stride_words;
                         if base + 4 >= u32_count {
                             break;
                         }
@@ -1184,20 +1221,27 @@ impl Engine {
                                 mapped[byte_idx + 3],
                             ])
                         };
+                        let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: word(0),
-                            instance_count: word(1),
+                            instance_count,
                             first_index: word(2),
                             base_vertex: word(3) as i32,
                             first_instance: word(4),
                         });
+                        decoded_indexed_record_count =
+                            decoded_indexed_record_count.saturating_add(1);
+                        decoded_indexed_instance_count =
+                            decoded_indexed_instance_count.saturating_add(instance_count);
+                        if instance_count > 0 {
+                            decoded_non_zero_record_count =
+                                decoded_non_zero_record_count.saturating_add(1);
+                        }
                     }
                     // Decode non-indexed records (4 words each) — they start
-                    // after the indexed region in the indirect buffer.
-                    let non_indexed_base_words =
-                        indexed_record_count * INDIRECT_INDEXED_STRIDE_WORDS;
+                    // at the non-indexed base region declared in the sink table.
                     for i in 0..non_indexed_record_count {
-                        let base = non_indexed_base_words + i * INDIRECT_NON_INDEXED_STRIDE_WORDS;
+                        let base = non_indexed_region_base_words + i * non_indexed_stride_words;
                         if base + 3 >= u32_count {
                             break;
                         }
@@ -1210,13 +1254,22 @@ impl Engine {
                                 mapped[byte_idx + 3],
                             ])
                         };
+                        let instance_count = word(1);
                         records.push(IndirectArgsRecord {
                             index_count: 0,
-                            instance_count: word(1),
+                            instance_count,
                             first_index: 0,
                             base_vertex: 0,
                             first_instance: word(3),
                         });
+                        decoded_non_indexed_record_count =
+                            decoded_non_indexed_record_count.saturating_add(1);
+                        decoded_non_indexed_instance_count =
+                            decoded_non_indexed_instance_count.saturating_add(instance_count);
+                        if instance_count > 0 {
+                            decoded_non_zero_record_count =
+                                decoded_non_zero_record_count.saturating_add(1);
+                        }
                     }
                     drop(mapped);
                 }
@@ -1234,6 +1287,16 @@ impl Engine {
                     captured_at_ms,
                     indirect_args: records,
                     instance_probe_values,
+                    render_counters: ReadbackRenderCounters {
+                        expected_indexed_record_count,
+                        expected_non_indexed_record_count,
+                        expected_total_instance_count,
+                        decoded_indexed_record_count,
+                        decoded_non_indexed_record_count,
+                        decoded_indexed_instance_count,
+                        decoded_non_indexed_instance_count,
+                        decoded_non_zero_record_count,
+                    },
                 };
                 if let Ok(mut slot) = pending_readback.lock() {
                     *slot = Some(snapshot);
