@@ -215,6 +215,7 @@ export interface RustRendererReadbackSnapshot {
   readonly indirectArgs: readonly RustRendererIndirectArgsRecord[];
   readonly indirectWordsHead?: Uint32Array;
   readonly shapeHeaderSample?: Uint32Array;
+  readonly shapeCpResolutionSample?: Uint32Array;
   readonly instanceProbeValues: Float32Array;
   readonly renderCounters: RustRendererReadbackRenderCounters;
 }

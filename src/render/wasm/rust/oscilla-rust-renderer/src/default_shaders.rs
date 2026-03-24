@@ -260,7 +260,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   instance_words[base + 3u] = rotation;
   instance_words[base + 4u] = scale2_x;
   instance_words[base + 5u] = scale2_y;
-  instance_words[base + 6u] = bitcast<f32>(shape_word_offset);
+  // [LAW:one-source-of-truth] Encode shape_word_offset as numeric f32.
+  // Bitcasting small u32 handles creates denormals that some GPUs flush to 0.
+  instance_words[base + 6u] = f32(shape_word_offset);
   instance_words[base + 7u] = 0.0;
   instance_words[base + 8u] = color_r;
   instance_words[base + 9u] = color_g;
@@ -603,9 +605,9 @@ fn vs_type5(
   @builtin(vertex_index) vertexIndex: u32,
 ) -> VertexOutput {
   let inst = instances[instanceIndex];
-  // [RECOVER-04] Assembly shader stores shape_word_offset via bitcast<f32>(u32).
-  // Recover the original u32 bit pattern — numeric f32→u32 truncates denorms to 0.
-  let topologyWordOffset = bitcast<u32>(inst.transform1.z);
+  // [LAW:one-source-of-truth] shape_word_offset is stored as numeric f32 in
+  // instance assembly; decode with rounded numeric conversion in vertex stage.
+  let topologyWordOffset = u32(max(inst.transform1.z, 0.0) + 0.5);
 
   // [RECOVER-11] Dispatch on ShapeClass from the topology header Kind word.
   let shapeClass = topologyBank[topologyWordOffset + SHAPE_WORD_KIND];
@@ -624,13 +626,18 @@ fn vs_type5(
   let cpArenaBase = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_BASE_OFFSET];
   let cpArenaLaneStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_LANE_STRIDE];
   let cpArenaComponentStride = topologyBank[topologyWordOffset + SHAPE_WORD_CP_ARENA_COMPONENT_STRIDE];
+  let relativeFirstVertex = topologyBank[topologyWordOffset + SHAPE_WORD_FIRST_VERTEX];
+  let absoluteFirstVertex = topologyWordOffset + relativeFirstVertex;
+  // [LAW:one-source-of-truth] drawIndirect supplies absolute vertex_index.
+  // Shape CP pulls are indexed in local shape space, so normalize once here.
+  let localVertexIndex = select(0u, vertexIndex - absoluteFirstVertex, vertexIndex >= absoluteFirstVertex);
 
   // [LAW:dataflow-not-control-flow] Both fan and sequential control-point
   // indices are computed; the flags data selects which one is used.
-  let tri = vertexIndex / 3u;
-  let loc = vertexIndex % 3u;
+  let tri = localVertexIndex / 3u;
+  let loc = localVertexIndex % 3u;
   let fanCpIndex = select(tri + loc, 0u, loc == 0u);
-  let cpIndex = select(vertexIndex, fanCpIndex, isClosed);
+  let cpIndex = select(localVertexIndex, fanCpIndex, isClosed);
 
   // [RECOVER-07] Read CP positions from compiler arena (GPU-computed data).
   let xAddr = cpArenaBase + cpIndex * cpArenaLaneStride;

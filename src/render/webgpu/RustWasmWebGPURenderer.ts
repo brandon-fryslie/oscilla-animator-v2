@@ -524,6 +524,7 @@ export class WebGPURenderer {
   // from the worker, replacing the stubbed readIndirectArgsDebugView.
   private latestReadbackSnapshot: RustRendererReadbackSnapshot | null = null;
   private readbackDebugLogged = false;
+  private shapeBankInstallDebugLogged = false;
 
   private reportEngineError(
     source: string,
@@ -1290,6 +1291,19 @@ export class WebGPURenderer {
     }
     if (wordCount > 0) {
       this.sharedShapeBankWords.set(shapeBank.data.subarray(0, wordCount), 0);
+      if (this.shouldEmitRuntimeConsole() && !this.shapeBankInstallDebugLogged) {
+        this.shapeBankInstallDebugLogged = true;
+        const firstWords = Array.from(shapeBank.data.subarray(0, Math.min(16, wordCount)));
+        const offset32Words = wordCount > 32
+          ? Array.from(shapeBank.data.subarray(32, Math.min(48, wordCount)))
+          : [];
+        this.emitRuntimeConsoleInfo({
+          kind: 'shape-bank-install-sample',
+          wordCount,
+          firstWords,
+          offset32Words,
+        });
+      }
     }
     return wordCount;
   }
@@ -1806,6 +1820,9 @@ export class WebGPURenderer {
             : [],
           shapeHeaderSample: payload.shapeHeaderSample
             ? Array.from(payload.shapeHeaderSample.slice(0, 16))
+            : [],
+          shapeCpResolutionSample: payload.shapeCpResolutionSample
+            ? Array.from(payload.shapeCpResolutionSample.slice(0, 8))
             : [],
           instanceProbeSample: Array.from(payload.instanceProbeValues.slice(0, 64)),
         });

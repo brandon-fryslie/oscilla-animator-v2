@@ -417,6 +417,7 @@ pub struct ReadbackSnapshot {
     pub indirect_args: Vec<IndirectArgsRecord>,
     pub indirect_words_head: Vec<u32>,
     pub shape_header_sample: Vec<u32>,
+    pub shape_cp_resolution_sample: Vec<u32>,
     pub instance_probe_values: Vec<f32>,
     pub render_counters: ReadbackRenderCounters,
 }
@@ -455,6 +456,12 @@ impl ReadbackSnapshot {
         set_value(&payload, "indirectWordsHead", &indirect_words_js)?;
         let shape_header_js = serialize_u32_array(&self.shape_header_sample);
         set_value(&payload, "shapeHeaderSample", &shape_header_js)?;
+        let shape_cp_resolution_js = serialize_u32_array(&self.shape_cp_resolution_sample);
+        set_value(
+            &payload,
+            "shapeCpResolutionSample",
+            &shape_cp_resolution_js,
+        )?;
         let probe_js = serialize_f32_array(&self.instance_probe_values);
         set_value(&payload, "instanceProbeValues", &probe_js)?;
         let render_counters_js = serialize_readback_render_counters(self.render_counters)?;
