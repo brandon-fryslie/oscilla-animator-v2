@@ -17,12 +17,10 @@ patch "Aurora Petal Showcase" {
         field_scale.refs,
         field_hue_shift.b,
         morph_lfo.phase,
-        field_morph.phase,
-      ]
+        field_morph.phase]
       phaseB = [
         field_position.refs,
-        field_scale.refs,
-      ]
+        field_scale.refs]
     }
   }
 
@@ -65,19 +63,18 @@ patch "Aurora Petal Showcase" {
     }
   }
 
-  block "Array" "field_points" {
+  block "InstanceDomain" "field_points" {
     count = 384
     outputs {
-      elements = lattice.elements
-      t = [field_position.refs, field_scale.refs, field_hue_shift.a]
+      index = lattice.index
+      rank = [field_position.refs, field_scale.refs, field_hue_shift.a]
     }
   }
 
-  block "GridLayoutUV" "lattice" {
-    rows = 16
-    cols = 24
+  block "ScatterUV" "lattice" {
+
     outputs {
-      controlPoints = [field_position.refs, field_scale.refs]
+      uv = [field_position.refs, field_scale.refs]
     }
   }
 
@@ -85,15 +82,15 @@ patch "Aurora Petal Showcase" {
     expression = <<-EXPR
       phase_a = clock.phaseA * 6.2832
       phase_b = clock.phaseB * 6.2832
-      phase_a_field = mapField(phase_a, field_points.t)
-      phase_b_field = mapField(phase_b, field_points.t)
+      phase_a_field = mapField(phase_a, field_points.rank)
+      phase_b_field = mapField(phase_b, field_points.rank)
       sin_a = sin(phase_a_field)
       cos_a = cos(phase_a_field)
       sin_b = sin(phase_b_field)
       cos_b = cos(phase_b_field)
 
-      x0 = lattice.controlPoints.x - 0.5
-      y0 = lattice.controlPoints.y - 0.5
+      x0 = lattice.uv.x - 0.5
+      y0 = lattice.uv.y - 0.5
       r = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
       bend = r * 8.4 + 1.2 * sin_b
@@ -119,12 +116,12 @@ patch "Aurora Petal Showcase" {
     expression = <<-EXPR
       phase_a = clock.phaseA * 6.2832
       phase_b = clock.phaseB * 6.2832
-      phase_a_field = mapField(phase_a, field_points.t)
-      phase_b_field = mapField(phase_b, field_points.t)
+      phase_a_field = mapField(phase_a, field_points.rank)
+      phase_b_field = mapField(phase_b, field_points.rank)
 
-      lane = field_points.t
-      x0 = lattice.controlPoints.x - 0.5
-      y0 = lattice.controlPoints.y - 0.5
+      lane = field_points.rank
+      x0 = lattice.uv.x - 0.5
+      y0 = lattice.uv.y - 0.5
       radius = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
 
       ripple = 0.5 + 0.5 * sin(lane * 96.0 + phase_a_field * 4.2)

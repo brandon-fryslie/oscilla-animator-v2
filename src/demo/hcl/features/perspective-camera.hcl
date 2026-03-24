@@ -37,19 +37,18 @@ patch "Perspective Camera" {
     }
   }
 
-  block "Array" "grid-elements" {
+  block "InstanceDomain" "grid-elements" {
     count = 100
     outputs {
-      elements = grid.elements
-      t = color.h
+      index = grid.index
+      rank = color.h
     }
   }
 
-  block "GridLayoutUV" "grid" {
-    rows = 10
-    cols = 10
+  block "ScatterUV" "grid" {
+
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 

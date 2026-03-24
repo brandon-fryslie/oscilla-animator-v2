@@ -15,20 +15,14 @@ patch "Library Kitchen Sink" {
     role = "timeRoot"
     outputs {
       phaseA = [
-        halo-layout.phase,
         halo-pulse.phase,
         halo-wobble.phase,
-        spiral-layout.phase,
         spiral-pulse.phase,
-        spiral-wobble.phase,
-        path-layout.offset,
-        path-wobble.phase,
-      ]
+        spiral-wobble.phase]
       phaseB = [
         halo-hue-shift.b,
         spiral-hue-shift.b,
-        path-hue-shift.b,
-      ]
+        path-hue-shift.b]
     }
   }
 
@@ -58,18 +52,17 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "Array" "halo-array" {
+  block "InstanceDomain" "halo-array" {
     count = 220
     outputs {
-      elements = halo-layout.elements
-      t = halo-hue-shift.a
+      index = halo-layout.index
+      rank = halo-hue-shift.a
     }
   }
 
-  block "CircleLayoutUV" "halo-layout" {
-    radius = 0.42
+  block "ScatterUV" "halo-layout" {
     outputs {
-      controlPoints = halo-render.controlPoints
+      uv = halo-render.controlPoints
     }
   }
 
@@ -160,19 +153,18 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "Array" "spiral-array" {
+  block "InstanceDomain" "spiral-array" {
     count = 160
     outputs {
-      elements = spiral-layout.elements
-      t = spiral-hue-shift.a
+      index = spiral-layout.index
+      rank = spiral-hue-shift.a
     }
   }
 
-  block "SpiralLayout" "spiral-layout" {
-    turns = 7
-    expansion = 0.28
+  block "ScatterUV" "spiral-layout" {
+
     outputs {
-      controlPoints = spiral-render.controlPoints
+      uv = spiral-render.controlPoints
     }
   }
 
@@ -245,22 +237,7 @@ patch "Library Kitchen Sink" {
     radiusX = 0.28
     radiusY = 0.20
     outputs {
-      controlPoints = path-wobble.controlPoints
-    }
-  }
-
-  block "ShapeWobble2D" "path-wobble" {
-    amount = 0.016
-    frequency = 4
-    outputs {
-      points = path-assembler.controlPoints
-    }
-  }
-
-  block "MakeShape2D" "path-assembler" {
-    closed = true
-    outputs {
-      shape = path-layout.shape
+      controlPoints = path-layout.controlPoints
     }
   }
 
@@ -272,17 +249,16 @@ patch "Library Kitchen Sink" {
     }
   }
 
-  block "Array" "path-array" {
+  block "InstanceDomain" "path-array" {
     count = 72
     outputs {
-      elements = path-layout.elements
-      t = path-hue-shift.a
+      rank = [path-layout.t, path-hue-shift.a]
     }
   }
 
-  block "PathLayout" "path-layout" {
+  block "SamplePath" "path-layout" {
     outputs {
-      controlPoints = path-attractor.points
+      position = path-attractor.points
     }
   }
 

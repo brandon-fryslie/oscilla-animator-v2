@@ -37,18 +37,17 @@ patch "Breathing Ring" {
     }
   }
 
-  block "Array" "instances" {
+  block "InstanceDomain" "instances" {
     count = 28
     outputs {
-      elements = ring.elements
-      t = hue-shift.a
+      index = ring.index
+      rank = hue-shift.a
     }
   }
 
-  block "CircleLayoutUV" "ring" {
-    radius = 0.34
+  block "ScatterUV" "ring" {
     outputs {
-      controlPoints = render.controlPoints
+      uv = render.controlPoints
     }
   }
 
@@ -105,7 +104,7 @@ patch "Breathing Ring" {
     }
   }
 
-  # Per-element rainbow: each dot gets its own hue from Array.t
+  # Per-element rainbow: each dot gets its own hue from Array.rank
   block "MakeColorOKLCH" "color" {
     s = 0.95
     l = 0.75
