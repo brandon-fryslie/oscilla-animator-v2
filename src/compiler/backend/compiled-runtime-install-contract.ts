@@ -21,7 +21,6 @@ import type { ValueExpr, ValueExprShapeRef } from '../ir/value-expr';
 import { getProgramTopology } from '../ir/program-topology';
 import {
   packDrawPrepSinkTableV1,
-  type DrawPrepSinkPointerMap,
 } from '../../runtime/DrawPrepSinkTablePacker';
 import { getValueExprChildren } from '../../runtime/ValueExprTreeWalker';
 import {
@@ -35,9 +34,6 @@ import { packParametricShapeBankRecord, parametricRecordWordCount } from '../../
 export interface CompiledDrawPrepInstallArtifact {
   readonly words: Uint32Array;
   readonly wordCount: number;
-  // [LAW:one-source-of-truth] Symbolic sink pointers are authored once at
-  // compile install boundary and resolved to physical words by Rust MMU.
-  readonly sinkPointerMap: DrawPrepSinkPointerMap;
 }
 
 export interface CompiledShapeBankInstallArtifact {
@@ -272,7 +268,6 @@ export function buildCompiledRuntimeInstallContract(
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))
     : new Uint32Array(0);
   const drawPrepWordCount = packed?.wordCount ?? 0;
-  const drawPrepSinkPointerMap: DrawPrepSinkPointerMap = packed?.sinkPointerMap ?? {};
   const shapeBankWordCount = assertFiniteUint32(
     topology.shapeBankWordCount,
     'gpuDrivenShapeBank.wordCount',
@@ -282,7 +277,6 @@ export function buildCompiledRuntimeInstallContract(
     drawPrep: {
       words: drawPrepWords,
       wordCount: drawPrepWordCount,
-      sinkPointerMap: drawPrepSinkPointerMap,
     },
     shapeBank: {
       words: topology.shapeBankWords,

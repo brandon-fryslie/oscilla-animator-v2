@@ -445,8 +445,6 @@ export class RuntimeService {
     const panX = viewport?.pan?.x ?? 0;
     const panY = viewport?.pan?.y ?? 0;
 
-    await renderer.installDrawPrepSinkPointerMap(installContract.drawPrep.sinkPointerMap);
-
     renderer.render({
       shapeBank: {
         data: installContract.shapeBank.words,

@@ -213,7 +213,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(readRecordU32(words, 1, DrawPrepSinkTableRecordWord.FirstInstance)).toBe(0);
   });
 
-  it('writes descriptor placeholders and sink pointer map entries', () => {
+  it('writes numeric slot routing IDs into descriptor triplets', () => {
     const slotsA: TestSinkSlotSet = {
       shape: valueSlot(1),
       controlPoints: valueSlot(2),
@@ -248,38 +248,36 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
 
-    const sinkPointerMap = packed!.sinkPointerMap;
-
-    // Verify descriptor placeholders for first sink (slotsA)
-    // [LAW:one-source-of-truth] JS emits symbolic resource IDs in sidecar map;
-    // Rust MMU resolves and patches descriptor base/lane/component words.
+    // [LAW:one-source-of-truth] JS emits numeric slot IDs directly in the
+    // descriptor triplets; Rust MMU resolves those slot IDs to physical words.
     const descA = descriptorBaseWord(totalRecords, 0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(Number(slotsA.controlPoints));
     expect(words[descA + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(0);
     expect(words[descA + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(Number(slotsA.color));
     expect(words[descA + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(0);
     expect(words[descA + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(Number(slotsA.scale));
     expect(words[descA + DrawPrepSinkDescriptorWord.ScaleLaneStride]).toBe(0);
     expect(words[descA + DrawPrepSinkDescriptorWord.ScaleComponentStride]).toBe(0);
-    expect(sinkPointerMap['0:position']).toBe(`arena:slot:${Number(slotsA.controlPoints)}`);
-    expect(sinkPointerMap['0:color']).toBe(`arena:slot:${Number(slotsA.color)}`);
-    expect(sinkPointerMap['0:scale']).toBe(`arena:slot:${Number(slotsA.scale)}`);
-    expect(sinkPointerMap['0:shape']).toBe(`arena:slot:${Number(slotsA.shape)}`);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(Number(slotsA.shape));
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
 
-    // Verify descriptor placeholders for second sink (slotsB)
+    // Verify descriptor payload for second sink (slotsB)
     const descB = descriptorBaseWord(totalRecords, 1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.PositionBaseOffset]).toBe(Number(slotsB.controlPoints));
     expect(words[descB + DrawPrepSinkDescriptorWord.PositionLaneStride]).toBe(0);
     expect(words[descB + DrawPrepSinkDescriptorWord.PositionComponentStride]).toBe(0);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ColorBaseOffset]).toBe(Number(slotsB.color));
     expect(words[descB + DrawPrepSinkDescriptorWord.ColorLaneStride]).toBe(0);
     expect(words[descB + DrawPrepSinkDescriptorWord.ColorComponentStride]).toBe(0);
-    expect(sinkPointerMap['1:position']).toBe(`arena:slot:${Number(slotsB.controlPoints)}`);
-    expect(sinkPointerMap['1:color']).toBe(`arena:slot:${Number(slotsB.color)}`);
-    expect(sinkPointerMap['1:scale']).toBe(`arena:slot:${Number(slotsB.scale)}`);
-    expect(sinkPointerMap['1:shape']).toBe(`arena:slot:${Number(slotsB.shape)}`);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ScaleBaseOffset]).toBe(Number(slotsB.scale));
+    expect(words[descB + DrawPrepSinkDescriptorWord.ScaleLaneStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ScaleComponentStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(Number(slotsB.shape));
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
   });
 
   it('writes shape-slot address and instance-count metadata in descriptor', () => {
@@ -317,9 +315,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const words = packed!.words;
     const totalRecords = packed!.header.totalRecordCount;
 
-    // [RECOVER-05] Shape-slot descriptor is patched by Rust from sinkPointerMap.
+    // [RECOVER-05] Shape-slot descriptor carries numeric slot routing ID.
     const descA = descriptorBaseWord(totalRecords, 0);
-    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(Number(slotsA.shape));
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
     // Instance count metadata: static mode with count=2
@@ -329,7 +327,7 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(words[descA + DrawPrepSinkDescriptorWord.ShapeWordOffset]).toBe(42);
 
     const descB = descriptorBaseWord(totalRecords, 1);
-    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(0);
+    expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotBaseOffset]).toBe(Number(slotsB.shape));
     expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotLaneStride]).toBe(0);
     expect(words[descB + DrawPrepSinkDescriptorWord.ShapeSlotComponentStride]).toBe(0);
     // Instance count metadata: static mode with count=3

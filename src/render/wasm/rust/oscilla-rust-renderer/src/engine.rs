@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -93,7 +92,6 @@ pub struct Engine {
     last_sink_table_words: u32,
     last_shape_header_sample: Vec<u32>,
     last_shape_cp_resolution_sample: Vec<u32>,
-    sink_pointer_map: HashMap<SinkPointerKey, String>,
     last_install_revision: u32,
     pending_fatal_gpu_error: Arc<AtomicBool>,
     // [LAW:one-source-of-truth] Worker-owned animation time. The worker's own
@@ -238,172 +236,25 @@ const SHAPE_CLASS_TYPE1_RIGID: u32 = 1;
 const SHAPE_CLASS_TYPE2_PARAMETRIC: u32 = 2;
 const TOPOLOGY_MODE_NON_PATH: u32 = 0;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-enum SinkPointerSemantic {
-    Position,
-    Color,
-    Scale,
-    Rotation,
-    Scale2,
-    Shape,
-}
-
-impl SinkPointerSemantic {
-    fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "position" => Some(Self::Position),
-            "color" => Some(Self::Color),
-            "scale" => Some(Self::Scale),
-            "rotation" => Some(Self::Rotation),
-            "scale2" => Some(Self::Scale2),
-            "shape" => Some(Self::Shape),
-            _ => None,
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Position => "position",
-            Self::Color => "color",
-            Self::Scale => "scale",
-            Self::Rotation => "rotation",
-            Self::Scale2 => "scale2",
-            Self::Shape => "shape",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct SinkPointerKey {
-    record_index: usize,
-    semantic: SinkPointerSemantic,
-}
-
 impl Engine {
-    fn resolve_resource_to_physical_words(
-        &self,
-        resource_id: &str,
-        context: &str,
-    ) -> (u32, u32, u32) {
+    fn resolve_slot_to_physical_words(&self, slot_id: u32, context: &str) -> (u32, u32, u32) {
+        // [LAW:one-source-of-truth] Slot routing resolves through the MMU's
+        // numeric slot table, not symbolic resource-id string lookups.
         let resolved = self
             .arena
             .symbol_resolver
-            .resolve(resource_id)
-            .unwrap_or_else(|| panic!("sink table {} references unknown resource {}", context, resource_id));
-        match resolved.storage_location {
-            crate::memory::ResourceStorageLocation::Arena => {}
-            // [LAW:no-silent-fallbacks] Draw-prep descriptors target render
-            // input slots only; non-arena resources are invalid here.
-            crate::memory::ResourceStorageLocation::State => {
+            .resolve_arena_slot_words(slot_id)
+            .unwrap_or_else(|| {
                 panic!(
-                    "sink table {} resource {} resolves to state storage (expected arena)",
-                    context, resource_id
-                );
-            }
-            crate::memory::ResourceStorageLocation::GlobalControlUbo => {
-                panic!(
-                    "sink table {} resource {} resolves to GlobalControlUbo (expected arena)",
-                    context, resource_id
-                );
-            }
-            crate::memory::ResourceStorageLocation::Texture2D => {
-                panic!(
-                    "sink table {} resource {} resolves to Texture2D (expected arena)",
-                    context, resource_id
-                );
-            }
-        }
-        (
-            resolved.base_offset_bytes / 4,
-            resolved.lane_stride_bytes / 4,
-            resolved.component_stride_bytes / 4,
-        )
-    }
-
-    fn resolve_slot_to_physical_words(
-        &self,
-        slot_id: u32,
-        context: &str,
-    ) -> (u32, u32, u32) {
-        let resource_id = format!("arena:slot:{}", slot_id);
-        self.resolve_resource_to_physical_words(&resource_id, context)
-    }
-
-    fn parse_sink_pointer_key(raw_key: &str) -> Result<SinkPointerKey, String> {
-        let mut parts = raw_key.split(':');
-        let record_part = parts
-            .next()
-            .ok_or_else(|| format!("sink pointer key '{}' is missing record index", raw_key))?;
-        let semantic_part = parts
-            .next()
-            .ok_or_else(|| format!("sink pointer key '{}' is missing semantic", raw_key))?;
-        if parts.next().is_some() {
-            return Err(format!(
-                "sink pointer key '{}' must use '<record>:<semantic>' format",
-                raw_key
-            ));
-        }
-        let record_index = record_part.parse::<usize>().map_err(|_| {
-            format!(
-                "sink pointer key '{}' has invalid record index '{}'",
-                raw_key, record_part
-            )
-        })?;
-        let semantic = SinkPointerSemantic::parse(semantic_part).ok_or_else(|| {
-            format!(
-                "sink pointer key '{}' has unknown semantic '{}'",
-                raw_key, semantic_part
-            )
-        })?;
-        Ok(SinkPointerKey {
-            record_index,
-            semantic,
-        })
-    }
-
-    pub fn set_sink_pointer_map(
-        &mut self,
-        sink_pointer_map: HashMap<String, String>,
-    ) -> Result<(), String> {
-        let mut parsed: HashMap<SinkPointerKey, String> = HashMap::new();
-        for (raw_key, raw_resource_id) in sink_pointer_map {
-            let key = Self::parse_sink_pointer_key(raw_key.as_str())?;
-            let resource_id = raw_resource_id.trim();
-            if resource_id.is_empty() {
-                return Err(format!(
-                    "sink pointer key '{}' maps to empty resource ID",
-                    raw_key
-                ));
-            }
-            if parsed.insert(key, resource_id.to_string()).is_some() {
-                return Err(format!("sink pointer key '{}' is duplicated", raw_key));
-            }
-        }
-        // [LAW:one-source-of-truth] Sink descriptor symbolic pointer ownership
-        // is centralized in engine state and consumed by one MMU patch boundary.
-        self.sink_pointer_map = parsed;
-        Ok(())
-    }
-
-    fn sink_pointer_resource_id(
-        &self,
-        record_index: usize,
-        semantic: SinkPointerSemantic,
-    ) -> Result<&str, String> {
-        let key = SinkPointerKey {
-            record_index,
-            semantic,
-        };
-        self.sink_pointer_map
-            .get(&key)
-            .map(|resource_id| resource_id.as_str())
-            .ok_or_else(|| {
-                format!(
-                    "sink pointer map missing key '{}:{}'",
-                    record_index,
-                    semantic.as_str()
+                    "sink table {} references unknown arena slot {}",
+                    context, slot_id
                 )
-            })
+            });
+        (
+            resolved.base_words,
+            resolved.lane_words,
+            resolved.component_words,
+        )
     }
 
     fn patch_sink_descriptor_triplet(
@@ -414,21 +265,22 @@ impl Engine {
         lane_word: usize,
         component_word: usize,
         record_index: usize,
-        semantic: SinkPointerSemantic,
-    ) -> Result<(), String> {
-        let resource_id = self.sink_pointer_resource_id(record_index, semantic)?;
-        let (base, lane, component) = self.resolve_resource_to_physical_words(resource_id, semantic.as_str());
+        semantic_label: &str,
+    ) {
+        let slot_id = plane_words[descriptor_base + base_word];
+        let context = format!("record {} {}", record_index, semantic_label);
+        let (base, lane, component) =
+            self.resolve_slot_to_physical_words(slot_id, context.as_str());
         plane_words[descriptor_base + base_word] = base;
         plane_words[descriptor_base + lane_word] = lane;
         plane_words[descriptor_base + component_word] = component;
-        Ok(())
     }
 
-    fn resolve_sink_descriptor_symbols(
+    fn resolve_sink_descriptor_slots(
         &self,
         plane_words: &mut [u32],
         total_record_count: usize,
-    ) -> Result<(), String> {
+    ) {
         // [LAW:single-enforcer] Sink descriptor physical address resolution is
         // owned by Rust MMU at the renderer boundary.
         let descriptor_region_base =
@@ -446,8 +298,8 @@ impl Engine {
                 DESCRIPTOR_WORD_POSITION_LANE_STRIDE,
                 DESCRIPTOR_WORD_POSITION_COMPONENT_STRIDE,
                 record,
-                SinkPointerSemantic::Position,
-            )?;
+                "position",
+            );
 
             self.patch_sink_descriptor_triplet(
                 plane_words,
@@ -456,8 +308,8 @@ impl Engine {
                 DESCRIPTOR_WORD_COLOR_LANE_STRIDE,
                 DESCRIPTOR_WORD_COLOR_COMPONENT_STRIDE,
                 record,
-                SinkPointerSemantic::Color,
-            )?;
+                "color",
+            );
 
             self.patch_sink_descriptor_triplet(
                 plane_words,
@@ -466,8 +318,8 @@ impl Engine {
                 DESCRIPTOR_WORD_SCALE_LANE_STRIDE,
                 DESCRIPTOR_WORD_SCALE_COMPONENT_STRIDE,
                 record,
-                SinkPointerSemantic::Scale,
-            )?;
+                "scale",
+            );
 
             let rotation_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_ROTATION_MODE];
             if rotation_mode == OPTIONAL_MODE_SLOT {
@@ -478,8 +330,8 @@ impl Engine {
                     DESCRIPTOR_WORD_ROTATION_LANE_STRIDE,
                     DESCRIPTOR_WORD_ROTATION_COMPONENT_STRIDE,
                     record,
-                    SinkPointerSemantic::Rotation,
-                )?;
+                    "rotation",
+                );
             }
 
             let scale2_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_SCALE2_MODE];
@@ -491,8 +343,8 @@ impl Engine {
                     DESCRIPTOR_WORD_SCALE2_LANE_STRIDE,
                     DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE,
                     record,
-                    SinkPointerSemantic::Scale2,
-                )?;
+                    "scale2",
+                );
             }
 
             self.patch_sink_descriptor_triplet(
@@ -502,10 +354,9 @@ impl Engine {
                 DESCRIPTOR_WORD_SHAPE_SLOT_LANE_STRIDE,
                 DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE,
                 record,
-                SinkPointerSemantic::Shape,
-            )?;
+                "shape",
+            );
         }
-        Ok(())
     }
 
     fn resolve_shape_bank_control_point_slots(
@@ -748,7 +599,6 @@ impl Engine {
             last_sink_table_words: 0,
             last_shape_header_sample: Vec::new(),
             last_shape_cp_resolution_sample: Vec::new(),
-            sink_pointer_map: HashMap::new(),
             last_install_revision: 0,
             pending_fatal_gpu_error,
             prev_tick_timestamp_ms: 0.0,
@@ -838,7 +688,6 @@ impl Engine {
             self.arena
                 .rebuild_buffers_from_resolver(&self.device, &resolver);
             self.arena.symbol_resolver = resolver;
-            self.sink_pointer_map.clear();
         }
         let staged = self
             .compute
@@ -1260,8 +1109,7 @@ impl Engine {
 
         let total_record_count_usize = total_record_count as usize;
         let mut plane_words = shared_sink_table.subarray(0, sink_table_words).to_vec();
-        self.resolve_sink_descriptor_symbols(&mut plane_words, total_record_count_usize)
-            .unwrap_or_else(|error| panic!("sink pointer map resolution failed: {}", error));
+        self.resolve_sink_descriptor_slots(&mut plane_words, total_record_count_usize);
         self.arena
             .write_sink_table_words(&self.device, &self.queue, &plane_words);
         // [RECOVER-07] Sum instance counts from descriptors, not zeroed record fields.

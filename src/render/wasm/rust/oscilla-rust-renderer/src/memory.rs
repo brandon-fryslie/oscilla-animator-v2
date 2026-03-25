@@ -143,6 +143,13 @@ pub struct Texture2DDescriptor {
     pub format: wgpu::TextureFormat,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct ArenaSlotAddressWords {
+    pub base_words: u32,
+    pub lane_words: u32,
+    pub component_words: u32,
+}
+
 impl ResolvedResource {
     /// WGSL component accessor (x, y, z, w) for UBO resources.
     pub fn ubo_component_name(&self) -> &'static str {
@@ -222,10 +229,17 @@ fn component_count_for_resource_type(resource_type: &JsonValue) -> u32 {
     }
 }
 
+fn parse_arena_slot_resource_id(resource_id: &str) -> Option<u32> {
+    resource_id
+        .strip_prefix("arena:slot:")
+        .and_then(|raw| raw.parse::<u32>().ok())
+}
+
 pub struct SymbolResolver {
     pub map: std::collections::HashMap<String, ResolvedResource>,
     pub total_arena_bytes: u32,
     pub total_state_bytes: u32,
+    pub arena_slot_words: std::collections::HashMap<u32, ArenaSlotAddressWords>,
 }
 
 impl SymbolResolver {
@@ -234,11 +248,16 @@ impl SymbolResolver {
             map: std::collections::HashMap::new(),
             total_arena_bytes: 0,
             total_state_bytes: 0,
+            arena_slot_words: std::collections::HashMap::new(),
         }
     }
 
     pub fn resolve(&self, id: &str) -> Option<&ResolvedResource> {
         self.map.get(id)
+    }
+
+    pub fn resolve_arena_slot_words(&self, slot_id: u32) -> Option<ArenaSlotAddressWords> {
+        self.arena_slot_words.get(&slot_id).copied()
     }
 
     // [LAW:single-enforcer] UBO offset mapping is computed here in the MMU,
@@ -266,6 +285,7 @@ impl SymbolResolver {
 
     pub fn build_from_manifest(manifest: &MemoryManifest) -> Self {
         let mut map = std::collections::HashMap::new();
+        let mut arena_slot_words = std::collections::HashMap::new();
         let mut current_arena_offset_bytes: u32 = 0;
         let mut current_state_offset_bytes: u32 = 0;
 
@@ -361,6 +381,7 @@ impl SymbolResolver {
             };
 
             let total_bytes = resource.cardinality * component_count * component_size_bytes;
+            let is_arena_storage = storage_location == ResourceStorageLocation::Arena;
 
             map.insert(
                 resource.id.clone(),
@@ -375,6 +396,21 @@ impl SymbolResolver {
                     texture_desc: None,
                 },
             );
+            if is_arena_storage {
+                if let Some(slot_id) = parse_arena_slot_resource_id(resource.id.as_str()) {
+                    let inserted = arena_slot_words.insert(
+                        slot_id,
+                        ArenaSlotAddressWords {
+                            base_words: base_offset_bytes / 4,
+                            lane_words: lane_stride_bytes / 4,
+                            component_words: component_stride_bytes / 4,
+                        },
+                    );
+                    if inserted.is_some() {
+                        panic!("Duplicate arena slot mapping for slot {}", slot_id);
+                    }
+                }
+            }
 
             *target_offset_bytes = (*target_offset_bytes).saturating_add(total_bytes);
         }
@@ -383,6 +419,7 @@ impl SymbolResolver {
             map,
             total_arena_bytes: current_arena_offset_bytes,
             total_state_bytes: current_state_offset_bytes,
+            arena_slot_words,
         }
     }
 }
