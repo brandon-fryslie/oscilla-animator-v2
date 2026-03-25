@@ -10,6 +10,7 @@ import { compile } from '../compile';
 import type { ScheduleIR } from '../backend/schedule-program';
 import { SCALAR_INSTANCE_ID } from '../ir/Indices';
 import type { StepMaterialize } from '../ir/types';
+import { getBlockDefinition, registerBlock } from '../../blocks/registry';
 
 describe('compile', () => {
   describe('TimeRoot validation', () => {
@@ -134,6 +135,37 @@ describe('compile', () => {
         expect(result.errors.some((e) => e.code === 'UnknownBlockType')).toBe(
           true
         );
+      }
+    });
+
+    it('fails when an intent block owns source/material semantics', () => {
+      if (!getBlockDefinition('TestIntentOwnershipViolation')) {
+        registerBlock({
+          type: 'TestIntentOwnershipViolation',
+          label: 'Test Intent Ownership Violation',
+          category: 'render',
+          form: 'primitive',
+          capability: 'render',
+          pillar: 'intent',
+          semanticContract: {
+            owns: ['source:radius', 'material:hue'],
+          },
+          inputs: {},
+          outputs: {},
+          lower: () => ({ outputsById: {}, effects: {} }),
+        });
+      }
+
+      const patch = buildPatch((b) => {
+        b.addBlock('InfiniteTimeRoot');
+        b.addBlock('TestIntentOwnershipViolation');
+      });
+
+      const result = compile(patch);
+
+      expect(result.kind).toBe('error');
+      if (result.kind === 'error') {
+        expect(result.errors.some((e) => e.code === 'IntentOwnershipViolation')).toBe(true);
       }
     });
   });

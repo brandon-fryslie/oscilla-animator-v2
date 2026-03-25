@@ -15,6 +15,7 @@ import type { InstanceId, StateSlotId } from "../ir/Indices";
 import type { StableStateId } from "../ir/types";
 import {
   getBlockDefinition,
+  type BlockDef,
   type LowerCtx,
   type LowerOutputsOnlyResult,
   type LowerResult,
@@ -76,6 +77,16 @@ function isLoweringError(error: unknown): error is LoweringError {
 function classifyLoweringErrorCode(error: unknown): CompileError['code'] {
   if (isLoweringError(error) && error.code !== undefined) return error.code;
   return 'NotImplemented';
+}
+
+const INTENT_FORBIDDEN_OWNERSHIP_PREFIXES = ['source:', 'material:'] as const;
+
+function findIntentOwnershipViolations(blockDef: BlockDef): readonly string[] {
+  if (blockDef.pillar !== 'intent') return [];
+  const owns = blockDef.semanticContract?.owns ?? [];
+  return owns.filter((semanticId) =>
+    INTENT_FORBIDDEN_OWNERSHIP_PREFIXES.some((prefix) => semanticId.startsWith(prefix))
+  );
 }
 
 
@@ -550,6 +561,20 @@ function lowerBlockInstance(
       where: { blockId: block.id },
     });
 
+    return outputRefs;
+  }
+
+  const intentOwnershipViolations = findIntentOwnershipViolations(blockDef);
+  if (intentOwnershipViolations.length > 0) {
+    errors.push({
+      code: 'IntentOwnershipViolation',
+      message: `Intent block "${block.type}" owns forbidden semantic(s): ${intentOwnershipViolations.join(', ')}`,
+      where: { blockId: block.id },
+      details: {
+        pillar: blockDef.pillar,
+        forbiddenPrefixes: INTENT_FORBIDDEN_OWNERSHIP_PREFIXES,
+      },
+    });
     return outputRefs;
   }
 

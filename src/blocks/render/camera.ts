@@ -34,6 +34,11 @@ export function register(): void {
     category: 'render',
     form: 'primitive',
     capability: 'render',
+    pillar: 'context',
+    semanticContract: {
+      owns: ['context:camera.projection', 'context:camera.view'],
+      provides: ['context:render.camera'],
+    },
     loweringPurity: 'impure',
     description: 'Declares camera projection parameters for 3D rendering',
     inputs: {

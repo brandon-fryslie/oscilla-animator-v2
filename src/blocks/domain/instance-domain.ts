@@ -32,6 +32,11 @@ export function register(): void {
     description: 'Provides per-element domain identity: rank and index',
     form: 'primitive',
     capability: 'identity',
+    pillar: 'generator',
+    semanticContract: {
+      owns: ['source:instanceDomain.count'],
+      provides: ['source:instanceDomain.rank', 'source:instanceDomain.index'],
+    },
     loweringPurity: 'pure',
     payload: {
       allowedPayloads: {

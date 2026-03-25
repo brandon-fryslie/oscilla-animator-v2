@@ -147,6 +147,13 @@ export function register(): void {
     description: 'Eulerian fluid dynamics via GPU compute kernels operating on Texture2D fields.',
     form: 'primitive',
     capability: 'render',
+    pillar: 'generator',
+    semanticContract: {
+      // [LAW:one-source-of-truth] Generator-owned fluid semantics are declared
+      // here so sink validation does not need runtime forensics.
+      owns: ['source:fluid.gridSize', 'source:fluid.jacobiIterations'],
+      provides: ['source:solverResource.velocity', 'source:solverResource.pressure', 'source:solverResource.divergence'],
+    },
     loweringPurity: 'impure',
     inputs: {
       gridSize: {

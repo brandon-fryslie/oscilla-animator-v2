@@ -17,4 +17,13 @@ describe('registerAllBlocks', () => {
     expect(after).toBeGreaterThan(before);
     expect(timeRootAfter.type).toBe('InfiniteTimeRoot');
   });
+
+  it('registers pillar metadata for core render architecture blocks', () => {
+    registerAllBlocks();
+    expect(requireBlockDef('FluidSim').pillar).toBe('generator');
+    expect(requireBlockDef('InstanceDomain').pillar).toBe('generator');
+    expect(requireBlockDef('RenderInstances2D').pillar).toBe('intent');
+    expect(requireBlockDef('WebGPUType1Sink').pillar).toBe('intent');
+    expect(requireBlockDef('Camera').pillar).toBe('context');
+  });
 });

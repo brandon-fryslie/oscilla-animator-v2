@@ -45,6 +45,12 @@ export function register(): void {
     description: 'Renders 2D instances at positions with color. Shape is automatically looked up from the instance.',
     form: 'primitive',
     capability: 'render',
+    pillar: 'intent',
+    semanticContract: {
+      requires: ['source:render.controlPoints', 'material:render.color', 'material:render.scale'],
+      owns: ['intent:render.instances2d'],
+      provides: ['intent:draw'],
+    },
     loweringPurity: 'impure',
     inputs: {
       // [LAW:one-source-of-truth] RenderInstances2D position authority is controlPoints.

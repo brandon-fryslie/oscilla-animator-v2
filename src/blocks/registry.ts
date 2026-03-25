@@ -169,6 +169,31 @@ export type Capability = 'time' | 'identity' | 'state' | 'render' | 'io' | 'pure
  */
 export type LoweringPurity = 'pure' | 'stateful' | 'impure';
 
+/**
+ * Pillar classification for render architecture ownership boundaries.
+ *
+ * - generator: creates source/topology/resources
+ * - modifier: transforms source resources
+ * - material: evaluates appearance semantics
+ * - intent: render sink/presentation policy
+ * - context: render-global context (camera, projection, etc.)
+ */
+export type PillarKind = 'generator' | 'modifier' | 'material' | 'intent' | 'context';
+
+/**
+ * Semantic ownership contract for block architecture boundaries.
+ *
+ * These IDs are compile-time metadata used by validation passes.
+ */
+export interface SemanticContract {
+  /** Semantic IDs owned by this block. */
+  readonly owns?: readonly string[];
+  /** Semantic IDs this block requires from upstream. */
+  readonly requires?: readonly string[];
+  /** Semantic IDs this block provides downstream. */
+  readonly provides?: readonly string[];
+}
+
 // =============================================================================
 // Payload-Generic Block Metadata (Spec §8)
 // =============================================================================
@@ -400,6 +425,16 @@ export interface BlockDef {
   // Compilation metadata
   readonly form: BlockForm;
   readonly capability: Capability;
+  /**
+   * Optional architecture pillar classification.
+   * Used by compile-time ownership validation.
+   */
+  readonly pillar?: PillarKind;
+  /**
+   * Optional semantic ownership contract.
+   * Used by compile-time boundary validation.
+   */
+  readonly semanticContract?: SemanticContract;
   /**
    * Whether this block is verified against the current canonical WebGPU render path.
    *

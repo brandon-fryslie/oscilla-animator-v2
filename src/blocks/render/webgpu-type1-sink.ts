@@ -23,6 +23,12 @@ export function register(): void {
     description: 'Canonical WebGPU Type 1 sink for rigid-shape bootstrap rendering',
     form: 'primitive',
     capability: 'render',
+    pillar: 'intent',
+    semanticContract: {
+      requires: ['source:render.shape', 'source:render.position', 'material:render.color'],
+      owns: ['intent:webgpu.type1'],
+      provides: ['intent:draw'],
+    },
     gpuVerified: true,
     loweringPurity: 'impure',
     inputs: {
