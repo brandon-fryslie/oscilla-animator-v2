@@ -7,7 +7,7 @@ export function attach_shared_shape_bank(shared_shape_bank: SharedArrayBuffer): 
 
 export function attach_shared_sink_table(shared_sink_table: SharedArrayBuffer): void;
 
-export function init_engine(canvas: OffscreenCanvas, max_particles: number, max_shapes: number, debug_readback_hz: number, initial_width: number, initial_height: number): Promise<void>;
+export function init_engine(canvas: OffscreenCanvas, debug_readback_hz: number, initial_width: number, initial_height: number): Promise<void>;
 
 export function inject_poison_alloc(): void;
 
@@ -34,7 +34,7 @@ export interface InitOutput {
     readonly attach_shared_input: (a: any) => [number, number];
     readonly attach_shared_shape_bank: (a: any) => [number, number];
     readonly attach_shared_sink_table: (a: any) => [number, number];
-    readonly init_engine: (a: any, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly init_engine: (a: any, b: number, c: number, d: number) => any;
     readonly inject_poison_alloc: () => [number, number];
     readonly pause_engine: () => [number, number];
     readonly rebuild_gpu_pipelines: (a: any) => any;

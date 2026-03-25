@@ -179,16 +179,12 @@ fn arm_worker_loop_if_needed() -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub async fn init_engine(
     canvas: OffscreenCanvas,
-    max_particles: u32,
-    max_shapes: u32,
     debug_readback_hz: u32,
     initial_width: u32,
     initial_height: u32,
 ) -> Result<(), JsValue> {
     install_panic_hook();
     let config = EngineConfig {
-        max_particles: max_particles as usize,
-        max_shapes: max_shapes as usize,
         debug_readback_hz,
     };
     let engine = Engine::new(canvas, config, initial_width, initial_height).await?;

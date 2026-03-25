@@ -4,7 +4,7 @@ export const memory: WebAssembly.Memory;
 export const attach_shared_input: (a: any) => [number, number];
 export const attach_shared_shape_bank: (a: any) => [number, number];
 export const attach_shared_sink_table: (a: any) => [number, number];
-export const init_engine: (a: any, b: number, c: number, d: number, e: number, f: number) => any;
+export const init_engine: (a: any, b: number, c: number, d: number) => any;
 export const inject_poison_alloc: () => [number, number];
 export const pause_engine: () => [number, number];
 export const rebuild_gpu_pipelines: (a: any) => any;

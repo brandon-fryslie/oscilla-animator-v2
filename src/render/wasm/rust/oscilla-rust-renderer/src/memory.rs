@@ -225,6 +225,7 @@ fn component_count_for_resource_type(resource_type: &JsonValue) -> u32 {
 pub struct SymbolResolver {
     pub map: std::collections::HashMap<String, ResolvedResource>,
     pub total_arena_bytes: u32,
+    pub total_state_bytes: u32,
 }
 
 impl SymbolResolver {
@@ -232,6 +233,7 @@ impl SymbolResolver {
         Self {
             map: std::collections::HashMap::new(),
             total_arena_bytes: 0,
+            total_state_bytes: 0,
         }
     }
 
@@ -264,7 +266,8 @@ impl SymbolResolver {
 
     pub fn build_from_manifest(manifest: &MemoryManifest) -> Self {
         let mut map = std::collections::HashMap::new();
-        let mut current_offset_bytes: u32 = 0;
+        let mut current_arena_offset_bytes: u32 = 0;
+        let mut current_state_offset_bytes: u32 = 0;
 
         for resource in &manifest.resources {
             // [LAW:single-enforcer] Texture2D resources are routed to dedicated
@@ -318,6 +321,15 @@ impl SymbolResolver {
                 continue;
             }
 
+            // [LAW:single-enforcer] State vs Arena routing is determined by
+            // the resource's ID prefix. This is the single place that makes
+            // this decision — the emitter reads the resolved storage_location.
+            let storage_location = if resource.id.starts_with("state:") {
+                ResourceStorageLocation::State
+            } else {
+                ResourceStorageLocation::Arena
+            };
+
             // [LAW:single-enforcer] All std430/std140 alignment rules are
             // enforced here in the Rust MMU.
             let component_size_bytes = 4; // Assuming f32/u32 for now
@@ -325,7 +337,18 @@ impl SymbolResolver {
 
             // std430 alignment: align to size of the first element (max 16)
             let alignment = (component_count * component_size_bytes).min(16).max(4);
-            current_offset_bytes = (current_offset_bytes + alignment - 1) / alignment * alignment;
+            // [LAW:one-source-of-truth] Arena and state offsets are tracked
+            // independently because they are distinct storage buffers.
+            let target_offset_bytes = match storage_location {
+                ResourceStorageLocation::Arena => &mut current_arena_offset_bytes,
+                ResourceStorageLocation::State => &mut current_state_offset_bytes,
+                ResourceStorageLocation::GlobalControlUbo | ResourceStorageLocation::Texture2D => {
+                    unreachable!("buffer resources are routed to arena/state only")
+                }
+            };
+            *target_offset_bytes =
+                (*target_offset_bytes + alignment - 1) / alignment * alignment;
+            let base_offset_bytes = *target_offset_bytes;
 
             let (lane_stride_bytes, component_stride_bytes) = match resource.packing {
                 MemoryPacking::Soa => (
@@ -339,19 +362,10 @@ impl SymbolResolver {
 
             let total_bytes = resource.cardinality * component_count * component_size_bytes;
 
-            // [LAW:single-enforcer] State vs Arena routing is determined by
-            // the resource's ID prefix. This is the single place that makes
-            // this decision — the emitter reads the resolved storage_location.
-            let storage_location = if resource.id.starts_with("state:") {
-                ResourceStorageLocation::State
-            } else {
-                ResourceStorageLocation::Arena
-            };
-
             map.insert(
                 resource.id.clone(),
                 ResolvedResource {
-                    base_offset_bytes: current_offset_bytes,
+                    base_offset_bytes,
                     lane_stride_bytes,
                     component_stride_bytes,
                     total_bytes,
@@ -362,12 +376,13 @@ impl SymbolResolver {
                 },
             );
 
-            current_offset_bytes += total_bytes;
+            *target_offset_bytes = (*target_offset_bytes).saturating_add(total_bytes);
         }
 
         Self {
             map,
-            total_arena_bytes: current_offset_bytes,
+            total_arena_bytes: current_arena_offset_bytes,
+            total_state_bytes: current_state_offset_bytes,
         }
     }
 }
@@ -449,15 +464,38 @@ impl GpuMemoryArena {
         device: &wgpu::Device,
         resolver: &SymbolResolver,
     ) {
-        let required_bytes = (resolver.total_arena_bytes as u64).max(16);
-        let current_bytes = self.compiler_arena_buffers[0].size();
+        let required_arena_bytes = (resolver.total_arena_bytes as u64).max(16);
+        let required_state_bytes = (resolver.total_state_bytes as u64).max(16);
+        let mut requires_bind_group_rebuild = false;
 
-        if required_bytes > current_bytes {
-            // Re-allocate arena buffers
+        if required_state_bytes > self.state_buffers[0].size() {
+            self.state_buffers = [
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("StateBuffer.A"),
+                    size: required_state_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("StateBuffer.B"),
+                    size: required_state_bytes,
+                    usage: wgpu::BufferUsages::STORAGE
+                        | wgpu::BufferUsages::COPY_DST
+                        | wgpu::BufferUsages::COPY_SRC,
+                    mapped_at_creation: false,
+                }),
+            ];
+            requires_bind_group_rebuild = true;
+        }
+
+        if required_arena_bytes > self.compiler_arena_buffers[0].size() {
+            // Re-allocate arena buffers.
             self.compiler_arena_buffers = [
                 device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("CompilerArenaBuffer.A"),
-                    size: required_bytes,
+                    size: required_arena_bytes,
                     usage: wgpu::BufferUsages::STORAGE
                         | wgpu::BufferUsages::COPY_DST
                         | wgpu::BufferUsages::COPY_SRC,
@@ -465,14 +503,19 @@ impl GpuMemoryArena {
                 }),
                 device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("CompilerArenaBuffer.B"),
-                    size: required_bytes,
+                    size: required_arena_bytes,
                     usage: wgpu::BufferUsages::STORAGE
                         | wgpu::BufferUsages::COPY_DST
                         | wgpu::BufferUsages::COPY_SRC,
                     mapped_at_creation: false,
                 }),
             ];
-            // [LAW:one-source-of-truth] Bind groups MUST be rebuilt after buffer re-allocation.
+            requires_bind_group_rebuild = true;
+        }
+
+        if requires_bind_group_rebuild {
+            // [LAW:one-source-of-truth] Bind groups MUST be rebuilt after any
+            // simulation/storage buffer re-allocation.
             self.rebuild_arena_bind_groups(device);
         }
 
@@ -524,6 +567,25 @@ impl GpuMemoryArena {
     }
 
     fn rebuild_arena_bind_groups(&mut self, device: &wgpu::Device) {
+        self.state_bind_groups = [
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("State.BindGroup.A"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.state_buffers[0].as_entire_binding(),
+                }],
+            }),
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("State.BindGroup.B"),
+                layout: &self.state_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.state_buffers[1].as_entire_binding(),
+                }],
+            }),
+        ];
+
         self.compiler_arena_bind_groups = [
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("CompilerArena.BindGroup.A"),
@@ -628,8 +690,6 @@ impl GpuMemoryArena {
         instance_layout: &wgpu::BindGroupLayout,
         topology_layout: &wgpu::BindGroupLayout,
         arena_render_layout: &wgpu::BindGroupLayout,
-        max_particles: usize,
-        max_shapes: usize,
     ) -> Self {
         // [LAW:one-source-of-truth] Uniform buffer is derived transport that
         // mirrors the canonical arena header. See publish_frame_header().
@@ -648,9 +708,9 @@ impl GpuMemoryArena {
             }],
         });
 
-        let state_buffer_bytes = (max_particles
-            .saturating_mul(4)
-            .saturating_mul(std::mem::size_of::<f32>())) as u64;
+        // [LAW:dataflow-not-control-flow] Bootstrap allocates minimal buffers;
+        // manifest-driven rebuild establishes executable capacities.
+        let state_buffer_bytes = 16u64;
         let state_buffers = [
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("StateBuffer.A"),
@@ -724,22 +784,11 @@ impl GpuMemoryArena {
             }),
         ];
 
-        let initial_instance_bytes = (max_shapes
-            .saturating_mul(INSTANCE_FLOATS_PER_RECORD)
-            .saturating_mul(std::mem::size_of::<f32>()))
-            as u64;
-        let initial_topology_words = max_shapes.saturating_mul(SHAPE_BANK_HEADER_WORDS);
-        let initial_sink_table_words = SINK_TABLE_HEADER_WORDS
-            + max_shapes.saturating_mul(SINK_TABLE_RECORD_WORDS)
-            + max_shapes.saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS);
-        let initial_indirect_words = max_shapes
-            .saturating_mul(INDIRECT_INDEXED_STRIDE_WORDS + INDIRECT_NON_INDEXED_STRIDE_WORDS);
-
-        let instance_capacity_bytes = initial_instance_bytes
-            .max((INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64);
-        let topology_capacity_words = initial_topology_words.max(SHAPE_BANK_HEADER_WORDS);
-        let sink_table_capacity_words = initial_sink_table_words.max(SINK_TABLE_HEADER_WORDS);
-        let indirect_capacity_words = initial_indirect_words.max(INDIRECT_WORDS_PER_RECORD);
+        let instance_capacity_bytes =
+            (INSTANCE_FLOATS_PER_RECORD * std::mem::size_of::<f32>()) as u64;
+        let topology_capacity_words = SHAPE_BANK_HEADER_WORDS;
+        let sink_table_capacity_words = SINK_TABLE_HEADER_WORDS;
+        let indirect_capacity_words = INDIRECT_WORDS_PER_RECORD;
 
         let instance_buffer = Self::create_instance_buffer(device, instance_capacity_bytes);
         let topology_buffer = Self::create_topology_buffer(device, topology_capacity_words);

@@ -53,8 +53,6 @@ fn debug_readback_interval_frames_from_hz(debug_readback_hz: u32) -> u64 {
 }
 
 pub struct EngineConfig {
-    pub max_particles: usize,
-    pub max_shapes: usize,
     pub debug_readback_hz: u32,
 }
 
@@ -90,8 +88,6 @@ pub struct Engine {
     // [RECOVER-10] [LAW:single-enforcer] Accumulated readback snapshot polled
     // by the worker via take_readback_snapshot, mirroring scheduler telemetry.
     pending_readback: Arc<std::sync::Mutex<Option<ReadbackSnapshot>>>,
-    max_particles: u32,
-    max_shapes: u32,
     draw_regions: IndirectRegionPlan,
     last_shape_bank_words: u32,
     last_sink_table_words: u32,
@@ -695,8 +691,6 @@ impl Engine {
             &device,
             DEFAULT_SIMULATION_WGSL,
             DEFAULT_ASSEMBLY_WGSL,
-            config.max_particles as u32,
-            config.max_shapes as u32,
         );
         let render = RenderDispatcher::new(
             &device,
@@ -715,8 +709,6 @@ impl Engine {
             &render.instance_layout,
             &render.topology_layout,
             &render.arena_render_layout,
-            config.max_particles,
-            config.max_shapes,
         );
         arena.clear_simulation_planes(&queue);
         let depth_target = DepthTarget::new(
@@ -751,8 +743,6 @@ impl Engine {
             debug_readback_in_flight: Arc::new(AtomicBool::new(false)),
             indirect_readback_in_flight: Arc::new(AtomicBool::new(false)),
             pending_readback: Arc::new(std::sync::Mutex::new(None)),
-            max_particles: config.max_particles as u32,
-            max_shapes: config.max_shapes as u32,
             draw_regions: IndirectRegionPlan::default(),
             last_shape_bank_words: 0,
             last_sink_table_words: 0,
@@ -852,7 +842,7 @@ impl Engine {
         }
         let staged = self
             .compute
-            .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs, self.max_particles)
+            .stage_gpu_pipelines_with_compiler_wgsl(&self.device, pass_specs)
             .await
             .map_err(|message| {
                 self.build_pipeline_rebuild_failure("pipeline_contract_rejected", &message)
@@ -1392,23 +1382,12 @@ impl Engine {
                     .shared_shape_bank
                     .as_ref()
                     .map(|plane| plane.length())
-                    .unwrap_or_else(|| {
-                        self.max_shapes
-                            .saturating_mul(SHAPE_BANK_HEADER_WORDS as u32)
-                    });
+                    .unwrap_or(0);
                 let sink_table_word_limit = self
                     .shared_sink_table
                     .as_ref()
                     .map(|plane| plane.length())
-                    .unwrap_or_else(|| {
-                        self.max_shapes
-                            .saturating_mul(SINK_TABLE_RECORD_WORDS as u32)
-                            .saturating_add(
-                                self.max_shapes
-                                    .saturating_mul(SINK_TABLE_DESCRIPTOR_WORDS as u32),
-                            )
-                            .saturating_add(SINK_TABLE_HEADER_WORDS as u32)
-                    });
+                    .unwrap_or(0);
                 let shape_bank_words = parse_finite_u32(
                     shared_input
                         .get_index(INPUT_WORD_SHAPE_BANK_WORDS as u32)

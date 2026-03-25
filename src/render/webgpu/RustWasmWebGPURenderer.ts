@@ -172,8 +172,6 @@ interface RendererFatalTransition {
 }
 
 const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
-  maxParticles: 65_536,
-  maxShapes: 65_536,
   debugReadbackHz: 0,
 });
 
@@ -798,8 +796,8 @@ export class WebGPURenderer {
       RUNTIME_INPUT_SIGNAL_WORDS * Int32Array.BYTES_PER_ELEMENT,
       RUNTIME_INPUT_FLOAT_WORDS,
     );
-    const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
-    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity(DEFAULT_BOOTSTRAP_CONFIG);
+    const shapeBankWordCapacity = computeRustRendererShapeBankWordCapacity();
+    const sinkTableWordCapacity = computeRustRendererSinkTableWordCapacity();
     const sharedShapeBank = new SharedArrayBuffer(shapeBankWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedSinkTable = new SharedArrayBuffer(sinkTableWordCapacity * Uint32Array.BYTES_PER_ELEMENT);
     const sharedShapeBankWords = new Uint32Array(sharedShapeBank);

@@ -3,8 +3,6 @@
 import type { GpuPassStage } from '../../types/gpu-pass-stage';
 import type { MemoryManifestIR } from '../../compiler/ir/program';
 export interface RustRendererBootstrapConfig {
-  readonly maxParticles: number;
-  readonly maxShapes: number;
   readonly debugReadbackHz: number;
 }
 
@@ -12,13 +10,19 @@ export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 26;
+// [LAW:one-source-of-truth] Shared-plane transport capacity is declared once
+// so renderer bootstrap and plane writers cannot drift.
+const RUST_RENDERER_SHARED_PLANE_RECORD_CAPACITY = 65_536;
 
-export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
-  return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);
+export function computeRustRendererShapeBankWordCapacity(): number {
+  return Math.max(
+    RUST_RENDERER_SHAPE_HEADER_WORDS,
+    RUST_RENDERER_SHARED_PLANE_RECORD_CAPACITY * RUST_RENDERER_SHAPE_HEADER_WORDS,
+  );
 }
 
-export function computeRustRendererSinkTableWordCapacity(config: RustRendererBootstrapConfig): number {
-  const maxRecords = Math.max(0, Math.floor(config.maxShapes));
+export function computeRustRendererSinkTableWordCapacity(): number {
+  const maxRecords = RUST_RENDERER_SHARED_PLANE_RECORD_CAPACITY;
   return RUST_RENDERER_SINK_TABLE_HEADER_WORDS
     + maxRecords * RUST_RENDERER_SINK_TABLE_RECORD_WORDS
     + maxRecords * RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS;
