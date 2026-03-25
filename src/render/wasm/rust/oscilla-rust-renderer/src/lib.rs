@@ -18,7 +18,10 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
-use crate::compute::CompilerComputePassSpec;
+use crate::compute::{
+    CompilerComputePassSpec, DispatchWorkgroups, DrawPrepExecutionSpec,
+    ShapeBankControlPointPatchSpec,
+};
 use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
 use crate::error_boundary::install_panic_hook;
 use crate::memory::MemoryManifest;
@@ -38,6 +41,112 @@ fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, Js
     raw.as_string().ok_or_else(|| {
         JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str())
     })
+}
+
+fn parse_required_u32(value: &JsValue, field: &str) -> Result<u32, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    let Some(number) = raw.as_f64() else {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must be a number", field).as_str(),
+        ));
+    };
+    if !number.is_finite() || number < 0.0 || number > u32::MAX as f64 {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must be a uint32", field).as_str(),
+        ));
+    }
+    let truncated = number.trunc();
+    if (number - truncated).abs() > f64::EPSILON {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must be an integer", field).as_str(),
+        ));
+    }
+    Ok(truncated as u32)
+}
+
+fn parse_required_dispatch_workgroups(
+    value: &JsValue,
+    field: &str,
+) -> Result<DispatchWorkgroups, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    if !raw.is_object() {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must be an object", field).as_str(),
+        ));
+    }
+    let x = parse_required_u32(&raw, "x")?;
+    let y = parse_required_u32(&raw, "y")?;
+    let z = parse_required_u32(&raw, "z")?;
+    if x == 0 || y == 0 || z == 0 {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must use dimensions >= 1", field).as_str(),
+        ));
+    }
+    Ok(DispatchWorkgroups { x, y, z })
+}
+
+fn read_optional_draw_prep_execution_field(
+    value: &JsValue,
+    field: &str,
+) -> Result<Option<DrawPrepExecutionSpec>, JsValue> {
+    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
+    if raw.is_undefined() || raw.is_null() {
+        return Ok(None);
+    }
+    if !raw.is_object() {
+        return Err(JsValue::from_str(
+            format!("GPU pass field '{}' must be an object", field).as_str(),
+        ));
+    }
+    let total_record_count = parse_required_u32(&raw, "totalRecordCount")?;
+    let indexed_record_count = parse_required_u32(&raw, "indexedRecordCount")?;
+    let non_indexed_record_count = parse_required_u32(&raw, "nonIndexedRecordCount")?;
+    let indexed_region_base_words = parse_required_u32(&raw, "indexedRegionBaseWords")?;
+    let non_indexed_region_base_words = parse_required_u32(&raw, "nonIndexedRegionBaseWords")?;
+    let indexed_stride_words = parse_required_u32(&raw, "indexedStrideWords")?;
+    let non_indexed_stride_words = parse_required_u32(&raw, "nonIndexedStrideWords")?;
+    let total_instance_count = parse_required_u32(&raw, "totalInstanceCount")?;
+    let assembly_dispatch_workgroups =
+        parse_required_dispatch_workgroups(&raw, "assemblyDispatchWorkgroups")?;
+    let draw_prep_dispatch_workgroups =
+        parse_required_dispatch_workgroups(&raw, "drawPrepDispatchWorkgroups")?;
+    let patches_raw = js_sys::Reflect::get(&raw, &JsValue::from_str("shapeControlPointPatches"))?;
+    if !Array::is_array(&patches_raw) {
+        return Err(JsValue::from_str(
+            "GPU pass drawPrepExecution.shapeControlPointPatches must be an array",
+        ));
+    }
+    let patches_js = Array::from(&patches_raw);
+    let mut patches = Vec::with_capacity(patches_js.length() as usize);
+    for patch_index in 0..patches_js.length() {
+        let patch = patches_js.get(patch_index);
+        if !patch.is_object() {
+            return Err(JsValue::from_str(
+                format!(
+                    "GPU pass drawPrepExecution.shapeControlPointPatches[{}] must be an object",
+                    patch_index
+                )
+                .as_str(),
+            ));
+        }
+        patches.push(ShapeBankControlPointPatchSpec {
+            shape_word_offset: parse_required_u32(&patch, "shapeWordOffset")?,
+            control_point_slot_id: parse_required_u32(&patch, "controlPointSlotId")?,
+        });
+    }
+    Ok(Some(DrawPrepExecutionSpec {
+        total_record_count,
+        indexed_record_count,
+        non_indexed_record_count,
+        indexed_region_base_words,
+        non_indexed_region_base_words,
+        indexed_stride_words,
+        non_indexed_stride_words,
+        total_instance_count,
+        assembly_dispatch_workgroups,
+        draw_prep_dispatch_workgroups,
+        shape_control_point_patches: patches,
+    }))
 }
 
 fn read_optional_memory_manifest_field(
@@ -107,6 +216,14 @@ fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>,
                     pass_id: read_required_string_field(&item, "passId")?,
                     entry_point: read_required_string_field(&item, "entryPoint")?,
                     wgsl: read_required_string_field(&item, "wgsl")?,
+                    dispatch_workgroups: parse_required_dispatch_workgroups(
+                        &item,
+                        "dispatchWorkgroups",
+                    )?,
+                    draw_prep_execution: read_optional_draw_prep_execution_field(
+                        &item,
+                        "drawPrepExecution",
+                    )?,
                     memory_manifest: read_optional_memory_manifest_field(&item, "memoryManifest")?,
                 });
             }

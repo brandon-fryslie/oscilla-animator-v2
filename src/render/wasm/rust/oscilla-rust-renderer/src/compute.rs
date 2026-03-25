@@ -1,4 +1,4 @@
-use crate::memory::{GpuMemoryArena, MemoryManifest, SymbolResolver};
+use crate::memory::{GpuMemoryArena, SymbolResolver};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 use naga::Module;
 use serde::Deserialize;
@@ -1276,11 +1276,41 @@ pub struct ComputeDispatcher {
     pending_dispatch_instructions: Vec<NagaEmitterInstruction>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DispatchWorkgroups {
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct ShapeBankControlPointPatchSpec {
+    pub shape_word_offset: u32,
+    pub control_point_slot_id: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct DrawPrepExecutionSpec {
+    pub total_record_count: u32,
+    pub indexed_record_count: u32,
+    pub non_indexed_record_count: u32,
+    pub indexed_region_base_words: u32,
+    pub non_indexed_region_base_words: u32,
+    pub indexed_stride_words: u32,
+    pub non_indexed_stride_words: u32,
+    pub total_instance_count: u32,
+    pub assembly_dispatch_workgroups: DispatchWorkgroups,
+    pub draw_prep_dispatch_workgroups: DispatchWorkgroups,
+    pub shape_control_point_patches: Vec<ShapeBankControlPointPatchSpec>,
+}
+
 #[derive(Clone, Debug)]
 pub struct CompilerComputePassSpec {
     pub pass_id: String,
     pub entry_point: String,
     pub wgsl: String,
+    pub dispatch_workgroups: DispatchWorkgroups,
+    pub draw_prep_execution: Option<DrawPrepExecutionSpec>,
     pub memory_manifest: Option<crate::memory::MemoryManifest>,
 }
 
@@ -1294,7 +1324,7 @@ struct WorkgroupSize {
 struct CompiledComputePassPipeline {
     _pass_id: String,
     pipeline: wgpu::ComputePipeline,
-    workgroup_count: u32,
+    dispatch_workgroups: DispatchWorkgroups,
 }
 
 #[derive(Clone, Debug)]
@@ -1302,7 +1332,7 @@ struct ValidatedComputePassProgram {
     pass_id: String,
     entry_point: String,
     wgsl: String,
-    workgroup_count: u32,
+    dispatch_workgroups: DispatchWorkgroups,
 }
 
 pub struct StagedSimulationPipelines {
@@ -1310,8 +1340,6 @@ pub struct StagedSimulationPipelines {
 }
 
 impl ComputeDispatcher {
-    const DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT: u32 = 1;
-
     fn validate_workgroup_size(
         limits: &wgpu::Limits,
         pass_id: &str,
@@ -1360,36 +1388,37 @@ impl ComputeDispatcher {
         Ok(())
     }
 
-    fn simulation_dispatch_count_for_workgroup_size(
-        active_lane_count: u32,
-        workgroup_size: WorkgroupSize,
-    ) -> u32 {
-        ((active_lane_count.saturating_add(workgroup_size.x.saturating_sub(1))) / workgroup_size.x)
-            .max(1)
-    }
-
-    fn active_lane_count_from_manifest(manifest: &MemoryManifest) -> u32 {
-        // [LAW:one-source-of-truth] Dispatch lane sizing is derived from the
-        // compiler-owned manifest cardinalities, not runtime bootstrap caps.
-        manifest
-            .resources
-            .iter()
-            .filter(|resource| resource.resource_kind != "texture2d")
-            .filter(|resource| {
-                !(resource.update_class == "FrameTime" && resource.cardinality == 1)
-            })
-            .map(|resource| resource.cardinality.max(1))
-            .max()
-            .unwrap_or(Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT)
-    }
-
-    fn resolve_active_lane_count(pass_specs: &[CompilerComputePassSpec]) -> u32 {
-        pass_specs
-            .iter()
-            .filter_map(|spec| spec.memory_manifest.as_ref())
-            .map(Self::active_lane_count_from_manifest)
-            .max()
-            .unwrap_or(Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT)
+    fn validate_dispatch_workgroups(
+        limits: &wgpu::Limits,
+        pass_id: &str,
+        dispatch_workgroups: DispatchWorkgroups,
+    ) -> Result<(), String> {
+        if dispatch_workgroups.x == 0 || dispatch_workgroups.y == 0 || dispatch_workgroups.z == 0
+        {
+            return Err(format!(
+                "pass \"{}\" dispatch_workgroups dimensions must all be at least 1",
+                pass_id
+            ));
+        }
+        if dispatch_workgroups.x > limits.max_compute_workgroups_per_dimension {
+            return Err(format!(
+                "pass \"{}\" dispatch_workgroups.x={} exceeds device limit {}",
+                pass_id, dispatch_workgroups.x, limits.max_compute_workgroups_per_dimension
+            ));
+        }
+        if dispatch_workgroups.y > limits.max_compute_workgroups_per_dimension {
+            return Err(format!(
+                "pass \"{}\" dispatch_workgroups.y={} exceeds device limit {}",
+                pass_id, dispatch_workgroups.y, limits.max_compute_workgroups_per_dimension
+            ));
+        }
+        if dispatch_workgroups.z > limits.max_compute_workgroups_per_dimension {
+            return Err(format!(
+                "pass \"{}\" dispatch_workgroups.z={} exceeds device limit {}",
+                pass_id, dispatch_workgroups.z, limits.max_compute_workgroups_per_dimension
+            ));
+        }
+        Ok(())
     }
 
     fn find_compute_entry_point(
@@ -1428,7 +1457,6 @@ impl ComputeDispatcher {
 
     fn validate_compute_program_contract(
         limits: &wgpu::Limits,
-        active_lane_count: u32,
         spec: &CompilerComputePassSpec,
     ) -> Result<ValidatedComputePassProgram, String> {
         // [LAW:single-enforcer] Candidate shader admission is derived from the
@@ -1454,20 +1482,16 @@ impl ComputeDispatcher {
             spec.entry_point.as_str(),
         )?;
         Self::validate_workgroup_size(limits, spec.pass_id.as_str(), workgroup_size)?;
-        let workgroup_count =
-            Self::simulation_dispatch_count_for_workgroup_size(active_lane_count, workgroup_size)
-                .max(1);
-        if workgroup_count > limits.max_compute_workgroups_per_dimension {
-            return Err(format!(
-                "pass \"{}\" dispatch count {} exceeds device limit {}",
-                spec.pass_id, workgroup_count, limits.max_compute_workgroups_per_dimension
-            ));
-        }
+        Self::validate_dispatch_workgroups(
+            limits,
+            spec.pass_id.as_str(),
+            spec.dispatch_workgroups,
+        )?;
         Ok(ValidatedComputePassProgram {
             pass_id: spec.pass_id.clone(),
             entry_point: spec.entry_point.clone(),
             wgsl: spec.wgsl.clone(),
-            workgroup_count,
+            dispatch_workgroups: spec.dispatch_workgroups,
         })
     }
 
@@ -1576,11 +1600,12 @@ impl ComputeDispatcher {
         let compiler_simulation_layout = Self::create_compiler_simulation_layout(device);
         let default_program = Self::validate_compute_program_contract(
             &device.limits(),
-            Self::DEFAULT_BOOTSTRAP_ACTIVE_LANE_COUNT,
             &CompilerComputePassSpec {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: simulation_wgsl.to_string(),
+                dispatch_workgroups: DispatchWorkgroups { x: 1, y: 1, z: 1 },
+                draw_prep_execution: None,
                 memory_manifest: None,
             },
         )
@@ -1702,7 +1727,7 @@ impl ComputeDispatcher {
             compiled.push(CompiledComputePassPipeline {
                 _pass_id: program.pass_id.clone(),
                 pipeline,
-                workgroup_count: program.workgroup_count,
+                dispatch_workgroups: program.dispatch_workgroups,
             });
         }
         Ok(compiled)
@@ -1805,11 +1830,9 @@ impl ComputeDispatcher {
         // [LAW:one-source-of-truth] Stage decisions come from WGSL program
         // contents plus device limits, not application-owned runtime planes.
         let limits = device.limits();
-        let active_lane_count = Self::resolve_active_lane_count(pass_specs);
         let mut programs = Vec::with_capacity(pass_specs.len());
         for spec in pass_specs {
-            let program =
-                Self::validate_compute_program_contract(&limits, active_lane_count, spec)?;
+            let program = Self::validate_compute_program_contract(&limits, spec)?;
             Self::validate_program_only_pipeline_compilation(device, &program).await?;
             programs.push(program);
         }
@@ -1868,7 +1891,11 @@ impl ComputeDispatcher {
         self.simulation_pipelines = vec![CompiledComputePassPipeline {
             _pass_id: "dynamic".to_string(),
             pipeline,
-            workgroup_count: (max_active_lanes + 63) / 64,
+            dispatch_workgroups: DispatchWorkgroups {
+                x: ((max_active_lanes + 63) / 64).max(1),
+                y: 1,
+                z: 1,
+            },
         }];
 
         // [LAW:one-source-of-truth] Dispatch instructions are stored once at
@@ -1885,7 +1912,13 @@ impl ComputeDispatcher {
     pub fn simulation_workgroup_count(&self) -> u32 {
         self.simulation_pipelines
             .iter()
-            .map(|pipeline| pipeline.workgroup_count)
+            .map(|pipeline| {
+                pipeline
+                    .dispatch_workgroups
+                    .x
+                    .saturating_mul(pipeline.dispatch_workgroups.y)
+                    .saturating_mul(pipeline.dispatch_workgroups.z)
+            })
             .fold(0u32, |acc, count| acc.saturating_add(count))
     }
 
@@ -1898,7 +1931,7 @@ impl ComputeDispatcher {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         arena: &mut GpuMemoryArena,
-        assembly_instance_count: u32,
+        assembly_dispatch_workgroups: DispatchWorkgroups,
     ) {
         let mut read_index = arena.ping_pong_index();
         for compiled_pass in &self.simulation_pipelines {
@@ -1912,7 +1945,11 @@ impl ComputeDispatcher {
                 arena.get_compiler_simulation_bind_group_for_index(read_index),
                 &[],
             );
-            compute_pass.dispatch_workgroups(compiled_pass.workgroup_count, 1, 1);
+            compute_pass.dispatch_workgroups(
+                compiled_pass.dispatch_workgroups.x,
+                compiled_pass.dispatch_workgroups.y,
+                compiled_pass.dispatch_workgroups.z,
+            );
             read_index = (read_index + 1) & 1;
         }
 
@@ -1922,7 +1959,7 @@ impl ComputeDispatcher {
             let active_lane_count = self
                 .simulation_pipelines
                 .first()
-                .map(|p| p.workgroup_count * 64)
+                .map(|p| p.dispatch_workgroups.x.saturating_mul(64))
                 .unwrap_or(0);
             if let Err(e) = self.execute_instructions(
                 device,
@@ -1951,11 +1988,13 @@ impl ComputeDispatcher {
                 &[],
             );
             compute_pass.set_bind_group(2, &arena.assembly_write_bind_group, &[]);
-            // [LAW:single-enforcer] Runtime sink-table instance totals are the
-            // canonical source for per-frame assembly dispatch size.
-            let assembly_workgroup_count =
-                ((assembly_instance_count.saturating_add(63)) / 64).max(1);
-            compute_pass.dispatch_workgroups(assembly_workgroup_count, 1, 1);
+            // [LAW:one-source-of-truth] Assembly dispatch dimensions are
+            // compiler-authored and validated at the install boundary.
+            compute_pass.dispatch_workgroups(
+                assembly_dispatch_workgroups.x,
+                assembly_dispatch_workgroups.y,
+                assembly_dispatch_workgroups.z,
+            );
         }
         arena.set_ping_pong_index(read_index);
     }
@@ -1989,7 +2028,7 @@ impl ComputeDispatcher {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         arena: &GpuMemoryArena,
-        draw_prep_record_count: u32,
+        draw_prep_dispatch_workgroups: DispatchWorkgroups,
     ) {
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Compute.DrawPrep.Pass"),
@@ -1997,10 +2036,13 @@ impl ComputeDispatcher {
         });
         compute_pass.set_pipeline(&self.draw_prep_pipeline);
         compute_pass.set_bind_group(0, &arena.draw_prep_bind_group, &[]);
-        // [LAW:dataflow-not-control-flow] Draw prep always dispatches on the
-        // canonical stage; record count data governs in-shader no-op behavior.
-        let draw_prep_workgroup_count = ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
-        compute_pass.dispatch_workgroups(draw_prep_workgroup_count, 1, 1);
+        // [LAW:one-source-of-truth] Draw-prep dispatch dimensions are
+        // compiler-authored and validated at the install boundary.
+        compute_pass.dispatch_workgroups(
+            draw_prep_dispatch_workgroups.x,
+            draw_prep_dispatch_workgroups.y,
+            draw_prep_dispatch_workgroups.z,
+        );
     }
 }
 
@@ -2008,7 +2050,8 @@ impl ComputeDispatcher {
 mod tests {
     use super::{
         translate_and_lower_expressions, CompilerComputePassSpec, ComputeDispatcher,
-        NagaBinaryOpIR, NagaExpressionIR, NagaExpressionIR_TS, NagaModuleIR_TS, WorkgroupSize,
+        DispatchWorkgroups, NagaBinaryOpIR, NagaExpressionIR, NagaExpressionIR_TS,
+        NagaModuleIR_TS, WorkgroupSize,
     };
     use crate::memory::{ResolvedResource, ResourceStorageLocation, SymbolResolver};
 
@@ -2016,11 +2059,12 @@ mod tests {
     fn validate_compute_program_contract_rejects_missing_entry_point() {
         let result = ComputeDispatcher::validate_compute_program_contract(
             &wgpu::Limits::default(),
-            1_024,
             &CompilerComputePassSpec {
                 pass_id: "simulation".to_string(),
                 entry_point: "compute_main".to_string(),
                 wgsl: "@compute @workgroup_size(64) fn other_main() {}".to_string(),
+                dispatch_workgroups: DispatchWorkgroups { x: 1, y: 1, z: 1 },
+                draw_prep_execution: None,
                 memory_manifest: None,
             },
         );
@@ -2030,12 +2074,15 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_count_uses_x_dimension_only() {
-        let count = ComputeDispatcher::simulation_dispatch_count_for_workgroup_size(
-            65_536,
-            WorkgroupSize { x: 64, y: 1, z: 1 },
+    fn validate_dispatch_workgroups_rejects_zero_dimension() {
+        let result = ComputeDispatcher::validate_dispatch_workgroups(
+            &wgpu::Limits::default(),
+            "simulation",
+            DispatchWorkgroups { x: 1, y: 0, z: 1 },
         );
-        assert_eq!(count, 1_024);
+        assert!(result
+            .err()
+            .is_some_and(|message| message.contains("at least 1")));
     }
 
     #[test]

@@ -7,7 +7,9 @@ import { primeNagaShimWasmBytes } from '../compiler/wasm/oscilla_naga_shim';
 import { EventHub } from '../events/EventHub';
 import { deserializePatch } from './PatchPersistence';
 import type {
+  CompiledDrawPrepExecutionArtifact,
   CompiledGpuPassBundle,
+  CompiledDispatchWorkgroupsArtifact,
   CompileWorkerRequest,
   CompileWorkerResponse,
   CompileWorkerBackendResult,
@@ -44,8 +46,17 @@ function toBackendError(errors: readonly CompileError[]): CompileWorkerBackendRe
 
 function buildCanonicalSimulationPassBundle(
   wgsl: string,
+  maxActiveLanes: number,
+  drawPrepExecution: CompiledDrawPrepExecutionArtifact,
   memoryManifest: SerializableCompiledProgramIR['memoryManifest'],
 ): CompiledGpuPassBundle {
+  const dispatchWorkgroups: CompiledDispatchWorkgroupsArtifact = {
+    // [LAW:one-source-of-truth] Simulation dispatch dimensions are compiler
+    // artifacts; runtime executes these validated integers directly.
+    x: Math.max(1, Math.ceil(Math.max(1, Math.floor(maxActiveLanes)) / 64)),
+    y: 1,
+    z: 1,
+  };
   return {
     schemaVersion: 1,
     passes: [{
@@ -53,6 +64,8 @@ function buildCanonicalSimulationPassBundle(
       stage: 'compute',
       entryPoint: 'compute_main',
       wgsl,
+      dispatchWorkgroups,
+      drawPrepExecution,
       // [LAW:one-source-of-truth] Rust renderer MMU resolution consumes the
       // same compile-owned memory manifest used by Naga lowering.
       memoryManifest,
@@ -82,16 +95,6 @@ async function toBackendResult(
   if (nagaCompilation.kind === 'error') {
     return toBackendError(attachPreNagaWarnings(nagaCompilation.errors, result.warnings));
   }
-  const compiledGpuBundle = buildCanonicalSimulationPassBundle(
-    nagaCompilation.wgsl,
-    result.program.memoryManifest,
-  );
-
-  const passValidation = validateCompiledGpuPassBundle(compiledGpuBundle);
-  if (passValidation.kind === 'error') {
-    return toBackendError(attachPreNagaWarnings(passValidation.errors, result.warnings));
-  }
-
   let runtimeInstall;
   try {
     runtimeInstall = buildCompiledRuntimeInstallContract(result.program);
@@ -103,6 +106,17 @@ async function toBackendResult(
       }],
       result.warnings,
     ));
+  }
+  const compiledGpuBundle = buildCanonicalSimulationPassBundle(
+    nagaCompilation.wgsl,
+    result.program.generatedComputeProgram.maxActiveLanes,
+    runtimeInstall.drawPrep.execution,
+    result.program.memoryManifest,
+  );
+
+  const passValidation = validateCompiledGpuPassBundle(compiledGpuBundle);
+  if (passValidation.kind === 'error') {
+    return toBackendError(attachPreNagaWarnings(passValidation.errors, result.warnings));
   }
 
   const program = stripKernelRegistry(result.program);

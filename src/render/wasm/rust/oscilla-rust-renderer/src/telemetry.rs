@@ -45,6 +45,8 @@ pub struct SchedulerTelemetry {
 pub struct SchedulerTelemetryInputs {
     pub simulation_dispatch_count: u32,
     pub simulation_workgroup_count: u32,
+    pub assembly_dispatch_workgroup_count: u32,
+    pub draw_prep_dispatch_workgroup_count: u32,
     pub indexed_record_count: u32,
     pub non_indexed_record_count: u32,
     pub total_instance_count: u32,
@@ -61,11 +63,6 @@ pub fn build_scheduler_telemetry(
 ) -> SchedulerTelemetry {
     // [LAW:one-source-of-truth] Scheduler telemetry shaping is centralized in
     // one module so runtime boundaries consume a single canonical packet model.
-    let assembly_workgroup_count = ((inputs.total_instance_count.saturating_add(63)) / 64).max(1);
-    let draw_prep_record_count = inputs
-        .indexed_record_count
-        .saturating_add(inputs.non_indexed_record_count);
-    let draw_prep_workgroup_count = ((draw_prep_record_count.saturating_add(63)) / 64).max(1);
     let dispatch_counters = DispatchCounters {
         compute_dispatch_count: inputs
             .simulation_dispatch_count
@@ -73,10 +70,11 @@ pub fn build_scheduler_telemetry(
             .saturating_add(1),
         compute_workgroup_count: inputs
             .simulation_workgroup_count
-            .saturating_add(assembly_workgroup_count)
-            .saturating_add(draw_prep_workgroup_count),
+            .saturating_add(inputs.assembly_dispatch_workgroup_count)
+            .saturating_add(inputs.draw_prep_dispatch_workgroup_count),
         active_lane_count: inputs.total_instance_count,
-        guarded_lane_count: assembly_workgroup_count
+        guarded_lane_count: inputs
+            .assembly_dispatch_workgroup_count
             .saturating_mul(64)
             .saturating_sub(inputs.total_instance_count),
     };

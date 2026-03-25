@@ -37,6 +37,7 @@ describe('compile worker payload clone safety', () => {
           stage: 'compute' as const,
           entryPoint: 'compute_main',
           wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+          dispatchWorkgroups: { x: 1, y: 1, z: 1 },
         },
       ],
     };

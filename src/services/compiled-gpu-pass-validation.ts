@@ -1,6 +1,11 @@
 import type { GeneratedGpuArtifactManifestIR, GpuPassManifestEntryIR } from '../compiler/ir/program';
 import type { CompileError } from '../compiler/types';
-import type { CompiledGpuPassArtifact, CompiledGpuPassBundle } from './compile-worker-protocol';
+import type {
+  CompiledDispatchWorkgroupsArtifact,
+  CompiledDrawPrepExecutionArtifact,
+  CompiledGpuPassArtifact,
+  CompiledGpuPassBundle,
+} from './compile-worker-protocol';
 import {
   type GpuPassStage,
   isGpuPassStage,
@@ -43,6 +48,126 @@ function createBundleError(message: string): CompileError {
   return {
     code: 'IRValidationFailed',
     message,
+  };
+}
+
+function isFiniteUint32(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && Number.isInteger(value)
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= 0xFFFF_FFFF;
+}
+
+function normalizeDispatchWorkgroups(
+  passId: string,
+  pass: CompiledGpuPassArtifact,
+  index: number,
+  errors: CompileError[],
+): CompiledDispatchWorkgroupsArtifact {
+  const dispatch = pass.dispatchWorkgroups as Partial<CompiledDispatchWorkgroupsArtifact> | undefined;
+  const x = dispatch?.x;
+  const y = dispatch?.y;
+  const z = dispatch?.z;
+  if (!isFiniteUint32(x) || x <= 0 || !isFiniteUint32(y) || y <= 0 || !isFiniteUint32(z) || z <= 0) {
+    errors.push(createPassError(
+      index,
+      `pass "${passId}" has invalid dispatchWorkgroups (expected positive uint32 x/y/z)`,
+    ));
+    return { x: 1, y: 1, z: 1 };
+  }
+  return { x, y, z };
+}
+
+function normalizeDrawPrepExecution(
+  passId: string,
+  pass: CompiledGpuPassArtifact,
+  index: number,
+  errors: CompileError[],
+): CompiledDrawPrepExecutionArtifact | undefined {
+  const execution = pass.drawPrepExecution;
+  if (!execution) return undefined;
+  const scalarFields: Array<keyof Omit<
+    CompiledDrawPrepExecutionArtifact,
+    'assemblyDispatchWorkgroups' | 'drawPrepDispatchWorkgroups' | 'shapeControlPointPatches'
+  >> = [
+    'totalRecordCount',
+    'indexedRecordCount',
+    'nonIndexedRecordCount',
+    'indexedRegionBaseWords',
+    'nonIndexedRegionBaseWords',
+    'indexedStrideWords',
+    'nonIndexedStrideWords',
+    'totalInstanceCount',
+  ];
+  for (const field of scalarFields) {
+    if (!isFiniteUint32(execution[field])) {
+      errors.push(createPassError(
+        index,
+        `pass "${passId}" drawPrepExecution.${field} must be a uint32`,
+      ));
+    }
+  }
+  const normalizeDispatch = (
+    value: unknown,
+    context: 'assemblyDispatchWorkgroups' | 'drawPrepDispatchWorkgroups',
+  ): CompiledDispatchWorkgroupsArtifact => {
+    const dispatch = value as Partial<CompiledDispatchWorkgroupsArtifact> | undefined;
+    const x = dispatch?.x;
+    const y = dispatch?.y;
+    const z = dispatch?.z;
+    if (!isFiniteUint32(x) || x <= 0 || !isFiniteUint32(y) || y <= 0 || !isFiniteUint32(z) || z <= 0) {
+      errors.push(createPassError(
+        index,
+        `pass "${passId}" drawPrepExecution.${context} must be positive uint32 x/y/z`,
+      ));
+      return { x: 1, y: 1, z: 1 };
+    }
+    return { x, y, z };
+  };
+  const shapeControlPointPatches = Array.isArray(execution.shapeControlPointPatches)
+    ? execution.shapeControlPointPatches
+        .filter((patch, patchIndex) => {
+          const valid = isFiniteUint32(patch?.shapeWordOffset)
+            && isFiniteUint32(patch?.controlPointSlotId);
+          if (!valid) {
+            errors.push(createPassError(
+              index,
+              `pass "${passId}" drawPrepExecution.shapeControlPointPatches[${patchIndex}] must contain uint32 shapeWordOffset/controlPointSlotId`,
+            ));
+          }
+          return valid;
+        })
+        .map((patch) => ({
+          shapeWordOffset: patch.shapeWordOffset,
+          controlPointSlotId: patch.controlPointSlotId,
+        }))
+    : [];
+  if (!Array.isArray(execution.shapeControlPointPatches)) {
+    errors.push(createPassError(
+      index,
+      `pass "${passId}" drawPrepExecution.shapeControlPointPatches must be an array`,
+    ));
+  }
+  return {
+    totalRecordCount: execution.totalRecordCount,
+    indexedRecordCount: execution.indexedRecordCount,
+    nonIndexedRecordCount: execution.nonIndexedRecordCount,
+    indexedRegionBaseWords: execution.indexedRegionBaseWords,
+    nonIndexedRegionBaseWords: execution.nonIndexedRegionBaseWords,
+    indexedStrideWords: execution.indexedStrideWords,
+    nonIndexedStrideWords: execution.nonIndexedStrideWords,
+    totalInstanceCount: execution.totalInstanceCount,
+    assemblyDispatchWorkgroups: normalizeDispatch(
+      execution.assemblyDispatchWorkgroups,
+      'assemblyDispatchWorkgroups',
+    ),
+    drawPrepDispatchWorkgroups: normalizeDispatch(
+      execution.drawPrepDispatchWorkgroups,
+      'drawPrepDispatchWorkgroups',
+    ),
+    shapeControlPointPatches,
   };
 }
 
@@ -122,6 +247,8 @@ function normalizePassShape(
   const stage = normalizePassStage(pass, index, errors);
   const entryPoint = normalizeEntryPoint(passId, pass, index, errors);
   const wgsl = normalizeWgsl(passId, pass, index, errors);
+  const dispatchWorkgroups = normalizeDispatchWorkgroups(passId, pass, index, errors);
+  const drawPrepExecution = normalizeDrawPrepExecution(passId, pass, index, errors);
   if (stage === null) {
     return null;
   }
@@ -131,6 +258,8 @@ function normalizePassShape(
     stage,
     entryPoint,
     wgsl,
+    dispatchWorkgroups,
+    ...(drawPrepExecution ? { drawPrepExecution } : {}),
     ...(pass.memoryManifest ? { memoryManifest: pass.memoryManifest } : {}),
   };
 }

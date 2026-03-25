@@ -18,6 +18,8 @@ import {
   computeRustRendererSinkTableWordCapacity,
   RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS,
   type RustRendererBootstrapConfig,
+  type RustRendererDispatchWorkgroups,
+  type RustRendererDrawPrepExecution,
   type RustRendererGpuPass,
   type RustRendererReadbackSnapshot,
   type RustRendererSchedulerState,
@@ -258,6 +260,83 @@ function requireGpuPassWgsl(pass: RustRendererGpuPass, passId: string): string {
   );
 }
 
+function requirePositiveDispatchWorkgroups(
+  value: RustRendererDispatchWorkgroups | undefined,
+  context: string,
+): RustRendererDispatchWorkgroups {
+  if (!value) {
+    throw new Error(`Rust renderer GPU pass contract violation: ${context} is required`);
+  }
+  const x = assertFiniteUint32(value.x, `${context}.x`);
+  const y = assertFiniteUint32(value.y, `${context}.y`);
+  const z = assertFiniteUint32(value.z, `${context}.z`);
+  if (x === 0 || y === 0 || z === 0) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: ${context} x/y/z must all be >= 1`,
+    );
+  }
+  return { x, y, z };
+}
+
+function normalizeDrawPrepExecution(
+  value: RustRendererDrawPrepExecution | undefined,
+  context: string,
+): RustRendererDrawPrepExecution | undefined {
+  if (!value) return undefined;
+  const normalized = {
+    totalRecordCount: assertFiniteUint32(value.totalRecordCount, `${context}.totalRecordCount`),
+    indexedRecordCount: assertFiniteUint32(value.indexedRecordCount, `${context}.indexedRecordCount`),
+    nonIndexedRecordCount: assertFiniteUint32(
+      value.nonIndexedRecordCount,
+      `${context}.nonIndexedRecordCount`,
+    ),
+    indexedRegionBaseWords: assertFiniteUint32(
+      value.indexedRegionBaseWords,
+      `${context}.indexedRegionBaseWords`,
+    ),
+    nonIndexedRegionBaseWords: assertFiniteUint32(
+      value.nonIndexedRegionBaseWords,
+      `${context}.nonIndexedRegionBaseWords`,
+    ),
+    indexedStrideWords: assertFiniteUint32(value.indexedStrideWords, `${context}.indexedStrideWords`),
+    nonIndexedStrideWords: assertFiniteUint32(value.nonIndexedStrideWords, `${context}.nonIndexedStrideWords`),
+    totalInstanceCount: assertFiniteUint32(value.totalInstanceCount, `${context}.totalInstanceCount`),
+    assemblyDispatchWorkgroups: requirePositiveDispatchWorkgroups(
+      value.assemblyDispatchWorkgroups,
+      `${context}.assemblyDispatchWorkgroups`,
+    ),
+    drawPrepDispatchWorkgroups: requirePositiveDispatchWorkgroups(
+      value.drawPrepDispatchWorkgroups,
+      `${context}.drawPrepDispatchWorkgroups`,
+    ),
+    shapeControlPointPatches: Array.isArray(value.shapeControlPointPatches)
+      ? value.shapeControlPointPatches.map((patch, patchIndex) => ({
+        shapeWordOffset: assertFiniteUint32(
+          patch.shapeWordOffset,
+          `${context}.shapeControlPointPatches[${patchIndex}].shapeWordOffset`,
+        ),
+        controlPointSlotId: assertFiniteUint32(
+          patch.controlPointSlotId,
+          `${context}.shapeControlPointPatches[${patchIndex}].controlPointSlotId`,
+        ),
+      }))
+      : (() => {
+        throw new Error(
+          `Rust renderer GPU pass contract violation: ${context}.shapeControlPointPatches must be an array`,
+        );
+      })(),
+  } satisfies RustRendererDrawPrepExecution;
+  if (
+    normalized.indexedRecordCount + normalized.nonIndexedRecordCount
+    !== normalized.totalRecordCount
+  ) {
+    throw new Error(
+      `Rust renderer GPU pass contract violation: ${context} record counts do not sum to totalRecordCount`,
+    );
+  }
+  return normalized;
+}
+
 function hasGpuPassPayloads(passes: readonly RustRendererGpuPass[]): boolean {
   return passes.length > 0;
 }
@@ -275,6 +354,8 @@ function buildValidatedGpuPassPayload(
   stage: GpuPassStage,
   entryPoint: string,
   wgsl: string,
+  dispatchWorkgroups: RustRendererDispatchWorkgroups,
+  drawPrepExecution: RustRendererDrawPrepExecution | undefined,
   memoryManifest: RustRendererGpuPass['memoryManifest'],
 ): RustRendererGpuPass {
   return {
@@ -282,6 +363,8 @@ function buildValidatedGpuPassPayload(
     stage,
     entryPoint,
     wgsl,
+    dispatchWorkgroups,
+    ...(drawPrepExecution ? { drawPrepExecution } : {}),
     ...(memoryManifest ? { memoryManifest } : {}),
   };
 }
@@ -313,7 +396,23 @@ function validateGpuPass(pass: RustRendererGpuPass, index: number): RustRenderer
   const stage = requireGpuPassStage(pass, passId);
   const entryPoint = requireGpuPassEntryPoint(pass, passId);
   const wgsl = requireGpuPassWgsl(pass, passId);
-  return buildValidatedGpuPassPayload(passId, stage, entryPoint, wgsl, pass.memoryManifest);
+  const dispatchWorkgroups = requirePositiveDispatchWorkgroups(
+    pass.dispatchWorkgroups,
+    `pass "${passId}".dispatchWorkgroups`,
+  );
+  const drawPrepExecution = normalizeDrawPrepExecution(
+    pass.drawPrepExecution,
+    `pass "${passId}".drawPrepExecution`,
+  );
+  return buildValidatedGpuPassPayload(
+    passId,
+    stage,
+    entryPoint,
+    wgsl,
+    dispatchWorkgroups,
+    drawPrepExecution,
+    pass.memoryManifest,
+  );
 }
 
 /**

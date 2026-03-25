@@ -16,6 +16,7 @@ function buildPass(overrides: Partial<CompiledGpuPassArtifact> = {}): CompiledGp
     stage: 'compute',
     entryPoint: 'compute_main',
     wgsl: '@compute @workgroup_size(64, 1, 1)\nfn compute_main() {}',
+    dispatchWorkgroups: { x: 1, y: 1, z: 1 },
     ...overrides,
   };
 }
@@ -70,6 +71,13 @@ describe('validateCompiledGpuPassBundle pass signature normalization', () => {
 
   it('rejects missing entrypoint values', () => {
     expectValidationError({ entryPoint: '' }, 'missing entryPoint');
+  });
+
+  it('rejects invalid dispatch workgroups payload', () => {
+    expectValidationError(
+      { dispatchWorkgroups: { x: 0, y: 1, z: 1 } },
+      'invalid dispatchWorkgroups',
+    );
   });
 
 });

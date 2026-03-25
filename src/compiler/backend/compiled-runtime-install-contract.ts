@@ -34,6 +34,32 @@ import { packParametricShapeBankRecord, parametricRecordWordCount } from '../../
 export interface CompiledDrawPrepInstallArtifact {
   readonly words: Uint32Array;
   readonly wordCount: number;
+  readonly execution: CompiledDrawPrepExecutionArtifact;
+}
+
+export interface CompiledDispatchWorkgroupsArtifact {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface CompiledShapeBankControlPointPatchArtifact {
+  readonly shapeWordOffset: number;
+  readonly controlPointSlotId: number;
+}
+
+export interface CompiledDrawPrepExecutionArtifact {
+  readonly totalRecordCount: number;
+  readonly indexedRecordCount: number;
+  readonly nonIndexedRecordCount: number;
+  readonly indexedRegionBaseWords: number;
+  readonly nonIndexedRegionBaseWords: number;
+  readonly indexedStrideWords: number;
+  readonly nonIndexedStrideWords: number;
+  readonly totalInstanceCount: number;
+  readonly assemblyDispatchWorkgroups: CompiledDispatchWorkgroupsArtifact;
+  readonly drawPrepDispatchWorkgroups: CompiledDispatchWorkgroupsArtifact;
+  readonly shapeControlPointPatches: readonly CompiledShapeBankControlPointPatchArtifact[];
 }
 
 export interface CompiledShapeBankInstallArtifact {
@@ -104,6 +130,98 @@ interface CanonicalTopologyInstall {
   readonly shapeWordOffsetBySlot: ReadonlyMap<ValueSlot, number>;
   // Sidecar metadata for the renderer (same contract as ShapeBankState).
   readonly topologyIdByHandle: Uint32Array;
+  readonly shapeControlPointPatches: readonly CompiledShapeBankControlPointPatchArtifact[];
+}
+
+const DRAW_PREP_WORKGROUP_SIZE_X = 64;
+
+function computeDispatchWorkgroupsX(totalItems: number, context: string): CompiledDispatchWorkgroupsArtifact {
+  const safeTotal = assertFiniteUint32(totalItems, context);
+  const x = Math.max(1, Math.ceil(safeTotal / DRAW_PREP_WORKGROUP_SIZE_X));
+  return {
+    x: assertFiniteUint32(x, `${context}.dispatch.x`),
+    y: 1,
+    z: 1,
+  };
+}
+
+function buildDrawPrepExecutionArtifact(
+  program: CompiledProgramIR,
+  shapeControlPointPatches: readonly CompiledShapeBankControlPointPatchArtifact[],
+): CompiledDrawPrepExecutionArtifact {
+  const drawPrepProgram = program.drawPrepProgram;
+  const totalRecordCount = assertFiniteUint32(
+    drawPrepProgram.totalRecordCount,
+    'drawPrepProgram.totalRecordCount',
+  );
+  const indexedRecordCount = assertFiniteUint32(
+    drawPrepProgram.indexedRecordCount,
+    'drawPrepProgram.indexedRecordCount',
+  );
+  const nonIndexedRecordCount = assertFiniteUint32(
+    drawPrepProgram.nonIndexedRecordCount,
+    'drawPrepProgram.nonIndexedRecordCount',
+  );
+  const indexedRegionBaseWords = assertFiniteUint32(
+    drawPrepProgram.indexedRegionBaseWords,
+    'drawPrepProgram.indexedRegionBaseWords',
+  );
+  const nonIndexedRegionBaseWords = assertFiniteUint32(
+    drawPrepProgram.nonIndexedRegionBaseWords,
+    'drawPrepProgram.nonIndexedRegionBaseWords',
+  );
+  const indexedStrideWords = assertFiniteUint32(
+    drawPrepProgram.indexedStrideWords,
+    'drawPrepProgram.indexedStrideWords',
+  );
+  const nonIndexedStrideWords = assertFiniteUint32(
+    drawPrepProgram.nonIndexedStrideWords,
+    'drawPrepProgram.nonIndexedStrideWords',
+  );
+  if (indexedRecordCount + nonIndexedRecordCount !== totalRecordCount) {
+    throw new Error(
+      'CompiledRuntimeInstallContract: drawPrepProgram record counts do not match totalRecordCount',
+    );
+  }
+  if (drawPrepProgram.sinks.length !== totalRecordCount) {
+    throw new Error(
+      'CompiledRuntimeInstallContract: drawPrepProgram sinks length does not match totalRecordCount',
+    );
+  }
+  let totalInstanceCount = 0;
+  for (const sink of drawPrepProgram.sinks) {
+    if (sink.instanceCountMode !== 'static') {
+      throw new Error(
+        `CompiledRuntimeInstallContract: drawPrep sink ${sink.sinkIndex} uses unsupported dynamic instance count`,
+      );
+    }
+    totalInstanceCount = assertFiniteUint32(
+      totalInstanceCount + assertFiniteUint32(
+        sink.staticInstanceCount ?? 0,
+        `drawPrepProgram.sinks[${sink.sinkIndex}].staticInstanceCount`,
+      ),
+      'drawPrepProgram.totalInstanceCount',
+    );
+  }
+  return {
+    totalRecordCount,
+    indexedRecordCount,
+    nonIndexedRecordCount,
+    indexedRegionBaseWords,
+    nonIndexedRegionBaseWords,
+    indexedStrideWords,
+    nonIndexedStrideWords,
+    totalInstanceCount,
+    assemblyDispatchWorkgroups: computeDispatchWorkgroupsX(
+      totalInstanceCount,
+      'drawPrepProgram.totalInstanceCount',
+    ),
+    drawPrepDispatchWorkgroups: computeDispatchWorkgroupsX(
+      totalRecordCount,
+      'drawPrepProgram.totalRecordCount',
+    ),
+    shapeControlPointPatches,
+  };
 }
 
 // [RECOVER-07] Build ShapeBank topology headers from compile-time data only.
@@ -149,6 +267,7 @@ function buildCanonicalTopologyHeaders(
   const shapeBankWords = new Uint32Array(totalWords);
   // Sidecar keyed by word offset — allocate full size for sparse O(1) lookup.
   const topologyIdByHandle = new Uint32Array(totalWords);
+  const shapeControlPointPatches: CompiledShapeBankControlPointPatchArtifact[] = [];
 
   let wordOffset = 0;
   for (let stepIdx = 0; stepIdx < shapeRefSteps.length; stepIdx++) {
@@ -160,6 +279,7 @@ function buildCanonicalTopologyHeaders(
     let cpArenaBaseOffset = 0;
     let cpArenaLaneStride = 0;
     let cpArenaComponentStride = 0;
+    const requiresControlPointPatch = Boolean(expr.parametricTemplate) || isPathTopology(topology);
     if (expr.controlPointField != null) {
       const slot = program.runtimeAddressTable.fieldExprToSlot.get(
         expr.controlPointField as number,
@@ -169,7 +289,25 @@ function buildCanonicalTopologyHeaders(
           Number(slot),
           `shapeRef(${String(expr.topologyId)}).controlPointSlotId`,
         );
+      } else if (requiresControlPointPatch) {
+        throw new Error(
+          `shapeRef(${String(expr.topologyId)}) controlPointField is missing runtimeAddressTable mapping`,
+        );
       }
+    }
+    if (requiresControlPointPatch) {
+      if (expr.controlPointField == null) {
+        throw new Error(
+          `shapeRef(${String(expr.topologyId)}) is missing controlPointField required by topology`,
+        );
+      }
+      shapeControlPointPatches.push({
+        shapeWordOffset: assertFiniteUint32(wordOffset, `shapePatch(${String(expr.topologyId)}).shapeWordOffset`),
+        controlPointSlotId: assertFiniteUint32(
+          cpArenaBaseOffset,
+          `shapePatch(${String(expr.topologyId)}).controlPointSlotId`,
+        ),
+      });
     }
 
     if (expr.parametricTemplate) {
@@ -241,6 +379,7 @@ function buildCanonicalTopologyHeaders(
     shapeBankWordCount: totalWords,
     shapeWordOffsetBySlot,
     topologyIdByHandle,
+    shapeControlPointPatches,
   };
 }
 
@@ -260,6 +399,7 @@ export function buildCompiledRuntimeInstallContract(
   program: CompiledProgramIR,
 ): CompiledRuntimeInstallContract {
   const topology = buildCanonicalTopologyHeaders(program);
+  const execution = buildDrawPrepExecutionArtifact(program, topology.shapeControlPointPatches);
 
   // [RECOVER-07] Sink table packer receives compile-time shape word offsets
   // directly — no arena round-trip through CPU materialization.
@@ -277,6 +417,7 @@ export function buildCompiledRuntimeInstallContract(
     drawPrep: {
       words: drawPrepWords,
       wordCount: drawPrepWordCount,
+      execution,
     },
     shapeBank: {
       words: topology.shapeBankWords,

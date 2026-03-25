@@ -49,7 +49,34 @@ export interface RustRendererGpuPass {
   readonly stage: GpuPassStage;
   readonly entryPoint: string;
   readonly wgsl: string;
+  readonly dispatchWorkgroups: RustRendererDispatchWorkgroups;
+  readonly drawPrepExecution?: RustRendererDrawPrepExecution;
   readonly memoryManifest?: MemoryManifestIR;
+}
+
+export interface RustRendererDispatchWorkgroups {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface RustRendererShapeControlPointPatch {
+  readonly shapeWordOffset: number;
+  readonly controlPointSlotId: number;
+}
+
+export interface RustRendererDrawPrepExecution {
+  readonly totalRecordCount: number;
+  readonly indexedRecordCount: number;
+  readonly nonIndexedRecordCount: number;
+  readonly indexedRegionBaseWords: number;
+  readonly nonIndexedRegionBaseWords: number;
+  readonly indexedStrideWords: number;
+  readonly nonIndexedStrideWords: number;
+  readonly totalInstanceCount: number;
+  readonly assemblyDispatchWorkgroups: RustRendererDispatchWorkgroups;
+  readonly drawPrepDispatchWorkgroups: RustRendererDispatchWorkgroups;
+  readonly shapeControlPointPatches: readonly RustRendererShapeControlPointPatch[];
 }
 
 export interface RustRendererRebuildGpuPipelinesMessage {

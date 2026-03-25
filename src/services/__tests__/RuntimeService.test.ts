@@ -36,6 +36,7 @@ function makePass(passId: string): CompiledGpuPassArtifact {
     stage: 'compute',
     entryPoint: 'main',
     wgsl: '@compute @workgroup_size(64) fn main() {}',
+    dispatchWorkgroups: { x: 1, y: 1, z: 1 },
   };
 }
 
@@ -47,6 +48,19 @@ function makeBundle(passId: string): CompiledGpuArtifactBundle {
       drawPrep: {
         words: new Uint32Array([11, 22, 33]),
         wordCount: 3,
+        execution: {
+          totalRecordCount: 1,
+          indexedRecordCount: 1,
+          nonIndexedRecordCount: 0,
+          indexedRegionBaseWords: 0,
+          nonIndexedRegionBaseWords: 5,
+          indexedStrideWords: 5,
+          nonIndexedStrideWords: 4,
+          totalInstanceCount: 2,
+          assemblyDispatchWorkgroups: { x: 1, y: 1, z: 1 },
+          drawPrepDispatchWorkgroups: { x: 1, y: 1, z: 1 },
+          shapeControlPointPatches: [],
+        },
       },
       shapeBank: {
         words: new Uint32Array([44, 55, 66, 77]),
