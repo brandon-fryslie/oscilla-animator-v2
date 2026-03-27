@@ -72,9 +72,8 @@ function compileWithDisconnectedBlock(): {
     b.wire(osc, 'out', add, 'a');
     b.wire(c, 'out', add, 'b');
 
-    // Add a disconnected Const block (not wired to anything)
-    const disconnected = b.addBlock('Const');
-    b.setConfig(disconnected, 'value', 42);
+    // Add a disconnected Comment block (no dataflow role in schedule)
+    const disconnected = b.addBlock('Comment');
     disconnectedId = disconnected;
   });
 

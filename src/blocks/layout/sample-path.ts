@@ -101,9 +101,12 @@ export function register(): void {
 
       // Target instance context comes from the t field
       const tCard = requireInst(tInput.type.extent.cardinality, 'cardinality');
-      const targetInstanceId = tCard.kind === 'many'
-        ? (typeof tCard.instance === 'object' ? tCard.instance.instanceId : tCard.instance)
-        : ctx.inferredInstance ?? ctx.instance;
+      const targetInstanceId =
+        tCard.kind === 'many'
+          ? (typeof tCard.instance === 'object' ? tCard.instance.instanceId : tCard.instance)
+          : (() => {
+              throw new Error('SamplePath requires many cardinality for t');
+            })();
 
       const posType = ctx.outTypes[0];
       const tanType = ctx.outTypes[1];
