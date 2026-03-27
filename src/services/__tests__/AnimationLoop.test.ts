@@ -73,7 +73,7 @@ function makeRenderer() {
     lastEvent: { tag: 'tick' },
   };
   return {
-    setViewportFrame: vi.fn<(payload: unknown) => void>(),
+    publishFrameInput: vi.fn<(payload: unknown) => void>(),
     getLifecycleState: vi.fn<() => string>(() => 'running'),
     getLatestRuntimeTelemetry: vi.fn(() => telemetry),
     getInstalledGpuPassIds: vi.fn(() => ['simulation']),
