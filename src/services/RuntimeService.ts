@@ -69,6 +69,7 @@ import {
   shouldClearStoredStartupPatch,
   type StartupRestoreSource,
 } from './runtime-gpu-fault-policy';
+import type { InstallPipelineBoundaryPayloadV1 } from '../render/rust/boundary-contract';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -400,7 +401,6 @@ export class RuntimeService {
     this.nextSwapIsInitial = false;
     this.swapInFlight = true;
     try {
-      await this.publishRendererPipelines(next);
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
       if (expectedProgram && this.compileState.currentProgram === expectedProgram && next.compiledGpuBundle) {
@@ -433,75 +433,25 @@ export class RuntimeService {
     if (!runtime || this.rendererExecutionState !== 'active') {
       return;
     }
-    const { renderer, canvas } = runtime;
+    const { renderer } = runtime;
 
     // [LAW:one-source-of-truth] RuntimeService publishes the canonical
     // worker-owned install contract without rebuilding static metadata.
     const installContract = compiledGpuBundle.runtimeInstall;
-    const viewport = this.store.viewport;
-    const renderWidth = Math.max(1, Math.floor(viewport?.canvasWidth || canvas.width || 1));
-    const renderHeight = Math.max(1, Math.floor(viewport?.canvasHeight || canvas.height || 1));
-    const zoom = viewport?.zoom ?? 1;
-    const panX = viewport?.pan?.x ?? 0;
-    const panY = viewport?.pan?.y ?? 0;
-
-    await renderer.installDrawPrepSinkPointerMap(installContract.drawPrep.sinkPointerMap);
-
-    renderer.render({
-      shapeBank: {
-        data: installContract.shapeBank.words,
-        volatilePtr: installContract.shapeBank.wordCount,
-        // [RECOVER-07] staticBoundary is 0: all topology headers are
-        // produced by the compile-time install stage, not the ShapeBank
-        // frame allocator.
-        staticBoundary: 0,
-        topologyIdByHandle: installContract.shapeBank.topologyIdByHandle,
+    const installPayload: InstallPipelineBoundaryPayloadV1 = {
+      type: 'INSTALL_PIPELINE_V1',
+      pipeline: {
+        passes: compiledGpuBundle.passes,
+        sinkPointerMap: installContract.drawPrep.sinkPointerMap,
+        shapeBankWords: Array.from(installContract.shapeBank.words),
+        shapeBankWordCount: installContract.shapeBank.wordCount,
+        topologyIdByHandle: Array.from(installContract.shapeBank.topologyIdByHandle),
+        sinkTableWords: Array.from(installContract.drawPrep.words),
+        sinkTableWordCount: installContract.drawPrep.wordCount,
       },
-      drawPrepSinkTableV1: installContract.drawPrep.words,
-      drawPrepSinkTableWordCount: installContract.drawPrep.wordCount,
-      width: renderWidth,
-      height: renderHeight,
-      zoom,
-      panX,
-      panY,
-      timeMs: 0,
-      inputMouseX: 0,
-      inputMouseY: 0,
-      inputMouseButtons: 0,
-      inputAudioLow: 0,
-      inputAudioMid: 0,
-      inputAudioHigh: 0,
-      inputGaugeActive: 0,
-    });
-  }
-
-  private async publishRendererPipelines(
-    artifacts: {
-      readonly backendResult: import('../compiler/compile').CompileResult | null;
-      readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
-    },
-  ): Promise<void> {
-    if (artifacts.backendResult?.kind !== 'ok') {
-      return;
-    }
-    const bundlePasses = artifacts.compiledGpuBundle?.passes ?? null;
-    if (!bundlePasses) {
-      throw new Error('RuntimeService: compile backend result is missing required GPU pass bundle');
-    }
-
-    const runtime = this.readActiveRuntimeResources();
-    if (!runtime) {
-      if (this.rendererExecutionState !== 'active') {
-        return;
-      }
-      throw new Error('RuntimeService: renderer must exist before publishing compiled GPU pipelines');
-    }
-    const { renderer } = runtime;
-
-    // [LAW:single-enforcer] RuntimeService is the only boundary that publishes
-    // compiler-emitted GPU shader artifacts into the active renderer.
-    shaderInspector.setPasses(bundlePasses);
-    await renderer.rebuildGpuPipelines(bundlePasses);
+    };
+    shaderInspector.setPasses(compiledGpuBundle.passes);
+    await renderer.applyInstallPipeline(installPayload);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
