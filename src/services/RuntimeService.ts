@@ -504,6 +504,23 @@ export class RuntimeService {
     await renderer.rebuildGpuPipelines(bundlePasses);
   }
 
+  /**
+   * Submit a raw GPU pass payload directly to the renderer, bypassing the
+   * compiler pipeline entirely. Used by the payload tester UI.
+   *
+   * WARNING: This replaces all currently installed pipelines. The previous
+   * compiled patch's rendering will be destroyed.
+   */
+  async submitRawGpuPayload(
+    passes: readonly import('../render/rust/worker-protocol').RustRendererGpuPass[]
+  ): Promise<void> {
+    const runtime = this.readActiveRuntimeResources();
+    if (!runtime) {
+      throw new Error('RuntimeService: renderer must be active before submitting raw GPU payload');
+    }
+    await runtime.renderer.rebuildGpuPipelines(passes);
+  }
+
   private buildCompileRequest(): CompileWorkerRunRequest {
     const debugValues = this.store.settings.get(debugSettings);
     const flagOverrides = this.store.settings.get(compilerFlagsSettings);
