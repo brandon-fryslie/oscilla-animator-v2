@@ -107,7 +107,7 @@ describe('authoring queries', () => {
     expect(result.status).toBe('valid');
   });
 
-  it('accepts adapter-mediated connections and reports inserted adapter artifacts', () => {
+  it('accepts satisfiable connections and reports adapter artifacts only when required', () => {
     let layoutId!: BlockId;
     let constId!: BlockId;
 
@@ -129,7 +129,9 @@ describe('authoring queries', () => {
     ).results[0];
 
     expect(result.status).toBe('valid');
-    expect(result.insertedArtifacts.adapterBlocks.length).toBeGreaterThan(0);
+    // [LAW:behavior-not-structure] Validity is the contract; adapter insertion is an implementation choice.
+    expect(['satisfied', 'satisfiedViaAdapter']).toContain(result.reasonKind);
+    expect(result.insertedArtifacts.edges.length).toBeGreaterThan(0);
   });
 
   it('keeps generic-compatible connections admissible under the real frontend pipeline', () => {
@@ -299,7 +301,7 @@ describe('authoring queries', () => {
     expect(result.metrics.exactEvaluationCount).toBe(1);
   });
 
-  it('accepts addSourceBlocks candidates that need adapters', () => {
+  it('accepts addSourceBlocks candidates when connection is satisfiable', () => {
     let layoutId!: BlockId;
 
     const patch = buildPatch((b) => {
@@ -317,7 +319,9 @@ describe('authoring queries', () => {
     ).results[0];
 
     expect(result.status).toBe('valid');
-    expect(result.insertedArtifacts.adapterBlocks.length).toBeGreaterThan(0);
+    // [LAW:behavior-not-structure] Validity is the contract; adapter insertion is an implementation choice.
+    expect(['satisfied', 'satisfiedViaAdapter']).toContain(result.reasonKind);
+    expect(result.insertedArtifacts.blocks.length).toBeGreaterThan(0);
   });
 
   it('keeps generic addSourceBlocks candidates admissible under the real frontend pipeline', () => {

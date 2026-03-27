@@ -116,6 +116,7 @@ function assertContainsAll(source, patterns, relativePath, artifactKind) {
 function compareNormalizedWasmArtifact(relativePath) {
   const generated = stripCustomSections(fs.readFileSync(path.join(repoRoot, relativePath)));
   const generatedInterface = describeWasmModule(generated, relativePath);
+  // [LAW:one-source-of-truth] Required exports must track the canonical wasm-bindgen surface in pkg/*.d.ts.
   const requiredExports = [
     'memory:memory',
     'function:attach_shared_input',
@@ -125,7 +126,6 @@ function compareNormalizedWasmArtifact(relativePath) {
     'function:inject_poison_alloc',
     'function:pause_engine',
     'function:rebuild_gpu_pipelines',
-    'function:rebuild_pipeline',
     'function:resume_engine',
     'function:take_frame_pacing_packet',
     'function:__wbindgen_malloc',
