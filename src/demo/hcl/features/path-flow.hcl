@@ -1,80 +1,36 @@
 # Path Flow
 #
-# Demonstrates the v2.5 layout system:
-#   - PathLayout (Type B Relation): distributes elements along an arc-length
-#     parameterized path defined by a ProceduralPolygon
-#   - Expression recentering: lifts origin-authored path samples into viewport UV space
-#   - Animated offset: elements flow continuously around the pentagon path
+# Elements flowing along a visible pentagon path.  A dense scaffold
+# of tiny dots traces the path shape behind the flowing elements
+# so the shape they're following is unmistakable.
 #
-# ═══════════════════════════════════════════════════════════════════════════
-# EXPECTED BEHAVIOR
-# ═══════════════════════════════════════════════════════════════════════════
-#
-# Visual:
-#   - 40 glowing ellipses arranged in a pentagonal path around the center
-#     of the viewport
-#   - Each ellipse has a unique hue from the rainbow spectrum (red → orange
-#     → yellow → green → cyan → blue → violet), cycling across the 40
-#     elements based on their normalized index
-#   - Elements are evenly distributed along the pentagon's perimeter via
-#     arc-length parameterized sampling — straight edges get fewer dots
-#     than they would with naive angle-based distribution (only true if
-#     edges have different lengths; for a regular pentagon they're equal)
-#
-# Animation:
-#   - The 40 dots flow continuously around the pentagonal path, completing
-#     one full circuit every 8 seconds (periodAMs = 8000)
-#   - The flow is driven by PathLayout's offset input, which receives a
-#     0→1 ramp from InfiniteTimeRoot.phaseA. The wrap01 contract ensures
-#     smooth wrapping at the boundary (no discontinuity when offset
-#     crosses from ~1.0 back to ~0.0)
-#   - The rainbow colors move WITH the elements (each element keeps its
-#     hue as it travels), creating a flowing rainbow necklace effect
-#
-# Positioning math:
-#   - ProceduralPolygon generates 5 vertices centered at (0, 0) with
-#     radius 0.2, so vertices lie at distance 0.2 from origin
-#   - PathLayout samples M=40 positions along these 5 edges
-#   - Expression adds (0.5, 0.5) to each sampled point
-#   - Result: control points are roughly in the range (0.3, 0.3) to (0.7, 0.7),
-#     centered in the viewport instead of clustering in the upper-left quadrant
-#
-# Blocks exercised:
-#   PathLayout       — arc-length path sampling via pathSample kernel
-#   ProceduralPolygon — pentagon path source (shapeRef + controlPoints)
-#   MakeShape2D      — topology assembler (consumes controlPoints)
-#   Expression       — field swizzle + viewport recentering
-#
-# ═══════════════════════════════════════════════════════════════════════════
+# Demonstrates: PathLayout arc-length sampling, ProceduralPolygon,
+#               ShapeWobble2D, dual-layer render (scaffold + flow).
 
 patch "Path Flow" {
-
-  # --- Time source: 8-second cycle for flow animation ---
-
   block "InfiniteTimeRoot" "clock" {
     periodAMs = 8000
+    periodBMs = 12000
     role = "timeRoot"
     outputs {
       phaseA = [path-layout.offset, polygon-wobble.phase]
+      phaseB = hue-shift.b
     }
   }
 
   # --- Pentagon path definition ---
-  # ProceduralPolygon creates:
-  #   shape         → One<shape2d> (shapeRef with topology + controlPointField)
-  #   controlPoints → Field<vec2> over control instance (5 vertices)
 
   block "ProceduralPolygon" "polygon" {
     sides = 5
-    radiusX = 0.2
-    radiusY = 0.2
+    radiusX = 0.28
+    radiusY = 0.28
     outputs {
       controlPoints = polygon-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "polygon-wobble" {
-    amount = 0.02
+    amount = 0.018
     frequency = 5
     outputs {
       points = assembler.controlPoints
@@ -84,33 +40,70 @@ patch "Path Flow" {
   block "MakeShape2D" "assembler" {
     closed = true
     outputs {
-      shape = path-layout.shape
+      shape = [path-layout.shape, scaffold-layout.shape]
     }
   }
 
-  # --- Visual stamp: small ellipses for each instance ---
+  # --- Scaffold layer: dense tiny dots tracing the pentagon path ---
+
+  block "Ellipse" "scaffold-dot" {
+    rx = 0.005
+    ry = 0.005
+    outputs {
+      shape = scaffold-arr.element
+    }
+  }
+
+  block "Array" "scaffold-arr" {
+    count = 200
+    outputs {
+      elements = scaffold-layout.elements
+    }
+  }
+
+  block "PathLayout" "scaffold-layout" {
+    outputs {
+      controlPoints = scaffold-center.refs
+    }
+  }
+
+  block "Expression" "scaffold-center" {
+    expression = <<-EXPR
+      x = scaffold_layout.controlPoints.x + 0.5
+      y = scaffold_layout.controlPoints.y + 0.5
+      vec2(x, y)
+    EXPR
+    outputs {
+      out = scaffold-render.controlPoints
+    }
+  }
+
+  block "Const" "scaffold-color" {
+    value = { r = 0.4, g = 0.5, b = 0.7, a = 0.35 }
+    outputs {
+      out = scaffold-render.color
+    }
+  }
+
+  block "RenderInstances2D" "scaffold-render" {}
+
+  # --- Flow layer: colored dots flowing along the path ---
 
   block "Ellipse" "dot" {
-    rx = 0.011
-    ry = 0.011
+    rx = 0.014
+    ry = 0.014
     outputs {
       shape = arr.element
     }
   }
 
-  # --- Instance array: 40 elements ---
-
   block "Array" "arr" {
-    count = 40
+    count = 48
     outputs {
       elements = path-layout.elements
-      t = color.h
+      t = hue-shift.a
     }
   }
-
-  # --- PathLayout: distribute along pentagon path ---
-  # spacing=1 (default) → elements span exactly one path length
-  # offset ← animated 0→1 ramp from clock → continuous flow
 
   block "PathLayout" "path-layout" {
     outputs {
@@ -120,8 +113,6 @@ patch "Path Flow" {
 
   block "Expression" "center-path" {
     expression = <<-EXPR
-      // PathLayout samples the pentagon in origin space.
-      // Visual: offset the flowing necklace into centered UV space without collapsing its radius.
       x = path_layout.controlPoints.x + 0.5
       y = path_layout.controlPoints.y + 0.5
       vec2(x, y)
@@ -131,9 +122,16 @@ patch "Path Flow" {
     }
   }
 
-  # --- Per-element rainbow color from normalized index ---
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
 
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.78
+    a = 0.95
     outputs {
       color = render.color
     }

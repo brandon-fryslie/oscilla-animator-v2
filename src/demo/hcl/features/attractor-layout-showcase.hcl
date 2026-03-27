@@ -1,54 +1,37 @@
 # Attractor Layout Showcase
 #
-# Purpose:
-#   Demonstrate AttractorLayout's specific behavior as a control-point deformer.
+# A grid of dots warped by two orbiting attractors at different strengths.
+# Three overlaid layers let you see the deformation in context:
+#   - Blue base grid (undeformed reference)
+#   - Teal soft attract (gentle pull toward orbiting target)
+#   - Pink hard attract (strong collapse toward the same target)
 #
-# What this patch shows:
-#   1) Base layout points (blue): raw GridLayoutUV positions
-#   2) Soft attract (teal): same points lerped toward center with strength=0.25
-#   3) Hard attract (pink): same points lerped toward center with strength=0.85
-#   4) Animated target (orbiting vec2), so deformation is visibly dynamic
+# The attractor target orbits in a figure-eight (Lissajous) so the
+# deformation sweeps across the grid in complex, non-circular patterns.
 #
-# Expected result:
-#   - Three overlaid point clouds using identical instance IDs and shapes
-#   - Soft set remains close to base layout
-#   - Hard set collapses strongly toward the center
-#   - Both attracted sets continuously move as the target orbits
-#   - This demonstrates AttractorLayout's per-point lerp semantics:
-#       out = lerp(points, target, strength)
+# Demonstrates: AttractorLayout strength comparison, animated Lissajous
+#               target, multi-layer render, GridLayoutUV.
 
 patch "Attractor Layout Showcase" {
   block "InfiniteTimeRoot" "clock" {
-    periodAMs = 16000
+    periodAMs = 12000
+    periodBMs = 8000
     role = "timeRoot"
     outputs {
       phaseA = target-orbit.refs
+      phaseB = target-orbit.refs
     }
   }
 
-  # Animated target: orbit around viewport center.
+  # Animated target: Lissajous figure-eight orbit.
   block "Expression" "target-orbit" {
     expression = <<-EXPR
-      // Orbit center in normalized viewport coordinates.
-      // Visual: keeps attractor movement centered in the patch.
-      center_x = 0.5
-      center_y = 0.5
+      ax = clock.phaseA * 6.2832
+      bx = clock.phaseB * 6.2832
 
-      // Radius of the target orbit.
-      // Visual: controls how far the deformation focus travels.
-      radius = 0.22
+      target_x = 0.5 + 0.25 * sin(ax)
+      target_y = 0.5 + 0.18 * sin(bx * 2.0)
 
-      // Clock phase in radians.
-      // Visual: drives smooth circular target motion over time.
-      angle = clock.phaseA * 6.2832
-
-      // Circular offset from center.
-      // Visual: traces the moving deformation hotspot.
-      target_x = center_x + radius * cos(angle)
-      target_y = center_y + radius * sin(angle)
-
-      // Emit animated attractor target.
-      // Visual: both soft/hard attractors chase this moving point.
       vec2(target_x, target_y)
     EXPR
     outputs {
@@ -56,55 +39,53 @@ patch "Attractor Layout Showcase" {
     }
   }
 
-  # Shared stamp shape for all three overlays.
+  # Shared stamp shape — bigger dots for visibility.
   block "Ellipse" "dot" {
-    rx = 0.005
-    ry = 0.005
+    rx = 0.009
+    ry = 0.009
     outputs {
       shape = instances.element
     }
   }
 
-  # One instance set drives all branches so only layout math differs.
   block "Array" "instances" {
-    count = 196
+    count = 144
     outputs {
       elements = [grid.elements, base-color.elements, soft-color.elements, hard-color.elements]
     }
   }
 
-  # Baseline spatial distribution.
   block "GridLayoutUV" "grid" {
-    rows = 14
-    cols = 14
+    rows = 12
+    cols = 12
     outputs {
       controlPoints = base-render.controlPoints
       controlPoints = [soft-attract.points, hard-attract.points]
     }
   }
 
-  # Same input points, weaker attraction.
+  # Soft attraction: subtle warping.
   block "AttractorLayout" "soft-attract" {
-    strength = 0.25
+    strength = 0.3
     outputs {
       controlPoints = soft-render.controlPoints
     }
   }
 
-  # Same input points, stronger attraction.
+  # Hard attraction: dramatic collapse.
   block "AttractorLayout" "hard-attract" {
-    strength = 0.85
+    strength = 0.88
     outputs {
       controlPoints = hard-render.controlPoints
     }
   }
 
-  # Color coding by branch.
+  # Color coding — distinct hues for each layer.
   block "FieldConstColor" "base-color" {
-    r = 0.12
-    g = 0.46
-    b = 1.0
-    a = 0.45
+    r = 0.15
+    g = 0.4
+    b = 0.9
+    a = 0.3
     outputs {
       color = base-render.color
     }
@@ -112,9 +93,9 @@ patch "Attractor Layout Showcase" {
 
   block "FieldConstColor" "soft-color" {
     r = 0.0
-    g = 0.95
-    b = 0.72
-    a = 0.55
+    g = 0.92
+    b = 0.7
+    a = 0.65
     outputs {
       color = soft-render.color
     }
@@ -122,9 +103,9 @@ patch "Attractor Layout Showcase" {
 
   block "FieldConstColor" "hard-color" {
     r = 1.0
-    g = 0.3
-    b = 0.75
-    a = 0.8
+    g = 0.25
+    b = 0.7
+    a = 0.9
     outputs {
       color = hard-render.color
     }

@@ -36,7 +36,7 @@ patch "Path Field Demo" {
   }
 
   block "Const" "outer-base" {
-    value = 0.23
+    value = 0.30
     outputs {
       out = star-outer.bias
     }
@@ -56,7 +56,7 @@ patch "Path Field Demo" {
   }
 
   block "Const" "inner-base" {
-    value = 0.10
+    value = 0.13
     outputs {
       out = star-inner.bias
     }
@@ -91,7 +91,7 @@ patch "Path Field Demo" {
   }
 
   block "Const" "length-scale-amt" {
-    value = 0.08
+    value = 0.6
     outputs {
       out = length-scale.b
     }
@@ -105,8 +105,8 @@ patch "Path Field Demo" {
 
   # Render instances distributed along the star path
   block "Ellipse" "marker" {
-    rx = 0.013
-    ry = 0.013
+    rx = 0.032
+    ry = 0.032
     outputs {
       shape = instances.element
     }
@@ -147,7 +147,7 @@ patch "Path Field Demo" {
   }
 
   block "Const" "scale-amt" {
-    value = 0.14
+    value = 0.3
     outputs {
       out = scale-map.scale
     }
@@ -160,6 +160,9 @@ patch "Path Field Demo" {
   }
 
   block "MakeColorOKLCH" "color" {
+    s = 0.95
+    l = 0.78
+    a = 0.95
     outputs {
       color = render.color
     }

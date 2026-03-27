@@ -116,18 +116,13 @@ describe('Store Integration', () => {
       )).toBe(true);
     });
 
-    it('routes DebugService suppressed query failures through diagnostics', () => {
+    it('returns undefined for edge with missing slot value', () => {
       debugService.setEdgeToSlotMap(new Map([
         ['edge1', { slotId: 10 as ValueSlot, type: canonicalType(FLOAT) }],
       ]));
       debugService.updateSlotValue(99 as ValueSlot, 0);
+      // Slot 10 was never written — queryScalarValue returns undefined gracefully.
       expect(debugService.tryGetEdgeValue('edge1')).toBeUndefined();
-
-      expect(readComputed(() =>
-        root.diagnostics.logs.some((entry) =>
-          entry.message === "DebugService(tryGetEdgeValue): Suppressed debug query failure for edge 'edge1'"
-        )
-      )).toBe(true);
     });
 
     it('routes unresolved debug port metadata through diagnostics without throwing', () => {

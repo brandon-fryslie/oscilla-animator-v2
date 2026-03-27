@@ -48,7 +48,7 @@ patch "Orbit" {
   # --- 100 bodies across 5 orbital bands (20 per ring) ---
 
   block "Array" "elements" {
-    count = 100
+    count = 101
     outputs {
       t = [positions.refs, scales.refs, hue_drift.a]
     }

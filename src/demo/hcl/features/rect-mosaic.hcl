@@ -1,30 +1,38 @@
 # Rect Mosaic
 #
-# 400 rectangles in a rotating circle layout with pulsing scale
-# via Oscillator → ScaleBias and per-instance jitter.
-# Demonstrates: ScaleBias pulsing, NoisyBroadcast, per-element rainbow.
+# A dense tiled wall of rectangles arranged in a grid, each with
+# unique size variation and color.  Rippling scale waves and hue
+# drift give the mosaic a living, breathing quality — like stained
+# glass catching shifting light.
+#
+# Demonstrates: GridLayoutUV, Rect shape, NoisyBroadcast per-element
+#               variation, Expression field scale, ShapeWobble2D.
 
 patch "Rect Mosaic" {
   block "InfiniteTimeRoot" "time" {
-    periodAMs = 4000
-    periodBMs = 3000
+    periodAMs = 10000
+    periodBMs = 7000
     role = "timeRoot"
     outputs {
-      phaseA = [layout.phase, pulse.phase, tile-wobble.phase]
+      phaseA = [scale-expr.refs, tile-wobble.phase]
+      phaseB = [scale-expr.refs, hue-shift.b]
     }
   }
 
+  # --- Tile shape: rounded rectangles with subtle wobble ---
+
   block "Rect" "tile" {
-    width = 0.03
-    height = 0.015
+    width = 0.032
+    height = 0.032
+    cornerRadius = 0.004
     outputs {
       controlPoints = tile-wobble.controlPoints
     }
   }
 
   block "ShapeWobble2D" "tile-wobble" {
-    amount = 0.0025
-    frequency = 4
+    amount = 0.003
+    frequency = 3
     outputs {
       points = tile-shape.controlPoints
     }
@@ -37,72 +45,60 @@ patch "Rect Mosaic" {
     }
   }
 
+  # --- 256 tiles in a 16x16 grid ---
+
   block "Array" "instances" {
-    count = 400
+    count = 256
     outputs {
-      elements = layout.elements
-      t = color.h
+      elements = grid.elements
+      t = [scale-expr.refs, hue-shift.a]
     }
   }
 
-  block "CircleLayoutUV" "layout" {
-    radius = 0.45
+  block "GridLayoutUV" "grid" {
+    rows = 16
+    cols = 16
     outputs {
       controlPoints = render.controlPoints
     }
   }
 
-  # Per-element rainbow
-  block "MakeColorOKLCH" "color" {
-    outputs {
-      color = render.color
-    }
-  }
+  # --- Scale: rippling waves across the grid ---
 
-  # Pulsing scale: Oscillator → ScaleBias(0.5, 1.0) → [0.5, 1.5]
-  block "Oscillator" "pulse" {
-    outputs {
-      out = scale-map.in
-    }
-  }
+  block "Expression" "scale-expr" {
+    expression = <<-EXPR
+      lane = instances.t
+      pa = mapField(time.phaseA * 6.2832, instances.t)
+      pb = mapField(time.phaseB * 6.2832, instances.t)
 
-  block "Const" "scale-amt" {
-    value = 0.5
-    outputs {
-      out = scale-map.scale
-    }
-  }
+      row = floor(lane * 16.0)
+      col = fract(lane * 16.0) * 16.0
 
-  block "Const" "scale-center" {
-    value = 1.0
-    outputs {
-      out = scale-map.bias
-    }
-  }
+      wave1 = sin(row * 0.8 + pa * 1.5)
+      wave2 = cos(col * 0.7 + pb * 1.2)
+      ripple = 0.5 + 0.5 * wave1 * wave2
 
-  block "ScaleBias" "scale-map" {
-    outputs {
-      out = scale-jitter.amount
-    }
-  }
-
-  block "Const" "base-scale" {
-    value = 1.0
-    outputs {
-      out = scale-jitter.value
-    }
-  }
-
-  block "Const" "jitter-seed" {
-    value = 41
-    outputs {
-      out = scale-jitter.seed
-    }
-  }
-
-  block "NoisyBroadcast" "scale-jitter" {
+      0.4 + 0.8 * ripple
+    EXPR
     outputs {
       out = render.scale
+    }
+  }
+
+  # --- Per-element rainbow color with time drift ---
+
+  block "Add" "hue-shift" {
+    outputs {
+      out = color.h
+    }
+  }
+
+  block "MakeColorOKLCH" "color" {
+    s = 0.88
+    l = 0.72
+    a = 0.92
+    outputs {
+      color = render.color
     }
   }
 
