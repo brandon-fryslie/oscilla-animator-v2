@@ -65,8 +65,8 @@ function makeBundle(passId: string): CompiledGpuArtifactBundle {
 
 function makeRendererStub() {
   return {
-    rebuildGpuPipelines: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
-    installDrawPrepSinkPointerMap: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
+    applyInstallPipeline: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
+    publishFrameInput: vi.fn<(payload: unknown) => void>(),
     setGpuFaultCallback: vi.fn<(callback: unknown) => void>(),
     dispose: vi.fn<() => void>(),
     render: vi.fn<(payload: unknown) => void>(),
@@ -78,35 +78,29 @@ describe('RuntimeService', () => {
     hoisted.createWebGPURendererMock.mockReset();
   });
 
-  it('leaves the active renderer in place when pipeline publication fails', async () => {
+  it('leaves the active renderer in place when canonical install publication fails', async () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
       runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
       rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      publishRendererPipelines: (artifacts: {
-        readonly backendResult: { readonly kind: 'ok' };
-        readonly compiledGpuBundle: CompiledGpuArtifactBundle;
-      }) => Promise<void>;
+      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => Promise<void>;
     };
     const candidateBundle = makeBundle('candidate');
     const renderer = makeRendererStub();
-    renderer.rebuildGpuPipelines.mockRejectedValue(new Error('reject install'));
+    renderer.applyInstallPipeline.mockRejectedValue(new Error('reject install'));
     serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer);
     serviceAccess.rendererExecutionState = 'active';
 
     await expect(
-      serviceAccess.publishRendererPipelines({
-        backendResult: { kind: 'ok' },
-        compiledGpuBundle: candidateBundle,
-      }),
+      serviceAccess.installRendererCanonicalAssets(candidateBundle),
     ).rejects.toThrow('reject install');
 
-    expect(renderer.rebuildGpuPipelines).toHaveBeenCalledWith(candidateBundle.passes);
+    expect(renderer.applyInstallPipeline).toHaveBeenCalledTimes(1);
     expect(serviceAccess.runtimeResourcesState.runtime.renderer).toBe(renderer);
   });
 
-  it('publishes worker-owned install metadata directly to renderer.render', async () => {
+  it('publishes worker-owned install metadata through INSTALL_PIPELINE_V1 payload', async () => {
     const store = new RootStore();
     const service = new RuntimeService(store);
     const serviceAccess = service as unknown as {
@@ -122,18 +116,14 @@ describe('RuntimeService', () => {
 
     await serviceAccess.installRendererCanonicalAssets(bundle);
 
-    expect(renderer.installDrawPrepSinkPointerMap).toHaveBeenCalledWith(
-      bundle.runtimeInstall.drawPrep.sinkPointerMap,
-    );
-
-    expect(renderer.render).toHaveBeenCalledWith(expect.objectContaining({
-      shapeBank: expect.objectContaining({
-        data: bundle.runtimeInstall.shapeBank.words,
-        volatilePtr: bundle.runtimeInstall.shapeBank.wordCount,
-        topologyIdByHandle: bundle.runtimeInstall.shapeBank.topologyIdByHandle,
+    expect(renderer.applyInstallPipeline).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'INSTALL_PIPELINE_V1',
+      pipeline: expect.objectContaining({
+        passes: bundle.passes,
+        sinkPointerMap: bundle.runtimeInstall.drawPrep.sinkPointerMap,
+        shapeBankWordCount: bundle.runtimeInstall.shapeBank.wordCount,
+        sinkTableWordCount: bundle.runtimeInstall.drawPrep.wordCount,
       }),
-      drawPrepSinkTableV1: bundle.runtimeInstall.drawPrep.words,
-      drawPrepSinkTableWordCount: bundle.runtimeInstall.drawPrep.wordCount,
     }));
   });
 

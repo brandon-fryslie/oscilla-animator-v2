@@ -111,6 +111,10 @@ export default defineConfig({
     // [LAW:single-enforcer] Build-warning normalization is centralized at the Vite boundary.
     chunkSizeWarningLimit: 6000,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'public', 'index.html'),
+        'payload-tester': path.resolve(__dirname, 'public', 'payload-tester.html'),
+      },
       onwarn(warning, warn) {
         // Ignore third-party "use client" directive noise from bundled dependencies.
         if (

@@ -457,14 +457,17 @@ export function executeAnimationFrame(
     // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
     // animation loop publishes viewport/time there and does not dual-publish to
     // any secondary runtime worker seam.
-    renderer.setViewportFrame({
-      width: renderWidth,
-      height: renderHeight,
-      zoom,
-      panX: pan.x,
-      panY: pan.y,
-      timeMs: tMs,
-      ...runtimeInputPlaneValues,
+    renderer.publishFrameInput({
+      type: 'PUBLISH_FRAME_INPUT_V1',
+      frame: {
+        width: renderWidth,
+        height: renderHeight,
+        zoom,
+        panX: pan.x,
+        panY: pan.y,
+        timeMs: tMs,
+        ...runtimeInputPlaneValues,
+      },
     });
     markRuntimeFrameAdvanced(-1, tMs);
   } finally {

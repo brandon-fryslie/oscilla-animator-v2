@@ -48,6 +48,12 @@ import {
   RendererCircuitBreaker,
   type WebGPURendererExecutionState,
 } from './renderer-circuit-breaker';
+import {
+  normalizeInstallPipelinePayloadV1,
+  normalizePublishFrameInputPayloadV1,
+  type InstallPipelineBoundaryPayloadV1,
+  type PublishFrameInputBoundaryPayloadV1,
+} from '../rust/boundary-contract';
 
 interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
   readonly shapeBank: RenderShapeBankSource;
@@ -892,25 +898,66 @@ export class WebGPURenderer {
     this.scheduleCircuitBreakerTermination();
   }
 
+  async applyInstallPipeline(payload: InstallPipelineBoundaryPayloadV1 | unknown): Promise<void> {
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
+    const normalized = normalizeInstallPipelinePayloadV1(payload);
+    if (!normalized.valid) {
+      throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
+    }
+    const canonicalPayload = normalized.value;
+    const { passes, sinkPointerMap } = canonicalPayload.pipeline;
+
+    // [LAW:dataflow-not-control-flow] Install boundary always performs the same
+    // sequence (pause → rebuild → pointer-map install → static-plane install).
+    this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
+    try {
+      await this.rebuildGpuPipelinesInternal(passes, {
+        pauseAndResumeWorker: false,
+        contextLabel: 'applyInstallPipeline',
+      });
+      await this.installDrawPrepSinkPointerMap(sinkPointerMap);
+      this.installStaticRenderPlanes({
+        shapeBank: {
+          data: canonicalPayload.pipeline.shapeBankWords,
+          volatilePtr: canonicalPayload.pipeline.shapeBankWordCount,
+          staticBoundary: 0,
+          topologyIdByHandle: canonicalPayload.pipeline.topologyIdByHandle,
+        },
+        drawPrepSinkTableV1: canonicalPayload.pipeline.sinkTableWords,
+        drawPrepSinkTableWordCount: canonicalPayload.pipeline.sinkTableWordCount,
+      });
+      this.publishSignalWord();
+    } finally {
+      if (!this.fatalError) {
+        this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      }
+    }
+  }
+
+  publishFrameInput(payload: PublishFrameInputBoundaryPayloadV1 | unknown): void {
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
+    const normalized = normalizePublishFrameInputPayloadV1(payload);
+    if (!normalized.valid) {
+      throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
+    }
+    this.publishViewportFrame(normalized.value.frame);
+  }
+
   render(input: RenderInput): void {
     this.assertRuntimeInputBoundaryReady();
     if (!(input.drawPrepSinkTableV1 instanceof Uint32Array)) {
       throw new Error('Rust renderer input contract violation: drawPrepSinkTableV1 must be Uint32Array');
     }
-    this.writeViewportFrame(input);
-    const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
-    // [LAW:one-source-of-truth] Geometry route classification runs in the
-    // active render path after ShapeBank data is synced to shared memory.
-    // RECOVER-03 establishes this seam; RECOVER-04 implements the direct path.
-    this.classifyAndDispatchGeometryRoutes(input.shapeBank);
-    const sinkTableWords = this.syncSinkTablePlane(
-      input.drawPrepSinkTableV1,
-      input.drawPrepSinkTableWordCount,
-    );
-    this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
-    this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
-    this.bumpInstallRevision();
-    this.publishSignalWord();
+    this.installStaticRenderPlanes({
+      shapeBank: input.shapeBank,
+      drawPrepSinkTableV1: input.drawPrepSinkTableV1,
+      drawPrepSinkTableWordCount: input.drawPrepSinkTableWordCount,
+    });
+    this.publishViewportFrame(input);
   }
 
   private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
@@ -925,10 +972,10 @@ export class WebGPURenderer {
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
     this.assertRuntimeInputBoundaryReady();
-    // [LAW:single-enforcer] Runtime viewport/input publication enters the
-    // renderer worker through one boundary method in canonical execution.
-    this.writeViewportFrame(frame);
-    this.publishSignalWord();
+    this.publishFrameInput({
+      type: 'PUBLISH_FRAME_INPUT_V1',
+      frame,
+    });
   }
 
   // [LAW:one-source-of-truth] Surface resize is driven by the shared input
@@ -999,60 +1046,13 @@ export class WebGPURenderer {
   async rebuildGpuPipelines(
     passes: readonly RustRendererGpuPass[],
   ): Promise<void> {
-    if (this.fatalError) {
-      throw this.fatalError;
-    }
-    if (!this.bootstrapped) {
-      throw new Error('Rust renderer worker is not bootstrapped');
-    }
-    // [LAW:single-enforcer] Renderer validates transport/runtime payload shape;
-    // semantic pass signatures are already validated at compile worker boundary.
-    const validatedPasses = [...validateGpuPassBundle(passes)];
-    for (const pass of validatedPasses) {
-      dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
-    }
-    if (this.shouldEmitRuntimeConsole()) {
-      // TODO(#159): Replace this inline payload assembly with:
-      // `buildGpuPipelineRebuildPayload(validatedPasses)` and emit through a
-      // shared `emitRuntimeConsolePayload(...)` helper from this
-      // `rebuildGpuPipelines(...)` call site.
-      // https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-      const payload = {
-        kind: 'gpu-pipeline-rebuild',
-        passCount: validatedPasses.length,
-        passes: validatedPasses.map((pass) => ({
-          passId: pass.passId,
-          stage: pass.stage,
-          entryPoint: pass.entryPoint,
-          wgslLength: pass.wgsl.length,
-          wgslHash: hashWgslSource(pass.wgsl),
-          wgslPreview: previewWgsl(pass.wgsl),
-          debugConstants: extractPassDebugConstants(pass.wgsl),
-        })),
-      };
-      // [LAW:one-source-of-truth] Renderer boundary emits one canonical
-      // structured line for pipeline install debugging in runtimeConsole mode.
-      this.emitRuntimeConsoleInfo(payload);
-    }
-    this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
-    try {
-      await this.awaitWorkerAck({
-        successType: 'REBUILD_GPU_PIPELINES_SUCCESS',
-        context: `rebuildGpuPipelines(${validatedPasses.length} passes)`,
-        dispatch: () => {
-          const message: RustRendererWorkerInboundMessage = {
-            type: 'REBUILD_GPU_PIPELINES',
-            passes: validatedPasses,
-          };
-          this.worker.postMessage(message);
-        },
-      });
-      this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
-    } finally {
-      if (!this.fatalError) {
-        this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
-      }
-    }
+    this.throwIfFatalError();
+    this.throwIfDisposed();
+    this.throwIfNotBootstrapped();
+    await this.rebuildGpuPipelinesInternal(passes, {
+      pauseAndResumeWorker: true,
+      contextLabel: 'rebuildGpuPipelines',
+    });
   }
 
   getLatestRuntimeTelemetry(): RustRendererRuntimeTelemetry | null {
@@ -1098,6 +1098,80 @@ export class WebGPURenderer {
       },
     });
     this.installedSinkPointerMapJson = sinkPointerMapJson;
+  }
+
+  private installStaticRenderPlanes(
+    input: Pick<RenderInput, 'shapeBank' | 'drawPrepSinkTableV1' | 'drawPrepSinkTableWordCount'>,
+  ): void {
+    const shapeBankWords = this.syncShapeBankPlane(input.shapeBank);
+    // [LAW:one-source-of-truth] Geometry route classification runs from the
+    // same canonical shape-bank payload after every static-plane install.
+    this.classifyAndDispatchGeometryRoutes(input.shapeBank);
+    const sinkTableWords = this.syncSinkTablePlane(
+      input.drawPrepSinkTableV1,
+      input.drawPrepSinkTableWordCount,
+    );
+    this.maybeEmitRenderInputDebugSample(input.drawPrepSinkTableV1, sinkTableWords);
+    this.setSinkAndShapeWordCounts(sinkTableWords, shapeBankWords);
+    this.bumpInstallRevision();
+  }
+
+  private publishViewportFrame(frame: RuntimeViewportFrame): void {
+    // [LAW:single-enforcer] Runtime viewport/input publication enters the
+    // renderer worker through this single helper.
+    this.writeViewportFrame(frame);
+    this.publishSignalWord();
+  }
+
+  private async rebuildGpuPipelinesInternal(
+    passes: readonly RustRendererGpuPass[],
+    options: { readonly pauseAndResumeWorker: boolean; readonly contextLabel: string },
+  ): Promise<void> {
+    // [LAW:single-enforcer] Renderer validates transport/runtime payload shape;
+    // semantic pass signatures are already validated at compile worker boundary.
+    const validatedPasses = [...validateGpuPassBundle(passes)];
+    for (const pass of validatedPasses) {
+      dumpShaderWithLineNumbers(pass.passId, pass.wgsl);
+    }
+    if (this.shouldEmitRuntimeConsole()) {
+      const payload = {
+        kind: 'gpu-pipeline-rebuild',
+        passCount: validatedPasses.length,
+        passes: validatedPasses.map((pass) => ({
+          passId: pass.passId,
+          stage: pass.stage,
+          entryPoint: pass.entryPoint,
+          wgslLength: pass.wgsl.length,
+          wgslHash: hashWgslSource(pass.wgsl),
+          wgslPreview: previewWgsl(pass.wgsl),
+          debugConstants: extractPassDebugConstants(pass.wgsl),
+        })),
+      };
+      // [LAW:one-source-of-truth] Renderer boundary emits one canonical
+      // structured line for pipeline install debugging in runtimeConsole mode.
+      this.emitRuntimeConsoleInfo(payload);
+    }
+    if (options.pauseAndResumeWorker) {
+      this.worker.postMessage({ type: 'PAUSE' } satisfies RustRendererWorkerInboundMessage);
+    }
+    try {
+      await this.awaitWorkerAck({
+        successType: 'REBUILD_GPU_PIPELINES_SUCCESS',
+        context: `${options.contextLabel}(${validatedPasses.length} passes)`,
+        dispatch: () => {
+          const message: RustRendererWorkerInboundMessage = {
+            type: 'REBUILD_GPU_PIPELINES',
+            passes: validatedPasses,
+          };
+          this.worker.postMessage(message);
+        },
+      });
+      this.lastInstalledPassIds = validatedPasses.map((pass) => pass.passId);
+    } finally {
+      if (options.pauseAndResumeWorker && !this.fatalError) {
+        this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
+      }
+    }
   }
 
   /**
