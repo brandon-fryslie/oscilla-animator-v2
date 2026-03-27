@@ -24,8 +24,6 @@ import { HelpPanelWrapper } from './panels/HelpPanelWrapper';
 import { ExpressionEditorPanel } from './panels/ExpressionEditorPanel';
 import { LeftSidebarPanel } from './panels/LeftSidebarPanel';
 import { RightSidebarPanel } from './panels/RightSidebarPanel';
-import { FixtureSelectorPanel } from './panels/FixtureSelectorPanel';
-import { PayloadEditorPanel } from './panels/PayloadEditorPanel';
 
 /**
  * Component map for Dockview.
@@ -45,8 +43,6 @@ export const PANEL_COMPONENTS = {
   'debug-miniview': DebugMiniViewPanel,
   'help': HelpPanelWrapper,
   'expression-editor': ExpressionEditorPanel,
-  'fixture-selector': FixtureSelectorPanel,
-  'payload-editor': PayloadEditorPanel,
 };
 
 export { PANEL_DEFINITIONS, PANEL_MENU_ITEMS };

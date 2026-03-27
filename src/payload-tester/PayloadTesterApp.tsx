@@ -7,12 +7,7 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
-import {
-  normalizeInstallPipelinePayloadV1,
-  normalizePublishFrameInputPayloadV1,
-  type InstallPipelineBoundaryPayloadV1,
-  type PublishFrameInputBoundaryPayloadV1,
-} from '../render/rust/boundary-contract';
+import { validateRawPayload } from '../render/rust/boundary-contract';
 import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
@@ -27,60 +22,12 @@ type SubmitResult =
   | { kind: 'ok'; message: string }
   | { kind: 'error'; message: string };
 
-interface PayloadTesterDocument {
-  readonly install: InstallPipelineBoundaryPayloadV1;
-  readonly frame: PublishFrameInputBoundaryPayloadV1;
-}
-
-function fixtureDocument(fixture: PayloadFixture): PayloadTesterDocument {
-  return {
-    install: fixture.install,
-    frame: fixture.frame,
-  };
-}
-
 export const PayloadTesterApp: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WebGPURenderer | null>(null);
-  const frameTemplateRef = useRef<PublishFrameInputBoundaryPayloadV1 | null>(null);
-  const frameRafRef = useRef<number | null>(null);
   const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
   const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState(() => JSON.stringify(fixtureDocument(PAYLOAD_FIXTURES[0]!), null, 2));
-
-  const stopFrameLoop = useCallback(() => {
-    if (frameRafRef.current !== null) {
-      cancelAnimationFrame(frameRafRef.current);
-      frameRafRef.current = null;
-    }
-  }, []);
-
-  const publishNextFrame = useCallback(() => {
-    const renderer = rendererRef.current;
-    const frameTemplate = frameTemplateRef.current;
-    const canvas = canvasRef.current;
-    if (!renderer || !frameTemplate || !canvas) {
-      frameRafRef.current = null;
-      return;
-    }
-    const framePayload: PublishFrameInputBoundaryPayloadV1 = {
-      type: 'PUBLISH_FRAME_INPUT_V1',
-      frame: {
-        ...frameTemplate.frame,
-        width: Math.max(1, Math.floor(canvas.clientWidth || canvas.width || frameTemplate.frame.width)),
-        height: Math.max(1, Math.floor(canvas.clientHeight || canvas.height || frameTemplate.frame.height)),
-        timeMs: performance.now(),
-      },
-    };
-    renderer.publishFrameInput(framePayload);
-    frameRafRef.current = requestAnimationFrame(publishNextFrame);
-  }, []);
-
-  const startFrameLoop = useCallback((frameTemplate: PublishFrameInputBoundaryPayloadV1) => {
-    frameTemplateRef.current = frameTemplate;
-    stopFrameLoop();
-    frameRafRef.current = requestAnimationFrame(publishNextFrame);
-  }, [publishNextFrame, stopFrameLoop]);
+  const [json, setJson] = useState('[]');
 
   // Boot renderer on mount
   useEffect(() => {
@@ -106,17 +53,11 @@ export const PayloadTesterApp: React.FC = () => {
         setRendererState({ kind: 'error', message: msg });
       });
 
-    return () => {
-      cancelled = true;
-      stopFrameLoop();
-      rendererRef.current?.setGpuFaultCallback(null);
-      rendererRef.current?.dispose();
-      rendererRef.current = null;
-    };
-  }, [stopFrameLoop]);
+    return () => { cancelled = true; };
+  }, []);
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    setJson(JSON.stringify(fixtureDocument(fixture), null, 2));
+    setJson(JSON.stringify(fixture.passes, null, 2));
     setSubmitResult({ kind: 'idle' });
   }, []);
 
@@ -135,36 +76,19 @@ export const PayloadTesterApp: React.FC = () => {
       return;
     }
 
-    if (parsed === null || typeof parsed !== 'object') {
-      setSubmitResult({ kind: 'error', message: 'Payload must be an object with { install, frame } sections' });
-      return;
-    }
-    const parsedDocument = parsed as Record<string, unknown>;
-
-    // [LAW:single-enforcer] Payload tester uses the same canonical boundary
-    // normalizers as RuntimeService so there is no tester-only schema.
-    const installValidation = normalizeInstallPipelinePayloadV1(parsedDocument.install);
-    if (!installValidation.valid) {
-      setSubmitResult({ kind: 'error', message: installValidation.errors.join('\n') });
-      return;
-    }
-    const frameValidation = normalizePublishFrameInputPayloadV1(parsedDocument.frame);
-    if (!frameValidation.valid) {
-      setSubmitResult({ kind: 'error', message: frameValidation.errors.join('\n') });
+    const validation = validateRawPayload(parsed);
+    if (!validation.valid) {
+      setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
       return;
     }
 
     try {
-      await renderer.applyInstallPipeline(installValidation.value);
-      startFrameLoop(frameValidation.value);
-      setSubmitResult({
-        kind: 'ok',
-        message: `Installed ${installValidation.value.pipeline.passes.length} pass(es) and started frame publication`,
-      });
+      await renderer.rebuildGpuPipelines(validation.passes);
+      setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
     } catch (e) {
       setSubmitResult({ kind: 'error', message: `Renderer error: ${e instanceof Error ? e.message : String(e)}` });
     }
-  }, [startFrameLoop]);
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
