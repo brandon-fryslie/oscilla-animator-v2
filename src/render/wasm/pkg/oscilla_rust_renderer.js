@@ -119,6 +119,17 @@ export function take_readback_snapshot() {
 }
 
 /**
+ * @param {number} offset_bytes
+ * @param {number} value
+ */
+export function update_control(offset_bytes, value) {
+    const ret = wasm.update_control(offset_bytes, value);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
  * @param {Uint32Array} data
  */
 export function upload_atlas_data(data) {
@@ -1243,7 +1254,7 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 64, function: Function { arguments: [F64], shim_idx: 65, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 49, function: Function { arguments: [F64], shim_idx: 50, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hac389948b8d10e82, wasm_bindgen__convert__closures_____invoke__h08519952343379dd);
             return ret;
         },

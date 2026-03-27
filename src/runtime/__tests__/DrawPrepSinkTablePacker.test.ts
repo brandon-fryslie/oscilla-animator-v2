@@ -384,9 +384,9 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 16]]);
     const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
     expect(packed).not.toBeNull();
-    // header(8) + records(1*8) + descriptors(1*26) = 42
+    // header(8) + records(1*8) + descriptors(1*31) = 47
     expect(packed!.wordCount).toBe(DRAW_PREP_SINK_TABLE_HEADER_WORDS + 1 * DRAW_PREP_SINK_TABLE_RECORD_WORDS + 1 * DRAW_PREP_SINK_DESCRIPTOR_WORDS);
-    expect(packed!.wordCount).toBe(8 + 8 + 26);
+    expect(packed!.wordCount).toBe(8 + 8 + 31);
   });
 
   it('fails fast for unsupported dynamic instance counts', () => {

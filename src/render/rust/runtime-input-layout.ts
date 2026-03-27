@@ -22,6 +22,20 @@ export const RUNTIME_INPUT_INDEX = Object.freeze({
   sinkTableWords: 13,
   shapeBankWords: 14,
   installRevision: 15,
+
+  // Camera parameters — written by CameraResolver, read by Rust engine
+  // to construct the FrameHeader.view_proj matrix each frame.
+  // [LAW:one-source-of-truth] Camera params flow through shared memory
+  // so the Rust engine is the single authority for VP matrix construction.
+  cameraProjection: 19,   // 0 = ortho (default), 1 = perspective
+  cameraCenterX: 20,      // world-space focal point X (default 0.5)
+  cameraCenterY: 21,      // world-space focal point Y (default 0.5)
+  cameraDistance: 22,      // perspective: camera distance (default 2.0)
+  cameraTiltRad: 23,       // perspective: tilt in radians (default 0.0)
+  cameraYawRad: 24,        // perspective: yaw in radians (default 0.0)
+  cameraFovYRad: 25,       // perspective: vertical FOV in radians (default ~0.785)
+  cameraNear: 26,          // near clip plane (default 0.01)
+  cameraFar: 27,           // far clip plane (default 100.0)
 } as const);
 
 // Heartbeat channel: Rust worker → main thread via shared memory.

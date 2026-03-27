@@ -126,6 +126,21 @@ patch "Library Kitchen Sink" {
     }
   }
 
+  # Halo Z: back layer (-0.2) with gentle rolling wave
+  block "Expression" "halo-z" {
+    expression = <<-EXPR
+      t = halo_array.rank
+      phase = clock.phaseA * 6.2832
+      -0.2 + sin(t * 6.2832 * 4.0 + phase) * 0.08
+    EXPR
+    inputs {
+      refs = [halo-array.rank, clock.phaseA]
+    }
+    outputs {
+      out = halo-render.positionZ
+    }
+  }
+
   block "RenderInstances2D" "halo-render" {}
 
   # --- Spiral branch: dense glowing core ---
@@ -228,6 +243,21 @@ patch "Library Kitchen Sink" {
     }
   }
 
+  # Spiral Z: middle layer (0.0) with breathing helix
+  block "Expression" "spiral-z" {
+    expression = <<-EXPR
+      t = spiral_array.rank
+      phase = clock.phaseA * 6.2832
+      sin(t * 6.2832 * 6.0 + phase * 1.5) * 0.15
+    EXPR
+    inputs {
+      refs = [spiral-array.rank, clock.phaseA]
+    }
+    outputs {
+      out = spiral-render.positionZ
+    }
+  }
+
   block "RenderInstances2D" "spiral-render" {}
 
   # --- Path branch: flowing necklace through the middle ---
@@ -287,6 +317,21 @@ patch "Library Kitchen Sink" {
     value = 0.72
     outputs {
       out = path-render.scale
+    }
+  }
+
+  # Path Z: front layer (+0.25) with serpentine motion along the necklace
+  block "Expression" "path-z" {
+    expression = <<-EXPR
+      t = path_array.rank
+      phase = clock.phaseB * 6.2832
+      0.25 + sin(t * 6.2832 * 2.0 - phase * 2.0) * 0.12
+    EXPR
+    inputs {
+      refs = [path-array.rank, clock.phaseB]
+    }
+    outputs {
+      out = path-render.positionZ
     }
   }
 

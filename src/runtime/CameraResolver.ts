@@ -10,6 +10,7 @@
 import type { CompiledProgramIR, CameraDeclIR } from '../compiler/ir/program';
 import type { ValueSlot } from '../compiler/ir/Indices';
 import type { RuntimeState } from './RuntimeState';
+import type { CameraInputContract } from '../render/types';
 import { getExprAddressTable } from './ExprAddressTable';
 import {
   CANONICAL_WORLD_CENTER_X,
@@ -49,6 +50,25 @@ export const DEFAULT_CAMERA: Readonly<ResolvedCameraParams> = Object.freeze({
   tiltRad: 0,
   yawRad: 0,
   fovYRad: 45 * DEGREES_TO_RADIANS,
+  near: 0.01,
+  far: 100,
+});
+
+/**
+ * Momentary 3D preview camera (Shift key or toolbar toggle).
+ *
+ * Hardcoded perspective defaults that provide a useful 3D overview without
+ * requiring a Camera block. MUST NOT affect compilation, state, or continuity —
+ * this is an ephemeral visualization-only override.
+ */
+export const PREVIEW_CAMERA: Readonly<ResolvedCameraParams> = Object.freeze({
+  projection: 'persp' as const,
+  centerX: CANONICAL_WORLD_CENTER_X,
+  centerY: CANONICAL_WORLD_CENTER_Y,
+  distance: 0.87,
+  tiltRad: 35 * DEGREES_TO_RADIANS,
+  yawRad: 0,
+  fovYRad: 60 * DEGREES_TO_RADIANS,
   near: 0.01,
   far: 100,
 });
@@ -162,3 +182,35 @@ export function resolveCameraDecl(
     far,
   };
 }
+
+// =============================================================================
+// Shared-memory bridge
+// =============================================================================
+
+/**
+ * Convert ResolvedCameraParams to the CameraInputContract shape for
+ * shared-memory publication to the Rust renderer worker.
+ *
+ * [LAW:one-source-of-truth] This is the single bridge between the
+ * domain-typed camera resolver and the flat numeric shared buffer.
+ */
+export function cameraParamsToInputContract(params: ResolvedCameraParams): CameraInputContract {
+  return {
+    cameraProjection: params.projection === 'persp' ? 1 : 0,
+    cameraCenterX: params.centerX,
+    cameraCenterY: params.centerY,
+    cameraDistance: params.distance,
+    cameraTiltRad: params.tiltRad,
+    cameraYawRad: params.yawRad,
+    cameraFovYRad: params.fovYRad,
+    cameraNear: params.near,
+    cameraFar: params.far,
+  };
+}
+
+/**
+ * Default camera input contract values for shared memory.
+ * Used when no Camera block exists or program is not compiled.
+ */
+export const DEFAULT_CAMERA_INPUT: Readonly<CameraInputContract> =
+  Object.freeze(cameraParamsToInputContract(DEFAULT_CAMERA));

@@ -59,6 +59,34 @@ export interface DrawPrepRenderContract {
   readonly drawPrepSinkTableWordCount: number;
 }
 
+/**
+ * Camera parameters resolved from CameraResolver and published to the
+ * renderer worker via shared input buffer each frame.
+ *
+ * [LAW:one-source-of-truth] CameraResolver is the single authority for
+ * sanitization; these values are written verbatim to shared memory.
+ */
+export interface CameraInputContract {
+  /** 0 = ortho (default), 1 = perspective */
+  readonly cameraProjection: number;
+  /** World-space focal point X, [0, 1] */
+  readonly cameraCenterX: number;
+  /** World-space focal point Y, [0, 1] */
+  readonly cameraCenterY: number;
+  /** Perspective camera distance (> 0) */
+  readonly cameraDistance: number;
+  /** Perspective tilt in radians */
+  readonly cameraTiltRad: number;
+  /** Perspective yaw in radians */
+  readonly cameraYawRad: number;
+  /** Perspective vertical FOV in radians */
+  readonly cameraFovYRad: number;
+  /** Near clip plane (> 0) */
+  readonly cameraNear: number;
+  /** Far clip plane (> near) */
+  readonly cameraFar: number;
+}
+
 export function defineDrawPrepRenderContract(contract: DrawPrepRenderContract): DrawPrepRenderContract {
   // [LAW:one-source-of-truth] Runtime and renderer use this helper to pin
   // contract shape ownership to the canonical boundary module.
