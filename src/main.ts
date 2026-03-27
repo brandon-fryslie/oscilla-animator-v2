@@ -242,16 +242,6 @@ function createRuntimeBootstrap() {
           return state.runtimeService.compileState.currentState?.externalChannels.writeBus;
       }
     },
-    async submitRawGpuPayload(passes: readonly import('./render/rust/worker-protocol').RustRendererGpuPass[]): Promise<void> {
-      switch (state.kind) {
-        case 'idle':
-        case 'waiting-for-store':
-        case 'waiting-for-canvas':
-          throw new Error('Cannot submit raw GPU payload: renderer is not yet active');
-        case 'active':
-          await state.runtimeService.submitRawGpuPayload(passes);
-      }
-    },
     dispose(): void {
       switch (state.kind) {
         case 'waiting-for-canvas':
@@ -341,7 +331,6 @@ async function main() {
               runtimeBootstrap.setStatsSink(sink);
             },
             externalWriteBus: runtimeBootstrap.getExternalWriteBus(),
-            submitRawGpuPayload: (passes) => runtimeBootstrap.submitRawGpuPayload(passes),
           })
         )
       )
