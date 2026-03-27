@@ -67,6 +67,9 @@ function makeRendererStub() {
   return {
     applyInstallPipeline: vi.fn<(...args: readonly unknown[]) => Promise<void>>(),
     publishFrameInput: vi.fn<(payload: unknown) => void>(),
+    getLatestBoundaryFixturePayloadV1: vi.fn<() => { install: unknown | null; frame: unknown | null }>(
+      () => ({ install: null, frame: null }),
+    ),
     setGpuFaultCallback: vi.fn<(callback: unknown) => void>(),
     dispose: vi.fn<() => void>(),
     render: vi.fn<(payload: unknown) => void>(),
@@ -168,5 +171,64 @@ describe('RuntimeService', () => {
     expect(store.diagnostics.logs.at(-1)?.message).toBe(
       'Fatal GPU fault [GPU_DRIVER/WEBGPU_VALIDATION] stopped rendering. Patch and editor state were preserved.',
     );
+  });
+
+  it('dumps canonical install + frame payloads from the active renderer boundary', () => {
+    const store = new RootStore();
+    const service = new RuntimeService(store);
+    const renderer = makeRendererStub();
+    renderer.getLatestBoundaryFixturePayloadV1.mockReturnValue({
+      install: {
+        type: 'INSTALL_PIPELINE_V1',
+        pipeline: {
+          passes: [makePass('fixture-pass')],
+          sinkPointerMap: {
+            '0:position': 'arena:slot:2',
+            '0:color': 'arena:slot:3',
+            '0:scale': 'arena:slot:4',
+            '0:shape': 'arena:slot:1',
+          },
+          shapeBankWords: [1, 2, 3, 4],
+          shapeBankWordCount: 4,
+          topologyIdByHandle: [7, 0, 0, 0],
+          sinkTableWords: [9, 8, 7],
+          sinkTableWordCount: 3,
+        },
+      },
+      frame: {
+        type: 'PUBLISH_FRAME_INPUT_V1',
+        frame: {
+          width: 640,
+          height: 360,
+          zoom: 1,
+          panX: 0,
+          panY: 0,
+          timeMs: 1234,
+          inputMouseX: 10,
+          inputMouseY: 20,
+          inputMouseButtons: 1,
+          inputAudioLow: 0.1,
+          inputAudioMid: 0.2,
+          inputAudioHigh: 0.3,
+          inputGaugeActive: 0.4,
+        },
+      },
+    });
+    const serviceAccess = service as unknown as {
+      runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
+      dumpLatestRendererBoundaryFixtureV1: () => {
+        readonly version: 1;
+        readonly install: { readonly type: 'INSTALL_PIPELINE_V1' };
+        readonly frame: { readonly type: 'PUBLISH_FRAME_INPUT_V1' };
+      };
+    };
+    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer);
+
+    const dumped = serviceAccess.dumpLatestRendererBoundaryFixtureV1();
+
+    expect(dumped.version).toBe(1);
+    expect(dumped.install.type).toBe('INSTALL_PIPELINE_V1');
+    expect(dumped.frame.type).toBe('PUBLISH_FRAME_INPUT_V1');
+    expect(renderer.getLatestBoundaryFixturePayloadV1).toHaveBeenCalledTimes(1);
   });
 });

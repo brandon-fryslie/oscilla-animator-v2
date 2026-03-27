@@ -37,6 +37,7 @@ import { StoreProvider, type RootStore } from './stores';
 import { RuntimeService } from './services/RuntimeService';
 import { BootService } from './services/BootService';
 import { ensureCrossOriginIsolationForSharedArrayBuffer } from './services/cross-origin-isolation';
+import { installRuntimeBoundaryDumpBridge } from './services/runtime-boundary-dump-bridge';
 import {
   initializeComposites,
   compositeStorage,
@@ -242,6 +243,16 @@ function createRuntimeBootstrap() {
           return state.runtimeService.compileState.currentState?.externalChannels.writeBus;
       }
     },
+    getRuntimeService(): RuntimeService | null {
+      switch (state.kind) {
+        case 'idle':
+        case 'waiting-for-store':
+          return null;
+        case 'waiting-for-canvas':
+        case 'active':
+          return state.runtimeService;
+      }
+    },
     dispose(): void {
       switch (state.kind) {
         case 'waiting-for-canvas':
@@ -262,6 +273,13 @@ function createRuntimeBootstrap() {
 
 const runtimeBootstrap = createRuntimeBootstrap();
 const bootService = new BootService();
+installRuntimeBoundaryDumpBridge(() => {
+  const runtimeService = runtimeBootstrap.getRuntimeService();
+  if (!runtimeService) {
+    throw new Error('Runtime boundary fixture dump is unavailable: runtime has not initialized yet');
+  }
+  return runtimeService.dumpLatestRendererBoundaryFixtureV1();
+});
 
 async function main() {
   registerAllBlocks();

@@ -11,6 +11,20 @@ Let us begin with the foundation.
 
 ---
 
+### Live Fixture Capture
+
+Use this to capture canonical boundary fixtures from a running app patch.
+
+- In-app copy flow: `Patch -> Copy Boundary Fixture JSON`
+- DevTools runtime object: `window.__OSCILLA_BOUNDARY_DUMP__`
+- Availability: installed at app bootstrap (no query flag required)
+- DevTools commands:
+  - `window.__OSCILLA_BOUNDARY_DUMP__.dumpFixtureV1()` returns runtime debug payload with metadata (`version`, `capturedAtMs`, `install`, `frame`)
+  - `window.__OSCILLA_BOUNDARY_DUMP__.dumpFixtureJsonV1()` returns fixture JSON only (`{ install, frame }`)
+  - `window.__OSCILLA_BOUNDARY_DUMP__.copyFixtureJsonV1()` copies fixture JSON only (`{ install, frame }`) to clipboard
+
+`dumpFixtureJsonV1` and `copyFixtureJsonV1` intentionally omit timestamps so fixture output is stable and replay-friendly.
+
 ### Stage 1: Memory Architecture & Data Layout
 
 The renderer's primary job is mapping abstract mathematical concepts from your JS graph into physical, strictly-aligned GPU VRAM. WebGPU is unforgiving here: a misaligned byte will silently corrupt your 2.5D transforms or crash the driver.
@@ -1040,4 +1054,3 @@ By establishing this baseline:
 4. **You have a Machine-Verifiable CI Pipeline** that proves the hardware renders the math correctly via headless Vulkan emulation.
 
 Hand this complete specification to your agents. It removes all ambiguity. It dictates the exact boundaries of JavaScript, Rust, WASM, and WebGPU. This is how you build a reliable, high-performance visual compute engine.
-
