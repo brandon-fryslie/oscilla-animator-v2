@@ -459,3 +459,20 @@ export function normalizeRustRendererBoundaryPayloadV1(
     ],
   };
 }
+
+/**
+ * Validate raw pass-array JSON used by the dockview payload tester.
+ *
+ * [LAW:single-enforcer] This helper reuses the canonical pass normalizer so
+ * pass-shape checks live in one boundary contract module.
+ */
+export function validateRawPayload(
+  json: unknown
+): { valid: true; passes: RustRendererGpuPass[] } | { valid: false; errors: string[] } {
+  const errors: string[] = [];
+  const passes = normalizeGpuPasses(json, 'passes', errors);
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+  return { valid: true, passes };
+}
