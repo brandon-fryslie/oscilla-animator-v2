@@ -19,6 +19,7 @@ import {
   TIER_0C_MODULE_A,
   TIER_0C_MODULE_B,
   type PayloadFixture,
+  isNagaModuleFixture,
 } from '../render/rust/fixtures';
 import { buildMinimalRenderInput } from './renderInput';
 import { FixtureSelector } from './FixtureSelector';
@@ -101,20 +102,29 @@ export const PayloadTesterApp: React.FC = () => {
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
     activeFixtureRef.current = fixture;
-    if (fixture.id === 'tier-0c-two-pass') {
-      const payload = {
-        description: fixture.description,
-        manifest: fixture.manifest,
-        modules: [
-          { passId: 'sine_generate', module: TIER_0C_MODULE_A },
-          { passId: 'double_values', module: TIER_0C_MODULE_B },
-        ],
-      };
-      setJson(JSON.stringify(payload, null, 2));
+    if (isNagaModuleFixture(fixture)) {
+      if (fixture.id === 'tier-0c-two-pass') {
+        const payload = {
+          description: fixture.description,
+          manifest: fixture.manifest,
+          modules: [
+            { passId: 'sine_generate', module: TIER_0C_MODULE_A },
+            { passId: 'double_values', module: TIER_0C_MODULE_B },
+          ],
+        };
+        setJson(JSON.stringify(payload, null, 2));
+      } else {
+        const payload = {
+          manifest: fixture.manifest,
+          module: fixture.module,
+        };
+        setJson(JSON.stringify(payload, null, 2));
+      }
     } else {
+      // Boundary-contract fixture — show install + frame payload
       const payload = {
-        manifest: fixture.manifest,
-        module: fixture.module,
+        install: fixture.install,
+        frame: fixture.frame,
       };
       setJson(JSON.stringify(payload, null, 2));
     }
