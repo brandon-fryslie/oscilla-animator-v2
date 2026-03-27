@@ -16,6 +16,7 @@ import {
 import 'dockview/dist/styles/dockview.css';
 import { PANEL_COMPONENTS } from './panelRegistry';
 import { createDefaultLayout } from './defaultLayout';
+import { createPayloadTesterLayout, isPayloadTesterLayoutRequested } from './payloadTesterLayout';
 import type { EditorHandle } from '../editorCommon';
 import { DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
@@ -66,17 +67,22 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     (event: DockviewReadyEvent) => {
       setApi(event.api);
 
-      const savedLayout = loadDockviewLayout();
-      if (savedLayout) {
-        try {
-          event.api.fromJSON(savedLayout);
-        } catch {
-          // [LAW:single-enforcer] persisted layout repair occurs at this initialization boundary.
-          clearStoredDockviewLayout();
+      if (isPayloadTesterLayoutRequested()) {
+        // Payload tester mode: skip saved layout, use dedicated layout
+        createPayloadTesterLayout(event.api);
+      } else {
+        const savedLayout = loadDockviewLayout();
+        if (savedLayout) {
+          try {
+            event.api.fromJSON(savedLayout);
+          } catch {
+            // [LAW:single-enforcer] persisted layout repair occurs at this initialization boundary.
+            clearStoredDockviewLayout();
+            createDefaultLayout(event.api);
+          }
+        } else {
           createDefaultLayout(event.api);
         }
-      } else {
-        createDefaultLayout(event.api);
       }
       applySidebarConstraints(event.api);
 
