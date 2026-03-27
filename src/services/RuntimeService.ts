@@ -69,7 +69,10 @@ import {
   shouldClearStoredStartupPatch,
   type StartupRestoreSource,
 } from './runtime-gpu-fault-policy';
-import type { InstallPipelineBoundaryPayloadV1 } from '../render/rust/boundary-contract';
+import type {
+  InstallPipelineBoundaryPayloadV1,
+  PublishFrameInputBoundaryPayloadV1,
+} from '../render/rust/boundary-contract';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -142,6 +145,13 @@ export interface RuntimeSpyReadbackPacket {
   readonly packetFlags: number;
   readonly entries: readonly RuntimeSpyReadbackEntry[];
   readonly samples: readonly DebugProbePacketSample[];
+}
+
+export interface RuntimeBoundaryFixtureV1 {
+  readonly version: 1;
+  readonly capturedAtMs: number;
+  readonly install: InstallPipelineBoundaryPayloadV1;
+  readonly frame: PublishFrameInputBoundaryPayloadV1;
 }
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
@@ -221,6 +231,27 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
+  }
+
+  dumpLatestRendererBoundaryFixtureV1(): RuntimeBoundaryFixtureV1 {
+    const runtime = this.requireActiveRuntimeResources('dumping renderer boundary fixture payloads');
+    const snapshot = runtime.renderer.getLatestBoundaryFixturePayloadV1();
+    if (snapshot.install === null) {
+      throw new Error(
+        'RuntimeService: no INSTALL_PIPELINE_V1 payload is available yet (compile + install has not completed)',
+      );
+    }
+    if (snapshot.frame === null) {
+      throw new Error(
+        'RuntimeService: no PUBLISH_FRAME_INPUT_V1 payload is available yet (animation loop has not published a frame)',
+      );
+    }
+    return {
+      version: 1,
+      capturedAtMs: performance.now(),
+      install: snapshot.install,
+      frame: snapshot.frame,
+    };
   }
 
   private disposeRendererDebugTelemetryBridge(): void {
