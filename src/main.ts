@@ -34,9 +34,10 @@ import { NuqsAdapter } from 'nuqs/adapters/react';
 import { App, BootGateScreen } from './ui/components';
 import { registerAllBlocks } from './blocks/all';
 import { StoreProvider, type RootStore } from './stores';
-import { RuntimeService, type RuntimeBoundaryFixtureV1 } from './services/RuntimeService';
+import { RuntimeService } from './services/RuntimeService';
 import { BootService } from './services/BootService';
 import { ensureCrossOriginIsolationForSharedArrayBuffer } from './services/cross-origin-isolation';
+import { installRuntimeBoundaryDumpBridge } from './services/runtime-boundary-dump-bridge';
 import {
   initializeComposites,
   compositeStorage,
@@ -82,16 +83,6 @@ type RuntimeBootstrapState =
 
 const noopStatsSink: StatsSink = () => {};
 const noopRenderApp: RenderApp = () => {};
-const RUNTIME_BOUNDARY_DUMP_GLOBAL_KEY = '__OSCILLA_BOUNDARY_DUMP__' as const;
-
-type RuntimeBoundaryDumpBridgeHost = typeof globalThis & {
-  [RUNTIME_BOUNDARY_DUMP_GLOBAL_KEY]?: RuntimeBoundaryDumpBridgeApi;
-};
-
-interface RuntimeBoundaryDumpBridgeApi {
-  readonly dumpFixtureV1: () => RuntimeBoundaryFixtureV1;
-  readonly dumpFixtureJsonV1: (space?: number) => string;
-}
 
 function createRuntimeBootstrapCallbacks(): RuntimeBootstrapCallbacks {
   return {
@@ -282,25 +273,13 @@ function createRuntimeBootstrap() {
 
 const runtimeBootstrap = createRuntimeBootstrap();
 const bootService = new BootService();
-
-function installRuntimeBoundaryDumpBridge(): void {
-  const host = globalThis as RuntimeBoundaryDumpBridgeHost;
-  const readFixture = (): RuntimeBoundaryFixtureV1 => {
-    const runtimeService = runtimeBootstrap.getRuntimeService();
-    if (!runtimeService) {
-      throw new Error('Runtime boundary fixture dump is unavailable: runtime has not initialized yet');
-    }
-    return runtimeService.dumpLatestRendererBoundaryFixtureV1();
-  };
-  const bridge: RuntimeBoundaryDumpBridgeApi = {
-    dumpFixtureV1: () => readFixture(),
-    dumpFixtureJsonV1: (space = 2) => JSON.stringify(readFixture(), null, space),
-  };
-  // [LAW:no-shared-mutable-globals] exception: expose one explicit DevTools
-  // bridge key so fixture export has a stable operator surface.
-  host[RUNTIME_BOUNDARY_DUMP_GLOBAL_KEY] = bridge;
-}
-installRuntimeBoundaryDumpBridge();
+installRuntimeBoundaryDumpBridge(() => {
+  const runtimeService = runtimeBootstrap.getRuntimeService();
+  if (!runtimeService) {
+    throw new Error('Runtime boundary fixture dump is unavailable: runtime has not initialized yet');
+  }
+  return runtimeService.dumpLatestRendererBoundaryFixtureV1();
+});
 
 async function main() {
   registerAllBlocks();
