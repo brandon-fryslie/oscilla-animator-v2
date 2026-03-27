@@ -22,7 +22,6 @@ import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
-import { PayloadSubmitterContext, type PayloadSubmitter } from '../../PayloadSubmitterContext';
 import { useShowPreview } from '../../../testing/test-params';
 import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
 import { EngineDebugOverlay } from './EngineDebugOverlay';
@@ -110,10 +109,9 @@ interface AppProps {
   onStoreReady?: (store: RootStore) => void;
   onStatsSinkReady?: (sink: ((statsText: string) => void) | null) => void;
   externalWriteBus?: ExternalWriteBus;
-  submitRawGpuPayload?: PayloadSubmitter;
 }
 
-export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus, submitRawGpuPayload }) => {
+export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus }) => {
   const showPreview = useShowPreview();
   const [stats, setStats] = useState('FPS: --');
 
@@ -212,7 +210,6 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
 
   return (
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
-      <PayloadSubmitterContext.Provider value={submitRawGpuPayload}>
       <ExternalWriteBusContext.Provider value={externalWriteBus}>
         {showPreview ? (
           /* Test automation: full-viewport canvas or errors, zero chrome */
@@ -261,7 +258,6 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
         </EditorProvider>
         )}
       </ExternalWriteBusContext.Provider>
-      </PayloadSubmitterContext.Provider>
     </MantineProvider>
   );
 };
