@@ -14,10 +14,12 @@
 import type { EventHub } from '../events/EventHub';
 import type { ParamChangedEvent } from '../events/types';
 import type { CompiledProgramIR } from '../compiler/ir/program';
+import type { WebGPURenderer } from '../render';
 
 export interface FastPathControllerDeps {
   readonly eventHub: EventHub;
   readonly getProgram: () => CompiledProgramIR | null;
+  readonly getRenderer: () => WebGPURenderer | null;
 }
 
 export class FastPathController {
@@ -48,16 +50,16 @@ export class FastPathController {
   // undefined (no match), which is the "no-op" data path.
   private handleParamChanged(event: ParamChangedEvent): void {
     const program = this.deps.getProgram();
-    if (!program) return;
+    const renderer = this.deps.getRenderer();
+    if (!program || !renderer) return;
 
     const key = `${event.blockId}:${event.paramKey}`;
     const offset = program.fastPathOffsets[key];
 
-    // Phase 1: offset is resolved but no WASM write target exists yet.
-    // Phase 2+ will call: wasm.update_control(offset, value)
+    // [LAW:single-enforcer] FastPathController is the single boundary that
+    // converts UI ParamChanged events into O(1) direct GPU buffer writes.
     if (offset !== undefined) {
-      // TODO(phase-2): wasm.update_control(offset, event.newValue)
-      void offset;
+      renderer.updateControl(offset, event.newValue);
     }
   }
 }

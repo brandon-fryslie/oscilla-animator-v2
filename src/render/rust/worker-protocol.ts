@@ -84,6 +84,12 @@ export interface RustRendererSetSinkPointerMapMessage {
   readonly sinkPointerMap: RustRendererSinkPointerMap;
 }
 
+export interface RustRendererUpdateControlMessage {
+  readonly type: 'UPDATE_CONTROL';
+  readonly offsetBytes: number;
+  readonly value: number;
+}
+
 export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
@@ -93,7 +99,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererInjectPoisonAllocMessage
   | RustRendererUploadAtlasMessage
   | RustRendererSetTelemetryEnabledMessage
-  | RustRendererSetSinkPointerMapMessage;
+  | RustRendererSetSinkPointerMapMessage
+  | RustRendererUpdateControlMessage;
 
 export interface RustRendererBootstrapSuccess {
   readonly type: 'BOOTSTRAP_SUCCESS';
