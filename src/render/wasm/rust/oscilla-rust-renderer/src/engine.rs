@@ -1670,4 +1670,17 @@ impl Engine {
         let _guard = StrictAllocator::hot_path_guard();
         let _poison = Vec::<u8>::with_capacity(32);
     }
+
+    /// Update a value in the global control uniform buffer.
+    /// [LAW:single-enforcer] This is the single entry point for fast-path
+    /// parameter updates bypassing the graph compiler.
+    pub fn update_control(&self, offset_bytes: u32, value: f32) {
+        // [LAW:dataflow-not-control-flow] All control updates use the same
+        // queue submission pipeline; variability is in the payload.
+        self.queue.write_buffer(
+            &self.arena.uniform_buffer,
+            offset_bytes as u64,
+            bytemuck::bytes_of(&value),
+        );
+    }
 }

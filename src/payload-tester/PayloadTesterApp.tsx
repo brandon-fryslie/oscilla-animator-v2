@@ -1,19 +1,31 @@
 /**
  * PayloadTesterApp — Root component for the standalone payload tester.
  *
- * Manages renderer lifecycle and layout. No MobX, no stores, no dockview.
- * Imports only: RustWasmWebGPURenderer, boundary-contract, fixtures.
+ * Manages renderer + Naga shim lifecycle and layout.
+ * No MobX, no stores, no dockview.
+ *
+ * Pipeline: NagaModuleIR (JSON) → NagaService.compile() → WGSL → renderer
+ *
+ * To get visible pixels, the tester also runs a rAF loop that publishes
+ * shape bank + sink table + viewport data via renderer.render().
  */
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
-import { validateRawPayload } from '../render/rust/boundary-contract';
-import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
+import { NagaService } from '../compiler/naga-bridge';
+import type { NagaModuleIR } from '../compiler/ir/naga-emitter/ScheduleNagaLowering';
+import {
+  PAYLOAD_FIXTURES,
+  TIER_0C_MODULE_A,
+  TIER_0C_MODULE_B,
+  type PayloadFixture,
+} from '../render/rust/fixtures';
+import { buildMinimalRenderInput } from './renderInput';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
 
-type RendererState =
-  | { kind: 'booting' }
+type BootState =
+  | { kind: 'booting'; message: string }
   | { kind: 'ready' }
   | { kind: 'error'; message: string };
 
@@ -25,39 +37,87 @@ type SubmitResult =
 export const PayloadTesterApp: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<WebGPURenderer | null>(null);
-  const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
+  const [bootState, setBootState] = useState<BootState>({ kind: 'booting', message: 'Initializing...' });
   const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState('[]');
+  const [json, setJson] = useState('{}');
+  const rafRef = useRef<number>(0);
 
-  // Boot renderer on mount
+  // Boot Naga shim + renderer, then start render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     let cancelled = false;
-    createWebGPURenderer(canvas, {
-      onGpuFault: (fault: GpuFault) => {
-        console.error('GPU fault:', fault);
-        setRendererState({ kind: 'error', message: `GPU fault: ${fault.message}` });
-      },
-    })
-      .then((renderer) => {
-        if (cancelled) return;
-        rendererRef.current = renderer;
-        setRendererState({ kind: 'ready' });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error('Renderer boot failed:', err);
-        setRendererState({ kind: 'error', message: msg });
-      });
 
-    return () => { cancelled = true; };
+    (async () => {
+      setBootState({ kind: 'booting', message: 'Booting Naga shim...' });
+      await NagaService.boot();
+      if (cancelled) return;
+
+      setBootState({ kind: 'booting', message: 'Booting WebGPU renderer...' });
+      const renderer = await createWebGPURenderer(canvas, {
+        onGpuFault: (fault: GpuFault) => {
+          console.error('GPU fault:', fault);
+          setBootState({ kind: 'error', message: `GPU fault: ${fault.message}` });
+        },
+      });
+      if (cancelled) return;
+
+      rendererRef.current = renderer;
+      setBootState({ kind: 'ready' });
+
+      // Start render loop — publishes shape bank + sink table + viewport every frame
+      const startMs = performance.now();
+      const renderInput = buildMinimalRenderInput();
+      const tick = () => {
+        if (cancelled) return;
+        const now = performance.now();
+        renderInput.timeMs = now - startMs;
+        renderInput.width = canvas.clientWidth * (window.devicePixelRatio || 1);
+        renderInput.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+        try {
+          renderer.render(renderInput);
+        } catch (e) {
+          console.error('Render tick error:', e);
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    })().catch((err) => {
+      if (cancelled) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Boot failed:', err);
+      setBootState({ kind: 'error', message: msg });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
+  // Track the active fixture so we can use its manifest on submit
+  const activeFixtureRef = useRef<PayloadFixture | null>(null);
+
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    setJson(JSON.stringify(fixture.passes, null, 2));
+    activeFixtureRef.current = fixture;
+    if (fixture.id === 'tier-0c-two-pass') {
+      const payload = {
+        description: fixture.description,
+        manifest: fixture.manifest,
+        modules: [
+          { passId: 'sine_generate', module: TIER_0C_MODULE_A },
+          { passId: 'double_values', module: TIER_0C_MODULE_B },
+        ],
+      };
+      setJson(JSON.stringify(payload, null, 2));
+    } else {
+      const payload = {
+        manifest: fixture.manifest,
+        module: fixture.module,
+      };
+      setJson(JSON.stringify(payload, null, 2));
+    }
     setSubmitResult({ kind: 'idle' });
   }, []);
 
@@ -76,70 +136,64 @@ export const PayloadTesterApp: React.FC = () => {
       return;
     }
 
-    const validation = validateRawPayload(parsed);
-    if (!validation.valid) {
-      setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
-      return;
-    }
-
     try {
-      await renderer.rebuildGpuPipelines(validation.passes);
-      setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
+      const obj = parsed as Record<string, unknown>;
+      const manifest = obj.manifest as import('../compiler/ir/program').MemoryManifestIR | undefined;
+
+      const modules: Array<{ passId: string; module: NagaModuleIR }> = [];
+
+      if (isMultiModulePayload(parsed)) {
+        for (const entry of (obj.modules as Array<{ passId: string; module: NagaModuleIR }>)) {
+          modules.push(entry);
+        }
+      } else if (obj.module) {
+        modules.push({ passId: 'pass_0', module: obj.module as NagaModuleIR });
+      } else {
+        modules.push({ passId: 'pass_0', module: parsed as NagaModuleIR });
+      }
+
+      const passes = modules.map(({ passId, module }) => {
+        const { wgsl } = NagaService.compile(module, { memoryManifest: manifest });
+        return {
+          passId,
+          stage: 'compute' as const,
+          entryPoint: 'compute_main',
+          wgsl,
+        };
+      });
+
+      await renderer.rebuildGpuPipelines(passes);
+      setSubmitResult({
+        kind: 'ok',
+        message: `Compiled ${passes.length} module(s) via Naga → submitted ${passes.length} pass(es) to renderer`,
+      });
     } catch (e) {
-      setSubmitResult({ kind: 'error', message: `Renderer error: ${e instanceof Error ? e.message : String(e)}` });
+      setSubmitResult({ kind: 'error', message: `${e instanceof Error ? e.message : String(e)}` });
     }
   }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-      {/* Main content area */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* Left: fixture selector */}
         <div style={{ width: 220, minWidth: 180, borderRight: '1px solid #333', overflow: 'auto' }}>
-          <FixtureSelector
-            fixtures={PAYLOAD_FIXTURES}
-            onSelect={handleFixtureSelect}
-          />
+          <FixtureSelector fixtures={PAYLOAD_FIXTURES} onSelect={handleFixtureSelect} />
         </div>
-
-        {/* Center: payload editor */}
         <div style={{ flex: 1, minWidth: 300, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-          <PayloadEditor
-            json={json}
-            onJsonChange={setJson}
-            onSubmit={handleSubmit}
-            disabled={rendererState.kind !== 'ready'}
-          />
+          <PayloadEditor json={json} onJsonChange={setJson} onSubmit={handleSubmit} disabled={bootState.kind !== 'ready'} />
         </div>
-
-        {/* Right: canvas preview */}
         <div style={{ flex: 1, minWidth: 200, background: '#000', position: 'relative' }}>
-          <canvas
-            ref={canvasRef}
-            style={{ width: '100%', height: '100%', display: 'block' }}
-          />
-          {rendererState.kind === 'booting' && (
-            <div style={overlayStyle}>Booting renderer...</div>
-          )}
-          {rendererState.kind === 'error' && (
-            <div style={{ ...overlayStyle, color: '#ff6b6b' }}>{rendererState.message}</div>
-          )}
+          <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+          {bootState.kind === 'booting' && <div style={overlayStyle}>{bootState.message}</div>}
+          {bootState.kind === 'error' && <div style={{ ...overlayStyle, color: '#ff6b6b' }}>{bootState.message}</div>}
         </div>
       </div>
-
-      {/* Bottom: status bar */}
       <div style={{
-        height: 32,
-        borderTop: '1px solid #333',
-        padding: '0 12px',
-        display: 'flex',
-        alignItems: 'center',
-        fontSize: 12,
-        fontFamily: '"SF Mono", Monaco, Consolas, monospace',
-        background: '#141517',
+        height: 32, borderTop: '1px solid #333', padding: '0 12px',
+        display: 'flex', alignItems: 'center', fontSize: 12,
+        fontFamily: '"SF Mono", Monaco, Consolas, monospace', background: '#141517',
       }}>
-        {rendererState.kind === 'booting' && <span style={{ color: '#ffd43b' }}>Renderer booting...</span>}
-        {rendererState.kind === 'ready' && submitResult.kind === 'idle' && <span style={{ color: '#69db7c' }}>Renderer ready</span>}
+        {bootState.kind === 'booting' && <span style={{ color: '#ffd43b' }}>{bootState.message}</span>}
+        {bootState.kind === 'ready' && submitResult.kind === 'idle' && <span style={{ color: '#69db7c' }}>Ready (Naga shim + renderer)</span>}
         {submitResult.kind === 'ok' && <span style={{ color: '#51cf66' }}>{submitResult.message}</span>}
         {submitResult.kind === 'error' && <span style={{ color: '#ff6b6b' }}>{submitResult.message}</span>}
       </div>
@@ -147,16 +201,12 @@ export const PayloadTesterApp: React.FC = () => {
   );
 };
 
+function isMultiModulePayload(obj: unknown): boolean {
+  return obj !== null && typeof obj === 'object' && 'modules' in (obj as Record<string, unknown>) && Array.isArray((obj as Record<string, unknown>).modules);
+}
+
 const overlayStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 14,
-  color: '#888',
-  background: 'rgba(0,0,0,0.7)',
+  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: 14, color: '#888', background: 'rgba(0,0,0,0.7)',
 };

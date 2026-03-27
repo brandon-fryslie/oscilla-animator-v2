@@ -377,6 +377,18 @@ pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
     })
 }
 
+#[wasm_bindgen]
+pub fn update_control(offset_bytes: u32, value: f32) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let engine_ref = engine_cell.borrow();
+        let engine = engine_ref.as_ref().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before update_control")
+        })?;
+        engine.update_control(offset_bytes, value);
+        Ok(())
+    })
+}
+
 fn start_worker_loop() -> Result<(), JsValue> {
     let closure = Closure::wrap(Box::new(move |timestamp_ms: f64| {
         LOOP_ARMED.with(|armed| armed.set(false));

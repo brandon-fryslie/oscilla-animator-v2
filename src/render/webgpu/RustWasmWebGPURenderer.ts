@@ -1225,6 +1225,19 @@ export class WebGPURenderer {
     );
   }
 
+  /**
+   * Fast-path parameter update. Directly writes to the GPU uniform buffer
+   * bypassing the graph compiler.
+   */
+  updateControl(offsetBytes: number, value: number): void {
+    // [LAW:dataflow-not-control-flow] All parameter updates use the same
+    // worker communication channel; variability is in the payload data.
+    this.tryPostWorkerMessage(
+      { type: 'UPDATE_CONTROL', offsetBytes, value } as RustRendererWorkerInboundMessage,
+      'Failed to send parameter update to worker',
+    );
+  }
+
   private postWorkerMessage(message: RustRendererWorkerInboundMessage): void {
     this.worker.postMessage(message);
   }

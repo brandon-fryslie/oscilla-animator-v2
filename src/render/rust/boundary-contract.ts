@@ -2,13 +2,14 @@
  * WASM Renderer Boundary Contract
  *
  * [LAW:one-source-of-truth] This module is the canonical authority for the
- * payload shape that crosses the JS→Rust WASM renderer boundary during
- * pipeline rebuild. All consumers (compiler backend, payload tester, tests)
- * import from here.
+ * payload shapes that cross the JS→Rust boundaries:
  *
- * The Rust side deserializes these types via serde in parse_gpu_pass_specs()
- * (oscilla-rust-renderer/src/lib.rs). Any changes here must be mirrored in
- * the Rust deserialization logic.
+ * 1. NagaModuleIR → Naga shim (Rust) → WGSL
+ * 2. RustRendererGpuPass[] → Renderer worker (Rust) → GPU pipelines
+ *
+ * The payload tester exercises boundary (1): NagaModuleIR is the input,
+ * WGSL is an intermediate artifact produced by Rust, and the renderer
+ * consumes it. JS never writes WGSL directly.
  */
 
 // Re-export canonical types from their authoritative modules.
@@ -24,65 +25,39 @@ export type {
   MemoryResourceKind,
   Texture2DFormat,
 } from '../../compiler/ir/program';
+export type { NagaModuleIR } from '../../compiler/ir/naga-emitter/ScheduleNagaLowering';
 
 /**
- * Validate a hand-authored JSON payload before submission to the renderer.
+ * Validate a hand-authored NagaModuleIR JSON payload.
  *
- * This checks structural correctness (required fields, correct types) but
- * does NOT validate WGSL syntax or memory manifest semantics — those are
- * enforced by the Rust side during pipeline compilation.
+ * Checks structural correctness (required top-level fields exist and are arrays).
+ * Does NOT validate expression/statement semantics — that's the Naga shim's job.
  */
-export function validateRawPayload(
+export function validateNagaModulePayload(
   json: unknown
-): { valid: true; passes: import('./worker-protocol').RustRendererGpuPass[] } | { valid: false; errors: string[] } {
-  if (!Array.isArray(json)) {
-    return { valid: false, errors: ['Payload must be a JSON array of pass objects'] };
+): { valid: true } | { valid: false; errors: string[] } {
+  if (json === null || typeof json !== 'object') {
+    return { valid: false, errors: ['Payload must be a JSON object'] };
   }
 
+  const obj = json as Record<string, unknown>;
   const errors: string[] = [];
-  const passes: import('./worker-protocol').RustRendererGpuPass[] = [];
 
-  for (let i = 0; i < json.length; i++) {
-    const item = json[i];
-    const prefix = `passes[${i}]`;
-
-    if (item === null || typeof item !== 'object') {
-      errors.push(`${prefix}: must be an object`);
-      continue;
-    }
-
-    const obj = item as Record<string, unknown>;
-
-    if (typeof obj.passId !== 'string' || obj.passId.length === 0) {
-      errors.push(`${prefix}.passId: must be a non-empty string`);
-    }
-
-    if (typeof obj.stage !== 'string') {
-      errors.push(`${prefix}.stage: must be a string`);
-    } else if (obj.stage !== 'compute') {
-      // Currently the only supported stage. The Rust side's parse_gpu_pass_specs
-      // matches on stage.as_str() and only handles "compute".
-      errors.push(`${prefix}.stage: unsupported stage "${obj.stage}" (only "compute" is currently supported)`);
-    }
-
-    if (typeof obj.entryPoint !== 'string' || obj.entryPoint.length === 0) {
-      errors.push(`${prefix}.entryPoint: must be a non-empty string`);
-    }
-
-    if (typeof obj.wgsl !== 'string' || obj.wgsl.length === 0) {
-      errors.push(`${prefix}.wgsl: must be a non-empty string`);
-    }
-
-    // memoryManifest is optional — no validation here (Rust handles it)
-
-    if (errors.length === 0) {
-      passes.push(obj as unknown as import('./worker-protocol').RustRendererGpuPass);
-    }
+  if (!Array.isArray(obj.types)) {
+    errors.push('Missing or invalid "types" array');
+  }
+  if (!Array.isArray(obj.constants)) {
+    errors.push('Missing or invalid "constants" array');
+  }
+  if (!Array.isArray(obj.global_variables)) {
+    errors.push('Missing or invalid "global_variables" array');
+  }
+  if (!Array.isArray(obj.functions)) {
+    errors.push('Missing or invalid "functions" array');
+  }
+  if (!Array.isArray(obj.entry_points)) {
+    errors.push('Missing or invalid "entry_points" array');
   }
 
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
-
-  return { valid: true, passes };
+  return errors.length > 0 ? { valid: false, errors } : { valid: true };
 }

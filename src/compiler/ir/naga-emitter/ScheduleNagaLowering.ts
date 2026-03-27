@@ -1732,6 +1732,8 @@ function emitKernelExprComponentF32(args: {
     case 'pathDerivative':
       return args.emitFromExprInput(args.expr.field, args.component);
     case 'pathSample':
+      // [DIRECTIONAL-CORRECTNESS] High-level path sampling is now a single
+      // instruction handled by the Rust-side compiler/intrinsic layer.
       return args.expr.op === 'tangentAngle'
         ? args.emitFromExprInput(args.expr.tField, 0)
         : args.emitFromExprInput(args.expr.controlPoints, args.component);

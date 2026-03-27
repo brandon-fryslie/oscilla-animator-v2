@@ -14,6 +14,7 @@ import {
   setRustRendererSinkPointerMap,
   takeRustRendererFramePacingPacket,
   takeRustRendererReadbackSnapshot,
+  updateRustRendererControl,
   uploadRustRendererAtlasData,
 } from '../wasm/oscilla_rust_renderer';
 import { isPositiveInt, parseSchedulerPacket } from './engine-telemetry';
@@ -228,6 +229,14 @@ function handleSetSinkPointerMap(
   // worker->wasm boundary so runtime render loops never patch descriptor layout.
   setRustRendererSinkPointerMap(JSON.stringify(message.sinkPointerMap));
   postWorkerMessage({ type: 'SET_SINK_POINTER_MAP_SUCCESS' });
+}
+
+function handleUpdateControl(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'UPDATE_CONTROL' }>,
+): void {
+  // [LAW:dataflow-not-control-flow] Fast-path control updates are applied
+  // directly to the GPU uniform buffer, bypassing the compiler.
+  updateRustRendererControl(message.offsetBytes, message.value);
 }
 
 // [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
@@ -466,6 +475,9 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
     withFatalBoundary('set_sink_pointer_map_failure', 'Rust worker sink-pointer-map install failure', () => {
       handleSetSinkPointerMap(message as Extract<InboundMessage, { type: 'SET_SINK_POINTER_MAP' }>);
     });
+  },
+  UPDATE_CONTROL: (message) => {
+    handleUpdateControl(message as Extract<InboundMessage, { type: 'UPDATE_CONTROL' }>);
   },
   // [RECOVER-11] Atlas upload for Type5 MSDF text.
   UPLOAD_ATLAS: (message) => {
