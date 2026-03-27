@@ -17,6 +17,7 @@ import { useStore } from '../../../stores';
 import { clearStorageAndReload } from '../../../services/PatchPersistence';
 import { useExportPatch } from '../../hooks/useExportPatch';
 import { Toast } from '../common/Toast';
+import { copyBoundaryFixtureJsonFromBridge } from './boundary-fixture-copy';
 import {
   openOrFocusPanel,
   resetDockviewLayout,
@@ -66,6 +67,19 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
     setToastOpen(true);
   };
 
+  const handleCopyBoundaryFixtureJson = async () => {
+    const result = await copyBoundaryFixtureJsonFromBridge();
+    setToastMessage(result.message);
+    setToastSeverity(result.success ? 'success' : 'error');
+    setToastOpen(true);
+    if (!result.success && result.error) {
+      diagnostics.log({
+        level: 'error',
+        message: `Boundary fixture copy error: ${result.error.message}`,
+      });
+    }
+  };
+
   const patchMenu = (
     <Menu shadow="md" width={220} withinPortal>
       <Menu.Target>
@@ -76,6 +90,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         <Menu.Item disabled>Save</Menu.Item>
         <Menu.Item disabled>Load</Menu.Item>
         <Menu.Item onClick={handleExport}>Export</Menu.Item>
+        <Menu.Item onClick={handleCopyBoundaryFixtureJson}>Copy Boundary Fixture JSON</Menu.Item>
         <Menu.Divider />
         <Menu.Item onClick={clearStorageAndReload}>Reset Storage</Menu.Item>
       </Menu.Dropdown>
@@ -139,6 +154,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         <Menu.Label>Patch</Menu.Label>
         <Menu.Item onClick={handleNewPatch}>New Patch</Menu.Item>
         <Menu.Item onClick={handleExport}>Export Patch</Menu.Item>
+        <Menu.Item onClick={handleCopyBoundaryFixtureJson}>Copy Boundary Fixture JSON</Menu.Item>
         <Menu.Item onClick={clearStorageAndReload}>Reset Storage</Menu.Item>
         <Menu.Divider />
         <Menu.Label>Layout</Menu.Label>

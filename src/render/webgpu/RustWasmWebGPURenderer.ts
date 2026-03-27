@@ -52,6 +52,8 @@ import {
   normalizeInstallPipelinePayloadV1,
   normalizePublishFrameInputPayloadV1,
   type InstallPipelineBoundaryPayloadV1,
+  type NormalizedInstallPipelinePayloadV1,
+  type NormalizedPublishFrameInputBoundaryPayloadV1,
   type PublishFrameInputBoundaryPayloadV1,
 } from '../rust/boundary-contract';
 
@@ -400,6 +402,47 @@ function canonicalizeSinkPointerMap(
   return canonical;
 }
 
+function toJsonInstallPipelinePayloadV1(
+  payload: NormalizedInstallPipelinePayloadV1,
+): InstallPipelineBoundaryPayloadV1 {
+  return {
+    type: 'INSTALL_PIPELINE_V1',
+    pipeline: {
+      passes: payload.pipeline.passes.map((pass) => (
+        pass.memoryManifest === undefined
+          ? {
+              passId: pass.passId,
+              stage: pass.stage,
+              entryPoint: pass.entryPoint,
+              wgsl: pass.wgsl,
+            }
+          : {
+              passId: pass.passId,
+              stage: pass.stage,
+              entryPoint: pass.entryPoint,
+              wgsl: pass.wgsl,
+              memoryManifest: pass.memoryManifest,
+            }
+      )),
+      sinkPointerMap: canonicalizeSinkPointerMap(payload.pipeline.sinkPointerMap),
+      shapeBankWords: Array.from(payload.pipeline.shapeBankWords),
+      shapeBankWordCount: payload.pipeline.shapeBankWordCount,
+      topologyIdByHandle: Array.from(payload.pipeline.topologyIdByHandle),
+      sinkTableWords: Array.from(payload.pipeline.sinkTableWords),
+      sinkTableWordCount: payload.pipeline.sinkTableWordCount,
+    },
+  };
+}
+
+function toJsonPublishFrameInputPayloadV1(
+  payload: NormalizedPublishFrameInputBoundaryPayloadV1,
+): PublishFrameInputBoundaryPayloadV1 {
+  return {
+    type: 'PUBLISH_FRAME_INPUT_V1',
+    frame: { ...payload.frame },
+  };
+}
+
 function toWorkerFailureDisposition(payload: RustRendererWorkerOutboundMessage): WorkerAckDisposition | null {
   if (payload.type === 'FATAL_ERROR') {
     return {
@@ -547,6 +590,8 @@ export class WebGPURenderer {
   private readbackDebugLogged = false;
   private shapeBankInstallDebugLogged = false;
   private installedSinkPointerMapJson: string | null = null;
+  private latestInstallBoundaryPayload: NormalizedInstallPipelinePayloadV1 | null = null;
+  private latestFrameBoundaryPayload: NormalizedPublishFrameInputBoundaryPayloadV1 | null = null;
 
   private reportEngineError(
     source: string,
@@ -929,6 +974,9 @@ export class WebGPURenderer {
         drawPrepSinkTableWordCount: canonicalPayload.pipeline.sinkTableWordCount,
       });
       this.publishSignalWord();
+      // [LAW:one-source-of-truth] Fixture dump reads from the canonical
+      // renderer boundary payload accepted by this adapter method.
+      this.latestInstallBoundaryPayload = canonicalPayload;
     } finally {
       if (!this.fatalError) {
         this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
@@ -945,6 +993,9 @@ export class WebGPURenderer {
       throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
     }
     this.publishViewportFrame(normalized.value.frame);
+    // [LAW:one-source-of-truth] Fixture dump reads from the canonical frame
+    // boundary payload accepted by this adapter method.
+    this.latestFrameBoundaryPayload = normalized.value;
   }
 
   render(input: RenderInput): void {
@@ -1073,6 +1124,20 @@ export class WebGPURenderer {
 
   getLatestSinkTableSample(): SinkTableDebugSample | null {
     return this.latestSinkTableSample;
+  }
+
+  getLatestBoundaryFixturePayloadV1(): {
+    readonly install: InstallPipelineBoundaryPayloadV1 | null;
+    readonly frame: PublishFrameInputBoundaryPayloadV1 | null;
+  } {
+    return {
+      install: this.latestInstallBoundaryPayload
+        ? toJsonInstallPipelinePayloadV1(this.latestInstallBoundaryPayload)
+        : null,
+      frame: this.latestFrameBoundaryPayload
+        ? toJsonPublishFrameInputPayloadV1(this.latestFrameBoundaryPayload)
+        : null,
+    };
   }
 
   async installDrawPrepSinkPointerMap(
