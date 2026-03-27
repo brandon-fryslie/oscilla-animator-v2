@@ -7,6 +7,7 @@ import {
   type ShapeBankDirectGeometry,
 } from './ShapeBankGeometrySeam';
 import type {
+  CameraInputContract,
   DrawPrepRenderContract,
   MatrixViewportContract,
   RuntimeInputSignalContract,
@@ -57,11 +58,11 @@ import {
   type PublishFrameInputBoundaryPayloadV1,
 } from '../rust/boundary-contract';
 
-interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
+interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract, CameraInputContract {
   readonly shapeBank: RenderShapeBankSource;
 }
 
-type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
+type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract & CameraInputContract;
 
 /**
  * GPU fault descriptor emitted to the main thread when a GPU error or device
@@ -1453,6 +1454,28 @@ export class WebGPURenderer {
     this.setInputWord(RUNTIME_INPUT_INDEX.audioMid, inputAudioMid);
     this.setInputWord(RUNTIME_INPUT_INDEX.audioHigh, inputAudioHigh);
     this.setInputWord(RUNTIME_INPUT_INDEX.gaugeActive, inputGaugeActive);
+
+    // Camera parameters for Rust VP matrix construction.
+    // [LAW:single-enforcer] CameraResolver sanitizes domain values; this boundary
+    // enforces the shared-memory numeric contract (finite, non-NaN).
+    const cameraProjection = assertFiniteRuntimeInput(input.cameraProjection, 'cameraProjection');
+    const cameraCenterX = assertFiniteRuntimeInput(input.cameraCenterX, 'cameraCenterX');
+    const cameraCenterY = assertFiniteRuntimeInput(input.cameraCenterY, 'cameraCenterY');
+    const cameraDistance = assertFiniteRuntimeInput(input.cameraDistance, 'cameraDistance');
+    const cameraTiltRad = assertFiniteRuntimeInput(input.cameraTiltRad, 'cameraTiltRad');
+    const cameraYawRad = assertFiniteRuntimeInput(input.cameraYawRad, 'cameraYawRad');
+    const cameraFovYRad = assertFiniteRuntimeInput(input.cameraFovYRad, 'cameraFovYRad');
+    const cameraNear = assertFiniteRuntimeInput(input.cameraNear, 'cameraNear');
+    const cameraFar = assertFiniteRuntimeInput(input.cameraFar, 'cameraFar');
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraProjection, cameraProjection);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraCenterX, cameraCenterX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraCenterY, cameraCenterY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraDistance, cameraDistance);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraTiltRad, cameraTiltRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraYawRad, cameraYawRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraFovYRad, cameraFovYRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraNear, cameraNear);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraFar, cameraFar);
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {

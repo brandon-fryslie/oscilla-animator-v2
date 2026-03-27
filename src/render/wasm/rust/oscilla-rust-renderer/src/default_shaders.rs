@@ -28,7 +28,7 @@ pub const DEFAULT_ASSEMBLY_WGSL: &str = r#"
 
 const SINK_TABLE_HEADER_WORDS: u32 = 8u;
 const SINK_TABLE_RECORD_WORDS: u32 = 8u;
-const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 26u;
+const SINK_TABLE_DESCRIPTOR_WORDS: u32 = 31u;
 
 const DESCRIPTOR_WORD_POSITION_BASE_OFFSET: u32 = 0u;
 const DESCRIPTOR_WORD_POSITION_LANE_STRIDE: u32 = 1u;
@@ -50,6 +50,12 @@ const DESCRIPTOR_WORD_SCALE2_LANE_STRIDE: u32 = 16u;
 const DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE: u32 = 17u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_X_BITS: u32 = 18u;
 const DESCRIPTOR_WORD_SCALE2_DEFAULT_Y_BITS: u32 = 19u;
+// Position Z (optional per-instance depth for 2.5D ordering)
+const DESCRIPTOR_WORD_POSITION_Z_MODE: u32 = 26u;
+const DESCRIPTOR_WORD_POSITION_Z_BASE_OFFSET: u32 = 27u;
+const DESCRIPTOR_WORD_POSITION_Z_LANE_STRIDE: u32 = 28u;
+const DESCRIPTOR_WORD_POSITION_Z_COMPONENT_STRIDE: u32 = 29u;
+const DESCRIPTOR_WORD_POSITION_Z_DEFAULT_BITS: u32 = 30u;
 // [RECOVER-06] Instance-count and shape-word-offset metadata
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: u32 = 23u;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: u32 = 24u;
@@ -101,6 +107,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let base = gid.x * 12u;
   var pos_x = 0.0;
   var pos_y = 0.0;
+  var pos_z = 0.0;
   var scale = 1.0;
   var rotation = 0.0;
   var scale2_x = 1.0;
@@ -249,6 +256,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
       );
       scale2_x = select(scale2_default_x, scale2_x_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
       scale2_y = select(scale2_default_y, scale2_y_from_slot, scale2_mode == OPTIONAL_MODE_SLOT);
+
+      let position_z_mode = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_Z_MODE);
+      let position_z_default = read_sink_f32(descriptor_base + DESCRIPTOR_WORD_POSITION_Z_DEFAULT_BITS, 0.0);
+      let position_z_base_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_Z_BASE_OFFSET);
+      let position_z_lane_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_Z_LANE_STRIDE);
+      let position_z_component_stride = read_sink_word(descriptor_base + DESCRIPTOR_WORD_POSITION_Z_COMPONENT_STRIDE);
+      let position_z_from_slot = read_arena_f32(
+        position_z_base_offset,
+        position_z_lane_stride,
+        position_z_component_stride,
+        sink_lane,
+        0u,
+        position_z_default,
+      );
+      pos_z = select(position_z_default, position_z_from_slot, position_z_mode == OPTIONAL_MODE_SLOT);
+
       // [RECOVER-06] Shape word offset from descriptor (resolved at pack time)
       shape_word_offset = read_sink_word(descriptor_base + DESCRIPTOR_WORD_SHAPE_WORD_OFFSET);
     }
@@ -263,7 +286,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // [LAW:one-source-of-truth] Encode shape_word_offset as numeric f32.
   // Bitcasting small u32 handles creates denormals that some GPUs flush to 0.
   instance_words[base + 6u] = f32(shape_word_offset);
-  instance_words[base + 7u] = 0.0;
+  instance_words[base + 7u] = pos_z;  // Z depth for 2.5D ordering (transform1.w)
   instance_words[base + 8u] = color_r;
   instance_words[base + 9u] = color_g;
   instance_words[base + 10u] = color_b;
@@ -521,6 +544,8 @@ fn vs_type2(
   let rawCenterY = inst.transform0.y;
   let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
   let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawCenterZ = inst.transform1.w;
+  let centerZ = select(0.0, rawCenterZ, rawCenterZ == rawCenterZ);
   let rawScaleX = inst.transform0.z * inst.transform1.x;
   let rawScaleY = inst.transform0.z * inst.transform1.y;
   let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
@@ -534,7 +559,7 @@ fn vs_type2(
     vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
     vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
     vec4<f32>(0.0, 0.0, 1.0, 0.0),
-    vec4<f32>(centerX, centerY, 0.0, 1.0),
+    vec4<f32>(centerX, centerY, centerZ, 1.0),
   );
 
   let worldPos = model * vec4<f32>(localX, localY, 0.0, 1.0);
@@ -582,12 +607,14 @@ fn vs_type5(
   let rawCenterY = inst.transform0.y;
   let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
   let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawCenterZ = inst.transform1.w;
+  let centerZ = select(0.0, rawCenterZ, rawCenterZ == rawCenterZ);
   let rawScale = inst.transform0.z;
   let scale = clamp(abs(select(1.0, rawScale, rawScale == rawScale)), 0.001, 1024.0);
 
   let worldX = centerX + localX * quadWidth * scale;
   let worldY = centerY + localY * quadHeight * scale;
-  let worldPos = vec4<f32>(worldX, worldY, 0.0, 1.0);
+  let worldPos = vec4<f32>(worldX, worldY, centerZ, 1.0);
 
   var out: VertexOutput;
   out.position = frame_header.view_proj * worldPos;
@@ -649,6 +676,8 @@ fn vs_type5(
   let rawCenterY = inst.transform0.y;
   let centerX = select(0.0, rawCenterX, rawCenterX == rawCenterX);
   let centerY = select(0.0, rawCenterY, rawCenterY == rawCenterY);
+  let rawCenterZ = inst.transform1.w;
+  let centerZ = select(0.0, rawCenterZ, rawCenterZ == rawCenterZ);
   let rawScaleX = inst.transform0.z * inst.transform1.x;
   let rawScaleY = inst.transform0.z * inst.transform1.y;
   let scaleX = clamp(abs(select(1.0, rawScaleX, rawScaleX == rawScaleX)), 0.001, 1024.0);
@@ -662,7 +691,7 @@ fn vs_type5(
     vec4<f32>(c * scaleX, s * scaleX, 0.0, 0.0),
     vec4<f32>(-s * scaleY, c * scaleY, 0.0, 0.0),
     vec4<f32>(0.0, 0.0, 1.0, 0.0),
-    vec4<f32>(centerX, centerY, 0.0, 1.0),
+    vec4<f32>(centerX, centerY, centerZ, 1.0),
   );
 
   let worldPos = model * vec4<f32>(pulledX, pulledY, 0.0, 1.0);

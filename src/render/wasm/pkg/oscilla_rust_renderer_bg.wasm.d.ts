@@ -13,6 +13,7 @@ export const set_debug_readback_hz: (a: number) => [number, number];
 export const set_sink_pointer_map: (a: number, b: number) => [number, number];
 export const take_frame_pacing_packet: () => [number, number, number];
 export const take_readback_snapshot: () => [number, number, number];
+export const update_control: (a: number, b: number) => [number, number];
 export const upload_atlas_data: (a: any) => [number, number];
 export const wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
 export const wasm_bindgen__closure__destroy__hac389948b8d10e82: (a: number, b: number) => void;

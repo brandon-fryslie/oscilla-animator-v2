@@ -68,6 +68,7 @@ interface RenderTargetInfo {
   color: { id: ValueExprId; stride: number };
   scale?: { id: ValueExprId; stride: number };
   rotation?: { id: ValueExprId; stride: number };
+  positionZ?: { id: ValueExprId; stride: number };
   shape?: { sourceExprId: ValueExprId };
 }
 
@@ -304,6 +305,7 @@ function collectRenderTargets(
     const colorRef = getInputRef(index, 'color', edges, blockOutputs);
     // TODO: This code is wrong.  Figure out the right way to fix this
     const scaleRef = getInputRef(index, 'scale', edges, blockOutputs);
+    const positionZRef = getInputRef(index, 'positionZ', edges, blockOutputs);
 
     if (!controlPointsRef || !colorRef) {
       continue;
@@ -336,6 +338,10 @@ function collectRenderTargets(
       ? { id: scaleExpr.id, stride: scaleExpr.stride }
       // TODO: This code is wrong.  Figure out the right way to fix this
       : undefined;
+    const positionZExpr: ExprValueRef = positionZRef ? asExprValueRef(positionZRef) : { kind: 'missing' };
+    const positionZ = positionZExpr.kind === 'expr'
+      ? { id: positionZExpr.id, stride: positionZExpr.stride }
+      : undefined;
 
     const shapeFieldId = instanceDecl.shapeField;
     const shapeExpr = valueExprs[shapeFieldId as number];
@@ -352,6 +358,7 @@ function collectRenderTargets(
       color: { id: color.id, stride: color.stride },
       scale,
       rotation: undefined,
+      positionZ,
       shape,
     });
   }
@@ -726,6 +733,21 @@ function buildRenderStepForTarget(args: {
     // TODO: This code is wrong.  Figure out the right way to fix this
     : undefined;
 
+  const positionZSlot = target.positionZ
+    ? getFieldSlot(
+        resolveFieldExprId({
+          sourceExprId: target.positionZ.id,
+          renderInstance,
+          valueExprs,
+          builder,
+          renderBlockId: target.renderBlockId,
+          label: 'positionZ',
+        }),
+        renderCustomSemantic(),
+        `${target.renderBlockId}:positionZ`,
+      )
+    : undefined;
+
   if (!target.shape) {
     throw new Error(renderMissingShapeInputMessage(target.instanceId));
   }
@@ -747,6 +769,7 @@ function buildRenderStepForTarget(args: {
     shape: shapeOutputs.shape,
     ...(shapeOutputs.controlPoints && { controlPoints: shapeOutputs.controlPoints }),
     ...(rotationSlot !== undefined && { rotationSlot }),
+    ...(positionZSlot !== undefined && { positionZSlot }),
   };
 }
 

@@ -320,6 +320,8 @@ export interface StepRender {
   readonly rotationSlot?: ValueSlot;
   /** C-13: Per-instance anisotropic scale (x,y pairs) - slot containing Float32Array */
   readonly scale2Slot?: ValueSlot;
+  /** Per-instance Z depth for 2.5D ordering - slot containing Float32Array */
+  readonly positionZSlot?: ValueSlot;
 }
 
 export interface StepStateWrite {
