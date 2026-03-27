@@ -359,7 +359,6 @@ async function main() {
               runtimeBootstrap.setStatsSink(sink);
             },
             externalWriteBus: runtimeBootstrap.getExternalWriteBus(),
-            submitRawGpuPayload: (passes) => runtimeBootstrap.submitRawGpuPayload(passes),
           })
         )
       )
