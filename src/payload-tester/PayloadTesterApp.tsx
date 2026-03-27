@@ -32,10 +32,40 @@ interface PayloadTesterDocument {
   readonly frame: PublishFrameInputBoundaryPayloadV1;
 }
 
+const DEFAULT_FRAME: PublishFrameInputBoundaryPayloadV1 = {
+  type: 'PUBLISH_FRAME_INPUT_V1',
+  frame: {
+    width: 960,
+    height: 540,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    timeMs: 0,
+    inputMouseX: 0,
+    inputMouseY: 0,
+    inputMouseButtons: 0,
+    inputAudioLow: 0,
+    inputAudioMid: 0,
+    inputAudioHigh: 0,
+    inputGaugeActive: 0,
+  },
+};
+
 function fixtureDocument(fixture: PayloadFixture): PayloadTesterDocument {
   return {
-    install: fixture.install,
-    frame: fixture.frame,
+    install: {
+      type: 'INSTALL_PIPELINE_V1',
+      pipeline: {
+        passes: fixture.passes,
+        sinkPointerMap: {},
+        shapeBankWords: [],
+        shapeBankWordCount: 0,
+        topologyIdByHandle: [],
+        sinkTableWords: [],
+        sinkTableWordCount: 0,
+      },
+    },
+    frame: DEFAULT_FRAME,
   };
 }
 
