@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  normalizeInstallPipelinePayloadV1,
-  normalizePublishFrameInputPayloadV1,
-} from '../boundary-contract';
-import { PAYLOAD_FIXTURES } from '../fixtures';
+  PAYLOAD_FIXTURES,
+  isNagaModuleFixture,
+  isBoundaryContractFixture,
+} from '../fixtures';
+import { validateNagaModulePayload } from '../boundary-contract';
 
 describe('payload fixtures', () => {
   it('provide unique fixture identifiers', () => {
@@ -11,13 +12,30 @@ describe('payload fixtures', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('normalize all fixture install/frame payloads through canonical boundary contract', () => {
+  it('every fixture is either a NagaModule or BoundaryContract fixture', () => {
     for (const fixture of PAYLOAD_FIXTURES) {
-      const installValidation = normalizeInstallPipelinePayloadV1(fixture.install);
-      const frameValidation = normalizePublishFrameInputPayloadV1(fixture.frame);
+      const isNaga = isNagaModuleFixture(fixture);
+      const isBoundary = isBoundaryContractFixture(fixture);
+      expect(isNaga || isBoundary, `${fixture.id} must be one fixture kind`).toBe(true);
+      expect(isNaga && isBoundary, `${fixture.id} must not be both kinds`).toBe(false);
+    }
+  });
 
-      expect(installValidation.valid, fixture.id).toBe(true);
-      expect(frameValidation.valid, fixture.id).toBe(true);
+  it('NagaModule fixtures have valid module payloads', () => {
+    for (const fixture of PAYLOAD_FIXTURES) {
+      if (!isNagaModuleFixture(fixture)) continue;
+      const result = validateNagaModulePayload(fixture.module);
+      expect(result.valid, `${fixture.id}: ${!result.valid ? result.errors.join(', ') : ''}`).toBe(true);
+    }
+  });
+
+  it('BoundaryContract fixtures have well-formed install + frame payloads', () => {
+    for (const fixture of PAYLOAD_FIXTURES) {
+      if (!isBoundaryContractFixture(fixture)) continue;
+      expect(fixture.install.type).toBe('INSTALL_PIPELINE_V1');
+      expect(fixture.install.pipeline.passes.length).toBeGreaterThan(0);
+      expect(fixture.frame.type).toBe('PUBLISH_FRAME_INPUT_V1');
+      expect(fixture.frame.frame.width).toBeGreaterThan(0);
     }
   });
 });
