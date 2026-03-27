@@ -64,6 +64,10 @@ export const PANEL_DEFINITIONS: PanelDefinition[] = [
 
   // Floating
   { id: 'preview', component: 'preview', title: 'Preview', group: 'preview-float', floating: true },
+
+  // Payload tester (only visible in payload-tester layout mode)
+  { id: 'fixture-selector', component: 'fixture-selector', title: 'Fixtures', group: 'left-top', initiallyHidden: true, menuHidden: true },
+  { id: 'payload-editor', component: 'payload-editor', title: 'Payload Editor', group: 'center', initiallyHidden: true, menuHidden: true },
 ];
 
 // [LAW:one-source-of-truth] Panels-menu entries are derived from the canonical
