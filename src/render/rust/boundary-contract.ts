@@ -221,17 +221,18 @@ export interface PublishFrameInputBoundaryPayloadV1 {
     readonly inputAudioMid: number;
     readonly inputAudioHigh: number;
     readonly inputGaugeActive: number;
-    // Camera params (optional — defaults applied by CameraResolver)
-    readonly cameraProjection?: number;
-    readonly cameraCenterX?: number;
-    readonly cameraCenterY?: number;
-    readonly cameraDistance?: number;
-    readonly cameraTiltRad?: number;
-    readonly cameraYawRad?: number;
-    readonly cameraFovYRad?: number;
-    readonly cameraNear?: number;
-    readonly cameraFar?: number;
-    readonly [key: string]: number | undefined;
+    // [LAW:one-source-of-truth] Camera params are required at this boundary.
+    // Defaults live in CameraResolver (DEFAULT_CAMERA / PREVIEW_CAMERA) —
+    // not here. Missing camera fields are a caller bug, not a normalization concern.
+    readonly cameraProjection: number;
+    readonly cameraCenterX: number;
+    readonly cameraCenterY: number;
+    readonly cameraDistance: number;
+    readonly cameraTiltRad: number;
+    readonly cameraYawRad: number;
+    readonly cameraFovYRad: number;
+    readonly cameraNear: number;
+    readonly cameraFar: number;
   };
 }
 
@@ -312,32 +313,23 @@ export function normalizePublishFrameInputPayloadV1(
   requireFinite('inputAudioHigh');
   requireFinite('inputGaugeActive');
 
-  // Validate optional camera fields when present (reject non-finite values
-  // like strings or NaN that would pass the ?? default but produce garbage).
-  const optionalFinite = (name: string) => {
-    const v = frame[name];
-    if (v !== undefined && v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
-      errors.push(`frame.${name} must be a finite number when provided, got ${String(v)}`);
-    }
-  };
-  optionalFinite('cameraProjection');
-  optionalFinite('cameraCenterX');
-  optionalFinite('cameraCenterY');
-  optionalFinite('cameraDistance');
-  optionalFinite('cameraTiltRad');
-  optionalFinite('cameraYawRad');
-  optionalFinite('cameraFovYRad');
-  optionalFinite('cameraNear');
-  optionalFinite('cameraFar');
+  // [LAW:one-source-of-truth] Camera fields are required — defaults live in
+  // CameraResolver, not at this boundary. Missing fields are a caller bug.
+  requireFinite('cameraProjection');
+  requireFinite('cameraCenterX');
+  requireFinite('cameraCenterY');
+  requirePositive('cameraDistance');
+  requireFinite('cameraTiltRad');
+  requireFinite('cameraYawRad');
+  requirePositive('cameraFovYRad');
+  requirePositive('cameraNear');
+  requirePositive('cameraFar');
 
   if (errors.length > 0) {
     return { valid: false, errors };
   }
 
   const f = frame as Record<string, number>;
-
-  const near = f.cameraNear ?? 0.01;
-  const far = f.cameraFar ?? 100;
 
   return {
     valid: true,
@@ -357,16 +349,15 @@ export function normalizePublishFrameInputPayloadV1(
         inputAudioMid: f.inputAudioMid,
         inputAudioHigh: f.inputAudioHigh,
         inputGaugeActive: f.inputGaugeActive,
-        // Camera defaults: ortho identity when not provided
-        cameraProjection: f.cameraProjection ?? 0,
-        cameraCenterX: f.cameraCenterX ?? 0.5,
-        cameraCenterY: f.cameraCenterY ?? 0.5,
-        cameraDistance: Math.max(f.cameraDistance ?? 2.0, 0.0001),
-        cameraTiltRad: f.cameraTiltRad ?? 0,
-        cameraYawRad: f.cameraYawRad ?? 0,
-        cameraFovYRad: f.cameraFovYRad ?? 0.7854,
-        cameraNear: Math.max(near, 0.000001),
-        cameraFar: Math.max(far, near + 0.000001),
+        cameraProjection: f.cameraProjection,
+        cameraCenterX: f.cameraCenterX,
+        cameraCenterY: f.cameraCenterY,
+        cameraDistance: f.cameraDistance,
+        cameraTiltRad: f.cameraTiltRad,
+        cameraYawRad: f.cameraYawRad,
+        cameraFovYRad: f.cameraFovYRad,
+        cameraNear: f.cameraNear,
+        cameraFar: f.cameraFar,
       },
     },
   };
