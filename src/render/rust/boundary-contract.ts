@@ -280,6 +280,12 @@ export function normalizePublishFrameInputPayloadV1(
   const frame = p.frame as Record<string, unknown>;
   const errors: string[] = [];
 
+  const requirePositiveInt = (name: string) => {
+    const v = frame[name];
+    if (typeof v !== 'number' || !Number.isFinite(v) || !Number.isInteger(v) || v <= 0) {
+      errors.push(`frame.${name} must be a positive integer, got ${String(v)}`);
+    }
+  };
   const requirePositive = (name: string) => {
     const v = frame[name];
     if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
@@ -299,8 +305,8 @@ export function normalizePublishFrameInputPayloadV1(
     }
   };
 
-  requirePositive('width');
-  requirePositive('height');
+  requirePositiveInt('width');
+  requirePositiveInt('height');
   requirePositive('zoom');
   requireFinite('panX');
   requireFinite('panY');
