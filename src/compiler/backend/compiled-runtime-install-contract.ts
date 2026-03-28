@@ -268,11 +268,15 @@ export function buildCompiledRuntimeInstallContract(
   // [RECOVER-07] Sink table packer receives compile-time shape word offsets
   // directly — no arena round-trip through CPU materialization.
   const packed = packDrawPrepSinkTableV1(program, topology.shapeWordOffsetBySlot);
+  // [LAW:one-source-of-truth] When no sinks exist, packed is null and the
+  // contract produces empty-but-valid artifacts (no fallback ambiguity).
   const drawPrepWords = packed
     ? new Uint32Array(packed.words.subarray(0, packed.wordCount))
     : new Uint32Array(0);
   const drawPrepWordCount = packed?.wordCount ?? 0;
-  const drawPrepSinkPointerMap: DrawPrepSinkPointerMap = packed?.sinkPointerMap ?? {};
+  const drawPrepSinkPointerMap: DrawPrepSinkPointerMap = packed
+    ? packed.sinkPointerMap
+    : Object.freeze({}) as DrawPrepSinkPointerMap;
   const shapeBankWordCount = assertFiniteUint32(
     topology.shapeBankWordCount,
     'gpuDrivenShapeBank.wordCount',
