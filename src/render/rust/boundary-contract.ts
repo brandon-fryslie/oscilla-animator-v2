@@ -46,6 +46,7 @@ export function validateRawPayload(
   for (let i = 0; i < json.length; i++) {
     const item = json[i];
     const prefix = `passes[${i}]`;
+    const preItemErrorCount = errors.length;
 
     if (item === null || typeof item !== 'object') {
       errors.push(`${prefix}: must be an object`);
@@ -76,7 +77,7 @@ export function validateRawPayload(
 
     // memoryManifest is optional — no validation here (Rust handles it)
 
-    if (errors.length === 0) {
+    if (errors.length === preItemErrorCount) {
       passes.push(obj as unknown as import('./worker-protocol').RustRendererGpuPass);
     }
   }
@@ -145,18 +146,28 @@ export function normalizeInstallPipelinePayloadV1(
     errors.push('payload.pipeline.passes must be a non-empty array');
   }
   const shapeBankWords = pipeline.shapeBankWords;
-  const shapeBankWordCount = typeof pipeline.shapeBankWordCount === 'number' ? pipeline.shapeBankWordCount : -1;
+  const shapeBankWordCount = pipeline.shapeBankWordCount;
+  if (!Number.isInteger(shapeBankWordCount) || (shapeBankWordCount as number) < 0) {
+    errors.push(`shapeBankWordCount must be a non-negative integer, got ${String(shapeBankWordCount)}`);
+  }
   if (!Array.isArray(shapeBankWords) && !(shapeBankWords instanceof Uint32Array)) {
     errors.push('payload.pipeline.shapeBankWords must be an array or Uint32Array');
-  } else if (shapeBankWordCount < 0 || shapeBankWordCount > (shapeBankWords as unknown[]).length) {
-    errors.push(`shapeBankWordCount (${shapeBankWordCount}) exceeds shapeBankWords length (${(shapeBankWords as unknown[]).length})`);
+  } else if (Number.isInteger(shapeBankWordCount) && (shapeBankWordCount as number) > (shapeBankWords as unknown[]).length) {
+    errors.push(`shapeBankWordCount (${shapeBankWordCount as number}) exceeds shapeBankWords length (${(shapeBankWords as unknown[]).length})`);
   }
   const sinkTableWords = pipeline.sinkTableWords;
-  const sinkTableWordCount = typeof pipeline.sinkTableWordCount === 'number' ? pipeline.sinkTableWordCount : -1;
+  const sinkTableWordCount = pipeline.sinkTableWordCount;
+  if (!Number.isInteger(sinkTableWordCount) || (sinkTableWordCount as number) < 0) {
+    errors.push(`sinkTableWordCount must be a non-negative integer, got ${String(sinkTableWordCount)}`);
+  }
   if (!Array.isArray(sinkTableWords) && !(sinkTableWords instanceof Uint32Array)) {
     errors.push('payload.pipeline.sinkTableWords must be an array or Uint32Array');
-  } else if (sinkTableWordCount < 0 || sinkTableWordCount > (sinkTableWords as unknown[]).length) {
-    errors.push(`sinkTableWordCount (${sinkTableWordCount}) exceeds sinkTableWords length (${(sinkTableWords as unknown[]).length})`);
+  } else if (Number.isInteger(sinkTableWordCount) && (sinkTableWordCount as number) > (sinkTableWords as unknown[]).length) {
+    errors.push(`sinkTableWordCount (${sinkTableWordCount as number}) exceeds sinkTableWords length (${(sinkTableWords as unknown[]).length})`);
+  }
+  const topologyIdByHandle = pipeline.topologyIdByHandle;
+  if (topologyIdByHandle !== undefined && !Array.isArray(topologyIdByHandle) && !(topologyIdByHandle instanceof Uint32Array)) {
+    errors.push('payload.pipeline.topologyIdByHandle must be an array or Uint32Array when provided');
   }
 
   if (errors.length > 0) {
@@ -170,10 +181,10 @@ export function normalizeInstallPipelinePayloadV1(
         passes: pipeline.passes as readonly _RustRendererGpuPass[],
         sinkPointerMap: (pipeline.sinkPointerMap ?? {}) as Readonly<Record<string, string>>,
         shapeBankWords: toUint32Array(shapeBankWords as readonly number[]),
-        shapeBankWordCount,
-        topologyIdByHandle: toUint32Array((pipeline.topologyIdByHandle ?? []) as readonly number[]),
+        shapeBankWordCount: shapeBankWordCount as number,
+        topologyIdByHandle: toUint32Array((topologyIdByHandle ?? []) as readonly number[]),
         sinkTableWords: toUint32Array(sinkTableWords as readonly number[]),
-        sinkTableWordCount,
+        sinkTableWordCount: sinkTableWordCount as number,
       },
     },
   };

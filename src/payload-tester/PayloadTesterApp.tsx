@@ -53,7 +53,15 @@ export const PayloadTesterApp: React.FC = () => {
         setRendererState({ kind: 'error', message: msg });
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      const renderer = rendererRef.current;
+      if (renderer) {
+        renderer.setGpuFaultCallback(null);
+        renderer.dispose();
+        rendererRef.current = null;
+      }
+    };
   }, []);
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {

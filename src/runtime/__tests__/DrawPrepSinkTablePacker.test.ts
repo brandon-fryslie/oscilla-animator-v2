@@ -389,6 +389,90 @@ describe('packDrawPrepSinkTableV1 static metadata only', () => {
     expect(packed!.wordCount).toBe(8 + 8 + 31);
   });
 
+  it('writes positionZ descriptor as constant mode when slot absent', () => {
+    const slotsA: TestSinkSlotSet = {
+      shape: valueSlot(1),
+      controlPoints: valueSlot(2),
+      color: valueSlot(3),
+      scale: valueSlot(4),
+    };
+    const instanceA = instanceId('instance-a');
+    // No positionZSlot on the render step
+    const steps = [makeRenderStep(instanceA, slotsA)];
+
+    const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 2, 2)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 20, 2, 2, 4)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 40, 4, 2, 8)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 60, 1, 2, 2)],
+    ]);
+    const program = makeMinimalProgram(steps, slotToArena);
+    (program as any).drawPrepProgram = {
+      ...program.drawPrepProgram,
+      totalRecordCount: 1,
+      indexedRecordCount: 1,
+      sinks: [program.drawPrepProgram.sinks[0]],
+    };
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42]]);
+
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
+    expect(packed).not.toBeNull();
+    const words = packed!.words;
+    const totalRecords = packed!.header.totalRecordCount;
+    const descA = descriptorBaseWord(totalRecords, 0);
+
+    // PositionZ mode should be constant (0) with default bits = float32(0.0)
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZMode]).toBe(0); // constant
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZBaseOffset]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZLaneStride]).toBe(0);
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZComponentStride]).toBe(0);
+    // Default bits: float32 representation of 0.0
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZDefaultBits]).toBe(0);
+    // No positionZ key in sinkPointerMap
+    expect(packed!.sinkPointerMap).not.toHaveProperty('0:positionZ');
+  });
+
+  it('writes positionZ descriptor as slot mode when positionZSlot present', () => {
+    const slotsA: TestSinkSlotSet = {
+      shape: valueSlot(1),
+      controlPoints: valueSlot(2),
+      color: valueSlot(3),
+      scale: valueSlot(4),
+    };
+    const positionZSlot = valueSlot(10);
+    const instanceA = instanceId('instance-a');
+    const step: StepRender = {
+      ...makeRenderStep(instanceA, slotsA),
+      positionZSlot,
+    };
+
+    const slotToArena = new Map<ValueSlot, ArenaSlotDescriptor>([
+      [slotsA.shape, makeArenaDescriptor(slotsA.shape, 0, 1, 5, 5)],
+      [slotsA.controlPoints, makeArenaDescriptor(slotsA.controlPoints, 20, 2, 5, 10)],
+      [slotsA.color, makeArenaDescriptor(slotsA.color, 40, 4, 5, 20)],
+      [slotsA.scale, makeArenaDescriptor(slotsA.scale, 60, 1, 5, 5)],
+      [positionZSlot, makeArenaDescriptor(positionZSlot, 80, 1, 5, 5)],
+    ]);
+    const program = makeMinimalProgram([step], slotToArena);
+    (program as any).drawPrepProgram = {
+      ...program.drawPrepProgram,
+      totalRecordCount: 1,
+      indexedRecordCount: 1,
+      sinks: [program.drawPrepProgram.sinks[0]],
+    };
+    const shapeWordOffsets = makeShapeWordOffsets([[slotsA.shape, 42]]);
+
+    const packed = packDrawPrepSinkTableV1(program, shapeWordOffsets);
+    expect(packed).not.toBeNull();
+    const words = packed!.words;
+    const totalRecords = packed!.header.totalRecordCount;
+    const descA = descriptorBaseWord(totalRecords, 0);
+
+    // PositionZ mode should be slot (1) with symbolic pointer in map
+    expect(words[descA + DrawPrepSinkDescriptorWord.PositionZMode]).toBe(1); // slot
+    expect(packed!.sinkPointerMap['0:positionZ']).toBe(`arena:slot:${Number(positionZSlot)}`);
+  });
+
   it('fails fast for unsupported dynamic instance counts', () => {
     const slots: TestSinkSlotSet = {
       shape: valueSlot(1),
