@@ -167,18 +167,18 @@ export function normalizeInstallPipelinePayloadV1(
     errors.push(`sinkTableWordCount (${sinkTableWordCount as number}) exceeds sinkTableWords length (${(sinkTableWords as unknown[]).length})`);
   }
   const topologyIdByHandle = pipeline.topologyIdByHandle;
-  if (topologyIdByHandle !== undefined && !Array.isArray(topologyIdByHandle) && !(topologyIdByHandle instanceof Uint32Array)) {
-    errors.push('payload.pipeline.topologyIdByHandle must be an array or Uint32Array when provided');
+  if (!Array.isArray(topologyIdByHandle) && !(topologyIdByHandle instanceof Uint32Array)) {
+    errors.push('payload.pipeline.topologyIdByHandle must be an array or Uint32Array');
   }
   const sinkPointerMap = pipeline.sinkPointerMap;
-  if (sinkPointerMap !== undefined && sinkPointerMap !== null && typeof sinkPointerMap === 'object' && !Array.isArray(sinkPointerMap)) {
+  if (sinkPointerMap === null || sinkPointerMap === undefined || typeof sinkPointerMap !== 'object' || Array.isArray(sinkPointerMap)) {
+    errors.push('payload.pipeline.sinkPointerMap must be a plain object');
+  } else {
     for (const [k, v] of Object.entries(sinkPointerMap as Record<string, unknown>)) {
       if (typeof k !== 'string' || typeof v !== 'string') {
         errors.push(`sinkPointerMap['${k}'] must be a string, got ${typeof v}`);
       }
     }
-  } else if (sinkPointerMap !== undefined && sinkPointerMap !== null) {
-    errors.push('payload.pipeline.sinkPointerMap must be a plain object when provided');
   }
 
   if (errors.length > 0) {
@@ -190,10 +190,10 @@ export function normalizeInstallPipelinePayloadV1(
     value: {
       pipeline: {
         passes: pipeline.passes as readonly _RustRendererGpuPass[],
-        sinkPointerMap: (pipeline.sinkPointerMap ?? {}) as Readonly<Record<string, string>>,
+        sinkPointerMap: sinkPointerMap as Readonly<Record<string, string>>,
         shapeBankWords: toUint32Array(shapeBankWords as readonly number[]),
         shapeBankWordCount: shapeBankWordCount as number,
-        topologyIdByHandle: toUint32Array((topologyIdByHandle ?? []) as readonly number[]),
+        topologyIdByHandle: toUint32Array(topologyIdByHandle as readonly number[]),
         sinkTableWords: toUint32Array(sinkTableWords as readonly number[]),
         sinkTableWordCount: sinkTableWordCount as number,
       },
