@@ -123,7 +123,8 @@ type NormalizeResult<T> =
   | { readonly valid: false; readonly errors: readonly string[] };
 
 function toUint32Array(arr: readonly number[] | Uint32Array): Uint32Array {
-  return arr instanceof Uint32Array ? arr : new Uint32Array(arr);
+  // Always clone to avoid sharing mutable buffers with callers.
+  return new Uint32Array(arr);
 }
 
 export function normalizeInstallPipelinePayloadV1(
@@ -168,6 +169,16 @@ export function normalizeInstallPipelinePayloadV1(
   const topologyIdByHandle = pipeline.topologyIdByHandle;
   if (topologyIdByHandle !== undefined && !Array.isArray(topologyIdByHandle) && !(topologyIdByHandle instanceof Uint32Array)) {
     errors.push('payload.pipeline.topologyIdByHandle must be an array or Uint32Array when provided');
+  }
+  const sinkPointerMap = pipeline.sinkPointerMap;
+  if (sinkPointerMap !== undefined && sinkPointerMap !== null && typeof sinkPointerMap === 'object' && !Array.isArray(sinkPointerMap)) {
+    for (const [k, v] of Object.entries(sinkPointerMap as Record<string, unknown>)) {
+      if (typeof k !== 'string' || typeof v !== 'string') {
+        errors.push(`sinkPointerMap['${k}'] must be a string, got ${typeof v}`);
+      }
+    }
+  } else if (sinkPointerMap !== undefined && sinkPointerMap !== null) {
+    errors.push('payload.pipeline.sinkPointerMap must be a plain object when provided');
   }
 
   if (errors.length > 0) {
@@ -301,11 +312,33 @@ export function normalizePublishFrameInputPayloadV1(
   requireFinite('inputAudioHigh');
   requireFinite('inputGaugeActive');
 
+  // Validate optional camera fields when present (reject non-finite values
+  // like strings or NaN that would pass the ?? default but produce garbage).
+  const optionalFinite = (name: string) => {
+    const v = frame[name];
+    if (v !== undefined && v !== null && (typeof v !== 'number' || !Number.isFinite(v))) {
+      errors.push(`frame.${name} must be a finite number when provided, got ${String(v)}`);
+    }
+  };
+  optionalFinite('cameraProjection');
+  optionalFinite('cameraCenterX');
+  optionalFinite('cameraCenterY');
+  optionalFinite('cameraDistance');
+  optionalFinite('cameraTiltRad');
+  optionalFinite('cameraYawRad');
+  optionalFinite('cameraFovYRad');
+  optionalFinite('cameraNear');
+  optionalFinite('cameraFar');
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
 
   const f = frame as Record<string, number>;
+
+  const near = f.cameraNear ?? 0.01;
+  const far = f.cameraFar ?? 100;
+
   return {
     valid: true,
     value: {
@@ -328,12 +361,12 @@ export function normalizePublishFrameInputPayloadV1(
         cameraProjection: f.cameraProjection ?? 0,
         cameraCenterX: f.cameraCenterX ?? 0.5,
         cameraCenterY: f.cameraCenterY ?? 0.5,
-        cameraDistance: f.cameraDistance ?? 2.0,
+        cameraDistance: Math.max(f.cameraDistance ?? 2.0, 0.0001),
         cameraTiltRad: f.cameraTiltRad ?? 0,
         cameraYawRad: f.cameraYawRad ?? 0,
         cameraFovYRad: f.cameraFovYRad ?? 0.7854,
-        cameraNear: f.cameraNear ?? 0.01,
-        cameraFar: f.cameraFar ?? 100,
+        cameraNear: Math.max(near, 0.000001),
+        cameraFar: Math.max(far, near + 0.000001),
       },
     },
   };
