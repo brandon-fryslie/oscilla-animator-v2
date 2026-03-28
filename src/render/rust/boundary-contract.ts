@@ -276,7 +276,7 @@ function normalizeSinkPointerMap(
   return normalized;
 }
 
-export function normalizeInstallPipelinePayloadV1(payload: unknown): ValidationResult<NormalizedInstallPipelinePayloadV1> {
+export function validateInstallPipelinePayloadV1(payload: unknown): ValidationResult<NormalizedInstallPipelinePayloadV1> {
   const errors: string[] = [];
   if (!isRecord(payload)) {
     return { valid: false, errors: ['payload: must be an object'] };
@@ -373,7 +373,7 @@ export function normalizeInstallPipelinePayloadV1(payload: unknown): ValidationR
   };
 }
 
-export function normalizePublishFrameInputPayloadV1(
+export function validatePublishFrameInputPayloadV1(
   payload: unknown,
 ): ValidationResult<NormalizedPublishFrameInputBoundaryPayloadV1> {
   const errors: string[] = [];
@@ -401,18 +401,18 @@ export function normalizePublishFrameInputPayloadV1(
   const inputAudioMid = readRequiredFiniteNumber(frameRaw, 'inputAudioMid', 'payload.frame', errors);
   const inputAudioHigh = readRequiredFiniteNumber(frameRaw, 'inputAudioHigh', 'payload.frame', errors);
   const inputGaugeActive = readRequiredFiniteNumber(frameRaw, 'inputGaugeActive', 'payload.frame', errors);
-  const inputMouseButtonsRaw = frameRaw.inputMouseButtons;
+  const inputMouseButtons = readRequiredUint32(frameRaw, 'inputMouseButtons', 'payload.frame', errors);
 
-  if (!isFiniteUint32(inputMouseButtonsRaw as number)) {
-    pushError(errors, 'payload.frame.inputMouseButtons', 'must be a uint32');
-  }
   if (typeof zoom === 'number' && zoom <= 0) {
     pushError(errors, 'payload.frame.zoom', 'must be > 0');
   }
 
   // [LAW:one-source-of-truth] Camera fields are required — defaults live in
   // CameraResolver, not at this boundary. Missing fields are a caller bug.
-  const cameraProjection = readRequiredFiniteNumber(frameRaw, 'cameraProjection', 'payload.frame', errors);
+  const cameraProjectionRaw = readRequiredFiniteNumber(frameRaw, 'cameraProjection', 'payload.frame', errors);
+  if (typeof cameraProjectionRaw === 'number' && cameraProjectionRaw !== 0 && cameraProjectionRaw !== 1) {
+    pushError(errors, 'payload.frame.cameraProjection', `must be 0 (ortho) or 1 (perspective), got ${cameraProjectionRaw}`);
+  }
   const cameraCenterX = readRequiredFiniteNumber(frameRaw, 'cameraCenterX', 'payload.frame', errors);
   const cameraCenterY = readRequiredFiniteNumber(frameRaw, 'cameraCenterY', 'payload.frame', errors);
   const cameraDistance = readRequiredFiniteNumber(frameRaw, 'cameraDistance', 'payload.frame', errors);
@@ -444,12 +444,12 @@ export function normalizePublishFrameInputPayloadV1(
     || timeMs === null
     || inputMouseX === null
     || inputMouseY === null
-    || !isFiniteUint32(inputMouseButtonsRaw as number)
+    || inputMouseButtons === null
     || inputAudioLow === null
     || inputAudioMid === null
     || inputAudioHigh === null
     || inputGaugeActive === null
-    || cameraProjection === null
+    || cameraProjectionRaw === null
     || cameraCenterX === null
     || cameraCenterY === null
     || cameraDistance === null
@@ -475,12 +475,12 @@ export function normalizePublishFrameInputPayloadV1(
         timeMs,
         inputMouseX,
         inputMouseY,
-        inputMouseButtons: (inputMouseButtonsRaw as number) >>> 0,
+        inputMouseButtons,
         inputAudioLow,
         inputAudioMid,
         inputAudioHigh,
         inputGaugeActive,
-        cameraProjection,
+        cameraProjection: cameraProjectionRaw,
         cameraCenterX,
         cameraCenterY,
         cameraDistance,
@@ -494,17 +494,17 @@ export function normalizePublishFrameInputPayloadV1(
   };
 }
 
-export function normalizeRustRendererBoundaryPayloadV1(
+export function validateRustRendererBoundaryPayloadV1(
   payload: unknown,
 ): ValidationResult<NormalizedRustRendererBoundaryPayloadV1> {
   if (!isRecord(payload)) {
     return { valid: false, errors: ['payload: must be an object'] };
   }
   if (payload.type === 'INSTALL_PIPELINE_V1') {
-    return normalizeInstallPipelinePayloadV1(payload);
+    return validateInstallPipelinePayloadV1(payload);
   }
   if (payload.type === 'PUBLISH_FRAME_INPUT_V1') {
-    return normalizePublishFrameInputPayloadV1(payload);
+    return validatePublishFrameInputPayloadV1(payload);
   }
   return {
     valid: false,

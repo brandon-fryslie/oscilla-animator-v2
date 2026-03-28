@@ -50,8 +50,8 @@ import {
   type WebGPURendererExecutionState,
 } from './renderer-circuit-breaker';
 import {
-  normalizeInstallPipelinePayloadV1,
-  normalizePublishFrameInputPayloadV1,
+  validateInstallPipelinePayloadV1,
+  validatePublishFrameInputPayloadV1,
   type InstallPipelineBoundaryPayloadV1,
   type NormalizedInstallPipelinePayloadV1,
   type NormalizedPublishFrameInputBoundaryPayloadV1,
@@ -932,7 +932,7 @@ export class WebGPURenderer {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = normalizeInstallPipelinePayloadV1(payload);
+    const normalized = validateInstallPipelinePayloadV1(payload);
     if (!normalized.valid) {
       throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
     }
@@ -973,7 +973,7 @@ export class WebGPURenderer {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = normalizePublishFrameInputPayloadV1(payload);
+    const normalized = validatePublishFrameInputPayloadV1(payload);
     if (!normalized.valid) {
       throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
     }
@@ -1170,7 +1170,7 @@ export class WebGPURenderer {
   private publishViewportFrame(frame: NormalizedPublishFrameInputBoundaryPayloadV1['frame']): void {
     // [LAW:single-enforcer] Runtime viewport/input publication enters the
     // renderer worker through this single helper. Input is already validated
-    // by normalizePublishFrameInputPayloadV1 in boundary-contract.ts.
+    // by validatePublishFrameInputPayloadV1 in boundary-contract.ts.
     this.writeViewportFrame(frame);
     this.publishSignalWord();
   }
@@ -1409,7 +1409,7 @@ export class WebGPURenderer {
 
   private writeViewportFrame(input: NormalizedPublishFrameInputBoundaryPayloadV1['frame']): void {
     // [LAW:single-enforcer] All validation happens in boundary-contract.ts
-    // (normalizePublishFrameInputPayloadV1). This method trusts its input.
+    // (validatePublishFrameInputPayloadV1). This method trusts its input.
     this.setInputWord(RUNTIME_INPUT_INDEX.width, input.width);
     this.setInputWord(RUNTIME_INPUT_INDEX.height, input.height);
     this.setInputWord(RUNTIME_INPUT_INDEX.zoom, input.zoom);

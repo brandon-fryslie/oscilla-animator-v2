@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  normalizeInstallPipelinePayloadV1,
-  normalizePublishFrameInputPayloadV1,
+  validateInstallPipelinePayloadV1,
+  validatePublishFrameInputPayloadV1,
 } from '../boundary-contract';
 
 function makeInstallPayload() {
@@ -33,7 +33,7 @@ function makeInstallPayload() {
 
 describe('boundary-contract', () => {
   it('normalizes INSTALL_PIPELINE_V1 payload into typed install planes', () => {
-    const result = normalizeInstallPipelinePayloadV1(makeInstallPayload());
+    const result = validateInstallPipelinePayloadV1(makeInstallPayload());
     expect(result.valid).toBe(true);
     if (!result.valid) return;
     expect(result.value.pipeline.passes).toHaveLength(1);
@@ -44,7 +44,7 @@ describe('boundary-contract', () => {
   });
 
   it('rejects malformed INSTALL_PIPELINE_V1 payloads with deterministic errors', () => {
-    const result = normalizeInstallPipelinePayloadV1({
+    const result = validateInstallPipelinePayloadV1({
       type: 'INSTALL_PIPELINE_V1',
       pipeline: {
         passes: [],
@@ -64,7 +64,7 @@ describe('boundary-contract', () => {
   });
 
   it('normalizes PUBLISH_FRAME_INPUT_V1 payload', () => {
-    const result = normalizePublishFrameInputPayloadV1({
+    const result = validatePublishFrameInputPayloadV1({
       type: 'PUBLISH_FRAME_INPUT_V1',
       frame: {
         width: 800,
@@ -100,7 +100,7 @@ describe('boundary-contract', () => {
   });
 
   it('rejects missing camera fields', () => {
-    const result = normalizePublishFrameInputPayloadV1({
+    const result = validatePublishFrameInputPayloadV1({
       type: 'PUBLISH_FRAME_INPUT_V1',
       frame: {
         width: 800,
@@ -126,7 +126,7 @@ describe('boundary-contract', () => {
   });
 
   it('rejects invalid frame payload fields', () => {
-    const result = normalizePublishFrameInputPayloadV1({
+    const result = validatePublishFrameInputPayloadV1({
       type: 'PUBLISH_FRAME_INPUT_V1',
       frame: {
         width: 0,

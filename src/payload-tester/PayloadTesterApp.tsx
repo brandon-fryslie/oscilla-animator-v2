@@ -27,7 +27,11 @@ export const PayloadTesterApp: React.FC = () => {
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
   const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState('[]');
+  const [json, setJson] = useState(() =>
+    PAYLOAD_FIXTURES.length > 0
+      ? JSON.stringify(PAYLOAD_FIXTURES[0].passes, null, 2)
+      : '[]',
+  );
 
   // Boot renderer on mount
   useEffect(() => {
