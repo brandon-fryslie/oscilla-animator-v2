@@ -130,9 +130,9 @@ fn build_perspective_vp(
     near: f32,
     far: f32,
 ) -> [[f32; 4]; 4] {
-    // Pan offset: convert pixel pan to world-space offset.
-    // In ortho, pan_x_px maps to world units via (pan / viewport * 2 * zoom).
-    // For perspective, we apply a similar offset to the camera target.
+    // Pan offset: convert pixel pan to world-space camera target offset.
+    // Simpler than ortho's (pan / viewport * 2 * zoom) because perspective
+    // handles zoom via camera distance (distance / zoom), not matrix scaling.
     let pan_world_x = -pan_x_px / viewport_width;
     let pan_world_y = -pan_y_px / viewport_height;
 
