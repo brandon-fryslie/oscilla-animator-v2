@@ -80,12 +80,49 @@ describe('boundary-contract', () => {
         inputAudioMid: 0,
         inputAudioHigh: 0,
         inputGaugeActive: 0,
+        cameraProjection: 0,
+        cameraCenterX: 0.5,
+        cameraCenterY: 0.5,
+        cameraDistance: 2.0,
+        cameraTiltRad: 0,
+        cameraYawRad: 0,
+        cameraFovYRad: 0.7854,
+        cameraNear: 0.01,
+        cameraFar: 100,
       },
     });
     expect(result.valid).toBe(true);
     if (!result.valid) return;
     expect(result.value.frame.width).toBe(800);
     expect(result.value.frame.inputMouseButtons).toBe(1);
+    expect(result.value.frame.cameraProjection).toBe(0);
+    expect(result.value.frame.cameraNear).toBe(0.01);
+  });
+
+  it('rejects missing camera fields', () => {
+    const result = normalizePublishFrameInputPayloadV1({
+      type: 'PUBLISH_FRAME_INPUT_V1',
+      frame: {
+        width: 800,
+        height: 600,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        timeMs: 0,
+        inputMouseX: 0,
+        inputMouseY: 0,
+        inputMouseButtons: 0,
+        inputAudioLow: 0,
+        inputAudioMid: 0,
+        inputAudioHigh: 0,
+        inputGaugeActive: 0,
+        // Camera fields intentionally missing
+      },
+    });
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors.some((err) => err.includes('cameraProjection'))).toBe(true);
+    expect(result.errors.some((err) => err.includes('cameraNear'))).toBe(true);
   });
 
   it('rejects invalid frame payload fields', () => {
@@ -105,6 +142,15 @@ describe('boundary-contract', () => {
         inputAudioMid: 0,
         inputAudioHigh: 0,
         inputGaugeActive: 0,
+        cameraProjection: 0,
+        cameraCenterX: 0.5,
+        cameraCenterY: 0.5,
+        cameraDistance: 2.0,
+        cameraTiltRad: 0,
+        cameraYawRad: 0,
+        cameraFovYRad: 0.7854,
+        cameraNear: 0.01,
+        cameraFar: 100,
       },
     });
     expect(result.valid).toBe(false);
