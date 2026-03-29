@@ -190,7 +190,7 @@ export interface NagaLoweringProgramIR {
   readonly compute: NagaComputeMetadataIR;
   readonly coverage: NagaLoweringCoverageIR;
   /**
-   * DispatchKernel instructions emitted by blocks (e.g., fluid sim passes).
+   * DispatchKernel instructions emitted by blocks.
    * These are executed by the Rust compute dispatcher independently of the
    * Naga-generated compute shader.
    */

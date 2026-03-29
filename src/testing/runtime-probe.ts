@@ -23,7 +23,6 @@ export interface RuntimeProbeHeartbeat {
     readonly stageTimings: {
       readonly inputMarshalMs: number;
       readonly simulationDispatchMs: number;
-      readonly fluidPassChainMs: number;
       readonly drawPrepMs: number;
       readonly renderMs: number;
       readonly swapMs: number;

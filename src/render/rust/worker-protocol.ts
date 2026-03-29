@@ -142,7 +142,6 @@ export type RustRendererSchedulerState = 'Booting' | 'Running' | 'Paused' | 'Los
 export interface RustRendererStageTimingsTelemetry {
   readonly inputMarshalMs: number;
   readonly simulationDispatchMs: number;
-  readonly fluidPassChainMs: number;
   readonly drawPrepMs: number;
   readonly renderMs: number;
   readonly swapMs: number;

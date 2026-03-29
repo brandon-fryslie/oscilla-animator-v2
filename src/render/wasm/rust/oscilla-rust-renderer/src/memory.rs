@@ -109,9 +109,7 @@ pub enum ResourceStorageLocation {
     State,
     /// Resource is packed into the global_controls uniform buffer (vec4 array).
     GlobalControlUbo,
-    /// Resource is a GPU Texture2D (e.g., fluid velocity/pressure fields).
-    /// FORBIDDEN: 1D array flattened simulations — Texture2D is required for
-    /// 120fps hardware filtering.
+    /// Resource is a GPU Texture2D.
     Texture2D,
 }
 
@@ -396,7 +394,7 @@ pub struct GpuMemoryArena {
     pub topology_bind_group: wgpu::BindGroup,
     /// Texture2D resources keyed by symbolic resource ID.
     /// [LAW:one-source-of-truth] The texture map is the single owner of GPU
-    /// texture objects for fluid sim / compute resources.
+    /// texture objects for texture-backed compute resources.
     texture_resources: std::collections::HashMap<String, GpuTexture2DResource>,
     assembly_layout: wgpu::BindGroupLayout,
     draw_prep_layout: wgpu::BindGroupLayout,
