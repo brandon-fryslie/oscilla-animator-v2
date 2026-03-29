@@ -88,9 +88,7 @@ export interface MemoryManifestIR {
  * Resource kind discriminant for MemoryResourceIR.
  *
  * - 'buffer': Standard storage/uniform buffer (arena slots, state banks).
- * - 'texture2d': 2D GPU texture (e.g., fluid velocity/pressure fields).
- *   FORBIDDEN: 1D array flattened simulations — Texture2D is required for
- *   120fps hardware filtering.
+ * - 'texture2d': 2D GPU texture resource.
  */
 export type MemoryResourceKind = 'buffer' | 'texture2d';
 
@@ -101,7 +99,7 @@ export type MemoryResourceKind = 'buffer' | 'texture2d';
 export type Texture2DFormat = 'rgba32float' | 'rg32float' | 'r32float' | 'rgba16float';
 
 export interface MemoryResourceIR {
-  /** Unique symbolic ID (e.g., 'arena:node_12_out', 'state:fluid_vel') */
+  /** Unique symbolic ID (e.g., 'arena:node_12_out', 'state:node_5_out') */
   readonly id: string;
   /** Canonical data type (FLOAT, VEC2, etc.) */
   readonly type: CanonicalType;

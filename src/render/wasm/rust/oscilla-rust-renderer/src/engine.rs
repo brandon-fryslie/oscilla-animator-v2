@@ -1163,12 +1163,6 @@ impl Engine {
                 let simulation_stage_end_ms = worker_monotonic_now_ms();
                 stage_timings.simulation_dispatch_ms =
                     (simulation_stage_end_ms - simulation_stage_start_ms).max(0.0);
-                stage_timings.fluid_pass_chain_ms = if self.compute.simulation_dispatch_count() > 1
-                {
-                    stage_timings.simulation_dispatch_ms
-                } else {
-                    0.0
-                };
                 let draw_prep_stage_start_ms = worker_monotonic_now_ms();
                 // [LAW:dataflow-not-control-flow] Draw-prep emits per-frame indirect
                 // instance counts; reset the target buffer before every draw-prep dispatch.

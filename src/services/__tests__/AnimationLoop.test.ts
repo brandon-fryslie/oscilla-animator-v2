@@ -48,7 +48,6 @@ function makeRenderer() {
     stageTimings: {
       inputMarshalMs: 1,
       simulationDispatchMs: 2,
-      fluidPassChainMs: 3,
       drawPrepMs: 4,
       renderMs: 5,
       swapMs: 6,
