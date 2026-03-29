@@ -50,8 +50,7 @@ import {
   type WebGPURendererExecutionState,
 } from './renderer-circuit-breaker';
 import {
-  validateInstallPipelinePayloadV1,
-  validatePublishFrameInputPayloadV1,
+  publishFramePayload,
   type InstallPipelineBoundaryPayloadV1,
   type NormalizedInstallPipelinePayloadV1,
   type NormalizedPublishFrameInputBoundaryPayloadV1,
@@ -928,16 +927,14 @@ export class WebGPURenderer {
     this.scheduleCircuitBreakerTermination();
   }
 
-  async applyInstallPipeline(payload: InstallPipelineBoundaryPayloadV1 | unknown): Promise<void> {
+  // [LAW:single-enforcer] Validation and normalization happen in boundary-contract.ts.
+  // Callers MUST go through publishPipelineInstallPayload() — this method accepts
+  // only pre-validated normalized payloads.
+  async applyInstallPipeline(payload: NormalizedInstallPipelinePayloadV1): Promise<void> {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = validateInstallPipelinePayloadV1(payload);
-    if (!normalized.valid) {
-      throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
-    }
-    const canonicalPayload = normalized.value;
-    const { passes, sinkPointerMap } = canonicalPayload.pipeline;
+    const { passes, sinkPointerMap } = payload.pipeline;
 
     // [LAW:dataflow-not-control-flow] Install boundary always performs the same
     // sequence (pause → rebuild → pointer-map install → static-plane install).
@@ -950,18 +947,18 @@ export class WebGPURenderer {
       await this.installDrawPrepSinkPointerMap(sinkPointerMap);
       this.installStaticRenderPlanes({
         shapeBank: {
-          data: canonicalPayload.pipeline.shapeBankWords,
-          volatilePtr: canonicalPayload.pipeline.shapeBankWordCount,
+          data: payload.pipeline.shapeBankWords,
+          volatilePtr: payload.pipeline.shapeBankWordCount,
           staticBoundary: 0,
-          topologyIdByHandle: canonicalPayload.pipeline.topologyIdByHandle,
+          topologyIdByHandle: payload.pipeline.topologyIdByHandle,
         },
-        drawPrepSinkTableV1: canonicalPayload.pipeline.sinkTableWords,
-        drawPrepSinkTableWordCount: canonicalPayload.pipeline.sinkTableWordCount,
+        drawPrepSinkTableV1: payload.pipeline.sinkTableWords,
+        drawPrepSinkTableWordCount: payload.pipeline.sinkTableWordCount,
       });
       this.publishSignalWord();
       // [LAW:one-source-of-truth] Fixture dump reads from the canonical
       // renderer boundary payload accepted by this adapter method.
-      this.latestInstallBoundaryPayload = canonicalPayload;
+      this.latestInstallBoundaryPayload = payload;
     } finally {
       if (!this.fatalError) {
         this.worker.postMessage({ type: 'RESUME' } satisfies RustRendererWorkerInboundMessage);
@@ -969,18 +966,17 @@ export class WebGPURenderer {
     }
   }
 
-  publishFrameInput(payload: PublishFrameInputBoundaryPayloadV1 | unknown): void {
+  // [LAW:single-enforcer] Validation and normalization happen in boundary-contract.ts.
+  // Callers MUST go through publishFramePayload() — this method accepts
+  // only pre-validated normalized payloads.
+  publishFrameInput(payload: NormalizedPublishFrameInputBoundaryPayloadV1): void {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = validatePublishFrameInputPayloadV1(payload);
-    if (!normalized.valid) {
-      throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
-    }
-    this.publishViewportFrame(normalized.value.frame);
+    this.publishViewportFrame(payload.frame);
     // [LAW:one-source-of-truth] Fixture dump reads from the canonical frame
     // boundary payload accepted by this adapter method.
-    this.latestFrameBoundaryPayload = normalized.value;
+    this.latestFrameBoundaryPayload = payload;
   }
 
   render(input: RenderInput): void {
@@ -1009,7 +1005,8 @@ export class WebGPURenderer {
 
   setViewportFrame(frame: RuntimeViewportFrame): void {
     this.assertRuntimeInputBoundaryReady();
-    this.publishFrameInput({
+    // [LAW:single-enforcer] Goes through boundary-contract for validation.
+    publishFramePayload(this, {
       type: 'PUBLISH_FRAME_INPUT_V1',
       frame,
     });

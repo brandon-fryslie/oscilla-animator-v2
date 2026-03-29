@@ -44,6 +44,9 @@ export interface RustRendererGpuPass {
   readonly passId: string;
   readonly stage: GpuPassStage;
   readonly entryPoint: string;
+  // TODO: Remove — WGSL is a Rust-internal concern and should not cross the
+  // JS→Rust boundary. Once Rust generates WGSL from OscillaIR, this field
+  // and all JS-side WGSL references (COMPUTE_PREAMBLE, Tier 0 fixtures) go away.
   readonly wgsl: string;
   readonly memoryManifest?: MemoryManifestIR;
 }

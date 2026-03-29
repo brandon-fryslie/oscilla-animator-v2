@@ -7,8 +7,12 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
-import { validateRawPayload } from '../render/rust/boundary-contract';
-import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
+import {
+  validateRawPayload,
+  publishPipelineInstallPayload,
+  publishFramePayload,
+} from '../render/rust/boundary-contract';
+import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
 
@@ -27,11 +31,13 @@ export const PayloadTesterApp: React.FC = () => {
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
   const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState(() =>
-    PAYLOAD_FIXTURES.length > 0
-      ? JSON.stringify(PAYLOAD_FIXTURES[0].passes, null, 2)
-      : '[]',
-  );
+  const [json, setJson] = useState(() => {
+    if (PAYLOAD_FIXTURES.length === 0) return '[]';
+    const first = PAYLOAD_FIXTURES[0];
+    return isWgslPassFixture(first)
+      ? JSON.stringify(first.passes, null, 2)
+      : JSON.stringify({ install: first.install, frame: first.frame }, null, 2);
+  });
 
   // Boot renderer on mount
   useEffect(() => {
@@ -69,7 +75,11 @@ export const PayloadTesterApp: React.FC = () => {
   }, []);
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    setJson(JSON.stringify(fixture.passes, null, 2));
+    if (isWgslPassFixture(fixture)) {
+      setJson(JSON.stringify(fixture.passes, null, 2));
+    } else {
+      setJson(JSON.stringify({ install: fixture.install, frame: fixture.frame }, null, 2));
+    }
     setSubmitResult({ kind: 'idle' });
   }, []);
 
@@ -88,15 +98,25 @@ export const PayloadTesterApp: React.FC = () => {
       return;
     }
 
-    const validation = validateRawPayload(parsed);
-    if (!validation.valid) {
-      setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
-      return;
-    }
+    // Detect payload shape: boundary-contract {install, frame} vs raw pass array
+    const obj = parsed as Record<string, unknown>;
+    const isBoundaryPayload = obj !== null && typeof obj === 'object' && 'install' in obj && 'frame' in obj;
 
     try {
-      await renderer.rebuildGpuPipelines(validation.passes);
-      setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
+      if (isBoundaryPayload) {
+        // [LAW:single-enforcer] Validation + publishing go through boundary-contract.
+        const normalized = await publishPipelineInstallPayload(renderer, obj.install);
+        publishFramePayload(renderer, obj.frame);
+        setSubmitResult({ kind: 'ok', message: `Installed pipeline (${normalized.pipeline.passes.length} pass(es)) + published frame` });
+      } else {
+        const validation = validateRawPayload(parsed);
+        if (!validation.valid) {
+          setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
+          return;
+        }
+        await renderer.rebuildGpuPipelines(validation.passes);
+        setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
+      }
     } catch (e) {
       setSubmitResult({ kind: 'error', message: `Renderer error: ${e instanceof Error ? e.message : String(e)}` });
     }
