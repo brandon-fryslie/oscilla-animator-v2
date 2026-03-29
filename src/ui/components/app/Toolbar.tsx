@@ -182,6 +182,9 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         <Menu.Item onClick={() => camera.toggle()}>
           {camera.isActive ? 'Disable 3D Camera' : 'Enable 3D Camera'}
         </Menu.Item>
+        <Menu.Item component="a" href="/payload-tester.html" target="_blank">
+          WASM Boundary Tester
+        </Menu.Item>
       </Menu.Dropdown>
     </Menu>
   );
@@ -273,6 +276,16 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                   onClick={() => camera.toggle()}
                 >
                   3D
+                </Button>
+                <Button
+                  component="a"
+                  href="/payload-tester.html"
+                  target="_blank"
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                >
+                  WASM Tester
                 </Button>
               </>
             )}
