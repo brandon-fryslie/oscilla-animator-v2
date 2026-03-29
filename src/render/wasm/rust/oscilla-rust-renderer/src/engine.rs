@@ -1039,7 +1039,12 @@ impl Engine {
             self.arena
                 .rebuild_buffers_from_resolver(&self.device, &resolver);
             self.arena.symbol_resolver = resolver;
-            self.sink_pointer_map.clear();
+            // [LAW:one-source-of-truth] The sink pointer map carries symbolic
+            // resource IDs, not physical addresses. The new SymbolResolver
+            // resolves those same IDs to their updated physical locations, so
+            // the map stays valid across arena rebuilds. The TS side owns the
+            // dedup invariant: it only re-sends the map when compilation
+            // produces different slot assignments (different JSON payload).
         }
         let staged = self
             .compute
