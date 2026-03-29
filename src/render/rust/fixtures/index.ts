@@ -31,6 +31,7 @@ import type {
 // ─── PayloadFixture: discriminated union ─────────────────────────────────────
 
 export interface WgslPassFixture {
+  readonly kind: 'wgsl-pass';
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -38,6 +39,7 @@ export interface WgslPassFixture {
 }
 
 export interface BoundaryContractFixture {
+  readonly kind: 'boundary-contract';
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -48,11 +50,11 @@ export interface BoundaryContractFixture {
 export type PayloadFixture = WgslPassFixture | BoundaryContractFixture;
 
 export function isWgslPassFixture(f: PayloadFixture): f is WgslPassFixture {
-  return 'passes' in f;
+  return f.kind === 'wgsl-pass';
 }
 
 export function isBoundaryContractFixture(f: PayloadFixture): f is BoundaryContractFixture {
-  return 'install' in f;
+  return f.kind === 'boundary-contract';
 }
 
 // ─── WGSL-pass fixture definitions ───────────────────────────────────────────
@@ -120,6 +122,7 @@ fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   // WGSL-pass fixtures (exercise shader compilation + dispatch)
   {
+    kind: 'wgsl-pass',
     id: 'tier-0-identity',
     name: 'Tier 0: Identity Copy',
     description: 'Copies arena_in to arena_out. Simplest valid compute pass.',
@@ -128,6 +131,7 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
     ],
   },
   {
+    kind: 'wgsl-pass',
     id: 'tier-0b-sine',
     name: 'Tier 0b: Time-Driven Sine',
     description: 'Writes sin(time + lane * 0.1) to arena. Validates uniform transport.',
@@ -136,6 +140,7 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
     ],
   },
   {
+    kind: 'wgsl-pass',
     id: 'tier-0c-two-pass',
     name: 'Tier 0c: Two-Pass Chain',
     description: 'Pass A writes sine, Pass B doubles it. Validates multi-pass ping-pong.',
