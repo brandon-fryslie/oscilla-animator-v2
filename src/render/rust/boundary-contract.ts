@@ -201,6 +201,7 @@ function normalizeGpuPasses(
     const passId = readRequiredString(rawEntry, 'passId', entryPath, errors);
     const stageRaw = rawEntry.stage;
     const entryPoint = readRequiredString(rawEntry, 'entryPoint', entryPath, errors);
+    // TODO: Remove — WGSL should not cross the JS→Rust boundary (see worker-protocol.ts).
     const wgsl = readRequiredString(rawEntry, 'wgsl', entryPath, errors);
     const stage: GpuPassStage | null =
       typeof stageRaw === 'string' && isGpuPassStage(stageRaw) ? stageRaw : null;
@@ -529,4 +530,51 @@ export function validateRawPayload(
     return { valid: false, errors };
   }
   return { valid: true, passes };
+}
+
+// ─── Publisher functions ─────────────────────────────────────────────────────
+// [LAW:single-enforcer] All install/frame payloads MUST go through these
+// functions. They validate, normalize, and publish in one atomic operation.
+// No other code may call the renderer's applyInstallPipeline or
+// publishFrameInput directly.
+
+/**
+ * Narrow interface satisfied by WebGPURenderer. Defined here to avoid a
+ * circular import (the renderer already imports from boundary-contract).
+ */
+export interface BoundaryPayloadTarget {
+  applyInstallPipeline(payload: NormalizedInstallPipelinePayloadV1): Promise<void>;
+  publishFrameInput(payload: NormalizedPublishFrameInputBoundaryPayloadV1): void;
+}
+
+/**
+ * Validate, normalize, and publish an install-pipeline payload to the renderer.
+ * Returns the normalized payload on success; throws on validation failure.
+ */
+export async function publishPipelineInstallPayload(
+  target: BoundaryPayloadTarget,
+  payload: unknown,
+): Promise<NormalizedInstallPipelinePayloadV1> {
+  const result = validateInstallPipelinePayloadV1(payload);
+  if (!result.valid) {
+    throw new Error(`Install pipeline boundary validation failed:\n${result.errors.join('\n')}`);
+  }
+  await target.applyInstallPipeline(result.value);
+  return result.value;
+}
+
+/**
+ * Validate, normalize, and publish a frame-input payload to the renderer.
+ * Returns the normalized payload on success; throws on validation failure.
+ */
+export function publishFramePayload(
+  target: BoundaryPayloadTarget,
+  payload: unknown,
+): NormalizedPublishFrameInputBoundaryPayloadV1 {
+  const result = validatePublishFrameInputPayloadV1(payload);
+  if (!result.valid) {
+    throw new Error(`Frame input boundary validation failed:\n${result.errors.join('\n')}`);
+  }
+  target.publishFrameInput(result.value);
+  return result.value;
 }

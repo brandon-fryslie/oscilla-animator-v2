@@ -69,9 +69,10 @@ import {
   shouldClearStoredStartupPatch,
   type StartupRestoreSource,
 } from './runtime-gpu-fault-policy';
-import type {
-  InstallPipelineBoundaryPayloadV1,
-  PublishFrameInputBoundaryPayloadV1,
+import {
+  publishPipelineInstallPayload,
+  type InstallPipelineBoundaryPayloadV1,
+  type PublishFrameInputBoundaryPayloadV1,
 } from '../render/rust/boundary-contract';
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
@@ -482,7 +483,8 @@ export class RuntimeService {
       },
     };
     shaderInspector.setPasses(compiledGpuBundle.passes);
-    await renderer.applyInstallPipeline(installPayload);
+    // [LAW:single-enforcer] Validation + publishing go through boundary-contract.
+    await publishPipelineInstallPayload(renderer, installPayload);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
