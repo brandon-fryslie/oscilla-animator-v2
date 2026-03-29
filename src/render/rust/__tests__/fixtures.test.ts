@@ -9,8 +9,26 @@ import {
   validateInstallPipelinePayloadV1,
   validatePublishFrameInputPayloadV1,
 } from '../boundary-contract';
+import {
+  DRAW_PREP_SINK_TABLE_HEADER_WORDS,
+  DRAW_PREP_SINK_TABLE_RECORD_WORDS,
+  DrawPrepSinkTableHeaderWord,
+  DrawPrepSinkTableRecordWord,
+} from '../../../runtime/DrawPrepSinkTable';
+
+// Expected fixture counts. Update these when adding/removing fixtures.
+const EXPECTED_WGSL_PASS_COUNT = 3;
+const EXPECTED_BOUNDARY_CONTRACT_COUNT = 0; // None yet — WGSL must come from Rust side
 
 describe('payload fixtures', () => {
+  it('contain expected fixture counts per kind', () => {
+    const wgslCount = PAYLOAD_FIXTURES.filter(isWgslPassFixture).length;
+    const boundaryCount = PAYLOAD_FIXTURES.filter(isBoundaryContractFixture).length;
+    expect(wgslCount, 'WGSL-pass fixture count').toBe(EXPECTED_WGSL_PASS_COUNT);
+    expect(boundaryCount, 'boundary-contract fixture count').toBe(EXPECTED_BOUNDARY_CONTRACT_COUNT);
+    expect(wgslCount + boundaryCount, 'total must equal PAYLOAD_FIXTURES length').toBe(PAYLOAD_FIXTURES.length);
+  });
+
   it('provide unique fixture identifiers', () => {
     const ids = PAYLOAD_FIXTURES.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -49,16 +67,17 @@ describe('payload fixtures', () => {
     }
   });
 
-  it('boundary-contract sink tables have materialId = 0', () => {
+  it('boundary-contract sink tables have materialId = 0 for every record', () => {
     // materialId is GPU draw-prep–owned. Fixtures must keep it 0.
-    const SINK_TABLE_HEADER = 8;
-    const SINK_TABLE_RECORD = 8;
-    const MATERIAL_ID_OFFSET_IN_RECORD = 7;
-    const materialIdOffset = SINK_TABLE_HEADER + MATERIAL_ID_OFFSET_IN_RECORD;
     for (const fixture of PAYLOAD_FIXTURES) {
       if (!isBoundaryContractFixture(fixture)) continue;
       const words = fixture.install.pipeline.sinkTableWords;
-      expect(words[materialIdOffset], `${fixture.id} materialId`).toBe(0);
+      const totalRecords = words[DrawPrepSinkTableHeaderWord.TotalRecordCount];
+      for (let i = 0; i < totalRecords; i++) {
+        const base = DRAW_PREP_SINK_TABLE_HEADER_WORDS + i * DRAW_PREP_SINK_TABLE_RECORD_WORDS;
+        const materialId = words[base + DrawPrepSinkTableRecordWord.MaterialId];
+        expect(materialId, `${fixture.id} record[${i}] materialId`).toBe(0);
+      }
     }
   });
 });
