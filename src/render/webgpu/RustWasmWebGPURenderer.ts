@@ -7,6 +7,7 @@ import {
   type ShapeBankDirectGeometry,
 } from './ShapeBankGeometrySeam';
 import type {
+  CameraInputContract,
   DrawPrepRenderContract,
   MatrixViewportContract,
   RuntimeInputSignalContract,
@@ -49,19 +50,19 @@ import {
   type WebGPURendererExecutionState,
 } from './renderer-circuit-breaker';
 import {
-  normalizeInstallPipelinePayloadV1,
-  normalizePublishFrameInputPayloadV1,
+  validateInstallPipelinePayloadV1,
+  validatePublishFrameInputPayloadV1,
   type InstallPipelineBoundaryPayloadV1,
   type NormalizedInstallPipelinePayloadV1,
   type NormalizedPublishFrameInputBoundaryPayloadV1,
   type PublishFrameInputBoundaryPayloadV1,
 } from '../rust/boundary-contract';
 
-interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract {
+interface RenderInput extends DrawPrepRenderContract, MatrixViewportContract, RuntimeInputSignalContract, CameraInputContract {
   readonly shapeBank: RenderShapeBankSource;
 }
 
-type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract;
+type RuntimeViewportFrame = MatrixViewportContract & RuntimeInputSignalContract & CameraInputContract;
 
 /**
  * GPU fault descriptor emitted to the main thread when a GPU error or device
@@ -184,22 +185,6 @@ const DEFAULT_BOOTSTRAP_CONFIG: RustRendererBootstrapConfig = Object.freeze({
   maxShapes: 65_536,
   debugReadbackHz: 0,
 });
-
-function assertFiniteRuntimeInput(value: number, field: string): number {
-  if (!Number.isFinite(value)) {
-    throw new Error(`Rust renderer input contract violation: ${field} must be finite, got ${value}`);
-  }
-  return value;
-}
-
-function assertPositiveCanvasDimension(value: number, field: string): number {
-  if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
-    throw new Error(
-      `Rust renderer input contract violation: ${field} must be a positive integer, got ${String(value)}`,
-    );
-  }
-  return value;
-}
 
 const MAX_UINT32 = 0xFFFF_FFFF;
 const RUNTIME_CONSOLE_ENABLED = isRuntimeConsoleEnabled();
@@ -947,7 +932,7 @@ export class WebGPURenderer {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = normalizeInstallPipelinePayloadV1(payload);
+    const normalized = validateInstallPipelinePayloadV1(payload);
     if (!normalized.valid) {
       throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
     }
@@ -988,7 +973,7 @@ export class WebGPURenderer {
     this.throwIfFatalError();
     this.throwIfDisposed();
     this.throwIfNotBootstrapped();
-    const normalized = normalizePublishFrameInputPayloadV1(payload);
+    const normalized = validatePublishFrameInputPayloadV1(payload);
     if (!normalized.valid) {
       throw new Error(`Rust renderer boundary validation failed:\n${normalized.errors.join('\n')}`);
     }
@@ -1008,7 +993,8 @@ export class WebGPURenderer {
       drawPrepSinkTableV1: input.drawPrepSinkTableV1,
       drawPrepSinkTableWordCount: input.drawPrepSinkTableWordCount,
     });
-    this.publishViewportFrame(input);
+    // [LAW:single-enforcer] All frame input goes through the boundary normalizer.
+    this.setViewportFrame(input);
   }
 
   private maybeEmitRenderInputDebugSample(sinkTableWords: Uint32Array, wordCount: number): void {
@@ -1181,9 +1167,10 @@ export class WebGPURenderer {
     this.bumpInstallRevision();
   }
 
-  private publishViewportFrame(frame: RuntimeViewportFrame): void {
+  private publishViewportFrame(frame: NormalizedPublishFrameInputBoundaryPayloadV1['frame']): void {
     // [LAW:single-enforcer] Runtime viewport/input publication enters the
-    // renderer worker through this single helper.
+    // renderer worker through this single helper. Input is already validated
+    // by validatePublishFrameInputPayloadV1 in boundary-contract.ts.
     this.writeViewportFrame(frame);
     this.publishSignalWord();
   }
@@ -1420,39 +1407,31 @@ export class WebGPURenderer {
     this.throwIfNotBootstrapped();
   }
 
-  private writeViewportFrame(input: RuntimeViewportFrame): void {
-    // [LAW:dataflow-not-control-flow] Runtime frame publication always executes
-    // in the same order; contract validation fails fast at the boundary.
-    const width = assertPositiveCanvasDimension(input.width, 'width');
-    const height = assertPositiveCanvasDimension(input.height, 'height');
-    const zoom = assertFiniteRuntimeInput(input.zoom, 'zoom');
-    if (zoom <= 0) {
-      throw new Error(`Rust renderer input contract violation: zoom must be positive, got ${zoom}`);
-    }
-    const panX = assertFiniteRuntimeInput(input.panX, 'panX');
-    const panY = assertFiniteRuntimeInput(input.panY, 'panY');
-    const timeMs = assertFiniteRuntimeInput(input.timeMs, 'timeMs');
-    const inputMouseX = assertFiniteRuntimeInput(input.inputMouseX, 'inputMouseX');
-    const inputMouseY = assertFiniteRuntimeInput(input.inputMouseY, 'inputMouseY');
-    const inputMouseButtons = assertFiniteRuntimeInput(input.inputMouseButtons, 'inputMouseButtons');
-    const inputAudioLow = assertFiniteRuntimeInput(input.inputAudioLow, 'inputAudioLow');
-    const inputAudioMid = assertFiniteRuntimeInput(input.inputAudioMid, 'inputAudioMid');
-    const inputAudioHigh = assertFiniteRuntimeInput(input.inputAudioHigh, 'inputAudioHigh');
-    const inputGaugeActive = assertFiniteRuntimeInput(input.inputGaugeActive, 'inputGaugeActive');
-
-    this.setInputWord(RUNTIME_INPUT_INDEX.width, width);
-    this.setInputWord(RUNTIME_INPUT_INDEX.height, height);
-    this.setInputWord(RUNTIME_INPUT_INDEX.zoom, zoom);
-    this.setInputWord(RUNTIME_INPUT_INDEX.panX, panX);
-    this.setInputWord(RUNTIME_INPUT_INDEX.panY, panY);
-    this.setInputWord(RUNTIME_INPUT_INDEX.timeMs, timeMs);
-    this.setInputWord(RUNTIME_INPUT_INDEX.mouseX, inputMouseX);
-    this.setInputWord(RUNTIME_INPUT_INDEX.mouseY, inputMouseY);
-    this.setInputWord(RUNTIME_INPUT_INDEX.mouseButtons, inputMouseButtons);
-    this.setInputWord(RUNTIME_INPUT_INDEX.audioLow, inputAudioLow);
-    this.setInputWord(RUNTIME_INPUT_INDEX.audioMid, inputAudioMid);
-    this.setInputWord(RUNTIME_INPUT_INDEX.audioHigh, inputAudioHigh);
-    this.setInputWord(RUNTIME_INPUT_INDEX.gaugeActive, inputGaugeActive);
+  private writeViewportFrame(input: NormalizedPublishFrameInputBoundaryPayloadV1['frame']): void {
+    // [LAW:single-enforcer] All validation happens in boundary-contract.ts
+    // (validatePublishFrameInputPayloadV1). This method trusts its input.
+    this.setInputWord(RUNTIME_INPUT_INDEX.width, input.width);
+    this.setInputWord(RUNTIME_INPUT_INDEX.height, input.height);
+    this.setInputWord(RUNTIME_INPUT_INDEX.zoom, input.zoom);
+    this.setInputWord(RUNTIME_INPUT_INDEX.panX, input.panX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.panY, input.panY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.timeMs, input.timeMs);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseX, input.inputMouseX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseY, input.inputMouseY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.mouseButtons, input.inputMouseButtons);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioLow, input.inputAudioLow);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioMid, input.inputAudioMid);
+    this.setInputWord(RUNTIME_INPUT_INDEX.audioHigh, input.inputAudioHigh);
+    this.setInputWord(RUNTIME_INPUT_INDEX.gaugeActive, input.inputGaugeActive);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraProjection, input.cameraProjection);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraCenterX, input.cameraCenterX);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraCenterY, input.cameraCenterY);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraDistance, input.cameraDistance);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraTiltRad, input.cameraTiltRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraYawRad, input.cameraYawRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraFovYRad, input.cameraFovYRad);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraNear, input.cameraNear);
+    this.setInputWord(RUNTIME_INPUT_INDEX.cameraFar, input.cameraFar);
   }
 
   private syncShapeBankPlane(shapeBank: RenderShapeBankSource): number {

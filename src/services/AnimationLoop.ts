@@ -17,6 +17,12 @@ import {
   shouldEnableRuntimeProbe,
   type RuntimeProbeHeartbeat,
 } from '../testing/runtime-probe';
+import {
+  resolveCameraFromGlobals,
+  cameraParamsToInputContract,
+  DEFAULT_CAMERA_INPUT,
+  PREVIEW_CAMERA,
+} from '../runtime/CameraResolver';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -448,7 +454,19 @@ export function executeAnimationFrame(
     return;
   }
 
-  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(getCurrentState());
+  const currentState = getCurrentState();
+  const runtimeInputPlaneValues = readRuntimeInputPlaneValues(currentState);
+
+  // [LAW:one-source-of-truth] Camera params are resolved with strict priority:
+  // 1. Momentary 3D preview (toolbar toggle / Shift key) — ephemeral, no compilation effect
+  // 2. Camera block declaration (from renderGlobals)
+  // 3. System defaults (ortho identity)
+  const cameraInput = store.camera.isActive
+    ? cameraParamsToInputContract(PREVIEW_CAMERA)
+    : currentState
+      ? cameraParamsToInputContract(resolveCameraFromGlobals(currentProgram, currentState))
+      : DEFAULT_CAMERA_INPUT;
+
   const { zoom, pan } = store.viewport;
   const renderWidth = Math.max(1, Math.floor(store.viewport.canvasWidth || canvas.width));
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
@@ -467,6 +485,7 @@ export function executeAnimationFrame(
         panY: pan.y,
         timeMs: tMs,
         ...runtimeInputPlaneValues,
+        ...cameraInput,
       },
     });
     markRuntimeFrameAdvanced(-1, tMs);

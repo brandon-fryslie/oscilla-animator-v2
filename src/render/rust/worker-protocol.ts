@@ -11,7 +11,7 @@ export interface RustRendererBootstrapConfig {
 export const RUST_RENDERER_SHAPE_HEADER_WORDS = 16;
 export const RUST_RENDERER_SINK_TABLE_HEADER_WORDS = 8;
 export const RUST_RENDERER_SINK_TABLE_RECORD_WORDS = 8;
-export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 26;
+export const RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS = 31;
 
 export function computeRustRendererShapeBankWordCapacity(config: RustRendererBootstrapConfig): number {
   return Math.max(RUST_RENDERER_SHAPE_HEADER_WORDS, Math.floor(config.maxShapes) * RUST_RENDERER_SHAPE_HEADER_WORDS);

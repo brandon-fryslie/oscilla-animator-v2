@@ -52,7 +52,7 @@ export const PayloadEditor: React.FC<PayloadEditorProps> = ({ json, onJsonChange
             fontWeight: 500,
           }}
         >
-          Install + Run (Cmd+Enter)
+          Submit (Cmd+Enter)
         </button>
       </div>
     </>

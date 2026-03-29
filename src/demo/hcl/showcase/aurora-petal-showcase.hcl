@@ -154,5 +154,27 @@ patch "Aurora Petal Showcase" {
     }
   }
 
+  # --- Z depth: undulating curtain driven by position + time ---
+  block "Expression" "field_z" {
+    expression = <<-EXPR
+      phase_a = clock.phaseA * 6.2832
+      phase_b = clock.phaseB * 6.2832
+      phase_a_field = mapField(phase_a, field_points.rank)
+      x0 = lattice.uv.x - 0.5
+      y0 = lattice.uv.y - 0.5
+      radius = sqrt(max(x0 * x0 + y0 * y0, 0.000001))
+      wave = sin(radius * 14.0 - phase_a_field * 3.0) * 0.15
+      fold = cos(x0 * 8.0 + y0 * 6.0 + phase_b * 1.3) * 0.1
+      ripple = sin(field_points.rank * 200.0 + phase_a * 2.0) * 0.06
+      wave + fold + ripple
+    EXPR
+    inputs {
+      refs = [clock.phaseA, clock.phaseB, field_points.rank, lattice.uv]
+    }
+    outputs {
+      out = field_render.positionZ
+    }
+  }
+
   block "RenderInstances2D" "field_render" {}
 }

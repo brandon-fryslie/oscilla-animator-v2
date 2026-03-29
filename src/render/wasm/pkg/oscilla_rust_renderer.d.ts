@@ -25,6 +25,8 @@ export function take_frame_pacing_packet(): any;
 
 export function take_readback_snapshot(): any;
 
+export function update_control(offset_bytes: number, value: number): void;
+
 export function upload_atlas_data(data: Uint32Array): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -43,6 +45,7 @@ export interface InitOutput {
     readonly set_sink_pointer_map: (a: number, b: number) => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly take_readback_snapshot: () => [number, number, number];
+    readonly update_control: (a: number, b: number) => [number, number];
     readonly upload_atlas_data: (a: any) => [number, number];
     readonly wasm_bindgen__closure__destroy__h34af7beb892ac90c: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hac389948b8d10e82: (a: number, b: number) => void;
