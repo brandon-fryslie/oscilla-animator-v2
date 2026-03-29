@@ -1271,7 +1271,7 @@ pub struct ComputeDispatcher {
     pub assembly_layout: wgpu::BindGroupLayout,
     pub draw_prep_layout: wgpu::BindGroupLayout,
     pub kernel_registry: KernelRegistry,
-    /// Dispatch instructions from TS compiler (e.g., fluid sim kernel chain).
+    /// Dispatch instructions from TS compiler (e.g., block-owned kernel chains).
     /// [LAW:one-source-of-truth] Set during rebuild; executed every frame.
     pending_dispatch_instructions: Vec<NagaEmitterInstruction>,
 }
@@ -1607,15 +1607,7 @@ impl ComputeDispatcher {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
         });
 
-        // [LAW:single-enforcer] Fluid kernels are registered once at
-        // engine init, keyed by the same IDs that TS DispatchKernel
-        // instructions reference.
-        let mut kernel_registry = KernelRegistry::new();
-        crate::fluid_kernels::register_fluid_kernels(
-            device,
-            &compiler_simulation_layout,
-            &mut kernel_registry,
-        );
+        let kernel_registry = KernelRegistry::new();
 
         Self {
             simulation_pipelines,
@@ -1891,7 +1883,7 @@ impl ComputeDispatcher {
             read_index = (read_index + 1) & 1;
         }
 
-        // Execute DispatchKernel instructions (e.g., fluid sim kernel chain)
+        // Execute DispatchKernel instructions
         // after simulation passes, before instance assembly.
         if !self.pending_dispatch_instructions.is_empty() {
             let particle_count = self

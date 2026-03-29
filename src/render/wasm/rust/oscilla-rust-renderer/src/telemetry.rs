@@ -7,7 +7,6 @@ const TIMING_WINDOW_SAMPLES: u32 = 60;
 pub struct StageTimingsMs {
     pub input_marshal_ms: f64,
     pub simulation_dispatch_ms: f64,
-    pub fluid_pass_chain_ms: f64,
     pub draw_prep_ms: f64,
     pub render_ms: f64,
     pub swap_ms: f64,
@@ -290,11 +289,6 @@ fn serialize_stage_timings(stage_timings: StageTimingsMs) -> Result<Object, JsVa
         &object,
         "simulationDispatchMs",
         stage_timings.simulation_dispatch_ms,
-    )?;
-    set_number(
-        &object,
-        "fluidPassChainMs",
-        stage_timings.fluid_pass_chain_ms,
     )?;
     set_number(&object, "drawPrepMs", stage_timings.draw_prep_ms)?;
     set_number(&object, "renderMs", stage_timings.render_ms)?;
