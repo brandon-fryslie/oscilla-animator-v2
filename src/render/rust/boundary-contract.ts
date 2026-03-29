@@ -201,6 +201,7 @@ function normalizeGpuPasses(
     const passId = readRequiredString(rawEntry, 'passId', entryPath, errors);
     const stageRaw = rawEntry.stage;
     const entryPoint = readRequiredString(rawEntry, 'entryPoint', entryPath, errors);
+    // TODO: Remove — WGSL should not cross the JS→Rust boundary (see worker-protocol.ts).
     const wgsl = readRequiredString(rawEntry, 'wgsl', entryPath, errors);
     const stage: GpuPassStage | null =
       typeof stageRaw === 'string' && isGpuPassStage(stageRaw) ? stageRaw : null;
