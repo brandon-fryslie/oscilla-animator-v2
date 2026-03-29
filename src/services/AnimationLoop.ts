@@ -23,6 +23,7 @@ import {
   DEFAULT_CAMERA_INPUT,
   PREVIEW_CAMERA,
 } from '../runtime/CameraResolver';
+import { publishFramePayload } from '../render/rust/boundary-contract';
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -472,10 +473,9 @@ export function executeAnimationFrame(
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
-    // [LAW:single-enforcer] Renderer worker is the one runtime-input boundary;
-    // animation loop publishes viewport/time there and does not dual-publish to
-    // any secondary runtime worker seam.
-    renderer.publishFrameInput({
+    // [LAW:single-enforcer] All frame payloads go through boundary-contract
+    // for validation and normalization before reaching the renderer.
+    publishFramePayload(renderer, {
       type: 'PUBLISH_FRAME_INPUT_V1',
       frame: {
         width: renderWidth,

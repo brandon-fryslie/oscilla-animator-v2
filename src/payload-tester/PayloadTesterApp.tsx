@@ -9,8 +9,8 @@ import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
 import {
   validateRawPayload,
-  validateInstallPipelinePayloadV1,
-  validatePublishFrameInputPayloadV1,
+  publishPipelineInstallPayload,
+  publishFramePayload,
 } from '../render/rust/boundary-contract';
 import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
@@ -104,19 +104,10 @@ export const PayloadTesterApp: React.FC = () => {
 
     try {
       if (isBoundaryPayload) {
-        const installResult = validateInstallPipelinePayloadV1(obj.install);
-        if (!installResult.valid) {
-          setSubmitResult({ kind: 'error', message: `Install validation: ${installResult.errors.join('\n')}` });
-          return;
-        }
-        const frameResult = validatePublishFrameInputPayloadV1(obj.frame);
-        if (!frameResult.valid) {
-          setSubmitResult({ kind: 'error', message: `Frame validation: ${frameResult.errors.join('\n')}` });
-          return;
-        }
-        await renderer.applyInstallPipeline(obj.install);
-        renderer.publishFrameInput(obj.frame);
-        setSubmitResult({ kind: 'ok', message: `Installed pipeline (${installResult.value.pipeline.passes.length} pass(es)) + published frame` });
+        // [LAW:single-enforcer] Validation + publishing go through boundary-contract.
+        const normalized = await publishPipelineInstallPayload(renderer, obj.install);
+        publishFramePayload(renderer, obj.frame);
+        setSubmitResult({ kind: 'ok', message: `Installed pipeline (${normalized.pipeline.passes.length} pass(es)) + published frame` });
       } else {
         const validation = validateRawPayload(parsed);
         if (!validation.valid) {
