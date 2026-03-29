@@ -8,7 +8,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
 import { validateRawPayload } from '../render/rust/boundary-contract';
-import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
+import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture, type WgslPassFixture, type BoundaryContractFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
 
@@ -27,11 +27,13 @@ export const PayloadTesterApp: React.FC = () => {
   const rendererRef = useRef<WebGPURenderer | null>(null);
   const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
   const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState(() =>
-    PAYLOAD_FIXTURES.length > 0
-      ? JSON.stringify(PAYLOAD_FIXTURES[0].passes, null, 2)
-      : '[]',
-  );
+  const [json, setJson] = useState(() => {
+    if (PAYLOAD_FIXTURES.length === 0) return '[]';
+    const first = PAYLOAD_FIXTURES[0];
+    return isWgslPassFixture(first)
+      ? JSON.stringify(first.passes, null, 2)
+      : JSON.stringify({ install: first.install, frame: first.frame }, null, 2);
+  });
 
   // Boot renderer on mount
   useEffect(() => {
@@ -69,7 +71,11 @@ export const PayloadTesterApp: React.FC = () => {
   }, []);
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    setJson(JSON.stringify(fixture.passes, null, 2));
+    if (isWgslPassFixture(fixture)) {
+      setJson(JSON.stringify(fixture.passes, null, 2));
+    } else {
+      setJson(JSON.stringify({ install: fixture.install, frame: fixture.frame }, null, 2));
+    }
     setSubmitResult({ kind: 'idle' });
   }, []);
 
