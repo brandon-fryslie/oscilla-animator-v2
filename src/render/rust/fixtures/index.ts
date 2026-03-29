@@ -28,6 +28,7 @@ import type {
   PublishFrameInputBoundaryPayloadV1,
 } from '../boundary-contract';
 import type { MemoryManifestIR } from '../../../compiler/ir/program';
+import { canonicalScalar, canonicalMany, FLOAT, VEC2, VEC4, UNBOUND_INSTANCE } from '../../../core/canonical-types';
 
 // ─── PayloadFixture: discriminated union ─────────────────────────────────────
 
@@ -127,11 +128,11 @@ function float32ToUint32Bits(value: number): number {
 
 const TRIANGLE_MEMORY_MANIFEST: MemoryManifestIR = {
   resources: [
-    { id: 'arena:slot:1', type: { payload: { kind: 'vec2' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'one' } } } } as any, cardinality: 1, packing: 'soa', updateClass: 'FrameTime' as any },
-    { id: 'arena:slot:2', type: { payload: { kind: 'vec4' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'one' } } } } as any, cardinality: 1, packing: 'soa', updateClass: 'FrameTime' as any },
-    { id: 'arena:slot:3', type: { payload: { kind: 'float' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'one' } } } } as any, cardinality: 1, packing: 'soa', updateClass: 'FrameTime' as any },
-    { id: 'arena:slot:4', type: { payload: { kind: 'float' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'one' } } } } as any, cardinality: 1, packing: 'soa', updateClass: 'FrameTime' as any },
-    { id: 'arena:slot:10', type: { payload: { kind: 'vec2' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'many' } } } } as any, cardinality: 3, packing: 'soa', updateClass: 'FrameTime' as any },
+    { id: 'arena:slot:1', type: canonicalScalar(VEC2), cardinality: 1, packing: 'soa', updateClass: 'FrameTime' },
+    { id: 'arena:slot:2', type: canonicalScalar(VEC4), cardinality: 1, packing: 'soa', updateClass: 'FrameTime' },
+    { id: 'arena:slot:3', type: canonicalScalar(FLOAT), cardinality: 1, packing: 'soa', updateClass: 'FrameTime' },
+    { id: 'arena:slot:4', type: canonicalScalar(FLOAT), cardinality: 1, packing: 'soa', updateClass: 'FrameTime' },
+    { id: 'arena:slot:10', type: canonicalMany(VEC2, undefined, UNBOUND_INSTANCE), cardinality: 3, packing: 'soa', updateClass: 'FrameTime' },
   ],
 };
 
