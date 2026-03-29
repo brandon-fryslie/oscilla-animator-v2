@@ -1,13 +1,13 @@
 # Block Library Overhaul — Master Plan
 
 **Status:** Draft
-**Depends on:** `B1-Block-Library-RAW.md` (4-Pillar architecture), `DEMO-PATCHES.md` (validation targets)
+**Depends on:** `B0-4-Pillar-Arch.md` (4-Pillar architecture), `B0-4-Pillar-Reference-Implementations.md` (reference lowering examples), `DEMO-PATCHES.md` (validation targets)
 
 ---
 
 ## 1. Problem
 
-The block library needs to support the 4-Pillar architecture (Generators, Modifiers, Materials, Render Intents) described in `B1-Block-Library-RAW.md`. But we cannot design blocks in isolation from the renderer — if the renderer doesn't conform to the expected payload contract, the blocks are fiction.
+The block library needs to support the 4-Pillar architecture (Generators, Modifiers, Materials, Render Intents) described in `B0-4-Pillar-Arch.md`. But we cannot design blocks in isolation from the renderer — if the renderer doesn't conform to the expected payload contract, the blocks are fiction.
 
 Three risks:
 1. **Wrong abstractions** — we lock into block APIs that can't express the demo patches
