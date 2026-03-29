@@ -7,8 +7,12 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
-import { validateRawPayload } from '../render/rust/boundary-contract';
-import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture, type WgslPassFixture, type BoundaryContractFixture } from '../render/rust/fixtures';
+import {
+  validateRawPayload,
+  validateInstallPipelinePayloadV1,
+  validatePublishFrameInputPayloadV1,
+} from '../render/rust/boundary-contract';
+import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
 
@@ -94,15 +98,34 @@ export const PayloadTesterApp: React.FC = () => {
       return;
     }
 
-    const validation = validateRawPayload(parsed);
-    if (!validation.valid) {
-      setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
-      return;
-    }
+    // Detect payload shape: boundary-contract {install, frame} vs raw pass array
+    const obj = parsed as Record<string, unknown>;
+    const isBoundaryPayload = obj !== null && typeof obj === 'object' && 'install' in obj && 'frame' in obj;
 
     try {
-      await renderer.rebuildGpuPipelines(validation.passes);
-      setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
+      if (isBoundaryPayload) {
+        const installResult = validateInstallPipelinePayloadV1(obj.install);
+        if (!installResult.valid) {
+          setSubmitResult({ kind: 'error', message: `Install validation: ${installResult.errors.join('\n')}` });
+          return;
+        }
+        const frameResult = validatePublishFrameInputPayloadV1(obj.frame);
+        if (!frameResult.valid) {
+          setSubmitResult({ kind: 'error', message: `Frame validation: ${frameResult.errors.join('\n')}` });
+          return;
+        }
+        await renderer.applyInstallPipeline(obj.install);
+        renderer.publishFrameInput(obj.frame);
+        setSubmitResult({ kind: 'ok', message: `Installed pipeline (${installResult.value.pipeline.passes.length} pass(es)) + published frame` });
+      } else {
+        const validation = validateRawPayload(parsed);
+        if (!validation.valid) {
+          setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
+          return;
+        }
+        await renderer.rebuildGpuPipelines(validation.passes);
+        setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
+      }
     } catch (e) {
       setSubmitResult({ kind: 'error', message: `Renderer error: ${e instanceof Error ? e.message : String(e)}` });
     }

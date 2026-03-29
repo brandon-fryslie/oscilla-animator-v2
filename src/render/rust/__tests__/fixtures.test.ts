@@ -4,7 +4,11 @@ import {
   isWgslPassFixture,
   isBoundaryContractFixture,
 } from '../fixtures';
-import { validateRawPayload } from '../boundary-contract';
+import {
+  validateRawPayload,
+  validateInstallPipelinePayloadV1,
+  validatePublishFrameInputPayloadV1,
+} from '../boundary-contract';
 
 describe('payload fixtures', () => {
   it('provide unique fixture identifiers', () => {
@@ -29,23 +33,32 @@ describe('payload fixtures', () => {
     }
   });
 
-  it('boundary-contract fixtures have well-formed install + frame payloads', () => {
+  it('boundary-contract install payloads pass canonical validator', () => {
     for (const fixture of PAYLOAD_FIXTURES) {
       if (!isBoundaryContractFixture(fixture)) continue;
-      expect(fixture.install.type).toBe('INSTALL_PIPELINE_V1');
-      expect(fixture.install.pipeline.passes.length).toBeGreaterThan(0);
-      expect(fixture.frame.type).toBe('PUBLISH_FRAME_INPUT_V1');
-      expect(fixture.frame.frame.width).toBeGreaterThan(0);
+      const result = validateInstallPipelinePayloadV1(fixture.install);
+      expect(result.valid, `${fixture.id} install: ${!result.valid ? result.errors.join(', ') : ''}`).toBe(true);
+    }
+  });
+
+  it('boundary-contract frame payloads pass canonical validator', () => {
+    for (const fixture of PAYLOAD_FIXTURES) {
+      if (!isBoundaryContractFixture(fixture)) continue;
+      const result = validatePublishFrameInputPayloadV1(fixture.frame);
+      expect(result.valid, `${fixture.id} frame: ${!result.valid ? result.errors.join(', ') : ''}`).toBe(true);
     }
   });
 
   it('boundary-contract sink tables have materialId = 0', () => {
-    // [Review comment] materialId is GPU draw-prep–owned. Fixtures must keep it 0.
-    const SINK_TABLE_MATERIAL_ID_OFFSET = 15; // 8 header + 7 record fields
+    // materialId is GPU draw-prep–owned. Fixtures must keep it 0.
+    const SINK_TABLE_HEADER = 8;
+    const SINK_TABLE_RECORD = 8;
+    const MATERIAL_ID_OFFSET_IN_RECORD = 7;
+    const materialIdOffset = SINK_TABLE_HEADER + MATERIAL_ID_OFFSET_IN_RECORD;
     for (const fixture of PAYLOAD_FIXTURES) {
       if (!isBoundaryContractFixture(fixture)) continue;
       const words = fixture.install.pipeline.sinkTableWords;
-      expect(words[SINK_TABLE_MATERIAL_ID_OFFSET], `${fixture.id} materialId`).toBe(0);
+      expect(words[materialIdOffset], `${fixture.id} materialId`).toBe(0);
     }
   });
 });

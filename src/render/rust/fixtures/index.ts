@@ -22,43 +22,12 @@
  */
 
 import type { RustRendererGpuPass } from '../worker-protocol';
-
-// ─── Boundary payload types (local to fixtures) ─────────────────────────────
-// These mirror the canonical shapes that the Rust renderer worker accepts.
-// [LAW:one-source-of-truth] If a canonical export appears in boundary-contract.ts,
-// switch the import; until then, fixture-local definitions avoid coupling.
-
-interface InstallPipelineBoundaryPayloadV1 {
-  readonly type: 'INSTALL_PIPELINE_V1';
-  readonly pipeline: {
-    readonly passes: readonly RustRendererGpuPass[];
-    readonly sinkPointerMap: Readonly<Record<string, string>>;
-    readonly shapeBankWords: readonly number[];
-    readonly shapeBankWordCount: number;
-    readonly topologyIdByHandle: readonly number[];
-    readonly sinkTableWords: readonly number[];
-    readonly sinkTableWordCount: number;
-  };
-}
-
-interface PublishFrameInputBoundaryPayloadV1 {
-  readonly type: 'PUBLISH_FRAME_INPUT_V1';
-  readonly frame: {
-    readonly width: number;
-    readonly height: number;
-    readonly zoom: number;
-    readonly panX: number;
-    readonly panY: number;
-    readonly timeMs: number;
-    readonly inputMouseX: number;
-    readonly inputMouseY: number;
-    readonly inputMouseButtons: number;
-    readonly inputAudioLow: number;
-    readonly inputAudioMid: number;
-    readonly inputAudioHigh: number;
-    readonly inputGaugeActive: number;
-  };
-}
+import { RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS } from '../worker-protocol';
+import type {
+  InstallPipelineBoundaryPayloadV1,
+  PublishFrameInputBoundaryPayloadV1,
+} from '../boundary-contract';
+import type { MemoryManifestIR } from '../../../compiler/ir/program';
 
 // ─── PayloadFixture: discriminated union ─────────────────────────────────────
 
@@ -156,8 +125,6 @@ function float32ToUint32Bits(value: number): number {
   return uintWords[0] >>> 0;
 }
 
-import type { MemoryManifestIR } from '../../../compiler/ir/program';
-
 const TRIANGLE_MEMORY_MANIFEST: MemoryManifestIR = {
   resources: [
     { id: 'arena:slot:1', type: { payload: { kind: 'vec2' }, unit: { kind: 'none' }, extent: { cardinality: { kind: 'inst', value: { kind: 'one' } } } } as any, cardinality: 1, packing: 'soa', updateClass: 'FrameTime' as any },
@@ -179,7 +146,7 @@ const BASE_SHAPE_BANK_WORDS: readonly number[] = [
   1, // Kind: Type1Rigid
   1, // TopologyMode: Path
   0, // Flags
-  0, // MaterialClass (overridden per fixture)
+  0, // MaterialClass
   0, // IndexCount (non-indexed draw)
   0, // FirstIndex (worker-derived)
   0, // BaseVertex (worker-derived)
@@ -196,10 +163,53 @@ const BASE_SHAPE_BANK_WORDS: readonly number[] = [
 
 const BASE_TOPOLOGY_ID_BY_HANDLE = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as const;
 
-// [Review fix] materialId is always 0: the canonical packer treats it as a
-// GPU draw-prep–owned dynamic field (see DrawPrepSinkTablePacker.ts:123-129).
+// materialId is always 0: the canonical packer treats it as a GPU draw-prep–
+// owned dynamic field (see DrawPrepSinkTablePacker.ts).
+// Descriptor uses the canonical 31-word layout (RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS)
+// including PositionZ fields at words 26-30.
 function createSinkTableWords(staticInstanceCount: number): number[] {
+  // Validate descriptor size matches canonical constant at build time
+  const EXPECTED_DESCRIPTOR_WORDS = RUST_RENDERER_SINK_TABLE_DESCRIPTOR_WORDS; // 31
+  const descriptor: number[] = [
+    // DrawPrepSinkDescriptorWord enum (0..30)
+    0, // 0: PositionBaseOffset (worker-resolved)
+    0, // 1: PositionLaneStride (worker-resolved)
+    0, // 2: PositionComponentStride (worker-resolved)
+    0, // 3: ColorBaseOffset (worker-resolved)
+    0, // 4: ColorLaneStride (worker-resolved)
+    0, // 5: ColorComponentStride (worker-resolved)
+    0, // 6: ScaleBaseOffset (worker-resolved)
+    0, // 7: ScaleLaneStride (worker-resolved)
+    0, // 8: ScaleComponentStride (worker-resolved)
+    0, // 9: RotationMode (constant)
+    0, // 10: RotationBaseOffset
+    0, // 11: RotationLaneStride
+    0, // 12: RotationComponentStride
+    float32ToUint32Bits(0.0), // 13: RotationDefaultBits
+    0, // 14: Scale2Mode (constant)
+    0, // 15: Scale2BaseOffset
+    0, // 16: Scale2LaneStride
+    0, // 17: Scale2ComponentStride
+    float32ToUint32Bits(1.0), // 18: Scale2DefaultXBits
+    float32ToUint32Bits(1.0), // 19: Scale2DefaultYBits
+    0, // 20: ShapeSlotBaseOffset (worker-resolved)
+    0, // 21: ShapeSlotLaneStride (worker-resolved)
+    0, // 22: ShapeSlotComponentStride (worker-resolved)
+    0, // 23: InstanceCountMode (static)
+    staticInstanceCount, // 24: StaticInstanceCount
+    0, // 25: ShapeWordOffset -> first shape record
+    0, // 26: PositionZMode (constant)
+    0, // 27: PositionZBaseOffset
+    0, // 28: PositionZLaneStride
+    0, // 29: PositionZComponentStride
+    float32ToUint32Bits(0.0), // 30: PositionZDefaultBits
+  ];
+  if (descriptor.length !== EXPECTED_DESCRIPTOR_WORDS) {
+    throw new Error(`Descriptor length ${descriptor.length} !== canonical ${EXPECTED_DESCRIPTOR_WORDS}`);
+  }
+
   return [
+    // Header (8 words)
     1, // version
     1, // totalRecordCount
     0, // indexedRecordCount
@@ -208,42 +218,17 @@ function createSinkTableWords(staticInstanceCount: number): number[] {
     0, // nonIndexedRegionBaseWords
     5, // indexedStrideWords
     4, // nonIndexedStrideWords
-    // record[0]
+    // Record (8 words)
     1, // drawMode: nonIndexed
     0, // count (GPU draw-prep writes)
     0, // instanceCount (GPU draw-prep writes)
     0, // first (GPU draw-prep writes)
     0, // baseVertex (GPU draw-prep writes)
     0, // firstInstance (GPU draw-prep writes)
-    0, // shapeWordOffset (unused in record, descriptor owns canonical value)
+    0, // shapeWordOffset (descriptor owns canonical value)
     0, // materialId (GPU draw-prep writes; fixtures keep this 0)
-    // descriptor[0] (26 words)
-    0, // position base (worker-resolved)
-    0, // position lane stride (worker-resolved)
-    0, // position component stride (worker-resolved)
-    0, // color base (worker-resolved)
-    0, // color lane stride (worker-resolved)
-    0, // color component stride (worker-resolved)
-    0, // scale base (worker-resolved)
-    0, // scale lane stride (worker-resolved)
-    0, // scale component stride (worker-resolved)
-    0, // rotation mode (constant)
-    0, // rotation base
-    0, // rotation lane stride
-    0, // rotation component stride
-    float32ToUint32Bits(0.0), // rotation default
-    0, // scale2 mode (constant)
-    0, // scale2 base
-    0, // scale2 lane stride
-    0, // scale2 component stride
-    float32ToUint32Bits(1.0), // scale2 default x
-    float32ToUint32Bits(1.0), // scale2 default y
-    0, // shape slot base (worker-resolved)
-    0, // shape slot lane stride (worker-resolved)
-    0, // shape slot component stride (worker-resolved)
-    0, // instanceCountMode: static
-    staticInstanceCount, // staticInstanceCount
-    0, // shapeWordOffset -> first shape record
+    // Descriptor (31 words)
+    ...descriptor,
   ];
 }
 
@@ -253,9 +238,6 @@ interface FixtureComputePass {
   readonly wgsl: string;
 }
 
-// [Review fix] materialClass (ShapeBank word 3) and materialId (sink table
-// record) are now separate options. materialId defaults to 0 since the
-// canonical packer treats it as GPU draw-prep–owned.
 function createTriangleInstall(
   passes: readonly FixtureComputePass[],
   options: {
@@ -309,16 +291,25 @@ function createFramePayload(
       inputAudioMid: 0,
       inputAudioHigh: 0,
       inputGaugeActive: 0,
+      // Camera defaults (orthographic, centered, standard near/far)
+      cameraProjection: 0,
+      cameraCenterX: 0,
+      cameraCenterY: 0,
+      cameraDistance: 5,
+      cameraTiltRad: 0,
+      cameraYawRad: 0,
+      cameraFovYRad: Math.PI / 4,
+      cameraNear: 0.1,
+      cameraFar: 100,
       ...frame,
     },
   };
 }
 
 // ─── Boundary-contract WGSL shaders ──────────────────────────────────────────
-// These use the old FrameHeader layout (pre-view_proj) because boundary-contract
-// fixtures exercise the install/frame payload shapes, not WGSL correctness.
-// The FrameHeader must match what the Rust renderer actually packs into the
-// uniform buffer — see memory.rs.
+// These fixtures exercise the install/frame payload shapes, not WGSL correctness.
+// The FrameHeader definition here must mirror memory.rs::FrameHeader and match
+// what the Rust renderer actually packs into the uniform buffer.
 
 const BOUNDARY_PREAMBLE = `
 struct FrameHeader {
@@ -406,9 +397,6 @@ fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let lane = global_id.x;
   if (lane != 0u) { return; }
 
-  let res_x = max(uniforms.resolution.x, 1.0);
-  let res_y = max(uniforms.resolution.y, 1.0);
-
   arena_out[0u] = 0.0;
   arena_out[1u] = 0.0;
 
@@ -458,9 +446,9 @@ fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `.trim();
 
-// [Review fix] Geometry pass writes ALL required sink lanes so the color pass
-// doesn't need to. Ping-pong buffers mean unwritten lanes contain stale data
-// from the previous write buffer — writing them here ensures deterministic output.
+// Geometry pass writes ALL required sink lanes so the color pass doesn't need to.
+// Ping-pong buffers mean unwritten lanes contain stale data from the previous
+// write buffer — writing them here ensures deterministic output.
 const TRIANGLE_TWO_PASS_GEOMETRY_WGSL = `${BOUNDARY_PREAMBLE}
 @compute @workgroup_size(64, 1, 1)
 fn compute_geometry(@builtin(global_invocation_id) global_id: vec3<u32>) {
