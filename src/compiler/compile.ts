@@ -669,7 +669,7 @@ function convertLinkedIRToProgram(
     });
   }
 
-  // 3. Additional resources declared by blocks (e.g., Texture2D for fluid sims)
+  // 3. Additional resources declared by blocks (e.g., Texture2D resources)
   manifestResources.push(...unlinkedIR.additionalMemoryResources);
 
   const memoryManifest: MemoryManifestIR = { resources: manifestResources };
@@ -733,7 +733,7 @@ function convertLinkedIRToProgram(
     valueExprs: valueExprNodes,
     exprToBlock: builder.getExprToBlock(),
   });
-  // Attach block-emitted dispatch instructions (e.g., fluid sim kernels)
+  // Attach block-emitted dispatch instructions (e.g., block-owned compute kernels)
   const nagaLoweringProgram = unlinkedIR.dispatchInstructions.length > 0
     ? { ...nagaLoweringProgramBase, dispatchInstructions: unlinkedIR.dispatchInstructions }
     : nagaLoweringProgramBase;

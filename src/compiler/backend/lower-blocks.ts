@@ -104,7 +104,7 @@ export interface UnlinkedIRFragments {
   warnings: CompileError[];
 
   /**
-   * Additional memory resources declared by blocks (e.g., Texture2D for fluid sims).
+   * Additional memory resources declared by blocks (e.g., Texture2D resources).
    * Collected from LowerEffects.memoryResources during pass 6 and forwarded to
    * the MemoryManifest in compile.ts.
    */

@@ -14,7 +14,6 @@ import type {
 interface RawSchedulerStageTimingsTelemetry {
   readonly inputMarshalMs: number;
   readonly simulationDispatchMs: number;
-  readonly fluidPassChainMs: number;
   readonly drawPrepMs: number;
   readonly renderMs: number;
   readonly swapMs: number;
@@ -93,7 +92,6 @@ type UnknownRecord = Record<string, unknown>;
 const STAGE_TIMING_FIELDS = [
   'inputMarshalMs',
   'simulationDispatchMs',
-  'fluidPassChainMs',
   'drawPrepMs',
   'renderMs',
   'swapMs',

@@ -199,7 +199,7 @@ export interface LowerEffects {
   /**
    * Additional memory resources to include in the MemoryManifest.
    * Used by blocks that require GPU resources beyond standard arena slots
-   * (e.g., Texture2D for fluid simulation fields).
+   * (e.g., Texture2D fields).
    */
   readonly memoryResources?: readonly import('./program').MemoryResourceIR[];
   /**
