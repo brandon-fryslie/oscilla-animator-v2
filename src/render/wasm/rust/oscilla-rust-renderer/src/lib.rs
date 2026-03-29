@@ -3,7 +3,6 @@ mod compute;
 mod default_shaders;
 mod engine;
 mod error_boundary;
-mod fluid_kernels;
 mod memory;
 mod render;
 mod scheduler;
