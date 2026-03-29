@@ -32,6 +32,7 @@ export type DrawPrepSinkPointerSemantic =
   | 'scale'
   | 'rotation'
   | 'scale2'
+  | 'positionZ'
   | 'shape';
 
 export type DrawPrepSinkPointerKey = `${number}:${DrawPrepSinkPointerSemantic}`;
@@ -211,6 +212,14 @@ export function packDrawPrepSinkTableV1(
           `scale2Slot sink(instance=${String(renderStep.instanceId)})`,
         )
         : null;
+    const positionZSlotAddress =
+      renderStep.positionZSlot !== undefined
+        ? resolveSlotArenaAddress(
+          program,
+          renderStep.positionZSlot,
+          `positionZSlot sink(instance=${String(renderStep.instanceId)})`,
+        )
+        : null;
 
     sinkPointerMap[sinkPointerKey(recordWriteIndex, 'position')] = positionAddress.resourceId;
     words[descriptorBase + DrawPrepSinkDescriptorWord.PositionBaseOffset] = 0;
@@ -245,6 +254,16 @@ export function packDrawPrepSinkTableV1(
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2ComponentStride] = 0;
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultXBits] = float32ToUint32Bits(1);
     words[descriptorBase + DrawPrepSinkDescriptorWord.Scale2DefaultYBits] = float32ToUint32Bits(1);
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionZMode] = positionZSlotAddress
+      ? OPTIONAL_MODE_SLOT
+      : OPTIONAL_MODE_CONSTANT;
+    if (positionZSlotAddress) {
+      sinkPointerMap[sinkPointerKey(recordWriteIndex, 'positionZ')] = positionZSlotAddress.resourceId;
+    }
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionZBaseOffset] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionZLaneStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionZComponentStride] = 0;
+    words[descriptorBase + DrawPrepSinkDescriptorWord.PositionZDefaultBits] = float32ToUint32Bits(0);
 
     // --- [RECOVER-05] New static metadata for GPU draw-prep derivation ---
     const shapeSlotAddress = resolveSlotArenaAddress(

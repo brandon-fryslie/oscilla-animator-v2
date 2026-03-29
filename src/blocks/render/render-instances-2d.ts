@@ -36,6 +36,10 @@ const RENDER_SCALE_CARD = cardinalityVar(cardinalityVarId('render_scale'), {
   acceptance: 'oneOrMany',
   instanceBinding: 'inherit',
 });
+const RENDER_POSITION_Z_CARD = cardinalityVar(cardinalityVarId('render_position_z'), {
+  acceptance: 'oneOrMany',
+  instanceBinding: 'inherit',
+});
 
 export function register(): void {
   registerBlock({
@@ -58,6 +62,12 @@ export function register(): void {
         defaultValue: 1.0,
         defaultSource: defaultSourceConst(1.0),
         uiHint: { kind: 'slider', min: 0.25, max: 2, step: 0.05 },
+      },
+      positionZ: {
+        label: 'Z Depth',
+        type: inferType(FLOAT, unitNone(), { cardinality: RENDER_POSITION_Z_CARD }),
+        defaulting: 'allowed',
+        uiHint: { kind: 'slider', min: -1, max: 1, step: 0.01 },
       },
     },
     outputs: {},

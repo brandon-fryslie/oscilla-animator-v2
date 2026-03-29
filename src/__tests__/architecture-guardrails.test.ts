@@ -239,9 +239,82 @@ function registerCompiledIrFoundationGateSuite(): void {
   });
 }
 
+// [LAW:single-enforcer] Coordinate system migration remnant guards.
+// CPU projection kernels are dead code — all projection happens in the GPU
+// vertex shader via FrameHeader.view_proj. These guards prevent resurrection.
+const COORDINATE_SYSTEM_MIGRATION_GATES: readonly Gate[] = [
+  {
+    id: 'CS-1',
+    pattern: "from.*projection/ortho-kernel",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'CS-2',
+    pattern: "from.*projection/perspective-kernel",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'CS-3',
+    pattern: "from.*projection/fields",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'CS-4',
+    pattern: "projectWorldToScreenOrtho|projectFieldOrtho",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'CS-5',
+    pattern: "projectWorldToScreenPerspective|projectFieldPerspective",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  // JS-side WGSL shader template (replaced by Rust default_shaders.rs)
+  {
+    id: 'CS-6',
+    pattern: "PATH_RENDER_WGSL",
+    scope: ['src'],
+    maxCount: 0,
+  },
+  {
+    id: 'CS-7',
+    pattern: "build_view_projection_matrix",
+    scope: ['src'],
+    maxCount: 0,
+  },
+];
+
+function registerCoordinateSystemMigrationSuite(): void {
+  describe('Coordinate system migration remnant guards', () => {
+    for (const gate of COORDINATE_SYSTEM_MIGRATION_GATES) {
+      it(`${gate.id} — no CPU projection kernel resurrection`, () => {
+        const count = rgLines(gate.pattern, gate.scope, NON_TEST_SRC_GLOBS).length;
+        expect(count).toBeLessThanOrEqual(gate.maxCount);
+      });
+    }
+
+    it('CameraResolver is wired into animation loop (not dead code)', () => {
+      // [LAW:verifiable-goals] CameraResolver must have at least one caller
+      // outside its own test file — if it's dead code, camera params never
+      // reach the Rust renderer.
+      const matches = rgLines(
+        'resolveCameraFromGlobals',
+        ['src'],
+        ['*.ts', '!**/*.test.*', '!**/__tests__/**'],
+      ).filter(line => !line.includes('CameraResolver.ts'));
+      expect(matches.length).toBeGreaterThan(0);
+    });
+  });
+}
+
 describe('Architecture Guardrails', () => {
   registerLegacyValueExprTypeRemovalOwnershipSuite();
   registerValueExprFlatteningOwnershipSuite();
   registerLegacyKindDispatchOwnershipSuite();
   registerCompiledIrFoundationGateSuite();
+  registerCoordinateSystemMigrationSuite();
 });

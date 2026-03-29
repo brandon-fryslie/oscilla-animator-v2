@@ -177,7 +177,7 @@ async function main() {
   while (Date.now() - bootStart < BOOT_TIMEOUT) {
     try {
       const text = await evalJs(cdp, `document.body?.innerText || ''`);
-      if (text && text.includes('Ready (Naga shim + renderer)')) { booted = true; break; }
+      if (text && text.includes('Renderer ready')) { booted = true; break; }
 
       // Also check for boot errors
       if (text && (text.includes('GPU fault') || text.includes('Boot failed'))) {

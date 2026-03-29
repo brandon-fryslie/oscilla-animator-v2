@@ -61,6 +61,14 @@ export const hclDemoCatalog: readonly DemoCatalogEntry[] = [
     highlights: ['sin/cos', 'construct', 'manual orbit math'],
   },
   {
+    filename: 'orbit-3d.hcl',
+    relativePath: 'examples/orbit-3d.hcl',
+    group: 'examples',
+    summary: '3D helix orbit with per-instance Z depth modulation. Click the 3D button to see depth.',
+    purposes: ['example', 'feature'],
+    highlights: ['positionZ', '2.5D depth', 'perspective camera', 'helix'],
+  },
+  {
     filename: 'attractor-layout-showcase.hcl',
     relativePath: 'features/attractor-layout-showcase.hcl',
     group: 'features',

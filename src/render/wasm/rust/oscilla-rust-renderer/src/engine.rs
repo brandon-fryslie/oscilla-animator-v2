@@ -39,8 +39,179 @@ const INPUT_WORD_PAN_Y: usize = 4;
 const INPUT_WORD_SINK_TABLE_WORDS: usize = 13;
 const INPUT_WORD_SHAPE_BANK_WORDS: usize = 14;
 const INPUT_WORD_INSTALL_REVISION: usize = 15;
+
+// Camera parameters — written by CameraResolver on the JS main thread.
+// [LAW:one-source-of-truth] Layout mirrors RUNTIME_INPUT_INDEX in
+// src/render/rust/runtime-input-layout.ts — keep in sync.
+const INPUT_WORD_CAMERA_PROJECTION: usize = 19;
+const INPUT_WORD_CAMERA_CENTER_X: usize = 20;
+const INPUT_WORD_CAMERA_CENTER_Y: usize = 21;
+const INPUT_WORD_CAMERA_DISTANCE: usize = 22;
+const INPUT_WORD_CAMERA_TILT_RAD: usize = 23;
+const INPUT_WORD_CAMERA_YAW_RAD: usize = 24;
+const INPUT_WORD_CAMERA_FOV_Y_RAD: usize = 25;
+const INPUT_WORD_CAMERA_NEAR: usize = 26;
+const INPUT_WORD_CAMERA_FAR: usize = 27;
+
 const INPUT_SIGNAL_WORDS: u32 = 4;
 const INPUT_FLOAT_WORDS: u32 = 32;
+
+/// Build a 4x4 orthographic view-projection matrix incorporating
+/// viewport dimensions, zoom, pan, and camera center offset.
+///
+/// For default camera (center 0.5, 0.5) and no pan, maps [0,1]² world
+/// space to [-1,1]² clip space — identical to the legacy hardcoded matrix.
+///
+/// Camera center shifts the focal point: center_x=0.3 means the viewport
+/// is centered on world x=0.3 rather than the default 0.5.
+fn build_ortho_vp(
+    viewport_width: f32,
+    viewport_height: f32,
+    zoom: f32,
+    pan_x_px: f32,
+    pan_y_px: f32,
+    camera_center_x: f32,
+    camera_center_y: f32,
+) -> [[f32; 4]; 4] {
+    // Scale: maps [0,1] → [-1,1] with zoom applied
+    let sx = 2.0 * zoom;
+    let sy = -2.0 * zoom;
+
+    // Translation: pan + camera center offset
+    // Camera center shifts the view: at center=(0.5,0.5) the offset is zero.
+    let center_offset_x = (camera_center_x - 0.5) * 2.0 * zoom;
+    let center_offset_y = (camera_center_y - 0.5) * 2.0 * zoom;
+    let tx = -zoom + (2.0 * zoom * (pan_x_px / viewport_width)) - center_offset_x;
+    let ty = zoom - (2.0 * zoom * (pan_y_px / viewport_height)) + center_offset_y;
+
+    let mut m = [[0.0_f32; 4]; 4];
+    m[0][0] = sx;
+    m[1][1] = sy;
+    // Map world Z [-1, 1] → NDC Z [0, 1] so negative Z isn't clipped
+    m[2][2] = 0.5;
+    m[3][0] = tx;
+    m[3][1] = ty;
+    m[3][2] = 0.5;
+    m[3][3] = 1.0;
+    m
+}
+
+/// 4x4 matrix multiply (column-major, matching WGSL mat4x4 layout).
+fn mat4_mul(a: &[[f32; 4]; 4], b: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
+    let mut m = [[0.0_f32; 4]; 4];
+    for col in 0..4 {
+        for row in 0..4 {
+            m[col][row] = a[0][row] * b[col][0]
+                + a[1][row] * b[col][1]
+                + a[2][row] * b[col][2]
+                + a[3][row] * b[col][3];
+        }
+    }
+    m
+}
+
+/// Build a 4x4 perspective view-projection matrix.
+///
+/// Camera position is derived from spherical coordinates around a target
+/// point. The view matrix uses a standard right-handed lookAt, and the
+/// projection uses WebGPU NDC conventions (Z range [0, 1]).
+fn build_perspective_vp(
+    viewport_width: f32,
+    viewport_height: f32,
+    zoom: f32,
+    pan_x_px: f32,
+    pan_y_px: f32,
+    center_x: f32,
+    center_y: f32,
+    distance: f32,
+    tilt_rad: f32,
+    yaw_rad: f32,
+    fov_y_rad: f32,
+    near: f32,
+    far: f32,
+) -> [[f32; 4]; 4] {
+    // Pan offset: convert pixel pan to world-space camera target offset.
+    // Simpler than ortho's (pan / viewport * 2 * zoom) because perspective
+    // handles zoom via camera distance (distance / zoom), not matrix scaling.
+    let pan_world_x = -pan_x_px / viewport_width;
+    let pan_world_y = -pan_y_px / viewport_height;
+
+    // Target point in world space (Z=0 canonical 2D plane), shifted by pan.
+    let target = [center_x + pan_world_x, center_y + pan_world_y, 0.0_f32];
+
+    // Zoom scales the camera distance (closer = more zoomed in).
+    let effective_distance = distance / zoom.max(0.01);
+
+    // Camera position from spherical coords around target
+    let cos_tilt = tilt_rad.cos();
+    let sin_tilt = tilt_rad.sin();
+    let cos_yaw = yaw_rad.cos();
+    let sin_yaw = yaw_rad.sin();
+    let eye = [
+        target[0] + effective_distance * cos_tilt * sin_yaw,
+        target[1] + effective_distance * sin_tilt,
+        target[2] + effective_distance * cos_tilt * cos_yaw,
+    ];
+
+    // --- View matrix (lookAt, right-handed) ---
+    let up = [0.0_f32, 1.0, 0.0];
+    let fwd = [
+        target[0] - eye[0],
+        target[1] - eye[1],
+        target[2] - eye[2],
+    ];
+    let fwd_len = (fwd[0] * fwd[0] + fwd[1] * fwd[1] + fwd[2] * fwd[2]).sqrt().max(1e-10);
+    let f = [fwd[0] / fwd_len, fwd[1] / fwd_len, fwd[2] / fwd_len];
+
+    // right = normalize(cross(f, up))
+    let rx = f[1] * up[2] - f[2] * up[1];
+    let ry = f[2] * up[0] - f[0] * up[2];
+    let rz = f[0] * up[1] - f[1] * up[0];
+    let r_len = (rx * rx + ry * ry + rz * rz).sqrt().max(1e-10);
+    let r = [rx / r_len, ry / r_len, rz / r_len];
+
+    // true_up = cross(r, f)
+    let u = [
+        r[1] * f[2] - r[2] * f[1],
+        r[2] * f[0] - r[0] * f[2],
+        r[0] * f[1] - r[1] * f[0],
+    ];
+
+    let view: [[f32; 4]; 4] = [
+        [r[0], u[0], -f[0], 0.0],
+        [r[1], u[1], -f[1], 0.0],
+        [r[2], u[2], -f[2], 0.0],
+        [
+            -(r[0] * eye[0] + r[1] * eye[1] + r[2] * eye[2]),
+            -(u[0] * eye[0] + u[1] * eye[1] + u[2] * eye[2]),
+            f[0] * eye[0] + f[1] * eye[1] + f[2] * eye[2],
+            1.0,
+        ],
+    ];
+
+    // --- Projection matrix (perspective, WebGPU Z range [0, 1]) ---
+    let aspect = viewport_width / viewport_height.max(1.0);
+    let half_fov = fov_y_rad * 0.5;
+    let f_val = 1.0 / half_fov.tan().max(1e-10);
+    let depth_range = far - near;
+    let depth_scale = if depth_range.abs() > 1e-10 {
+        far / depth_range
+    } else {
+        1.0
+    };
+
+    // Right-handed perspective for WebGPU NDC (Z [0, 1]):
+    // - view_z is negative for objects in front → proj[2][3] = -1.0 for positive clip_w
+    // - Y is negated to match the ortho convention (world Y-up → screen Y-down)
+    let proj: [[f32; 4]; 4] = [
+        [f_val / aspect, 0.0, 0.0, 0.0],
+        [0.0, -f_val, 0.0, 0.0],
+        [0.0, 0.0, -depth_scale, -1.0],
+        [0.0, 0.0, -near * depth_scale, 0.0],
+    ];
+
+    mat4_mul(&proj, &view)
+}
 
 fn debug_readback_interval_frames_from_hz(debug_readback_hz: u32) -> u64 {
     // [LAW:one-source-of-truth] Debug readback cadence conversion is defined
@@ -229,6 +400,10 @@ const DESCRIPTOR_WORD_SHAPE_SLOT_COMPONENT_STRIDE: usize = 22;
 const DESCRIPTOR_WORD_INSTANCE_COUNT_MODE: usize = 23;
 const DESCRIPTOR_WORD_STATIC_INSTANCE_COUNT: usize = 24;
 const DESCRIPTOR_WORD_SHAPE_WORD_OFFSET: usize = 25;
+const DESCRIPTOR_WORD_POSITION_Z_MODE: usize = 26;
+const DESCRIPTOR_WORD_POSITION_Z_BASE_OFFSET: usize = 27;
+const DESCRIPTOR_WORD_POSITION_Z_LANE_STRIDE: usize = 28;
+const DESCRIPTOR_WORD_POSITION_Z_COMPONENT_STRIDE: usize = 29;
 const INSTANCE_COUNT_MODE_STATIC: u32 = 0;
 const OPTIONAL_MODE_SLOT: u32 = 1;
 
@@ -249,6 +424,7 @@ enum SinkPointerSemantic {
     Scale,
     Rotation,
     Scale2,
+    PositionZ,
     Shape,
 }
 
@@ -260,6 +436,7 @@ impl SinkPointerSemantic {
             "scale" => Some(Self::Scale),
             "rotation" => Some(Self::Rotation),
             "scale2" => Some(Self::Scale2),
+            "positionZ" => Some(Self::PositionZ),
             "shape" => Some(Self::Shape),
             _ => None,
         }
@@ -272,6 +449,7 @@ impl SinkPointerSemantic {
             Self::Scale => "scale",
             Self::Rotation => "rotation",
             Self::Scale2 => "scale2",
+            Self::PositionZ => "positionZ",
             Self::Shape => "shape",
         }
     }
@@ -496,6 +674,19 @@ impl Engine {
                     DESCRIPTOR_WORD_SCALE2_COMPONENT_STRIDE,
                     record,
                     SinkPointerSemantic::Scale2,
+                )?;
+            }
+
+            let position_z_mode = plane_words[descriptor_base + DESCRIPTOR_WORD_POSITION_Z_MODE];
+            if position_z_mode == OPTIONAL_MODE_SLOT {
+                self.patch_sink_descriptor_triplet(
+                    plane_words,
+                    descriptor_base,
+                    DESCRIPTOR_WORD_POSITION_Z_BASE_OFFSET,
+                    DESCRIPTOR_WORD_POSITION_Z_LANE_STRIDE,
+                    DESCRIPTOR_WORD_POSITION_Z_COMPONENT_STRIDE,
+                    record,
+                    SinkPointerSemantic::PositionZ,
                 )?;
             }
 
@@ -1368,17 +1559,66 @@ impl Engine {
             let pan_y_px = shared_input.get_index(INPUT_WORD_PAN_Y as u32) as f32;
             let safe_pan_x_px = if pan_x_px.is_finite() { pan_x_px } else { 0.0 };
             let safe_pan_y_px = if pan_y_px.is_finite() { pan_y_px } else { 0.0 };
-            let sx = 2.0 * zoom;
-            let sy = -2.0 * zoom;
-            let tx = -zoom + (2.0 * zoom * (safe_pan_x_px / viewport_width));
-            let ty = zoom - (2.0 * zoom * (safe_pan_y_px / viewport_height));
-            header.view_proj = [[0.0; 4]; 4];
-            header.view_proj[0][0] = sx;
-            header.view_proj[1][1] = sy;
-            header.view_proj[2][2] = 1.0;
-            header.view_proj[3][0] = tx;
-            header.view_proj[3][1] = ty;
-            header.view_proj[3][3] = 1.0;
+
+            // Read camera parameters from shared input.
+            // [LAW:one-source-of-truth] Camera param indices mirror
+            // RUNTIME_INPUT_INDEX in runtime-input-layout.ts.
+            let camera_center_x = {
+                let v = shared_input.get_index(INPUT_WORD_CAMERA_CENTER_X as u32) as f32;
+                if v.is_finite() { v } else { 0.5 }
+            };
+            let camera_center_y = {
+                let v = shared_input.get_index(INPUT_WORD_CAMERA_CENTER_Y as u32) as f32;
+                if v.is_finite() { v } else { 0.5 }
+            };
+
+            // [LAW:dataflow-not-control-flow] VP matrix is always written;
+            // the camera_projection word selects which math produces it.
+            let camera_projection = {
+                let v = shared_input.get_index(INPUT_WORD_CAMERA_PROJECTION as u32) as f32;
+                if v.is_finite() { v } else { 0.0 }
+            };
+            header.view_proj = if camera_projection >= 0.5 {
+                // Perspective mode — read remaining camera params
+                let camera_distance = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_DISTANCE as u32) as f32;
+                    if v.is_finite() && v > 0.0 { v } else { 2.0 }
+                };
+                let camera_tilt_rad = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_TILT_RAD as u32) as f32;
+                    if v.is_finite() { v } else { 0.0 }
+                };
+                let camera_yaw_rad = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_YAW_RAD as u32) as f32;
+                    if v.is_finite() { v } else { 0.0 }
+                };
+                let camera_fov_y_rad = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_FOV_Y_RAD as u32) as f32;
+                    if v.is_finite() && v > 0.01 { v } else { 0.7854 }
+                };
+                let camera_near = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_NEAR as u32) as f32;
+                    if v.is_finite() && v > 0.0 { v } else { 0.01 }
+                };
+                let camera_far = {
+                    let v = shared_input.get_index(INPUT_WORD_CAMERA_FAR as u32) as f32;
+                    if v.is_finite() && v > 0.0 { v } else { 100.0 }
+                };
+                build_perspective_vp(
+                    viewport_width, viewport_height,
+                    zoom, safe_pan_x_px, safe_pan_y_px,
+                    camera_center_x, camera_center_y,
+                    camera_distance, camera_tilt_rad, camera_yaw_rad,
+                    camera_fov_y_rad, camera_near, camera_far,
+                )
+            } else {
+                // Ortho mode (default)
+                build_ortho_vp(
+                    viewport_width, viewport_height,
+                    zoom, safe_pan_x_px, safe_pan_y_px,
+                    camera_center_x, camera_center_y,
+                )
+            };
             let install_revision = parse_finite_u32(
                 shared_input
                     .get_index(INPUT_WORD_INSTALL_REVISION as u32)
@@ -1443,13 +1683,8 @@ impl Engine {
             }
         } else {
             // No shared input attached — use identity viewport.
-            header.view_proj = [[0.0; 4]; 4];
-            header.view_proj[0][0] = 2.0;
-            header.view_proj[1][1] = -2.0;
-            header.view_proj[2][2] = 1.0;
-            header.view_proj[3][0] = -1.0;
-            header.view_proj[3][1] = 1.0;
-            header.view_proj[3][3] = 1.0;
+            // Default camera center (0.5, 0.5) produces zero offset.
+            header.view_proj = build_ortho_vp(1.0, 1.0, 1.0, 0.0, 0.0, 0.5, 0.5);
             self.last_shape_bank_words = 0;
             self.last_sink_table_words = 0;
             self.last_shape_header_sample.clear();

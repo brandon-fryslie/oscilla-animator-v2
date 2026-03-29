@@ -114,5 +114,20 @@ patch "Breathing Ring" {
     }
   }
 
+  # Z depth: each dot bobs at its own phase, creating a wave around the ring
+  block "Expression" "z-depth" {
+    expression = <<-EXPR
+      t = instances.rank
+      phase = clock.phaseA * 6.2832
+      sin(t * 6.2832 * 3.0 + phase) * 0.2 + cos(t * 6.2832 * 5.0 - phase * 0.7) * 0.1
+    EXPR
+    inputs {
+      refs = [instances.rank, clock.phaseA]
+    }
+    outputs {
+      out = render.positionZ
+    }
+  }
+
   block "RenderInstances2D" "render" {}
 }

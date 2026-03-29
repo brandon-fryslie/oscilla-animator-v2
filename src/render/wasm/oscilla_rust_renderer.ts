@@ -28,6 +28,8 @@ interface RendererWasmModule {
   ) => Promise<void> | void;
   // [RECOVER-11] Atlas upload for Type5 MSDF text rendering.
   readonly upload_atlas_data?: (data: Uint32Array) => void;
+  // Fast-path control update (direct GPU uniform buffer write).
+  readonly update_control?: (offsetBytes: number, value: number) => void;
 }
 
 let initialized = false;
@@ -46,6 +48,7 @@ let takeReadbackSnapshotImpl: RendererWasmModule['take_readback_snapshot'] | nul
 let rebuildGpuPipelinesImpl: RendererWasmModule['rebuild_gpu_pipelines'] | null = null;
 // [RECOVER-11] Atlas upload binding.
 let uploadAtlasDataImpl: RendererWasmModule['upload_atlas_data'] | null = null;
+let updateControlImpl: RendererWasmModule['update_control'] | null = null;
 
 export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Promise<void> {
   if (initialized) {
@@ -116,6 +119,10 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       // [RECOVER-11] Atlas upload is optional (only present in builds with Type5).
       uploadAtlasDataImpl = wasmModule.upload_atlas_data
         ? wasmModule.upload_atlas_data.bind(wasmModule)
+        : null;
+      // Fast-path control update is optional (only present in builds with fast-path support).
+      updateControlImpl = wasmModule.update_control
+        ? wasmModule.update_control.bind(wasmModule)
         : null;
       initialized = true;
     })().catch((error) => {
@@ -234,4 +241,12 @@ export function uploadRustRendererAtlasData(data: Uint32Array): void {
     throw new Error('Rust renderer wasm is not initialized or missing upload_atlas_data export');
   }
   uploadAtlasDataImpl(data);
+}
+
+// Fast-path control update: write a single f32 value directly to the GPU uniform buffer.
+export function updateRustRendererControl(offsetBytes: number, value: number): void {
+  if (!initialized || !updateControlImpl) {
+    throw new Error('Rust renderer wasm is not initialized or missing update_control export');
+  }
+  updateControlImpl(offsetBytes, value);
 }
