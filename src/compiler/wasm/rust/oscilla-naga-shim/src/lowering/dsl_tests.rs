@@ -463,10 +463,62 @@ fn exercise_full_helper_surface() {
     function.loop_body(|body| {
         body.emit_break();
     });
-    let no_break = function.lit_bool(false);
-    function.break_if(no_break);
 
     function.emit_return();
     module.add_compute_entry("compute_main", [1, 1, 1], function);
     let _ = validate_and_emit(&module.finish());
+}
+
+#[test]
+#[should_panic(expected = "FnBuilder::break_if is only valid inside loop_body closures")]
+fn break_if_panics_at_function_root() {
+    let mut function = FnBuilder::new("compute_main");
+    let cond = function.lit_bool(true);
+    function.break_if(cond);
+}
+
+#[test]
+#[should_panic(expected = "FnBodyBuilder::break_if is only valid inside loop_body closures")]
+fn break_if_panics_inside_if_then() {
+    let (mut module, arena, _uniforms) = new_compute_builder();
+    let mut function = FnBuilder::new("compute_main");
+    let arena_expr = function.global(arena);
+    let cond = function.lit_bool(true);
+
+    function.if_then(cond, |body| {
+        let idx = body.lit_u32(0);
+        let value = body.lit_f32(1.0);
+        body.store_buffer(arena_expr, idx, value);
+        let break_cond = body.lit_bool(true);
+        body.break_if(break_cond);
+    });
+
+    module.add_compute_entry("compute_main", [1, 1, 1], function);
+}
+
+#[test]
+#[should_panic(expected = "FnBodyBuilder::break_if is only valid inside loop_body closures")]
+fn break_if_panics_inside_if_then_else() {
+    let (mut module, arena, _uniforms) = new_compute_builder();
+    let mut function = FnBuilder::new("compute_main");
+    let arena_expr = function.global(arena);
+    let cond = function.lit_bool(true);
+
+    function.if_then_else(
+        cond,
+        |accept| {
+            let idx = accept.lit_u32(0);
+            let value = accept.lit_f32(1.0);
+            accept.store_buffer(arena_expr, idx, value);
+            let break_cond = accept.lit_bool(true);
+            accept.break_if(break_cond);
+        },
+        |reject| {
+            let idx = reject.lit_u32(1);
+            let value = reject.lit_f32(2.0);
+            reject.store_buffer(arena_expr, idx, value);
+        },
+    );
+
+    module.add_compute_entry("compute_main", [1, 1, 1], function);
 }

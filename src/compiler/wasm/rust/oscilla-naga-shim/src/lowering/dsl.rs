@@ -496,7 +496,8 @@ impl FnBuilder {
     }
 
     pub fn break_if(&mut self, cond: Expr) {
-        self.with_root(|inner| inner.break_if(cond));
+        let _ = cond;
+        panic!("FnBuilder::break_if is only valid inside loop_body closures")
     }
 
     pub fn emit_break(&mut self) {
@@ -968,7 +969,11 @@ impl<'a> FnBodyBuilder<'a> {
     where
         F: FnOnce(&mut FnBodyBuilder<'_>),
     {
-        let (accept, _, _) = self.with_nested_block(body);
+        let (accept, accept_break_if, _) = self.with_nested_block(body);
+        assert!(
+            accept_break_if.is_none(),
+            "FnBodyBuilder::break_if is only valid inside loop_body closures"
+        );
         self.push_statement(naga::Statement::If {
             condition: cond,
             accept,
@@ -981,8 +986,16 @@ impl<'a> FnBodyBuilder<'a> {
         F: FnOnce(&mut FnBodyBuilder<'_>),
         G: FnOnce(&mut FnBodyBuilder<'_>),
     {
-        let (accept_block, _, _) = self.with_nested_block(accept);
-        let (reject_block, _, _) = self.with_nested_block(reject);
+        let (accept_block, accept_break_if, _) = self.with_nested_block(accept);
+        let (reject_block, reject_break_if, _) = self.with_nested_block(reject);
+        assert!(
+            accept_break_if.is_none(),
+            "FnBodyBuilder::break_if is only valid inside loop_body closures"
+        );
+        assert!(
+            reject_break_if.is_none(),
+            "FnBodyBuilder::break_if is only valid inside loop_body closures"
+        );
         self.push_statement(naga::Statement::If {
             condition: cond,
             accept: accept_block,
