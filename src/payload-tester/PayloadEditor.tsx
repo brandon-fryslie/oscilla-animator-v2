@@ -5,9 +5,10 @@ interface PayloadEditorProps {
   onJsonChange: (json: string) => void;
   onSubmit: (json: string) => void;
   disabled: boolean;
+  submitLabel?: string;
 }
 
-export const PayloadEditor: React.FC<PayloadEditorProps> = ({ json, onJsonChange, onSubmit, disabled }) => {
+export const PayloadEditor: React.FC<PayloadEditorProps> = ({ json, onJsonChange, onSubmit, disabled, submitLabel }) => {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -52,7 +53,7 @@ export const PayloadEditor: React.FC<PayloadEditorProps> = ({ json, onJsonChange
             fontWeight: 500,
           }}
         >
-          Submit (Cmd+Enter)
+          {submitLabel ?? 'Submit'} (Cmd+Enter)
         </button>
       </div>
     </>
