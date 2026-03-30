@@ -55,11 +55,43 @@ fn builds_minimal_compute_module() {
 #[test]
 fn module_builder_supports_non_compute_entrypoints() {
     let mut module = ModuleBuilder::new();
-    let vertex = FnBuilder::new("vertex_main");
-    let fragment = FnBuilder::new("fragment_main");
+    let vec4_ty = module.vec4_f32_type();
+
+    let mut vertex = FnBuilder::new("vertex_main");
+    vertex.set_result(
+        vec4_ty,
+        Some(naga::Binding::BuiltIn(naga::BuiltIn::Position {
+            invariant: false,
+        })),
+    );
+    let vx = vertex.lit_f32(0.0);
+    let vy = vertex.lit_f32(0.0);
+    let vz = vertex.lit_f32(0.0);
+    let vw = vertex.lit_f32(1.0);
+    let clip = vertex.compose(vec4_ty, vec![vx, vy, vz, vw]);
+    vertex.emit_return_value(clip);
+
+    let mut fragment = FnBuilder::new("fragment_main");
+    fragment.set_result(
+        vec4_ty,
+        Some(naga::Binding::Location {
+            location: 0,
+            interpolation: None,
+            sampling: None,
+            second_blend_source: false,
+        }),
+    );
+    let fr = fragment.lit_f32(1.0);
+    let fg = fragment.lit_f32(0.0);
+    let fb = fragment.lit_f32(0.0);
+    let fa = fragment.lit_f32(1.0);
+    let color = fragment.compose(vec4_ty, vec![fr, fg, fb, fa]);
+    fragment.emit_return_value(color);
+
     let vertex_index = module.add_vertex_entry("vertex_main", vertex);
     let fragment_index = module.add_fragment_entry("fragment_main", fragment);
     let module = module.finish();
+    let wgsl = validate_and_emit(&module);
 
     assert_eq!(vertex_index, 0);
     assert_eq!(fragment_index, 1);
@@ -71,6 +103,8 @@ fn module_builder_supports_non_compute_entrypoints() {
         module.entry_points[fragment_index].stage,
         naga::ShaderStage::Fragment
     ));
+    assert!(wgsl.contains("@vertex"));
+    assert!(wgsl.contains("@fragment"));
 }
 
 #[test]
