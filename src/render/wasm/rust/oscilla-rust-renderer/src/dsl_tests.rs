@@ -1,5 +1,6 @@
 use super::dsl::{Expr, FnBuilder, ModuleBuilder};
 use std::num::NonZeroU32;
+use wasm_bindgen_test::wasm_bindgen_test;
 
 fn validate_and_emit(module: &naga::Module) -> String {
     let info = naga::valid::Validator::new(
@@ -36,7 +37,7 @@ fn new_compute_builder() -> (
     (module, arena, uniforms)
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn builds_minimal_compute_module() {
     let (mut module, arena, _uniforms) = new_compute_builder();
 
@@ -52,7 +53,7 @@ fn builds_minimal_compute_module() {
     assert!(wgsl.contains("@compute"));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn module_builder_supports_non_compute_entrypoints() {
     let mut module = ModuleBuilder::new();
     let vec4_ty = module.vec4_f32_type();
@@ -78,7 +79,8 @@ fn module_builder_supports_non_compute_entrypoints() {
             location: 0,
             interpolation: None,
             sampling: None,
-            second_blend_source: false,
+            blend_src: None,
+            per_primitive: false,
         }),
     );
     let fr = fragment.lit_f32(1.0);
@@ -107,7 +109,7 @@ fn module_builder_supports_non_compute_entrypoints() {
     assert!(wgsl.contains("@fragment"));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn texture_sample_helper_emits_image_sample_expression() {
     let mut module = ModuleBuilder::new();
     let sampled_image_ty = module.image_type(
@@ -157,7 +159,7 @@ fn texture_sample_helper_emits_image_sample_expression() {
     )));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn arithmetic_and_math_helpers_emit_valid_expressions() {
     let (mut module, arena, uniforms) = new_compute_builder();
     let mut function = FnBuilder::new("compute_main");
@@ -237,7 +239,7 @@ fn arithmetic_and_math_helpers_emit_valid_expressions() {
     let _ = validate_and_emit(&module);
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn control_flow_helpers_emit_valid_statements() {
     let (mut module, arena, _uniforms) = new_compute_builder();
     let mut function = FnBuilder::new("compute_main");
@@ -302,7 +304,7 @@ fn expect_u32_literal(expressions: &naga::Arena<naga::Expression>, expr: Expr, v
     }
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn address_helpers_generate_expected_index_formula() {
     let (mut module, arena, _uniforms) = new_compute_builder();
     let mut function = FnBuilder::new("compute_main");
@@ -367,7 +369,7 @@ fn address_helpers_generate_expected_index_formula() {
     let _ = validate_and_emit(&module);
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn exercise_full_helper_surface() {
     let (mut module, arena, uniforms) = new_compute_builder();
     let u32_ty = module.u32_type();
@@ -503,7 +505,7 @@ fn exercise_full_helper_surface() {
     let _ = validate_and_emit(&module.finish());
 }
 
-#[test]
+#[wasm_bindgen_test]
 #[should_panic(expected = "FnBuilder::break_if is only valid inside loop_body closures")]
 fn break_if_panics_at_function_root() {
     let mut function = FnBuilder::new("compute_main");
@@ -511,7 +513,7 @@ fn break_if_panics_at_function_root() {
     function.break_if(cond);
 }
 
-#[test]
+#[wasm_bindgen_test]
 #[should_panic(expected = "FnBodyBuilder::break_if is only valid inside loop_body closures")]
 fn break_if_panics_inside_if_then() {
     let (mut module, arena, _uniforms) = new_compute_builder();
@@ -530,7 +532,7 @@ fn break_if_panics_inside_if_then() {
     module.add_compute_entry("compute_main", [1, 1, 1], function);
 }
 
-#[test]
+#[wasm_bindgen_test]
 #[should_panic(expected = "FnBodyBuilder::break_if is only valid inside loop_body closures")]
 fn break_if_panics_inside_if_then_else() {
     let (mut module, arena, _uniforms) = new_compute_builder();

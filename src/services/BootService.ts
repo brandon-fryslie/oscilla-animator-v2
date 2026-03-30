@@ -1,6 +1,3 @@
-import { NagaService } from '../compiler/naga-bridge';
-import { compile_ir, type ShimBootStage, type ShimCompilationResult } from '../compiler/wasm/oscilla_naga_shim';
-
 export type BootState = 'initial' | 'fetching' | 'compiling' | 'ready' | 'error';
 
 export interface BootSnapshot {
@@ -10,19 +7,13 @@ export interface BootSnapshot {
 
 type BootListener = (snapshot: BootSnapshot) => void;
 
-const STAGE_TO_STATE: Record<ShimBootStage, BootState> = {
-  fetching: 'fetching',
-  compiling: 'compiling',
-  binding: 'compiling',
-};
-
-function formatErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
- * [LAW:single-enforcer] BootService owns the app-level WASM boot gate state
+ * [LAW:single-enforcer] BootService owns the app-level boot gate state
  * machine so UI gating does not diverge across callsites.
+ *
+ * With naga-shim removed (WGSL generation now happens in Rust renderer),
+ * boot is trivially immediate. The state machine shape is preserved so
+ * BootGateScreen and other consumers don't need changes.
  */
 export class BootService {
   private snapshot: BootSnapshot = {
@@ -60,49 +51,9 @@ export class BootService {
   }
 
   private async runStart(): Promise<BootSnapshot> {
-    // [LAW:no-silent-fallbacks] Seed explicit fetching state before bridge init
-    // so import-time failures still surface a concrete pre-ready phase.
-    this.setSnapshot({
-      state: 'fetching',
-      error: null,
-    });
-
-    try {
-      await NagaService.boot({
-        onStage: (stage) => {
-          this.setSnapshot({
-            state: STAGE_TO_STATE[stage],
-            error: null,
-          });
-        },
-      });
-      this.runSmokeTest();
-      this.setSnapshot({
-        state: 'ready',
-        error: null,
-      });
-      return this.snapshot;
-    } catch (error) {
-      this.setSnapshot({
-        state: 'error',
-        error: formatErrorMessage(error),
-      });
-      return this.snapshot;
-    }
-  }
-
-  private runSmokeTest(): void {
-    // [LAW:verifiable-goals] Boot readiness requires a deterministic compile
-    // call proving wasm bindings are callable, not just loaded.
-    const smokeResult = compile_ir({} as never, 1) as ShimCompilationResult;
-    const isStructuredResult =
-      typeof smokeResult === 'object' &&
-      smokeResult !== null &&
-      typeof smokeResult.is_valid === 'boolean' &&
-      Array.isArray(smokeResult.errors);
-    if (!isStructuredResult) {
-      throw new Error('WASM integrity check failed: compile_ir returned malformed result');
-    }
+    // No WASM boot required — Naga shim removed, WGSL generation is Rust-side.
+    this.setSnapshot({ state: 'ready', error: null });
+    return this.snapshot;
   }
 
   private setSnapshot(next: BootSnapshot): void {

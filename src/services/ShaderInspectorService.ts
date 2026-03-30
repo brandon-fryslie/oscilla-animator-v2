@@ -1,8 +1,12 @@
-import type { RustRendererGpuPass } from '../render/rust/worker-protocol';
+// [LAW:locality-or-seam] Local interface decouples inspector from worker protocol.
+interface InspectedGpuPass {
+  readonly passId: string;
+  readonly entryPoint: string;
+}
 
 export interface ShaderInspectorSnapshot {
   readonly updatedAtMs: number;
-  readonly passes: readonly RustRendererGpuPass[];
+  readonly passes: readonly InspectedGpuPass[];
 }
 
 type Listener = () => void;
@@ -22,7 +26,7 @@ class ShaderInspectorService {
     };
   }
 
-  setPasses(passes: readonly RustRendererGpuPass[]): void {
+  setPasses(passes: readonly InspectedGpuPass[]): void {
     // [LAW:one-source-of-truth] Shader inspector snapshot is sourced from the
     // canonical runtime-installed pass bundle, not ad-hoc compiler side-copies.
     this.snapshot = {

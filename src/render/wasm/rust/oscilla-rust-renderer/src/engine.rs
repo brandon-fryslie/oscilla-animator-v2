@@ -48,9 +48,9 @@ impl Engine {
         initial_width: u32,
         initial_height: u32,
     ) -> Result<Self, JsValue> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         let surface = create_runtime_surface(&instance, canvas)?;
 
@@ -61,7 +61,7 @@ impl Engine {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or_else(|| JsValue::from_str("request_adapter failed: no compatible adapter"))?;
+            .map_err(|error| JsValue::from_str(&format!("request_adapter failed: {error}")))?;
 
         // [LAW:single-enforcer] Required limits are negotiated in one place
         // at device creation so runtime paths don't fork on capability checks.
@@ -74,15 +74,14 @@ impl Engine {
             .max(128 * 1024 * 1024);
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Oscilla.Render.Device"),
-                    required_features: wgpu::Features::INDIRECT_FIRST_INSTANCE,
-                    required_limits,
-                    memory_hints: wgpu::MemoryHints::Performance,
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Oscilla.Render.Device"),
+                required_features: wgpu::Features::INDIRECT_FIRST_INSTANCE,
+                required_limits,
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                trace: wgpu::Trace::Off,
+            })
             .await
             .map_err(|error| JsValue::from_str(&format!("request_device failed: {error}")))?;
 
@@ -91,7 +90,7 @@ impl Engine {
 
         // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
         // faults are classified and emitted through one runtime error boundary.
-        device.on_uncaptured_error(Box::new(move |error| {
+        device.on_uncaptured_error(Arc::new(move |error| {
             let payload = match error {
                 wgpu::Error::Validation {
                     source: _,
@@ -191,11 +190,13 @@ impl Engine {
     /// Proves the engine is alive and the surface is configured.
     pub fn render_clear_frame(&mut self) -> Result<(), JsValue> {
         let output = match self.surface.get_current_texture() {
-            Ok(output) => output,
-            Err(wgpu::SurfaceError::Timeout) => return Ok(()),
-            Err(error) => {
+            wgpu::CurrentSurfaceTexture::Success(output)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
+            wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
+            other => {
                 return Err(JsValue::from_str(&format!(
-                    "get_current_texture failed: {error}"
+                    "get_current_texture failed: {other:?}"
                 )));
             }
         };
@@ -215,6 +216,7 @@ impl Engine {
                 label: Some("clear_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -229,6 +231,7 @@ impl Engine {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
         }
 

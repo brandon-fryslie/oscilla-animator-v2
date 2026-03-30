@@ -81,54 +81,9 @@ describe('RuntimeService', () => {
     hoisted.createWebGPURendererMock.mockReset();
   });
 
-  it('leaves the active renderer in place when canonical install publication fails', async () => {
-    const store = new RootStore();
-    const service = new RuntimeService(store);
-    const serviceAccess = service as unknown as {
-      runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
-      rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => Promise<void>;
-    };
-    const candidateBundle = makeBundle('candidate');
-    const renderer = makeRendererStub();
-    renderer.applyInstallPipeline.mockRejectedValue(new Error('reject install'));
-    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer);
-    serviceAccess.rendererExecutionState = 'active';
-
-    await expect(
-      serviceAccess.installRendererCanonicalAssets(candidateBundle),
-    ).rejects.toThrow('reject install');
-
-    expect(renderer.applyInstallPipeline).toHaveBeenCalledTimes(1);
-    expect(serviceAccess.runtimeResourcesState.runtime.renderer).toBe(renderer);
-  });
-
-  it('publishes worker-owned install metadata through INSTALL_PIPELINE_V1 payload', async () => {
-    const store = new RootStore();
-    const service = new RuntimeService(store);
-    const serviceAccess = service as unknown as {
-      runtimeResourcesState: ReturnType<typeof makeActiveRuntimeState>;
-      rendererExecutionState: 'active' | 'pausedByBreaker' | 'fatal';
-      installRendererCanonicalAssets: (bundle: CompiledGpuArtifactBundle) => Promise<void>;
-    };
-    const renderer = makeRendererStub();
-    const bundle = makeBundle('worker-owned-install');
-    const canvas = { width: 640, height: 360 } as HTMLCanvasElement;
-    serviceAccess.runtimeResourcesState = makeActiveRuntimeState(renderer, canvas);
-    serviceAccess.rendererExecutionState = 'active';
-
-    await serviceAccess.installRendererCanonicalAssets(bundle);
-
-    expect(renderer.applyInstallPipeline).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'INSTALL_PIPELINE_V1',
-      pipeline: expect.objectContaining({
-        passes: bundle.passes,
-        sinkPointerMap: bundle.runtimeInstall.drawPrep.sinkPointerMap,
-        shapeBankWordCount: bundle.runtimeInstall.shapeBank.wordCount,
-        sinkTableWordCount: bundle.runtimeInstall.drawPrep.wordCount,
-      }),
-    }));
-  });
+  // Deleted: 'leaves the active renderer in place when canonical install publication fails'
+  // Deleted: 'publishes worker-owned install metadata through INSTALL_PIPELINE_V1 payload'
+  // Both tests exercised the old V1 boundary contract path which was removed during scorched earth.
 
   it('disposes the renderer and preserves app state after a fatal GPU fault', async () => {
     const store = new RootStore();

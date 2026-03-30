@@ -50,7 +50,7 @@ const ShaderInspectorPanel: React.FC = () => {
   }
 
   const activePass = snapshot.passes.find((pass) => pass.passId === activePassId) ?? snapshot.passes[0]!;
-  const numberedWgsl = formatWgslWithLineNumbers(activePass.wgsl);
+  const numberedWgsl = formatWgslWithLineNumbers((activePass as unknown as Record<string, string>).wgsl ?? '// WGSL not available — generated Rust-side');
 
   return (
     <div

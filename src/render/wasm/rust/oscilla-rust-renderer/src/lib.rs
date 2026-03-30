@@ -1,8 +1,12 @@
 mod allocator;
+pub mod dsl;
 mod engine;
 mod error_boundary;
 mod scheduler;
 mod telemetry;
+
+#[cfg(test)]
+mod dsl_tests;
 
 use std::cell::{Cell, RefCell};
 
