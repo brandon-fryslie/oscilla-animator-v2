@@ -24,10 +24,8 @@ npx vitest run --include "**/cardinality*.test.ts"
 
 ### Rust/WASM Components
 ```bash
-npm run build:naga-shim        # Build Naga WGSL emitter (oscilla-naga-shim)
 npm run build:rust-renderer    # Build WebGPU Rust renderer (oscilla-rust-renderer)
 npm run build:debug-probe      # Build WASM debug probe (oscilla-debug-probe)
-npm run verify:naga-shim       # Verify Naga shim output correctness
 
 # Native headless WebGPU tests (requires Vulkan/lavapipe on CI)
 npm run test:native-webgpu-gates
@@ -62,8 +60,7 @@ Located under `src/*/wasm/rust/`:
 
 | Crate | Path | Role |
 |-------|------|------|
-| `oscilla-naga-shim` | `src/compiler/wasm/rust/oscilla-naga-shim/` | WGSL emission via Naga |
-| `oscilla-rust-renderer` | `src/render/wasm/rust/oscilla-rust-renderer/` | WebGPU render worker (zero-alloc hot path) |
+| `oscilla-rust-renderer` | `src/render/wasm/rust/oscilla-rust-renderer/` | WebGPU render worker + Naga DSL + AST translator |
 | `oscilla-debug-probe` | `src/services/wasm/rust/oscilla-debug-probe/` | Runtime debug snapshot ABI |
 
 Native headless tests: `native-tests/webgpu-headless/`

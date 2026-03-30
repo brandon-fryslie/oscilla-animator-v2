@@ -6,11 +6,11 @@
 // WebGPU. Alternative renderers are kept in module-local paths, not exported
 // from the runtime render boundary.
 export {
-  WebGPURenderer,
   createWebGPURenderer,
   assertWebGPUStartupContract,
 } from './webgpu';
 export type {
+  WebGPURenderer,
   GpuFault,
   GpuFaultCallback,
   WebGPURendererExecutionState,
