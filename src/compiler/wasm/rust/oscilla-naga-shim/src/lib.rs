@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use wasm_bindgen::prelude::*;
 
+mod lowering;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FormattedError {
     pub message: String,
@@ -272,18 +274,16 @@ impl SymbolResolver {
             let component_size_bytes = 4u32;
             let component_count = Self::component_count_from_resource_type(&resource.resource_type);
             let alignment = (component_count * component_size_bytes).clamp(4, 16);
-            current_offset_bytes =
-                ((current_offset_bytes + alignment - 1) / alignment) * alignment;
+            current_offset_bytes = ((current_offset_bytes + alignment - 1) / alignment) * alignment;
 
             let (lane_stride_bytes, component_stride_bytes) = match resource.packing {
                 MemoryPacking::Soa => (
                     component_size_bytes,
                     resource.cardinality * component_size_bytes,
                 ),
-                MemoryPacking::Aos => (
-                    component_count * component_size_bytes,
-                    component_size_bytes,
-                ),
+                MemoryPacking::Aos => {
+                    (component_count * component_size_bytes, component_size_bytes)
+                }
             };
 
             let storage_location = if resource.id.starts_with("state:") {
@@ -1186,7 +1186,10 @@ fn emit_statement_block(
                         format!("Function [{}]", function_ir.name),
                     )
                 })?;
-                if matches!(resolved.storage_location, ResourceStorageLocation::Texture2D) {
+                if matches!(
+                    resolved.storage_location,
+                    ResourceStorageLocation::Texture2D
+                ) {
                     return Err(make_error(
                         format!(
                             "Symbolic resource '{}' resolves to Texture2D and cannot be lowered as scalar buffer store",
@@ -1403,8 +1406,8 @@ fn compile_internal(
             "Lowering symbolic expressions",
         )]
     })?;
-    let emitted_wgsl =
-        emit_module_to_wgsl(&module_ir, &resolver, max_active_lanes).map_err(|error| vec![error])?;
+    let emitted_wgsl = emit_module_to_wgsl(&module_ir, &resolver, max_active_lanes)
+        .map_err(|error| vec![error])?;
 
     let module = naga::front::wgsl::parse_str(&emitted_wgsl).map_err(|error| {
         vec![make_error(
