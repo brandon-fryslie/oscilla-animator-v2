@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CRATE_DIR="$ROOT_DIR/src/compiler/wasm/rust/oscilla-naga-shim"
+CRATE_DIR="$ROOT_DIR/src/compiler/wasm/rust/oscilla-naga-translator"
 PKG_DIR="$ROOT_DIR/src/compiler/wasm/pkg"
 TARGET_DIR="$CRATE_DIR/target"
 
@@ -25,8 +25,8 @@ else
 fi
 mkdir -p "$PKG_DIR"
 wasm-bindgen \
-  "$TARGET_DIR/wasm32-unknown-unknown/release/oscilla_naga_shim.wasm" \
+  "$TARGET_DIR/wasm32-unknown-unknown/release/oscilla_naga_translator.wasm" \
   --target web \
   --out-dir "$PKG_DIR"
 
-echo "Built Rust/WASM naga shim into $PKG_DIR"
+echo "Built Rust/WASM naga translator into $PKG_DIR"
