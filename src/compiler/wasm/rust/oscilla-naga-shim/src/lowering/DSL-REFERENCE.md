@@ -144,7 +144,7 @@ Notes:
 | `if_then(cond, body)` | `if (cond) { ... }` | single-branch conditional | `Statement::If` with empty reject | `f.if_then(cond, |b| { b.store_buffer(...); });` |
 | `if_then_else(cond,accept,reject)` | `if (cond) { ... } else { ... }` | two-branch conditional | `Statement::If` | `f.if_then_else(cond, |a| {...}, |r| {...});` |
 | `loop_body(body)` | `loop { ... }` | explicit loop blocks | `Statement::Loop` | `f.loop_body(|b| { ... });` |
-| `break_if(cond)` | `break if cond;` loop break condition | structured loop exits | `Loop.break_if = Some(cond)` | `b.break_if(done);` |
+| `break_if(cond)` | `break if cond;` loop break condition | structured loop exits inside `loop_body` closures only (fail-fast panic if used at function root or inside `if_then`/`if_then_else`) | `Loop.break_if = Some(cond)` | `b.break_if(done);` |
 | `emit_break()` | `break;` | immediate loop/switch exit | `Statement::Break` | `b.emit_break();` |
 | `emit_continue()` | `continue;` | continue current loop | `Statement::Continue` | `b.emit_continue();` |
 | `emit_return()` | `return;` | function early return | `Statement::Return { None }` | `f.emit_return();` |
