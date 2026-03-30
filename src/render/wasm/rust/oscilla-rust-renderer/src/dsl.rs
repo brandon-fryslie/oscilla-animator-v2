@@ -136,6 +136,7 @@ impl ModuleBuilder {
                 binding: Some(naga::ResourceBinding { group, binding }),
                 ty,
                 init: None,
+                memory_decorations: Default::default(),
             },
             naga::Span::UNDEFINED,
         )
@@ -155,6 +156,7 @@ impl ModuleBuilder {
                 binding: Some(naga::ResourceBinding { group, binding }),
                 ty,
                 init: None,
+                memory_decorations: Default::default(),
             },
             naga::Span::UNDEFINED,
         )
@@ -172,7 +174,11 @@ impl ModuleBuilder {
             stage,
             early_depth_test: None,
             workgroup_size,
+            workgroup_size_overrides: None,
             function: function.finish(),
+            incoming_ray_payload: None,
+            mesh_info: None,
+            task_payload: None,
         });
         self.module.entry_points.len() - 1
     }
@@ -237,6 +243,7 @@ impl ModuleBuilder {
                 binding: Some(naga::ResourceBinding { group, binding }),
                 ty,
                 init: None,
+                memory_decorations: Default::default(),
             },
             naga::Span::UNDEFINED,
         )
@@ -932,6 +939,7 @@ impl<'a> FnBodyBuilder<'a> {
             offset: None,
             level: naga::SampleLevel::Auto,
             depth_ref: None,
+            clamp_to_edge: false,
         })
     }
 
@@ -951,6 +959,7 @@ impl<'a> FnBodyBuilder<'a> {
             offset: None,
             level: naga::SampleLevel::Exact(level),
             depth_ref: None,
+            clamp_to_edge: false,
         })
     }
 
@@ -1139,11 +1148,11 @@ impl<'a> FnBodyBuilder<'a> {
     }
 
     pub fn storage_barrier(&mut self) {
-        self.push_statement(naga::Statement::Barrier(naga::Barrier::STORAGE));
+        self.push_statement(naga::Statement::ControlBarrier(naga::Barrier::STORAGE));
     }
 
     pub fn workgroup_barrier(&mut self) {
-        self.push_statement(naga::Statement::Barrier(naga::Barrier::WORK_GROUP));
+        self.push_statement(naga::Statement::ControlBarrier(naga::Barrier::WORK_GROUP));
     }
 
     pub fn atomic_add(
@@ -1160,7 +1169,7 @@ impl<'a> FnBodyBuilder<'a> {
             pointer,
             fun: naga::AtomicFunction::Add,
             value,
-            result,
+            result: Some(result),
         });
         result
     }
@@ -1179,7 +1188,7 @@ impl<'a> FnBodyBuilder<'a> {
             pointer,
             fun: naga::AtomicFunction::Exchange { compare: None },
             value,
-            result,
+            result: Some(result),
         });
         result
     }

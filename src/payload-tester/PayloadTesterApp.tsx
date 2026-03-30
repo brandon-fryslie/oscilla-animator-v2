@@ -1,125 +1,35 @@
 /**
  * PayloadTesterApp — Root component for the standalone payload tester.
  *
- * Manages renderer lifecycle and layout. No MobX, no stores, no dockview.
- * Imports only: RustWasmWebGPURenderer, boundary-contract, fixtures.
+ * Minimal stub: renderer pipeline deleted (scorched earth), rebuild in progress.
+ * Layout preserved: left fixture selector, center editor, right canvas placeholder, bottom status bar.
  */
 
-import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { createWebGPURenderer, type WebGPURenderer, type GpuFault } from '../render/webgpu/RustWasmWebGPURenderer';
-import {
-  validateRawPayload,
-  publishPipelineInstallPayload,
-  publishFramePayload,
-} from '../render/rust/boundary-contract';
-import { PAYLOAD_FIXTURES, type PayloadFixture, isWgslPassFixture } from '../render/rust/fixtures';
+import React, { useState, useCallback } from 'react';
+import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { PayloadEditor } from './PayloadEditor';
 
-type RendererState =
-  | { kind: 'booting' }
-  | { kind: 'ready' }
-  | { kind: 'error'; message: string };
-
-type SubmitResult =
+type StatusMessage =
   | { kind: 'idle' }
-  | { kind: 'ok'; message: string }
+  | { kind: 'info'; message: string }
   | { kind: 'error'; message: string };
 
 export const PayloadTesterApp: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<WebGPURenderer | null>(null);
-  const [rendererState, setRendererState] = useState<RendererState>({ kind: 'booting' });
-  const [submitResult, setSubmitResult] = useState<SubmitResult>({ kind: 'idle' });
-  const [json, setJson] = useState(() => {
-    if (PAYLOAD_FIXTURES.length === 0) return '[]';
-    const first = PAYLOAD_FIXTURES[0];
-    return isWgslPassFixture(first)
-      ? JSON.stringify(first.passes, null, 2)
-      : JSON.stringify({ install: first.install, frame: first.frame }, null, 2);
-  });
-
-  // Boot renderer on mount
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let cancelled = false;
-    createWebGPURenderer(canvas, {
-      onGpuFault: (fault: GpuFault) => {
-        console.error('GPU fault:', fault);
-        setRendererState({ kind: 'error', message: `GPU fault: ${fault.message}` });
-      },
-    })
-      .then((renderer) => {
-        if (cancelled) return;
-        rendererRef.current = renderer;
-        setRendererState({ kind: 'ready' });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error('Renderer boot failed:', err);
-        setRendererState({ kind: 'error', message: msg });
-      });
-
-    return () => {
-      cancelled = true;
-      const renderer = rendererRef.current;
-      if (renderer) {
-        renderer.setGpuFaultCallback(null);
-        renderer.dispose();
-        rendererRef.current = null;
-      }
-    };
-  }, []);
+  const [status, setStatus] = useState<StatusMessage>({ kind: 'idle' });
+  const [json, setJson] = useState(() =>
+    PAYLOAD_FIXTURES.length > 0
+      ? JSON.stringify(PAYLOAD_FIXTURES[0].payload, null, 2)
+      : '{}',
+  );
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    if (isWgslPassFixture(fixture)) {
-      setJson(JSON.stringify(fixture.passes, null, 2));
-    } else {
-      setJson(JSON.stringify({ install: fixture.install, frame: fixture.frame }, null, 2));
-    }
-    setSubmitResult({ kind: 'idle' });
+    setJson(JSON.stringify(fixture.payload, null, 2));
+    setStatus({ kind: 'idle' });
   }, []);
 
-  const handleSubmit = useCallback(async (rawJson: string) => {
-    const renderer = rendererRef.current;
-    if (!renderer) {
-      setSubmitResult({ kind: 'error', message: 'Renderer not yet ready' });
-      return;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawJson);
-    } catch (e) {
-      setSubmitResult({ kind: 'error', message: `JSON parse error: ${e instanceof Error ? e.message : String(e)}` });
-      return;
-    }
-
-    // Detect payload shape: boundary-contract {install, frame} vs raw pass array
-    const obj = parsed as Record<string, unknown>;
-    const isBoundaryPayload = obj !== null && typeof obj === 'object' && 'install' in obj && 'frame' in obj;
-
-    try {
-      if (isBoundaryPayload) {
-        // [LAW:single-enforcer] Validation + publishing go through boundary-contract.
-        const normalized = await publishPipelineInstallPayload(renderer, obj.install);
-        publishFramePayload(renderer, obj.frame);
-        setSubmitResult({ kind: 'ok', message: `Installed pipeline (${normalized.pipeline.passes.length} pass(es)) + published frame` });
-      } else {
-        const validation = validateRawPayload(parsed);
-        if (!validation.valid) {
-          setSubmitResult({ kind: 'error', message: validation.errors.join('\n') });
-          return;
-        }
-        await renderer.rebuildGpuPipelines(validation.passes);
-        setSubmitResult({ kind: 'ok', message: `Submitted ${validation.passes.length} pass(es) successfully` });
-      }
-    } catch (e) {
-      setSubmitResult({ kind: 'error', message: `Renderer error: ${e instanceof Error ? e.message : String(e)}` });
-    }
+  const handleSubmit = useCallback((_rawJson: string) => {
+    setStatus({ kind: 'info', message: 'Submit not yet implemented — renderer rebuild in progress' });
   }, []);
 
   return (
@@ -140,22 +50,13 @@ export const PayloadTesterApp: React.FC = () => {
             json={json}
             onJsonChange={setJson}
             onSubmit={handleSubmit}
-            disabled={rendererState.kind !== 'ready'}
+            disabled={false}
           />
         </div>
 
-        {/* Right: canvas preview */}
+        {/* Right: canvas placeholder */}
         <div style={{ flex: 1, minWidth: 200, background: '#000', position: 'relative' }}>
-          <canvas
-            ref={canvasRef}
-            style={{ width: '100%', height: '100%', display: 'block' }}
-          />
-          {rendererState.kind === 'booting' && (
-            <div style={overlayStyle}>Booting renderer...</div>
-          )}
-          {rendererState.kind === 'error' && (
-            <div style={{ ...overlayStyle, color: '#ff6b6b' }}>{rendererState.message}</div>
-          )}
+          <div style={overlayStyle}>Renderer not available — rebuild in progress</div>
         </div>
       </div>
 
@@ -170,10 +71,9 @@ export const PayloadTesterApp: React.FC = () => {
         fontFamily: '"SF Mono", Monaco, Consolas, monospace',
         background: '#141517',
       }}>
-        {rendererState.kind === 'booting' && <span style={{ color: '#ffd43b' }}>Renderer booting...</span>}
-        {rendererState.kind === 'ready' && submitResult.kind === 'idle' && <span style={{ color: '#69db7c' }}>Renderer ready</span>}
-        {submitResult.kind === 'ok' && <span style={{ color: '#51cf66' }}>{submitResult.message}</span>}
-        {submitResult.kind === 'error' && <span style={{ color: '#ff6b6b' }}>{submitResult.message}</span>}
+        {status.kind === 'idle' && <span style={{ color: '#888' }}>Renderer unavailable</span>}
+        {status.kind === 'info' && <span style={{ color: '#ffd43b' }}>{status.message}</span>}
+        {status.kind === 'error' && <span style={{ color: '#ff6b6b' }}>{status.message}</span>}
       </div>
     </div>
   );

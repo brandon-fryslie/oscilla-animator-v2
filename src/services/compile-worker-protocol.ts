@@ -53,8 +53,9 @@ export function toCompiledGpuPassSignature(
 export type CompileWorkerBackendResult =
   | {
       readonly kind: 'ok';
-      readonly program: SerializableGpuReadyCompiledProgramIR;
-      readonly compiledGpuBundle: CompiledGpuArtifactBundle;
+      readonly program: SerializableCompiledProgramIR;
+      // Null — WGSL generation now happens Rust-side via install_pipeline.
+      readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
       readonly warnings: readonly CompileError[];
     }
   | {
@@ -77,7 +78,6 @@ export interface CompileWorkerRequest {
   readonly kind: 'compile';
   readonly requestId: number;
   readonly patchRevision: number;
-  readonly nagaShimWasmBytes: ArrayBuffer;
   /**
    * Serialized patch payload.
    * [LAW:single-enforcer] Worker message boundary is the single clone-safety boundary.
