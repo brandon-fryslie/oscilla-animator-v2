@@ -275,6 +275,10 @@ impl FnBuilder {
         self.with_root(|b| b.set_uniform_source(uniform_source));
     }
 
+    pub fn set_result(&mut self, ty: naga::Handle<naga::Type>, binding: Option<naga::Binding>) {
+        self.function.result = Some(naga::FunctionResult { ty, binding });
+    }
+
     pub fn global(&mut self, handle: naga::Handle<naga::GlobalVariable>) -> Expr {
         self.with_root(|b| b.global(handle))
     }
@@ -510,6 +514,10 @@ impl FnBuilder {
 
     pub fn emit_return(&mut self) {
         self.with_root(|inner| inner.emit_return());
+    }
+
+    pub fn emit_return_value(&mut self, value: Expr) {
+        self.with_root(|inner| inner.emit_return_value(value));
     }
 
     pub fn buffer_address(
@@ -1029,6 +1037,10 @@ impl<'a> FnBodyBuilder<'a> {
 
     pub fn emit_return(&mut self) {
         self.push_statement(naga::Statement::Return { value: None });
+    }
+
+    pub fn emit_return_value(&mut self, value: Expr) {
+        self.push_statement(naga::Statement::Return { value: Some(value) });
     }
 
     pub fn buffer_address(
