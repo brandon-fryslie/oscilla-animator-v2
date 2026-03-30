@@ -1,27 +1,19 @@
 mod allocator;
-mod compute;
-mod default_shaders;
 mod engine;
 mod error_boundary;
-mod memory;
-mod render;
 mod scheduler;
-mod shader_prelude;
 mod telemetry;
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 
-use js_sys::{Array, Function, Object, Reflect};
+use js_sys::Function;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DedicatedWorkerGlobalScope, OffscreenCanvas};
 
-use crate::compute::CompilerComputePassSpec;
-use crate::engine::{Engine, EngineConfig, PipelineRebuildFailure};
+use crate::engine::Engine;
 use crate::error_boundary::install_panic_hook;
-use crate::memory::MemoryManifest;
 
 thread_local! {
     static ENGINE: RefCell<Option<Engine>> = RefCell::new(None);
@@ -31,100 +23,6 @@ thread_local! {
 
 fn worker_scope() -> Result<DedicatedWorkerGlobalScope, JsValue> {
     Ok(js_sys::global().dyn_into::<DedicatedWorkerGlobalScope>()?)
-}
-
-fn read_required_string_field(value: &JsValue, field: &str) -> Result<String, JsValue> {
-    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
-    raw.as_string().ok_or_else(|| {
-        JsValue::from_str(format!("GPU pass field '{}' must be a string", field).as_str())
-    })
-}
-
-fn read_optional_memory_manifest_field(
-    value: &JsValue,
-    field: &str,
-) -> Result<Option<MemoryManifest>, JsValue> {
-    let raw = js_sys::Reflect::get(value, &JsValue::from_str(field))?;
-    if raw.is_undefined() || raw.is_null() {
-        return Ok(None);
-    }
-    let json = js_sys::JSON::stringify(&raw)?
-        .as_string()
-        .ok_or_else(|| JsValue::from_str("GPU pass memoryManifest must be JSON-serializable"))?;
-    let manifest: MemoryManifest = serde_json::from_str(&json).map_err(|error| {
-        JsValue::from_str(
-            format!("GPU pass field '{}' is not a valid MemoryManifest: {}", field, error)
-                .as_str(),
-        )
-    })?;
-    Ok(Some(manifest))
-}
-
-fn pipeline_rebuild_failure_to_js_value(error: PipelineRebuildFailure) -> JsValue {
-    let object = Object::new();
-    let _ = Reflect::set(
-        &object,
-        &JsValue::from_str("code"),
-        &JsValue::from_str(error.code),
-    );
-    let _ = Reflect::set(
-        &object,
-        &JsValue::from_str("passId"),
-        &JsValue::from_str(error.pass_id.as_str()),
-    );
-    let _ = Reflect::set(
-        &object,
-        &JsValue::from_str("message"),
-        &JsValue::from_str(error.message.as_str()),
-    );
-    object.into()
-}
-
-fn parse_gpu_pass_specs(passes: JsValue) -> Result<Vec<CompilerComputePassSpec>, JsValue> {
-    if !Array::is_array(&passes) {
-        return Err(JsValue::from_str("GPU pass payload must be an array"));
-    }
-    let list = Array::from(&passes);
-    if list.length() == 0 {
-        return Err(JsValue::from_str(
-            "GPU pass payload must contain at least one pass",
-        ));
-    }
-    let mut specs = Vec::with_capacity(list.length() as usize);
-    for idx in 0..list.length() {
-        let item = list.get(idx);
-        if !item.is_object() {
-            return Err(JsValue::from_str(
-                format!("GPU pass payload item {} must be an object", idx).as_str(),
-            ));
-        }
-        let stage = read_required_string_field(&item, "stage")?;
-        match stage.as_str() {
-            "compute" => {
-                // [LAW:single-enforcer] ComputeDispatcher is the only runtime owner
-                // of executable pass compilation in this engine revision.
-                specs.push(CompilerComputePassSpec {
-                    pass_id: read_required_string_field(&item, "passId")?,
-                    entry_point: read_required_string_field(&item, "entryPoint")?,
-                    wgsl: read_required_string_field(&item, "wgsl")?,
-                    memory_manifest: read_optional_memory_manifest_field(&item, "memoryManifest")?,
-                });
-            }
-            _ => {
-                return Err(JsValue::from_str(
-                    format!("GPU pass {} has unsupported stage '{}'", idx, stage).as_str(),
-                ));
-            }
-        }
-    }
-    if specs.is_empty() {
-        return Err(JsValue::from_str(
-            // [LAW:no-silent-fallbacks] The compute pipeline install boundary
-            // must fail explicitly when no executable compute pass is present.
-            "GPU pass payload must contain at least one compute pass",
-        ));
-    }
-    Ok(specs)
 }
 
 fn should_schedule_next_frame() -> bool {
@@ -175,68 +73,24 @@ fn arm_worker_loop_if_needed() -> Result<(), JsValue> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// WASM Exports
+// ---------------------------------------------------------------------------
+
 #[wasm_bindgen]
 pub async fn init_engine(
     canvas: OffscreenCanvas,
-    max_particles: u32,
-    max_shapes: u32,
-    debug_readback_hz: u32,
     initial_width: u32,
     initial_height: u32,
 ) -> Result<(), JsValue> {
     install_panic_hook();
-    let config = EngineConfig {
-        max_particles: max_particles as usize,
-        max_shapes: max_shapes as usize,
-        debug_readback_hz,
-    };
-    let engine = Engine::new(canvas, config, initial_width, initial_height).await?;
+    let engine = Engine::new(canvas, initial_width, initial_height).await?;
     ENGINE.with(|engine_cell| {
         // [LAW:single-enforcer] The worker runtime stores one canonical engine
         // instance; worker callbacks and rebuild commands mutate this owner only.
         *engine_cell.borrow_mut() = Some(engine);
     });
     start_worker_loop()
-}
-
-#[wasm_bindgen]
-pub fn attach_shared_input(shared_input: js_sys::SharedArrayBuffer) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before attaching shared input")
-        })?;
-        engine.attach_shared_input(shared_input);
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn attach_shared_shape_bank(
-    shared_shape_bank: js_sys::SharedArrayBuffer,
-) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before attaching shared shape bank")
-        })?;
-        engine.attach_shared_shape_bank(shared_shape_bank);
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn attach_shared_sink_table(
-    shared_sink_table: js_sys::SharedArrayBuffer,
-) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before attaching shared sink table")
-        })?;
-        engine.attach_shared_sink_table(shared_sink_table);
-        Ok(())
-    })
 }
 
 #[wasm_bindgen]
@@ -264,71 +118,70 @@ pub fn resume_engine() -> Result<(), JsValue> {
     arm_worker_loop_if_needed()
 }
 
+/// Phase 1: Pipeline Install — receives the full PipelineInstallPayload JSON.
+/// Returns an InstallReceipt JSON object.
+///
+/// STUB: Returns error receipt until the MMU + AST translator are implemented.
 #[wasm_bindgen]
-pub fn set_debug_readback_hz(debug_readback_hz: u32) -> Result<(), JsValue> {
+pub fn install_pipeline(_payload: JsValue) -> Result<JsValue, JsValue> {
+    // TODO: Deserialize PipelineInstallPayload, run MMU, translate AST, compile pipelines
+    let receipt = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &receipt,
+        &JsValue::from_str("status"),
+        &JsValue::from_str("error"),
+    )?;
+    js_sys::Reflect::set(
+        &receipt,
+        &JsValue::from_str("compilationTimeMs"),
+        &JsValue::from_f64(0.0),
+    )?;
+    let diagnostics = js_sys::Array::new();
+    let diag = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &diag,
+        &JsValue::from_str("severity"),
+        &JsValue::from_str("error"),
+    )?;
+    js_sys::Reflect::set(
+        &diag,
+        &JsValue::from_str("phase"),
+        &JsValue::from_str("manifest_allocation"),
+    )?;
+    js_sys::Reflect::set(
+        &diag,
+        &JsValue::from_str("message"),
+        &JsValue::from_str("install_pipeline not yet implemented"),
+    )?;
+    diagnostics.push(&diag.into());
+    js_sys::Reflect::set(
+        &receipt,
+        &JsValue::from_str("diagnostics"),
+        &diagnostics.into(),
+    )?;
+    Ok(receipt.into())
+}
+
+/// Phase 2 Avenue 1: Update globals (Float32Array written to uniform buffer).
+///
+/// STUB: No-op until MMU allocates the globals buffer.
+#[wasm_bindgen]
+pub fn update_globals(_data: &[u8]) -> Result<(), JsValue> {
+    // TODO: queue.write_buffer(globals_buffer, 0, data)
+    Ok(())
+}
+
+/// Phase 2: Execute the compiled roster (compute → draw_prep → render → submit).
+///
+/// STUB: Clears canvas to dark gray so we can visually confirm the engine is alive.
+#[wasm_bindgen]
+pub fn render_frame() -> Result<(), JsValue> {
     ENGINE.with(|engine_cell| {
         let mut engine_ref = engine_cell.borrow_mut();
         let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before set_debug_readback_hz")
+            JsValue::from_str("Rust engine must be initialized before render_frame")
         })?;
-        // [LAW:single-enforcer] Debug readback cadence changes are applied at
-        // one engine boundary so worker telemetry toggles stay deterministic.
-        engine.set_debug_readback_hz(debug_readback_hz);
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub fn set_sink_pointer_map(sink_pointer_map_json: String) -> Result<(), JsValue> {
-    let sink_pointer_map: HashMap<String, String> = if sink_pointer_map_json.is_empty()
-        || sink_pointer_map_json == "{}"
-    {
-        HashMap::new()
-    } else {
-        serde_json::from_str(&sink_pointer_map_json)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse sink pointer map: {}", e)))?
-    };
-
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before set_sink_pointer_map")
-        })?;
-        engine
-            .set_sink_pointer_map(sink_pointer_map)
-            .map_err(|e| JsValue::from_str(&e))?;
-        Ok(())
-    })
-}
-
-#[wasm_bindgen]
-pub async fn rebuild_gpu_pipelines(passes: JsValue) -> Result<(), JsValue> {
-    let pass_specs = parse_gpu_pass_specs(passes)?;
-    let mut engine = ENGINE.with(|engine_cell| {
-        engine_cell.borrow_mut().take().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before rebuild_gpu_pipelines")
-        })
-    })?;
-    let rebuild_result = engine.rebuild_gpu_pipelines(pass_specs.as_slice()).await;
-    ENGINE.with(|engine_cell| {
-        *engine_cell.borrow_mut() = Some(engine);
-    });
-    arm_worker_loop_if_needed()?;
-    rebuild_result.map_err(pipeline_rebuild_failure_to_js_value)
-}
-
-// [RECOVER-11] Upload MSDF atlas data for Type5 text rendering.
-// Data is a Uint32Array: [0]=width, [1]=height, [2..]=packed RGBA pixels.
-#[wasm_bindgen]
-pub fn upload_atlas_data(data: js_sys::Uint32Array) -> Result<(), JsValue> {
-    ENGINE.with(|engine_cell| {
-        let mut engine_ref = engine_cell.borrow_mut();
-        let engine = engine_ref.as_mut().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before upload_atlas_data")
-        })?;
-        let words = data.to_vec();
-        engine.upload_atlas_data(&words);
-        Ok(())
+        engine.render_clear_frame()
     })
 }
 
@@ -352,25 +205,7 @@ pub fn take_frame_pacing_packet() -> Result<JsValue, JsValue> {
             JsValue::from_str("Rust engine must be initialized before take_frame_pacing_packet")
         })?;
         if let Some(packet) = engine.take_frame_pacing_packet() {
-            // [LAW:single-enforcer] JS serialization of scheduler observability
-            // packets is owned by telemetry.rs so this boundary stays thin.
             return packet.to_js_value();
-        }
-        Ok(JsValue::NULL)
-    })
-}
-
-// [RECOVER-10] [LAW:single-enforcer] One polling boundary for structured
-// readback data (indirect args + instance probe), mirroring telemetry pattern.
-#[wasm_bindgen]
-pub fn take_readback_snapshot() -> Result<JsValue, JsValue> {
-    ENGINE.with(|engine_cell| {
-        let engine_ref = engine_cell.borrow();
-        let engine = engine_ref.as_ref().ok_or_else(|| {
-            JsValue::from_str("Rust engine must be initialized before take_readback_snapshot")
-        })?;
-        if let Some(snapshot) = engine.take_readback_snapshot() {
-            return snapshot.to_js_value();
         }
         Ok(JsValue::NULL)
     })
