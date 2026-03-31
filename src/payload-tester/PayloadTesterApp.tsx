@@ -157,7 +157,18 @@ export const PayloadTesterApp: React.FC = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    setJson(JSON.stringify(fixture.payload, null, 2));
+    const fixtureJson = JSON.stringify(fixture.payload, null, 2);
+    setJson(fixtureJson);
+    // Auto-submit when a fixture is selected
+    const worker = workerRef.current;
+    if (worker) {
+      const installMsg: RustRendererInstallPipelineMessage = {
+        type: 'INSTALL_PIPELINE',
+        payloadJson: fixtureJson,
+      };
+      worker.postMessage(installMsg);
+      setStatus({ kind: 'info', message: 'Installing pipeline...' });
+    }
   }, []);
 
   const handleSubmit = useCallback((rawJson: string) => {

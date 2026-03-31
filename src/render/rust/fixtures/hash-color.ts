@@ -121,6 +121,9 @@ export const hashColor: PipelineInstallPayload = {
           { type: 'Let', name: 'iid', value: { type: 'Intrinsic', name: 'instance_index' } },
           { type: 'Let', name: 'px', value: { type: 'LoadField', symbolId: 'dots:pos_x', index: { type: 'VarRef', name: 'iid' } } },
           { type: 'Let', name: 'py', value: { type: 'LoadField', symbolId: 'dots:pos_y', index: { type: 'VarRef', name: 'iid' } } },
+          { type: 'Let', name: 'cr', value: { type: 'LoadField', symbolId: 'dots:color_r', index: { type: 'VarRef', name: 'iid' } } },
+          { type: 'Let', name: 'cg', value: { type: 'LoadField', symbolId: 'dots:color_g', index: { type: 'VarRef', name: 'iid' } } },
+          { type: 'Let', name: 'cb', value: { type: 'LoadField', symbolId: 'dots:color_b', index: { type: 'VarRef', name: 'iid' } } },
           {
             type: 'ReturnVertex',
             position: {
@@ -131,17 +134,23 @@ export const hashColor: PipelineInstallPayload = {
                 { type: 'LiteralF32', value: 1.0 },
               ],
             },
-            varyings: {},
+            varyings: {
+              color: {
+                type: 'Construct', dataType: 'vec4<f32>', args: [
+                  { type: 'VarRef', name: 'cr' },
+                  { type: 'VarRef', name: 'cg' },
+                  { type: 'VarRef', name: 'cb' },
+                  { type: 'LiteralF32', value: 1.0 },
+                ],
+              },
+            },
           },
         ],
         fragmentAst: [
-          { type: 'Let', name: 'r', value: { type: 'LoadField', symbolId: 'dots:color_r', index: { type: 'LiteralU32', value: 0 } } },
-          { type: 'Let', name: 'g', value: { type: 'LoadField', symbolId: 'dots:color_g', index: { type: 'LiteralU32', value: 0 } } },
-          { type: 'Let', name: 'b', value: { type: 'LoadField', symbolId: 'dots:color_b', index: { type: 'LiteralU32', value: 0 } } },
           {
             type: 'ReturnFragment',
             outputs: {
-              color: { type: 'Construct', dataType: 'vec4<f32>', args: [{ type: 'VarRef', name: 'r' }, { type: 'VarRef', name: 'g' }, { type: 'VarRef', name: 'b' }, { type: 'LiteralF32', value: 1.0 }] },
+              color: { type: 'VarRef', name: 'color' },
             },
           },
         ],
