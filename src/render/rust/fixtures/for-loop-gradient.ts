@@ -164,6 +164,7 @@ export const forLoopGradient: PipelineInstallPayload = {
         vertexAst: [
           { type: 'Let', name: 'iid', value: { type: 'Intrinsic', name: 'instance_index' } },
           { type: 'Let', name: 'px', value: { type: 'LoadField', symbolId: 'bars:pos_x', index: { type: 'VarRef', name: 'iid' } } },
+          { type: 'Let', name: 'b', value: { type: 'LoadField', symbolId: 'bars:brightness', index: { type: 'VarRef', name: 'iid' } } },
           {
             type: 'ReturnVertex',
             position: {
@@ -174,11 +175,22 @@ export const forLoopGradient: PipelineInstallPayload = {
                 { type: 'LiteralF32', value: 1.0 },
               ],
             },
-            varyings: {},
+            // Pass brightness as varying so fragment can use it per-instance
+            varyings: {
+              brightness: {
+                type: 'Construct', dataType: 'vec4<f32>', args: [
+                  { type: 'VarRef', name: 'b' },
+                  { type: 'LiteralF32', value: 0.0 },
+                  { type: 'LiteralF32', value: 0.0 },
+                  { type: 'LiteralF32', value: 0.0 },
+                ],
+              },
+            },
           },
         ],
         fragmentAst: [
-          { type: 'Let', name: 'b', value: { type: 'LoadField', symbolId: 'bars:brightness', index: { type: 'LiteralU32', value: 0 } } },
+          // Read brightness from the varying (x component of the vec4)
+          { type: 'Let', name: 'b', value: { type: 'Swizzle', source: { type: 'VarRef', name: 'brightness' }, mask: 'x' } },
           {
             type: 'ReturnFragment',
             outputs: {
