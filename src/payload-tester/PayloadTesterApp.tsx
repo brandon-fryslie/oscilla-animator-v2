@@ -33,11 +33,39 @@ export const PayloadTesterApp: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const latestJsonRef = useRef(json);
+  const rendererReadyRef = useRef(false);
+  const pendingInstallRef = useRef<string | null>(null);
   const rendererReady = status.kind === 'ready' || status.kind === 'info';
 
   useEffect(() => {
     latestJsonRef.current = json;
   }, [json]);
+
+  useEffect(() => {
+    rendererReadyRef.current = rendererReady;
+  }, [rendererReady]);
+
+  const installPipeline = useCallback((payloadJson: string) => {
+    const worker = workerRef.current;
+
+    // [LAW:one-source-of-truth] All install requests share one dispatch path
+    // so fixture clicks and manual submit behave identically.
+    if (!worker || !rendererReadyRef.current) {
+      pendingInstallRef.current = payloadJson;
+      setStatus({
+        kind: 'info',
+        message: 'Renderer not ready yet. Queued install request.',
+      });
+      return;
+    }
+
+    const installMsg: RustRendererInstallPipelineMessage = {
+      type: 'INSTALL_PIPELINE',
+      payloadJson,
+    };
+    worker.postMessage(installMsg);
+    setStatus({ kind: 'info', message: 'Installing pipeline...' });
+  }, []);
 
   // Boot the renderer worker on mount
   useEffect(() => {
@@ -79,7 +107,19 @@ export const PayloadTesterApp: React.FC = () => {
 
         switch (msg.type) {
           case 'BOOTSTRAP_SUCCESS':
+            rendererReadyRef.current = true;
             setStatus({ kind: 'ready', message: 'Renderer ready' });
+            if (pendingInstallRef.current) {
+              const payloadJson = pendingInstallRef.current;
+              pendingInstallRef.current = null;
+              if (worker) {
+                worker.postMessage({
+                  type: 'INSTALL_PIPELINE',
+                  payloadJson,
+                } satisfies RustRendererInstallPipelineMessage);
+                setStatus({ kind: 'info', message: 'Installing queued pipeline...' });
+              }
+            }
             break;
           case 'INSTALL_PIPELINE_SUCCESS': {
             // Count passes from the current payload
@@ -158,26 +198,12 @@ export const PayloadTesterApp: React.FC = () => {
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
     const fixtureJson = JSON.stringify(fixture.payload, null, 2);
+    latestJsonRef.current = fixtureJson;
     setJson(fixtureJson);
-    // Auto-submit when a fixture is selected
-    const worker = workerRef.current;
-    if (worker) {
-      const installMsg: RustRendererInstallPipelineMessage = {
-        type: 'INSTALL_PIPELINE',
-        payloadJson: fixtureJson,
-      };
-      worker.postMessage(installMsg);
-      setStatus({ kind: 'info', message: 'Installing pipeline...' });
-    }
-  }, []);
+    installPipeline(fixtureJson);
+  }, [installPipeline]);
 
   const handleSubmit = useCallback((rawJson: string) => {
-    const worker = workerRef.current;
-    if (!worker) {
-      setStatus({ kind: 'error', message: 'Worker not initialized' });
-      return;
-    }
-
     // Validate JSON
     try {
       JSON.parse(rawJson);
@@ -185,14 +211,9 @@ export const PayloadTesterApp: React.FC = () => {
       setStatus({ kind: 'error', message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}` });
       return;
     }
-
-    const installMsg: RustRendererInstallPipelineMessage = {
-      type: 'INSTALL_PIPELINE',
-      payloadJson: rawJson,
-    };
-    worker.postMessage(installMsg);
-    setStatus({ kind: 'info', message: 'Installing pipeline...' });
-  }, []);
+    latestJsonRef.current = rawJson;
+    installPipeline(rawJson);
+  }, [installPipeline]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>

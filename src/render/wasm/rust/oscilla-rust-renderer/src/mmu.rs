@@ -30,6 +30,7 @@ pub enum BufferKind {
     GlobalUniform,
     ArenaScalar,
     DomainStandard,
+    DomainAtomic,
 }
 
 /// Static geometry allocated from the shape bank.
@@ -55,6 +56,9 @@ pub struct GpuMemoryArena {
     pub globals_buffer: wgpu::Buffer,
     pub scalars_buffer: wgpu::Buffer,
     pub domain_buffers: HashMap<String, wgpu::Buffer>,
+    /// Separate atomic buffers for domains with atomic fields (bifurcation).
+    /// Only present for domains that have at least one atomic<u32>/atomic<i32> field.
+    pub domain_atomic_buffers: HashMap<String, wgpu::Buffer>,
     pub shape_bank: HashMap<String, AllocatedShape>,
     pub indirect_buffer: wgpu::Buffer,
     pub textures: HashMap<String, AllocatedTexture>,
@@ -147,43 +151,73 @@ pub fn allocate_arena(
     });
 
     // Phase B: Domains (Storage buffers, SoA with 256-byte alignment per field)
+    // Bifurcation: atomic fields go to a separate buffer because WGSL prohibits
+    // bitcast on atomic types — they cannot coexist with f32-as-u32 in one binding.
     let mut domain_buffers = HashMap::new();
+    let mut domain_atomic_buffers = HashMap::new();
     let mut domain_keys: Vec<_> = manifest.domains.keys().collect();
     domain_keys.sort();
     for domain_id in &domain_keys {
         let spec = &manifest.domains[*domain_id];
         let capacity = spec.capacity;
-        let mut current_offset: u32 = 0;
+        let mut std_offset: u32 = 0;
+        let mut atomic_offset: u32 = 0;
 
         let mut field_keys: Vec<_> = spec.fields.keys().collect();
         field_keys.sort();
         for field_key in &field_keys {
             let field = &spec.fields[*field_key];
+            let is_atomic = field.wgsl_type.starts_with("atomic<");
             let symbol_id = format!("{}:{}", domain_id, field_key);
+
+            let (buffer_kind, word_offset) = if is_atomic {
+                let offset = atomic_offset;
+                atomic_offset += capacity;
+                atomic_offset = align_up(atomic_offset, DOMAIN_ALIGNMENT_WORDS);
+                (BufferKind::DomainAtomic, offset)
+            } else {
+                let offset = std_offset;
+                std_offset += capacity;
+                std_offset = align_up(std_offset, DOMAIN_ALIGNMENT_WORDS);
+                (BufferKind::DomainStandard, offset)
+            };
+
             symbol_map.insert(
                 symbol_id,
                 PhysicalSymbol {
-                    buffer_kind: BufferKind::DomainStandard,
+                    buffer_kind,
                     domain_id: Some((*domain_id).clone()),
-                    word_offset: current_offset,
+                    word_offset,
                     wgsl_type: field.wgsl_type.clone(),
                 },
             );
-            current_offset += capacity;
-            // Align next field to 256 bytes
-            current_offset = align_up(current_offset, DOMAIN_ALIGNMENT_WORDS);
         }
 
-        let buffer_bytes = ((current_offset * 4) as u64).max(MIN_BUFFER_BYTES);
+        // Standard buffer (f32/u32/i32 fields via bitcast)
+        let std_bytes = ((std_offset * 4) as u64).max(MIN_BUFFER_BYTES);
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some(&format!("domain_{}", domain_id)),
-            size: buffer_bytes,
+            label: Some(&format!("domain_{}_std", domain_id)),
+            size: std_bytes,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         domain_buffers.insert((*domain_id).clone(), buffer);
+
+        // Atomic buffer (only if domain has atomic fields)
+        if atomic_offset > 0 {
+            let atomic_bytes = ((atomic_offset * 4) as u64).max(MIN_BUFFER_BYTES);
+            let atomic_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("domain_{}_atomic", domain_id)),
+                size: atomic_bytes,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            domain_atomic_buffers.insert((*domain_id).clone(), atomic_buffer);
+        }
     }
 
     // Phase D: Shape bank (Vertex + Index buffers)
@@ -356,18 +390,22 @@ pub fn allocate_arena(
         queue.write_buffer(&scalars_buffer, 0, bytemuck::cast_slice(&clear_data));
     }
 
-    // Domains: write clear values for each field
+    // Domains: write clear values for each field (route to correct buffer)
     for domain_id in &domain_keys {
         let spec = &manifest.domains[*domain_id];
-        let buffer = &domain_buffers[*domain_id];
         let mut field_keys: Vec<_> = spec.fields.keys().collect();
         field_keys.sort();
         for field_key in &field_keys {
             let field = &spec.fields[*field_key];
             let symbol_id = format!("{}:{}", domain_id, field_key);
             let sym = &symbol_map[&symbol_id];
+            let is_atomic = field.wgsl_type.starts_with("atomic<");
+            let buffer = if is_atomic {
+                &domain_atomic_buffers[*domain_id]
+            } else {
+                &domain_buffers[*domain_id]
+            };
             let offset_bytes = (sym.word_offset * 4) as u64;
-            // Write clearValue for each instance slot
             let clear_word = if field.wgsl_type == "f32" {
                 (field.clear_value as f32).to_bits()
             } else {
@@ -382,6 +420,7 @@ pub fn allocate_arena(
         globals_buffer,
         scalars_buffer,
         domain_buffers,
+        domain_atomic_buffers,
         shape_bank,
         indirect_buffer,
         textures,

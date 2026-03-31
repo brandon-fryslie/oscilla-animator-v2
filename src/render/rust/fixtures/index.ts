@@ -12,6 +12,8 @@ import { forLoopGradient } from './for-loop-gradient';
 import { hashColor } from './hash-color';
 import { varyingGradient } from './varying-gradient';
 import { textureReadwrite } from './texture-readwrite';
+import { sdfCircle } from './sdf-circle';
+import { atomicBoids } from './atomic-boids';
 
 export interface PayloadFixture {
   readonly id: string;
@@ -56,5 +58,17 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
     name: 'Texture Pattern',
     description: 'Gate 6+7: Compute writes animated gradient to storage texture, render reads via TextureLoad. Tests texture allocation, TextureStore, TextureLoad.',
     payload: textureReadwrite,
+  },
+  {
+    id: 'sdf-circle',
+    name: 'SDF Circle',
+    description: 'Gate 8: Anti-aliased signed distance circle. Tests fragment-stage dpdx, dpdy, and fwidth derivatives.',
+    payload: sdfCircle,
+  },
+  {
+    id: 'atomic-boids',
+    name: 'Atomic Boids',
+    description: 'Gate 9: 10,000 boids with atomic<u32> grid_cell. Forces MMU to bifurcate standard + atomic fields into separate GPU buffers. Tests AtomicOpField, AtomicLoadField.',
+    payload: atomicBoids,
   },
 ];

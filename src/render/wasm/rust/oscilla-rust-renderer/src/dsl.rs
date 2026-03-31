@@ -515,6 +515,15 @@ impl FnBuilder {
     pub fn refract(&mut self, i: Expr, n: Expr, eta: Expr) -> Expr {
         self.with_root(|inner| inner.refract(i, n, eta))
     }
+    pub fn dpdx(&mut self, expr: Expr) -> Expr {
+        self.with_root(|inner| inner.dpdx(expr))
+    }
+    pub fn dpdy(&mut self, expr: Expr) -> Expr {
+        self.with_root(|inner| inner.dpdy(expr))
+    }
+    pub fn fwidth(&mut self, expr: Expr) -> Expr {
+        self.with_root(|inner| inner.fwidth(expr))
+    }
     pub fn swizzle(
         &mut self,
         src: Expr,
@@ -724,6 +733,13 @@ impl FnBuilder {
     ) -> Expr {
         self.with_root(|inner| inner.atomic_exchange(pointer, value, result_type))
     }
+
+    pub fn atomic_sub(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_sub(p, v, t)) }
+    pub fn atomic_max(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_max(p, v, t)) }
+    pub fn atomic_min(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_min(p, v, t)) }
+    pub fn atomic_and(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_and(p, v, t)) }
+    pub fn atomic_or(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_or(p, v, t)) }
+    pub fn atomic_xor(&mut self, p: Expr, v: Expr, t: naga::Handle<naga::Type>) -> Expr { self.with_root(|i| i.atomic_xor(p, v, t)) }
 
     /// Add a function argument and return the expression handle for it.
     /// Used for vertex attributes (`@location(N)`) and builtins (`@builtin(vertex_index)`).
@@ -1119,6 +1135,30 @@ impl<'a> FnBodyBuilder<'a> {
         self.math(naga::MathFunction::Refract, i, Some(n), Some(eta), None)
     }
 
+    pub fn dpdx(&mut self, expr: Expr) -> Expr {
+        self.append_expr(naga::Expression::Derivative {
+            axis: naga::DerivativeAxis::X,
+            ctrl: naga::DerivativeControl::None,
+            expr,
+        })
+    }
+
+    pub fn dpdy(&mut self, expr: Expr) -> Expr {
+        self.append_expr(naga::Expression::Derivative {
+            axis: naga::DerivativeAxis::Y,
+            ctrl: naga::DerivativeControl::None,
+            expr,
+        })
+    }
+
+    pub fn fwidth(&mut self, expr: Expr) -> Expr {
+        self.append_expr(naga::Expression::Derivative {
+            axis: naga::DerivativeAxis::Width,
+            ctrl: naga::DerivativeControl::None,
+            expr,
+        })
+    }
+
     // --- Multi-component swizzle ---
 
     pub fn swizzle(
@@ -1468,6 +1508,52 @@ impl<'a> FnBodyBuilder<'a> {
             result: Some(result),
         });
         result
+    }
+
+    // --- Additional atomic operations (Gate 9) ---
+
+    pub fn atomic_op(
+        &mut self,
+        fun: naga::AtomicFunction,
+        pointer: Expr,
+        value: Expr,
+        result_type: naga::Handle<naga::Type>,
+    ) -> Expr {
+        let result = self.append_expr(naga::Expression::AtomicResult {
+            ty: result_type,
+            comparison: false,
+        });
+        self.push_statement(naga::Statement::Atomic {
+            pointer,
+            fun,
+            value,
+            result: Some(result),
+        });
+        result
+    }
+
+    pub fn atomic_sub(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::Subtract, pointer, value, result_type)
+    }
+
+    pub fn atomic_max(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::Max, pointer, value, result_type)
+    }
+
+    pub fn atomic_min(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::Min, pointer, value, result_type)
+    }
+
+    pub fn atomic_and(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::And, pointer, value, result_type)
+    }
+
+    pub fn atomic_or(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::InclusiveOr, pointer, value, result_type)
+    }
+
+    pub fn atomic_xor(&mut self, pointer: Expr, value: Expr, result_type: naga::Handle<naga::Type>) -> Expr {
+        self.atomic_op(naga::AtomicFunction::ExclusiveOr, pointer, value, result_type)
     }
 
     /// Declare a mutable local variable. Returns a **pointer** expression.

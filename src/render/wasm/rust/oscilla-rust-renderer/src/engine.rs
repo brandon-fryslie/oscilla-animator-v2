@@ -532,6 +532,7 @@ impl Engine {
                     };
 
                     let has_group1 = !compute_result.bound_domain_keys.is_empty()
+                        || !compute_result.bound_atomic_domain_keys.is_empty()
                         || !compute_result.bound_texture_keys.is_empty()
                         || !compute_result.bound_sampler_keys.is_empty();
                     let auto_group1 = if has_group1 {
@@ -542,6 +543,15 @@ impl Engine {
                             bg_entries.push(wgpu::BindGroupEntry {
                                 binding,
                                 resource: arena.domain_buffers[domain_id].as_entire_binding(),
+                            });
+                            binding += 1;
+                        }
+                        // Atomic domain buffers next
+                        for domain_id in &compute_result.bound_atomic_domain_keys {
+                            bg_entries.push(wgpu::BindGroupEntry {
+                                binding,
+                                resource: arena.domain_atomic_buffers[domain_id]
+                                    .as_entire_binding(),
                             });
                             binding += 1;
                         }
@@ -845,6 +855,7 @@ impl Engine {
 
                         // Bind group: domains + textures (matching translator's group 0 layout)
                         let has_bindings = !render_result.bound_domain_keys.is_empty()
+                            || !render_result.bound_atomic_domain_keys.is_empty()
                             || !render_result.bound_texture_keys.is_empty()
                             || !render_result.bound_sampler_keys.is_empty();
                         let bind_group = if has_bindings {
@@ -854,6 +865,15 @@ impl Engine {
                                 bg_entries.push(wgpu::BindGroupEntry {
                                     binding,
                                     resource: arena.domain_buffers[domain_id].as_entire_binding(),
+                                });
+                                binding += 1;
+                            }
+                            // Atomic domain buffers
+                            for domain_id in &render_result.bound_atomic_domain_keys {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: arena.domain_atomic_buffers[domain_id]
+                                        .as_entire_binding(),
                                 });
                                 binding += 1;
                             }

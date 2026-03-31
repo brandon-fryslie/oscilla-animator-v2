@@ -17,11 +17,21 @@ use crate::mmu::{GpuMemoryArena, PhysicalSymbol};
 // ---------------------------------------------------------------------------
 
 /// Resolved buffer handles and type handles for a single pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TranslationStage {
+    Compute,
+    Vertex,
+    Fragment,
+}
+
 struct PassContext {
+    stage: TranslationStage,
     globals_expr: Option<Expr>,
     scalars_expr: Option<Expr>,
-    /// Domain ID → buffer expression handle
+    /// Domain ID → standard buffer expression handle (array<u32>)
     domain_exprs: HashMap<String, Expr>,
+    /// Domain ID → atomic buffer expression handle (array<atomic<u32>>)
+    domain_atomic_exprs: HashMap<String, Expr>,
     /// Texture ID → global variable expression handle
     texture_exprs: HashMap<String, Expr>,
     /// Texture ID → whether this texture is sampled-class (requires mip level for textureLoad).
@@ -85,6 +95,8 @@ pub struct ComputePassTranslation {
     pub module: naga::Module,
     pub info: naga::valid::ModuleInfo,
     pub bound_domain_keys: Vec<String>,
+    /// Domain IDs that have atomic buffers bound (separate from standard buffers).
+    pub bound_atomic_domain_keys: Vec<String>,
     pub bound_texture_keys: Vec<String>,
     pub bound_sampler_keys: Vec<String>,
     pub uses_globals: bool,
@@ -156,8 +168,34 @@ pub fn translate_compute_pass(
         domain_gvs.insert((*domain_id).clone(), gv);
     }
 
-    // Group 1 continued: Textures (sorted alpha, after domains)
+    // Group 1 continued: Atomic domain buffers (same domain keys, separate bindings)
     let mut group1_binding = domain_keys.len() as u32;
+    let mut domain_atomic_gvs = HashMap::new();
+    for domain_id in &domain_keys {
+        // Check if this domain has any atomic fields
+        let has_atomics = arena.domain_atomic_buffers.contains_key(*domain_id);
+        if has_atomics {
+            let atomic_arr_ty = m.atomic_type(naga::ScalarKind::Uint);
+            let atomic_array_ty = m.array_type(atomic_arr_ty, None, 4);
+            let access_str = &spec.dependencies.domains[*domain_id];
+            let access = if access_str == "read" {
+                naga::StorageAccess::LOAD
+            } else {
+                naga::StorageAccess::LOAD | naga::StorageAccess::STORE
+            };
+            let gv = m.add_global_storage(
+                &format!("{}_atomic", domain_id),
+                atomic_array_ty,
+                1,
+                group1_binding,
+                access,
+            );
+            domain_atomic_gvs.insert((*domain_id).clone(), gv);
+            group1_binding += 1;
+        }
+    }
+
+    // Group 1 continued: Textures (sorted alpha, after domains + atomics)
     let referenced_textures = collect_textures_from_stmts_set(&spec.ast);
     let mut texture_gvs = HashMap::new();
     let mut tex_keys: Vec<_> = spec
@@ -235,6 +273,10 @@ pub fn translate_compute_pass(
     for (domain_id, gv) in &domain_gvs {
         domain_exprs.insert(domain_id.clone(), fb.global(*gv));
     }
+    let mut domain_atomic_exprs = HashMap::new();
+    for (domain_id, gv) in &domain_atomic_gvs {
+        domain_atomic_exprs.insert(domain_id.clone(), fb.global(*gv));
+    }
     let mut texture_exprs = HashMap::new();
     for (tex_id, gv) in &texture_gvs {
         texture_exprs.insert(tex_id.clone(), fb.global(*gv));
@@ -268,9 +310,11 @@ pub fn translate_compute_pass(
     type_handles.insert("vec4<f32>".into(), m.vec4_f32_type());
 
     let ctx = PassContext {
+        stage: TranslationStage::Compute,
         globals_expr,
         scalars_expr,
         domain_exprs,
+        domain_atomic_exprs,
         symbol_map: arena.symbol_map.clone(),
         type_handles,
         texture_exprs,
@@ -289,10 +333,12 @@ pub fn translate_compute_pass(
     let bound_texture_keys: Vec<String> = tex_keys.into_iter().cloned().collect();
     let bound_sampler_keys = sampler_keys;
     let (module, info) = validate_module(m.finish());
+    let bound_atomic_domain_keys: Vec<String> = domain_atomic_gvs.keys().cloned().collect();
     ComputePassTranslation {
         module,
         info,
         bound_domain_keys,
+        bound_atomic_domain_keys,
         bound_texture_keys,
         bound_sampler_keys,
         uses_globals,
@@ -870,6 +916,7 @@ pub struct RenderPassTranslation {
     pub module: naga::Module,
     pub info: naga::valid::ModuleInfo,
     pub bound_domain_keys: Vec<String>,
+    pub bound_atomic_domain_keys: Vec<String>,
     pub bound_texture_keys: Vec<String>,
     pub bound_sampler_keys: Vec<String>,
 }
@@ -955,6 +1002,11 @@ pub fn translate_render_pass(
         domain_gvs.insert((*domain_id).clone(), gv);
         group0_binding += 1;
     }
+
+    // Note: Atomic domain buffers are NOT declared in render passes because
+    // WebGPU vertex/fragment stages don't support read_write storage (required for atomics).
+    // Compute passes copy atomic values to standard fields for render consumption.
+    let render_atomic_gvs: HashMap<String, naga::Handle<naga::GlobalVariable>> = HashMap::new();
 
     // Group 0 continued: Textures (sorted alpha)
     let referenced_textures = collect_textures_from_stmts_set(&draw_call.vertex_ast)
@@ -1075,10 +1127,16 @@ pub fn translate_render_pass(
     for (domain_id, gv) in &domain_gvs {
         vs_domain_exprs.insert(domain_id.clone(), vs.global(*gv));
     }
+    let mut vs_domain_atomic_exprs = HashMap::new();
+    for (domain_id, gv) in &render_atomic_gvs {
+        vs_domain_atomic_exprs.insert(domain_id.clone(), vs.global(*gv));
+    }
     let vs_ctx = PassContext {
+        stage: TranslationStage::Vertex,
         globals_expr: None,
         scalars_expr: None,
         domain_exprs: vs_domain_exprs,
+        domain_atomic_exprs: vs_domain_atomic_exprs,
         symbol_map: arena.symbol_map.clone(),
         type_handles: type_handles.clone(),
         texture_exprs: HashMap::new(),
@@ -1149,9 +1207,11 @@ pub fn translate_render_pass(
         fs_sampler_exprs.insert(sampler_id.clone(), fs.global(*gv));
     }
     let fs_ctx = PassContext {
+        stage: TranslationStage::Fragment,
         globals_expr: None,
         scalars_expr: None,
         domain_exprs: fs_domain_exprs,
+        domain_atomic_exprs: HashMap::new(),
         symbol_map: arena.symbol_map.clone(),
         type_handles,
         texture_exprs: fs_texture_exprs,
@@ -1195,10 +1255,12 @@ pub fn translate_render_pass(
     }
 
     let (module, info) = validate_module(raw_module);
+    let bound_atomic_domain_keys: Vec<String> = render_atomic_gvs.keys().cloned().collect();
     RenderPassTranslation {
         module,
         info,
         bound_domain_keys,
+        bound_atomic_domain_keys,
         bound_texture_keys,
         bound_sampler_keys,
     }
@@ -1382,6 +1444,68 @@ fn translate_statement_body(
         }
         StatementIR::Continue => {
             bb.emit_continue();
+        }
+        StatementIR::AtomicOpField {
+            op,
+            symbol_id,
+            index,
+            value,
+            assign_result_to,
+        } => {
+            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
+                panic!("AtomicOpField: symbol '{}' not in symbol_map", symbol_id)
+            });
+            let domain_id = sym.domain_id.as_ref().unwrap();
+            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
+                panic!("AtomicOpField: domain '{}' has no atomic buffer", domain_id)
+            });
+            let idx = translate_expr_body(bb, ctx, index, scope);
+            let offset_lit = bb.lit_u32(sym.word_offset);
+            let addr = bb.add(offset_lit, idx);
+            let pointer = bb.access(*atomic_buf, addr);
+            let val = translate_expr_body(bb, ctx, value, scope);
+            let u32_ty = *ctx.type_handles.get("u32").unwrap();
+            let fun = match op.as_str() {
+                "Add" => naga::AtomicFunction::Add,
+                "Sub" => naga::AtomicFunction::Subtract,
+                "Max" => naga::AtomicFunction::Max,
+                "Min" => naga::AtomicFunction::Min,
+                "And" => naga::AtomicFunction::And,
+                "Or" => naga::AtomicFunction::InclusiveOr,
+                "Xor" => naga::AtomicFunction::ExclusiveOr,
+                "Exchange" => naga::AtomicFunction::Exchange { compare: None },
+                _ => panic!("AtomicOpField: unknown op '{}'", op),
+            };
+            let result = bb.atomic_op(fun, pointer, val, u32_ty);
+            if let Some(name) = assign_result_to {
+                scope.insert_let(name.clone(), result);
+            }
+        }
+        StatementIR::AtomicOpScalar {
+            op,
+            symbol_id,
+            value,
+            assign_result_to,
+        } => {
+            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
+                panic!("AtomicOpScalar: symbol '{}' not in symbol_map", symbol_id)
+            });
+            let scalars = ctx.scalars_expr.expect("AtomicOpScalar requires scalars buffer");
+            let offset = bb.lit_u32(sym.word_offset);
+            let pointer = bb.access(scalars, offset);
+            let val = translate_expr_body(bb, ctx, value, scope);
+            let u32_ty = *ctx.type_handles.get("u32").unwrap();
+            let fun = match op.as_str() {
+                "Add" => naga::AtomicFunction::Add,
+                "Sub" => naga::AtomicFunction::Subtract,
+                "Max" => naga::AtomicFunction::Max,
+                "Min" => naga::AtomicFunction::Min,
+                _ => panic!("AtomicOpScalar: unknown op '{}'", op),
+            };
+            let result = bb.atomic_op(fun, pointer, val, u32_ty);
+            if let Some(name) = assign_result_to {
+                scope.insert_let(name.clone(), result);
+            }
         }
         _ => {
             panic!(
@@ -1648,6 +1772,18 @@ fn translate_expr_body(
                 "normalize" => bb.normalize(translated[0]),
                 "reflect" => bb.reflect(translated[0], translated[1]),
                 "refract" => bb.refract(translated[0], translated[1], translated[2]),
+                "dpdx" => {
+                    ensure_fragment_derivative(ctx, "dpdx");
+                    bb.dpdx(translated[0])
+                }
+                "dpdy" => {
+                    ensure_fragment_derivative(ctx, "dpdy");
+                    bb.dpdy(translated[0])
+                }
+                "fwidth" => {
+                    ensure_fragment_derivative(ctx, "fwidth");
+                    bb.fwidth(translated[0])
+                }
                 _ => panic!("CallBuiltin: not yet implemented: '{}'", func),
             }
         }
@@ -1737,6 +1873,31 @@ fn translate_expr_body(
             bb.texture_load(tex, coords_expr, level)
         }
 
+        ExprIR::AtomicLoadField { symbol_id, index } => {
+            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
+                panic!("AtomicLoadField: symbol '{}' not in symbol_map", symbol_id)
+            });
+            let domain_id = sym.domain_id.as_ref().unwrap();
+            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
+                panic!("AtomicLoadField: domain '{}' has no atomic buffer", domain_id)
+            });
+            let idx = translate_expr_body(bb, ctx, index, scope);
+            let offset_lit = bb.lit_u32(sym.word_offset);
+            let addr = bb.add(offset_lit, idx);
+            let pointer = bb.access(*atomic_buf, addr);
+            bb.load_local(pointer) // atomicLoad is just Expression::Load on the atomic pointer
+        }
+
+        ExprIR::AtomicLoadScalar { symbol_id } => {
+            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
+                panic!("AtomicLoadScalar: symbol '{}' not in symbol_map", symbol_id)
+            });
+            let scalars = ctx.scalars_expr.expect("AtomicLoadScalar requires scalars buffer");
+            let offset = bb.lit_u32(sym.word_offset);
+            let pointer = bb.access(scalars, offset);
+            bb.load_local(pointer)
+        }
+
         ExprIR::Intrinsic { name } => match name.as_str() {
             "global_invocation_id.x" | "global_invocation_id.y" | "global_invocation_id.z" => {
                 let (gid, _) = scope
@@ -1781,6 +1942,17 @@ fn translate_expr_body(
                 std::mem::discriminant(expr)
             );
         }
+    }
+}
+
+fn ensure_fragment_derivative(ctx: &PassContext, func_name: &str) {
+    // [LAW:single-enforcer] Derivative stage legality is enforced in one
+    // translation boundary, not scattered across callsites.
+    if !matches!(ctx.stage, TranslationStage::Fragment) {
+        panic!(
+            "CallBuiltin '{}' is only valid in fragment shaders",
+            func_name
+        );
     }
 }
 
