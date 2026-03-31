@@ -4,46 +4,6 @@ import type {
   RustRendererSchedulerState,
 } from './worker-protocol';
 
-// TODO(#159): Consolidate renderer debug/telemetry ownership once the
-// dedicated GPU renderer debug architecture is finalized.
-// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/159
-// TODO(#161): Follow review cleanup plan for telemetry ownership split between
-// worker, scheduler packet parsing, and Rust-side hot-path boundaries.
-// https://github.com/brandon-fryslie/oscilla-animator-v2/issues/161
-
-interface RawSchedulerStageTimingsTelemetry {
-  readonly inputMarshalMs: number;
-  readonly simulationDispatchMs: number;
-  readonly drawPrepMs: number;
-  readonly renderMs: number;
-  readonly swapMs: number;
-  readonly totalFrameMs: number;
-}
-
-interface RawSchedulerDispatchCountersTelemetry {
-  readonly computeDispatchCount: number;
-  readonly computeWorkgroupCount: number;
-  readonly activeLaneCount: number;
-  readonly guardedLaneCount: number;
-}
-
-interface RawSchedulerResourceStatsTelemetry {
-  readonly shapeBankWordCount: number;
-  readonly sinkTableWordCount: number;
-  readonly indexedRecordCount: number;
-  readonly nonIndexedRecordCount: number;
-  readonly totalInstanceCount: number;
-  readonly canvasWidth: number;
-  readonly canvasHeight: number;
-  readonly pingPongIndex: number;
-}
-
-interface RawSchedulerTelemetry {
-  readonly stageTimings: RawSchedulerStageTimingsTelemetry;
-  readonly dispatchCounters: RawSchedulerDispatchCountersTelemetry;
-  readonly resourceStats: RawSchedulerResourceStatsTelemetry;
-}
-
 interface RawSchedulerHeartbeat {
   readonly sequence: number;
   readonly state: string;
@@ -55,7 +15,8 @@ interface RawSchedulerHeartbeat {
   readonly sampleCount: number;
   readonly lastTickMs: number;
   readonly lastSuccessMs: number;
-  readonly telemetry: RawSchedulerTelemetry;
+  readonly totalFrameMs?: number;
+  readonly telemetry?: unknown;
 }
 
 interface RawRuntimeEvent {
@@ -88,33 +49,6 @@ export function isPositiveInt(value: unknown): value is number {
 }
 
 type UnknownRecord = Record<string, unknown>;
-
-const STAGE_TIMING_FIELDS = [
-  'inputMarshalMs',
-  'simulationDispatchMs',
-  'drawPrepMs',
-  'renderMs',
-  'swapMs',
-  'totalFrameMs',
-] as const;
-
-const DISPATCH_COUNTER_FIELDS = [
-  'computeDispatchCount',
-  'computeWorkgroupCount',
-  'activeLaneCount',
-  'guardedLaneCount',
-] as const;
-
-const RESOURCE_STATS_FIELDS = [
-  'shapeBankWordCount',
-  'sinkTableWordCount',
-  'indexedRecordCount',
-  'nonIndexedRecordCount',
-  'totalInstanceCount',
-  'canvasWidth',
-  'canvasHeight',
-  'pingPongIndex',
-] as const;
 
 const HEARTBEAT_NUMBER_FIELDS = [
   'sequence',
@@ -157,33 +91,6 @@ function hasStringFields(record: UnknownRecord, keys: readonly string[]): boolea
   return keys.every((key) => typeof record[key] === 'string');
 }
 
-function isRawSchedulerStageTimingsTelemetry(value: unknown): value is RawSchedulerStageTimingsTelemetry {
-  const telemetry = asUnknownRecord(value);
-  return telemetry !== null && hasFiniteNumberFields(telemetry, STAGE_TIMING_FIELDS);
-}
-
-function isRawSchedulerDispatchCountersTelemetry(value: unknown): value is RawSchedulerDispatchCountersTelemetry {
-  const telemetry = asUnknownRecord(value);
-  return telemetry !== null && hasFiniteNumberFields(telemetry, DISPATCH_COUNTER_FIELDS);
-}
-
-function isRawSchedulerResourceStatsTelemetry(value: unknown): value is RawSchedulerResourceStatsTelemetry {
-  const telemetry = asUnknownRecord(value);
-  return telemetry !== null && hasFiniteNumberFields(telemetry, RESOURCE_STATS_FIELDS);
-}
-
-function isRawSchedulerTelemetry(value: unknown): value is RawSchedulerTelemetry {
-  const telemetry = asUnknownRecord(value);
-  if (telemetry === null) {
-    return false;
-  }
-  return (
-    isRawSchedulerStageTimingsTelemetry(telemetry.stageTimings)
-    && isRawSchedulerDispatchCountersTelemetry(telemetry.dispatchCounters)
-    && isRawSchedulerResourceStatsTelemetry(telemetry.resourceStats)
-  );
-}
-
 function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat {
   const heartbeat = asUnknownRecord(value);
   if (heartbeat === null) {
@@ -192,7 +99,6 @@ function isRawSchedulerHeartbeat(value: unknown): value is RawSchedulerHeartbeat
   return (
     hasFiniteNumberFields(heartbeat, HEARTBEAT_NUMBER_FIELDS)
     && typeof heartbeat.state === 'string'
-    && isRawSchedulerTelemetry(heartbeat.telemetry)
   );
 }
 
@@ -226,6 +132,23 @@ function requireSchedulerState(value: unknown, path: string): RustRendererSchedu
     failSchedulerPacketContract(`${path} must be one of Booting|Running|Paused|Lost`);
   }
   return value;
+}
+
+function readTotalFrameMs(raw: RawSchedulerHeartbeat): number {
+  if (isFiniteNumber(raw.totalFrameMs)) {
+    return raw.totalFrameMs;
+  }
+
+  // [LAW:one-source-of-truth] Runtime packet compatibility is normalized in one parser
+  // boundary, so worker loop consumers read a single canonical telemetry shape.
+  const telemetry = asUnknownRecord(raw.telemetry);
+  const stageTimings = asUnknownRecord(telemetry?.stageTimings);
+  const totalFrameMs = stageTimings?.totalFrameMs;
+  if (isFiniteNumber(totalFrameMs)) {
+    return totalFrameMs;
+  }
+
+  return 0;
 }
 
 export function parseSchedulerPacket(packet: unknown): ParsedSchedulerPacket {
@@ -276,7 +199,11 @@ function toOutboundHeartbeat(
     sampleCount: raw.sampleCount,
     lastTickMs: raw.lastTickMs,
     lastSuccessMs: raw.lastSuccessMs,
-    telemetry: raw.telemetry,
+    telemetry: {
+      stageTimings: {
+        totalFrameMs: readTotalFrameMs(raw),
+      },
+    },
   };
 }
 

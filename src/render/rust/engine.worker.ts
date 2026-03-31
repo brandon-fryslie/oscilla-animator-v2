@@ -6,8 +6,10 @@ import {
   initRustRendererWasm,
   installRustRendererPipeline,
   pauseRustRendererEngine,
+  resizeRustRendererEnvironment,
   resumeRustRendererEngine,
   takeRustRendererFramePacingPacket,
+  updateRustRendererDataStream,
 } from '../wasm/oscilla_rust_renderer';
 import { parseSchedulerPacket } from './engine-telemetry';
 import {
@@ -127,6 +129,9 @@ function handleInstallPipeline(
   if (pollingWasActive) {
     stopRuntimePolling();
   }
+  // [LAW:single-enforcer] Install is the single mutable roster boundary; pause
+  // frame execution so Rust engine mutation and tick execution cannot interleave.
+  pauseRustRendererEngine();
   try {
     const receiptJson = installRustRendererPipeline(message.payloadJson);
     // Parse receipt to check status
@@ -158,6 +163,7 @@ function handleInstallPipeline(
     postWorkerMessage({ type: 'INSTALL_PIPELINE_FAILURE', receiptJson: errorReceipt });
   } finally {
     if (pollingWasActive) {
+      resumeRustRendererEngine();
       startRuntimePolling();
     }
   }
@@ -173,6 +179,18 @@ function handleResume(): void {
 
 function handleInjectPoisonAlloc(): void {
   injectRustRendererPoisonAlloc();
+}
+
+function handleUpdateDataStream(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'UPDATE_DATA_STREAM' }>,
+): void {
+  updateRustRendererDataStream(message.streamId, new Uint8Array(message.data));
+}
+
+function handleEnvironmentResize(
+  message: Extract<RustRendererWorkerInboundMessage, { type: 'ENVIRONMENT_RESIZE' }>,
+): void {
+  resizeRustRendererEnvironment(message.payloadJson);
 }
 
 function stopRuntimePolling(): void {
@@ -290,6 +308,16 @@ const INBOUND_HANDLERS: Record<InboundMessageType, InboundHandler> = {
   INSTALL_PIPELINE: (message) => {
     withFatalBoundary('install_pipeline_failure', 'Rust worker install pipeline failure', () => {
       handleInstallPipeline(message as Extract<InboundMessage, { type: 'INSTALL_PIPELINE' }>);
+    });
+  },
+  UPDATE_DATA_STREAM: (message) => {
+    withFatalBoundary('update_data_stream_failure', 'Rust worker update data stream failure', () => {
+      handleUpdateDataStream(message as Extract<InboundMessage, { type: 'UPDATE_DATA_STREAM' }>);
+    });
+  },
+  ENVIRONMENT_RESIZE: (message) => {
+    withFatalBoundary('environment_resize_failure', 'Rust worker environment resize failure', () => {
+      handleEnvironmentResize(message as Extract<InboundMessage, { type: 'ENVIRONMENT_RESIZE' }>);
     });
   },
   BOOTSTRAP: (message) => {

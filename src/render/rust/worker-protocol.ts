@@ -27,6 +27,17 @@ export interface RustRendererInstallPipelineMessage {
   readonly payloadJson: string;
 }
 
+export interface RustRendererUpdateDataStreamMessage {
+  readonly type: 'UPDATE_DATA_STREAM';
+  readonly streamId: string;
+  readonly data: ArrayBuffer;
+}
+
+export interface RustRendererEnvironmentResizeMessage {
+  readonly type: 'ENVIRONMENT_RESIZE';
+  readonly payloadJson: string;
+}
+
 export interface RustRendererPauseMessage {
   readonly type: 'PAUSE';
 }
@@ -48,6 +59,8 @@ export type RustRendererWorkerInboundMessage =
   | RustRendererBootstrapMessage
   | RustRendererShutdownMessage
   | RustRendererInstallPipelineMessage
+  | RustRendererUpdateDataStreamMessage
+  | RustRendererEnvironmentResizeMessage
   | RustRendererPauseMessage
   | RustRendererResumeMessage
   | RustRendererInjectPoisonAllocMessage

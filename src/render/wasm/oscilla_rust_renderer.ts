@@ -13,6 +13,8 @@ interface RendererWasmModule {
   readonly resume_engine?: () => void;
   readonly install_pipeline?: (payloadJson: string) => string;
   readonly update_globals?: (data: Uint8Array) => void;
+  readonly update_data_stream?: (streamId: string, data: Uint8Array) => void;
+  readonly resize_environment?: (payloadJson: string) => void;
   readonly render_frame?: () => void;
   readonly inject_poison_alloc?: () => void;
   readonly take_frame_pacing_packet?: () => unknown;
@@ -25,6 +27,8 @@ let pauseEngineImpl: RendererWasmModule['pause_engine'] | null = null;
 let resumeEngineImpl: RendererWasmModule['resume_engine'] | null = null;
 let installPipelineImpl: RendererWasmModule['install_pipeline'] | null = null;
 let updateGlobalsImpl: RendererWasmModule['update_globals'] | null = null;
+let updateDataStreamImpl: RendererWasmModule['update_data_stream'] | null = null;
+let resizeEnvironmentImpl: RendererWasmModule['resize_environment'] | null = null;
 let renderFrameImpl: RendererWasmModule['render_frame'] | null = null;
 let injectPoisonAllocImpl: RendererWasmModule['inject_poison_alloc'] | null = null;
 let takeFramePacingPacketImpl: RendererWasmModule['take_frame_pacing_packet'] | null = null;
@@ -62,6 +66,12 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       if (typeof wasmModule.update_globals !== 'function') {
         throw new Error('Rust renderer wasm module missing update_globals export');
       }
+      if (typeof wasmModule.update_data_stream !== 'function') {
+        throw new Error('Rust renderer wasm module missing update_data_stream export');
+      }
+      if (typeof wasmModule.resize_environment !== 'function') {
+        throw new Error('Rust renderer wasm module missing resize_environment export');
+      }
       if (typeof wasmModule.render_frame !== 'function') {
         throw new Error('Rust renderer wasm module missing render_frame export');
       }
@@ -76,6 +86,8 @@ export async function initRustRendererWasm(rendererWasmBytes: ArrayBuffer): Prom
       resumeEngineImpl = wasmModule.resume_engine.bind(wasmModule);
       installPipelineImpl = wasmModule.install_pipeline.bind(wasmModule);
       updateGlobalsImpl = wasmModule.update_globals.bind(wasmModule);
+      updateDataStreamImpl = wasmModule.update_data_stream.bind(wasmModule);
+      resizeEnvironmentImpl = wasmModule.resize_environment.bind(wasmModule);
       renderFrameImpl = wasmModule.render_frame.bind(wasmModule);
       injectPoisonAllocImpl = wasmModule.inject_poison_alloc.bind(wasmModule);
       takeFramePacingPacketImpl = wasmModule.take_frame_pacing_packet.bind(wasmModule);
@@ -129,6 +141,20 @@ export function updateRustRendererGlobals(data: Uint8Array): void {
     throw new Error('Rust renderer wasm is not initialized');
   }
   updateGlobalsImpl(data);
+}
+
+export function updateRustRendererDataStream(streamId: string, data: Uint8Array): void {
+  if (!initialized || !updateDataStreamImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  updateDataStreamImpl(streamId, data);
+}
+
+export function resizeRustRendererEnvironment(payloadJson: string): void {
+  if (!initialized || !resizeEnvironmentImpl) {
+    throw new Error('Rust renderer wasm is not initialized');
+  }
+  resizeEnvironmentImpl(payloadJson);
 }
 
 export function renderRustRendererFrame(): void {

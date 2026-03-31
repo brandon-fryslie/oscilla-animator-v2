@@ -3,11 +3,11 @@
  * check-payload-tester-visible.mjs
  *
  * Smoke-checks payload-tester canonical boundary path end-to-end:
- * fixture install -> per-frame publication -> non-black canvas.
+ * fixture click auto-install -> per-frame publication -> visible canvas.
  *
  * Requires a running dev server.
  * Usage:
- *   APP_PORT=5784 node scripts/check-payload-tester-visible.mjs
+ *   APP_PORT=5784 PAYLOAD_TESTER_FIXTURE="Audio Reactive" node scripts/check-payload-tester-visible.mjs
  */
 
 import { chromium } from '@playwright/test';
@@ -15,6 +15,7 @@ import { chromium } from '@playwright/test';
 const appPort = process.env.APP_PORT ?? '5784';
 const targetUrl = `http://127.0.0.1:${appPort}/payload-tester.html`;
 const outputPath = process.env.PAYLOAD_TESTER_SCREENSHOT ?? '/tmp/oscilla-payload-tester-visible.png';
+const fixtureName = process.env.PAYLOAD_TESTER_FIXTURE ?? 'Audio Reactive';
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -44,8 +45,7 @@ try {
   if (!statusText.includes('Renderer ready')) {
     fail(`renderer did not reach ready state; status snapshot: ${statusText.slice(0, 300)}`);
   }
-  await page.getByRole('button', { name: 'Visible Triangle' }).click({ timeout: 10_000 });
-  await page.getByRole('button', { name: /Install \+ Run/ }).click({ timeout: 10_000 });
+  await page.getByRole('button', { name: new RegExp(fixtureName, 'i') }).click({ timeout: 10_000 });
   await Promise.race([
     page.getByText(/Installed .* pass\(es\) and started frame publication/, { exact: false }).waitFor({
       timeout: 20_000,
@@ -58,7 +58,7 @@ try {
   if (!postInstallStatus.includes('Installed')) {
     fail(`install did not succeed; status snapshot: ${postInstallStatus.slice(0, 500)}`);
   }
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(fixtureName.toLowerCase().includes('audio') ? 1500 : 1000);
 
   const sample = await page.evaluate(() => {
     const src = document.querySelector('canvas');
@@ -86,6 +86,35 @@ try {
         nonBlackPixels += 1;
       }
     }
+    let luminanceCount = 0;
+    let luminanceMin = Number.POSITIVE_INFINITY;
+    let luminanceMax = Number.NEGATIVE_INFINITY;
+    let luminanceMean = 0;
+    let luminanceM2 = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i] ?? 0;
+      const g = data[i + 1] ?? 0;
+      const b = data[i + 2] ?? 0;
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      if (luma <= 20) {
+        continue;
+      }
+      luminanceCount += 1;
+      if (luma < luminanceMin) luminanceMin = luma;
+      if (luma > luminanceMax) luminanceMax = luma;
+      const delta = luma - luminanceMean;
+      luminanceMean += delta / luminanceCount;
+      const delta2 = luma - luminanceMean;
+      luminanceM2 += delta * delta2;
+    }
+    const luminanceStdDev = luminanceCount > 0
+      ? Math.sqrt(luminanceM2 / luminanceCount)
+      : 0;
+    if (luminanceCount === 0) {
+      luminanceMin = 0;
+      luminanceMax = 0;
+    }
+
     return {
       ok: true,
       width,
@@ -93,6 +122,10 @@ try {
       nonBlackPixels,
       totalPixels: width * height,
       ratio: nonBlackPixels / (width * height),
+      luminanceCount,
+      luminanceStdDev,
+      luminanceMin,
+      luminanceMax,
     };
   });
 
@@ -104,10 +137,20 @@ try {
       `canvas appears black (nonBlackPixels=${sample.nonBlackPixels}, totalPixels=${sample.totalPixels})`,
     );
   }
+  if (fixtureName.toLowerCase().includes('audio')) {
+    if (sample.luminanceCount < 200) {
+      fail(`audio fixture produced too few lit pixels for luminance analysis (count=${sample.luminanceCount})`);
+    }
+    if (sample.luminanceStdDev < 8 || sample.luminanceMax - sample.luminanceMin < 28) {
+      fail(
+        `audio bars do not show expected lightness variation (stdDev=${sample.luminanceStdDev.toFixed(2)}, range=${(sample.luminanceMax - sample.luminanceMin).toFixed(2)})`,
+      );
+    }
+  }
 
   await page.screenshot({ path: outputPath, fullPage: true });
   console.info(
-    `PASS: payload tester visible output verified (nonBlackPixels=${sample.nonBlackPixels}, ratio=${sample.ratio.toFixed(6)})`,
+    `PASS: payload tester visible output verified for "${fixtureName}" (nonBlackPixels=${sample.nonBlackPixels}, ratio=${sample.ratio.toFixed(6)}, luminanceStdDev=${sample.luminanceStdDev.toFixed(2)})`,
   );
   console.info(`Screenshot: ${outputPath}`);
 } finally {
