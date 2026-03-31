@@ -363,11 +363,264 @@ export const MemoryManifestSchema = z.object({
 });
 export type MemoryManifest = z.infer<typeof MemoryManifestSchema>;
 
-export const PipelineInstallPayloadSchema = z.object({
+// ---------------------------------------------------------------------------
+// Semantic validation — data-driven cross-reference checks
+// ---------------------------------------------------------------------------
+
+// [LAW:single-enforcer] These tables are the single place that defines what
+// each IR node references and how to recurse into children. Adding a new
+// ExprIR or StatementIR variant without adding an entry here is a compile error
+// (Record<ExprIR['type'], ...> enforces exhaustiveness).
+
+/** Which manifest collection a symbolId/textureId/samplerId must exist in */
+type RefCheck = 'global' | 'scalar' | 'field' | 'atomicField' | 'texture' | 'sampler';
+
+interface ExprRule {
+  /** Fields that reference manifest symbols: [fieldName, checkKind] */
+  readonly refs: readonly (readonly [string, RefCheck])[];
+  /** Field names containing a single child ExprIR */
+  readonly children: readonly string[];
+  /** Field names containing an ExprIR[] array */
+  readonly childArrays: readonly string[];
+  /** Optional special validation */
+  readonly special?: 'builtinArgCount' | 'fragmentOnly';
+}
+
+interface StmtRule {
+  readonly refs: readonly (readonly [string, RefCheck])[];
+  readonly children: readonly string[];
+  readonly childArrays: readonly string[];
+  /** Field names containing a single child StatementIR */
+  readonly stmtChildren: readonly string[];
+  /** Field names containing a StatementIR[] array */
+  readonly stmtChildArrays: readonly string[];
+  /** Field names containing a Record<string, ExprIR> */
+  readonly exprRecords: readonly string[];
+}
+
+/** Expected arg count for each builtin math function */
+const BUILTIN_ARG_COUNTS: Record<BuiltinMathFunc, number> = {
+  sin: 1, cos: 1, tan: 1, asin: 1, acos: 1, atan: 1, atan2: 2,
+  exp: 1, log: 1, pow: 2, sqrt: 1,
+  abs: 1, min: 2, max: 2, clamp: 3, mix: 3, step: 2, smoothstep: 3,
+  sign: 1, fract: 1, ceil: 1, floor: 1, round: 1,
+  length: 1, distance: 2, dot: 2, cross: 2, normalize: 1, reflect: 2, refract: 3,
+  fwidth: 1, dpdx: 1, dpdy: 1,
+  hash_u32: 1, noise_simplex_2d: 1, noise_simplex_3d: 1,
+};
+
+const FRAGMENT_ONLY_BUILTINS = new Set<string>(['dpdx', 'dpdy', 'fwidth']);
+
+// Exhaustive: Record<ExprIR['type'], ExprRule> — adding a variant without a rule is a compile error
+const EXPR_RULES: Record<ExprIR['type'], ExprRule> = {
+  LiteralF32:      { refs: [], children: [], childArrays: [] },
+  LiteralU32:      { refs: [], children: [], childArrays: [] },
+  LiteralI32:      { refs: [], children: [], childArrays: [] },
+  LiteralBool:     { refs: [], children: [], childArrays: [] },
+  VarRef:          { refs: [], children: [], childArrays: [] },
+  Intrinsic:       { refs: [], children: [], childArrays: [] },
+  LoadGlobal:      { refs: [['symbolId', 'global']], children: [], childArrays: [] },
+  LoadScalar:      { refs: [['symbolId', 'scalar']], children: [], childArrays: [] },
+  LoadField:       { refs: [['symbolId', 'field']], children: ['index'], childArrays: [] },
+  AtomicLoadField: { refs: [['symbolId', 'atomicField']], children: ['index'], childArrays: [] },
+  AtomicLoadScalar:{ refs: [['symbolId', 'scalar']], children: [], childArrays: [] },
+  TextureLoad:     { refs: [['textureId', 'texture']], children: ['coords'], childArrays: [] },
+  TextureSample:   { refs: [['textureId', 'texture'], ['samplerId', 'sampler']], children: ['uv'], childArrays: [] },
+  BinaryOp:        { refs: [], children: ['left', 'right'], childArrays: [] },
+  UnaryOp:         { refs: [], children: ['expr'], childArrays: [] },
+  Cast:            { refs: [], children: ['expr'], childArrays: [] },
+  Swizzle:         { refs: [], children: ['source'], childArrays: [] },
+  IndexAccess:     { refs: [], children: ['target', 'index'], childArrays: [] },
+  Construct:       { refs: [], children: [], childArrays: ['args'] },
+  CallBuiltin:     { refs: [], children: [], childArrays: ['args'], special: 'builtinArgCount' },
+};
+
+// Exhaustive: Record<StatementIR['type'], StmtRule>
+const STMT_RULES: Record<StatementIR['type'], StmtRule> = {
+  Let:             { refs: [], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  Var:             { refs: [], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  Assign:          { refs: [], children: ['target', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  StoreScalar:     { refs: [['symbolId', 'scalar']], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  StoreField:      { refs: [['symbolId', 'field']], children: ['index', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  TextureStore:    { refs: [['textureId', 'texture']], children: ['coords', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  If:              { refs: [], children: ['condition'], childArrays: [], stmtChildren: [], stmtChildArrays: ['accept', 'reject'], exprRecords: [] },
+  For:             { refs: [], children: ['condition'], childArrays: [], stmtChildren: ['init', 'update'], stmtChildArrays: ['body'], exprRecords: [] },
+  Break:           { refs: [], children: [], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  Continue:        { refs: [], children: [], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  AtomicOpField:   { refs: [['symbolId', 'atomicField']], children: ['index', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  AtomicOpScalar:  { refs: [['symbolId', 'scalar']], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  ReturnVertex:    { refs: [], children: ['position'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: ['varyings'] },
+  ReturnFragment:  { refs: [], children: [], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: ['outputs'] },
+};
+
+/**
+ * Validate semantic consistency of a PipelineInstallPayload.
+ * Driven by EXPR_RULES and STMT_RULES tables — no case statements.
+ */
+function validatePayloadSemantics(
+  payload: { manifest: MemoryManifest; roster: readonly RosterEntry[] },
+  ctx: z.RefinementCtx,
+): void {
+  const { manifest, roster } = payload;
+
+  // Build lookup sets from manifest
+  const lookups: Record<RefCheck, Set<string>> = {
+    global: new Set(Object.keys(manifest.globals)),
+    scalar: new Set(Object.keys(manifest.arenaScalars)),
+    field: new Set<string>(),
+    atomicField: new Set<string>(),
+    texture: new Set(Object.keys(manifest.textures)),
+    sampler: new Set(Object.keys(manifest.samplers)),
+  };
+  const domainIds = new Set(Object.keys(manifest.domains));
+  const shapeIds = new Set(Object.keys(manifest.shapeBank));
+
+  for (const [domainId, domain] of Object.entries(manifest.domains)) {
+    for (const [fieldName, fieldSpec] of Object.entries(domain.fields)) {
+      const symbolId = `${domainId}:${fieldName}`;
+      lookups.field.add(symbolId);
+      if (fieldSpec.type === 'atomic<u32>' || fieldSpec.type === 'atomic<i32>') {
+        lookups.atomicField.add(symbolId);
+      }
+    }
+  }
+
+  const REF_LABELS: Record<RefCheck, string> = {
+    global: 'manifest.globals', scalar: 'manifest.arenaScalars',
+    field: 'manifest domains', atomicField: 'manifest (must be atomic<u32> or atomic<i32>)',
+    texture: 'manifest.textures', sampler: 'manifest.samplers',
+  };
+
+  function issue(path: (string | number)[], message: string): void {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+  }
+
+  type Stage = 'compute' | 'vertex' | 'fragment';
+
+  function validateExpr(expr: ExprIR, path: (string | number)[], stage: Stage): void {
+    const rule = EXPR_RULES[expr.type];
+    const node = expr as Record<string, unknown>;
+
+    // Reference checks
+    for (const [field, check] of rule.refs) {
+      const id = node[field] as string;
+      if (!lookups[check].has(id)) {
+        issue([...path, field], `'${id}' not in ${REF_LABELS[check]}`);
+      }
+    }
+
+    // Special: CallBuiltin arg count + fragment-only
+    if (rule.special === 'builtinArgCount' && expr.type === 'CallBuiltin') {
+      const expected = BUILTIN_ARG_COUNTS[expr.func];
+      if (expr.args.length !== expected) {
+        issue([...path, 'args'], `${expr.func}() expects ${expected} arg(s), got ${expr.args.length}`);
+      }
+      if (stage !== 'fragment' && FRAGMENT_ONLY_BUILTINS.has(expr.func)) {
+        issue([...path, 'func'], `${expr.func}() is only valid in fragment shaders`);
+      }
+    }
+
+    // Recurse into children
+    for (const field of rule.children) {
+      const child = node[field];
+      if (child) validateExpr(child as ExprIR, [...path, field], stage);
+    }
+    for (const field of rule.childArrays) {
+      const arr = node[field] as readonly ExprIR[];
+      for (let i = 0; i < arr.length; i++) validateExpr(arr[i], [...path, field, i], stage);
+    }
+  }
+
+  function validateStmt(stmt: StatementIR, path: (string | number)[], stage: Stage): void {
+    const rule = STMT_RULES[stmt.type];
+    const node = stmt as Record<string, unknown>;
+
+    // Reference checks
+    for (const [field, check] of rule.refs) {
+      const id = node[field] as string;
+      if (!lookups[check].has(id)) {
+        issue([...path, field], `'${id}' not in ${REF_LABELS[check]}`);
+      }
+    }
+
+    // Recurse into expression children
+    for (const field of rule.children) {
+      const child = node[field];
+      if (child) validateExpr(child as ExprIR, [...path, field], stage);
+    }
+    for (const field of rule.childArrays) {
+      const arr = node[field] as readonly ExprIR[];
+      for (let i = 0; i < arr.length; i++) validateExpr(arr[i], [...path, field, i], stage);
+    }
+
+    // Recurse into statement children
+    for (const field of rule.stmtChildren) {
+      const child = node[field];
+      if (child) validateStmt(child as StatementIR, [...path, field], stage);
+    }
+    for (const field of rule.stmtChildArrays) {
+      const arr = node[field] as readonly StatementIR[];
+      for (let i = 0; i < arr.length; i++) validateStmt(arr[i], [...path, field, i], stage);
+    }
+
+    // Recurse into expression records (varyings, outputs)
+    for (const field of rule.exprRecords) {
+      const rec = node[field] as Record<string, ExprIR>;
+      for (const [k, v] of Object.entries(rec)) validateExpr(v, [...path, field, k], stage);
+    }
+  }
+
+  function validateStmts(stmts: readonly StatementIR[], path: (string | number)[], stage: Stage): void {
+    for (let i = 0; i < stmts.length; i++) validateStmt(stmts[i], [...path, i], stage);
+  }
+
+  // Validate roster entries
+  for (let i = 0; i < roster.length; i++) {
+    const entry = roster[i];
+    const bp = ['roster', i]; // base path
+
+    if (entry.type === 'Compute') {
+      if (entry.dispatch.mode === 'Domain' && !domainIds.has(entry.dispatch.domainId))
+        issue([...bp, 'dispatch', 'domainId'], `Domain '${entry.dispatch.domainId}' not in manifest`);
+      if (entry.dispatch.mode === 'Texture' && !lookups.texture.has(entry.dispatch.textureId))
+        issue([...bp, 'dispatch', 'textureId'], `Texture '${entry.dispatch.textureId}' not in manifest`);
+      for (const d of Object.keys(entry.dependencies.domains))
+        if (!domainIds.has(d)) issue([...bp, 'dependencies', 'domains', d], `Domain '${d}' not in manifest`);
+      for (const t of Object.keys(entry.dependencies.textures))
+        if (!lookups.texture.has(t)) issue([...bp, 'dependencies', 'textures', t], `Texture '${t}' not in manifest`);
+      validateStmts(entry.ast, [...bp, 'ast'], 'compute');
+    }
+    if (entry.type === 'System_DrawPrep') {
+      if (!lookups.scalar.has(entry.activeLanesSymbol))
+        issue([...bp, 'activeLanesSymbol'], `Scalar '${entry.activeLanesSymbol}' not in manifest.arenaScalars`);
+    }
+    if (entry.type === 'Render') {
+      for (let j = 0; j < entry.drawCalls.length; j++) {
+        const dc = entry.drawCalls[j];
+        const dp = [...bp, 'drawCalls', j];
+        if (dc.source.type === 'Domain') {
+          if (!domainIds.has(dc.source.domainId)) issue([...dp, 'source', 'domainId'], `Domain '${dc.source.domainId}' not in manifest`);
+          if (!shapeIds.has(dc.source.shapeId)) issue([...dp, 'source', 'shapeId'], `Shape '${dc.source.shapeId}' not in manifest.shapeBank`);
+        }
+        for (const d of Object.keys(dc.dependencies.domains))
+          if (!domainIds.has(d)) issue([...dp, 'dependencies', 'domains', d], `Domain '${d}' not in manifest`);
+        for (const t of Object.keys(dc.dependencies.textures))
+          if (!lookups.texture.has(t)) issue([...dp, 'dependencies', 'textures', t], `Texture '${t}' not in manifest`);
+        validateStmts(dc.vertexAst, [...dp, 'vertexAst'], 'vertex');
+        validateStmts(dc.fragmentAst, [...dp, 'fragmentAst'], 'fragment');
+      }
+    }
+  }
+}
+
+const PipelineInstallPayloadBaseSchema = z.object({
   manifest: MemoryManifestSchema,
   roster: z.array(RosterEntrySchema).readonly(),
 });
-export type PipelineInstallPayload = z.infer<typeof PipelineInstallPayloadSchema>;
+
+export const PipelineInstallPayloadSchema = PipelineInstallPayloadBaseSchema
+  .superRefine(validatePayloadSemantics);
+export type PipelineInstallPayload = z.infer<typeof PipelineInstallPayloadBaseSchema>;
 
 // Receipt (Rust → JS direction)
 export const CompilationDiagnosticSchema = z.object({
