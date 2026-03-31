@@ -121,6 +121,23 @@ impl ModuleBuilder {
         )
     }
 
+    /// Create a named struct type with members. Each member has a name, type, and optional binding.
+    pub fn struct_type(
+        &mut self,
+        name: &str,
+        members: Vec<naga::StructMember>,
+    ) -> naga::Handle<naga::Type> {
+        // Calculate span (total byte size) from members
+        let span = members.last().map(|m| m.offset + 16).unwrap_or(0); // rough estimate
+        self.module.types.insert(
+            naga::Type {
+                name: Some(name.to_owned()),
+                inner: naga::TypeInner::Struct { members, span },
+            },
+            naga::Span::UNDEFINED,
+        )
+    }
+
     pub fn add_global_storage(
         &mut self,
         name: &str,
@@ -266,7 +283,7 @@ impl FnBuilder {
         }
     }
 
-    fn with_root<R>(&mut self, f: impl FnOnce(&mut FnBodyBuilder<'_>) -> R) -> R {
+    pub fn with_root<R>(&mut self, f: impl FnOnce(&mut FnBodyBuilder<'_>) -> R) -> R {
         let mut root = std::mem::take(&mut self.root);
         let mut builder = FnBodyBuilder {
             function: &mut self.function,
@@ -328,6 +345,42 @@ impl FnBuilder {
 
     pub fn neg(&mut self, a: Expr) -> Expr {
         self.with_root(|inner| inner.neg(a))
+    }
+
+    pub fn and(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.and(a, b))
+    }
+
+    pub fn or(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.or(a, b))
+    }
+
+    pub fn not(&mut self, a: Expr) -> Expr {
+        self.with_root(|inner| inner.not(a))
+    }
+
+    pub fn bit_and(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.bit_and(a, b))
+    }
+
+    pub fn bit_or(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.bit_or(a, b))
+    }
+
+    pub fn bit_xor(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.bit_xor(a, b))
+    }
+
+    pub fn shl(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.shl(a, b))
+    }
+
+    pub fn shr(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.shr(a, b))
+    }
+
+    pub fn bit_not(&mut self, a: Expr) -> Expr {
+        self.with_root(|inner| inner.bit_not(a))
     }
 
     pub fn lt(&mut self, a: Expr, b: Expr) -> Expr {
@@ -424,6 +477,51 @@ impl FnBuilder {
 
     pub fn atan2(&mut self, y: Expr, x: Expr) -> Expr {
         self.with_root(|inner| inner.atan2(y, x))
+    }
+
+    pub fn asin(&mut self, a: Expr) -> Expr {
+        self.with_root(|inner| inner.asin(a))
+    }
+    pub fn acos(&mut self, a: Expr) -> Expr {
+        self.with_root(|inner| inner.acos(a))
+    }
+    pub fn atan(&mut self, a: Expr) -> Expr {
+        self.with_root(|inner| inner.atan(a))
+    }
+    pub fn step(&mut self, edge: Expr, x: Expr) -> Expr {
+        self.with_root(|inner| inner.step(edge, x))
+    }
+    pub fn smoothstep(&mut self, lo: Expr, hi: Expr, x: Expr) -> Expr {
+        self.with_root(|inner| inner.smoothstep(lo, hi, x))
+    }
+    pub fn length(&mut self, v: Expr) -> Expr {
+        self.with_root(|inner| inner.length(v))
+    }
+    pub fn distance(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.distance(a, b))
+    }
+    pub fn dot(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.dot(a, b))
+    }
+    pub fn cross(&mut self, a: Expr, b: Expr) -> Expr {
+        self.with_root(|inner| inner.cross(a, b))
+    }
+    pub fn normalize(&mut self, v: Expr) -> Expr {
+        self.with_root(|inner| inner.normalize(v))
+    }
+    pub fn reflect(&mut self, i: Expr, n: Expr) -> Expr {
+        self.with_root(|inner| inner.reflect(i, n))
+    }
+    pub fn refract(&mut self, i: Expr, n: Expr, eta: Expr) -> Expr {
+        self.with_root(|inner| inner.refract(i, n, eta))
+    }
+    pub fn swizzle(
+        &mut self,
+        src: Expr,
+        size: naga::VectorSize,
+        pattern: [naga::SwizzleComponent; 4],
+    ) -> Expr {
+        self.with_root(|inner| inner.swizzle(src, size, pattern))
     }
 
     pub fn f32(&mut self, e: Expr) -> Expr {
@@ -627,6 +725,56 @@ impl FnBuilder {
         self.with_root(|inner| inner.atomic_exchange(pointer, value, result_type))
     }
 
+    /// Add a function argument and return the expression handle for it.
+    /// Used for vertex attributes (`@location(N)`) and builtins (`@builtin(vertex_index)`).
+    pub fn add_argument(
+        &mut self,
+        name: &str,
+        ty: naga::Handle<naga::Type>,
+        binding: Option<naga::Binding>,
+    ) -> Expr {
+        let index = self.function.arguments.len() as u32;
+        self.function.arguments.push(naga::FunctionArgument {
+            name: Some(name.to_owned()),
+            ty,
+            binding,
+        });
+        self.with_root(|b| b.append_expr(naga::Expression::FunctionArgument(index)))
+    }
+
+    /// Bitcast (reinterpret bits, no value conversion) to f32.
+    /// Domain SoA buffers are `array<u32>` — f32 values require bitcast on read.
+    pub fn bitcast_f32(&mut self, e: Expr) -> Expr {
+        self.with_root(|inner| inner.bitcast_f32(e))
+    }
+
+    /// Bitcast (reinterpret bits, no value conversion) to u32.
+    /// f32 values stored to `array<u32>` domain buffers require bitcast on write.
+    pub fn bitcast_u32(&mut self, e: Expr) -> Expr {
+        self.with_root(|inner| inner.bitcast_u32(e))
+    }
+
+    /// Declare a mutable local variable. Returns a **pointer** expression.
+    /// Read via `load_local(ptr)`, write via `store_local(ptr, value)`.
+    pub fn declare_var(
+        &mut self,
+        name: &str,
+        ty: naga::Handle<naga::Type>,
+        init: Option<Expr>,
+    ) -> Expr {
+        self.with_root(|inner| inner.declare_var(name, ty, init))
+    }
+
+    /// Load the current value of a local variable from its pointer.
+    pub fn load_local(&mut self, pointer: Expr) -> Expr {
+        self.with_root(|inner| inner.load_local(pointer))
+    }
+
+    /// Store a value to a local variable pointer.
+    pub fn store_local(&mut self, pointer: Expr, value: Expr) {
+        self.with_root(|inner| inner.store_local(pointer, value));
+    }
+
     pub fn finish(mut self) -> naga::Function {
         let root = std::mem::take(&mut self.root);
         let root_builder = FnBodyBuilder {
@@ -762,6 +910,52 @@ impl<'a> FnBodyBuilder<'a> {
         })
     }
 
+    // --- Logical operators ---
+
+    pub fn and(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::LogicalAnd, a, b)
+    }
+
+    pub fn or(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::LogicalOr, a, b)
+    }
+
+    pub fn not(&mut self, a: Expr) -> Expr {
+        self.append_expr(naga::Expression::Unary {
+            op: naga::UnaryOperator::LogicalNot,
+            expr: a,
+        })
+    }
+
+    // --- Bitwise operators ---
+
+    pub fn bit_and(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::And, a, b)
+    }
+
+    pub fn bit_or(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::InclusiveOr, a, b)
+    }
+
+    pub fn bit_xor(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::ExclusiveOr, a, b)
+    }
+
+    pub fn shl(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::ShiftLeft, a, b)
+    }
+
+    pub fn shr(&mut self, a: Expr, b: Expr) -> Expr {
+        self.binary(naga::BinaryOperator::ShiftRight, a, b)
+    }
+
+    pub fn bit_not(&mut self, a: Expr) -> Expr {
+        self.append_expr(naga::Expression::Unary {
+            op: naga::UnaryOperator::BitwiseNot,
+            expr: a,
+        })
+    }
+
     pub fn lt(&mut self, a: Expr, b: Expr) -> Expr {
         self.binary(naga::BinaryOperator::Less, a, b)
     }
@@ -875,6 +1069,71 @@ impl<'a> FnBodyBuilder<'a> {
         self.math(naga::MathFunction::Atan2, y, Some(x), None, None)
     }
 
+    // --- Extended math (Gate 4) ---
+
+    pub fn asin(&mut self, a: Expr) -> Expr {
+        self.math(naga::MathFunction::Asin, a, None, None, None)
+    }
+
+    pub fn acos(&mut self, a: Expr) -> Expr {
+        self.math(naga::MathFunction::Acos, a, None, None, None)
+    }
+
+    pub fn atan(&mut self, a: Expr) -> Expr {
+        self.math(naga::MathFunction::Atan, a, None, None, None)
+    }
+
+    pub fn step(&mut self, edge: Expr, x: Expr) -> Expr {
+        self.math(naga::MathFunction::Step, edge, Some(x), None, None)
+    }
+
+    pub fn smoothstep(&mut self, lo: Expr, hi: Expr, x: Expr) -> Expr {
+        self.math(naga::MathFunction::SmoothStep, lo, Some(hi), Some(x), None)
+    }
+
+    pub fn length(&mut self, v: Expr) -> Expr {
+        self.math(naga::MathFunction::Length, v, None, None, None)
+    }
+
+    pub fn distance(&mut self, a: Expr, b: Expr) -> Expr {
+        self.math(naga::MathFunction::Distance, a, Some(b), None, None)
+    }
+
+    pub fn dot(&mut self, a: Expr, b: Expr) -> Expr {
+        self.math(naga::MathFunction::Dot, a, Some(b), None, None)
+    }
+
+    pub fn cross(&mut self, a: Expr, b: Expr) -> Expr {
+        self.math(naga::MathFunction::Cross, a, Some(b), None, None)
+    }
+
+    pub fn normalize(&mut self, v: Expr) -> Expr {
+        self.math(naga::MathFunction::Normalize, v, None, None, None)
+    }
+
+    pub fn reflect(&mut self, i: Expr, n: Expr) -> Expr {
+        self.math(naga::MathFunction::Reflect, i, Some(n), None, None)
+    }
+
+    pub fn refract(&mut self, i: Expr, n: Expr, eta: Expr) -> Expr {
+        self.math(naga::MathFunction::Refract, i, Some(n), Some(eta), None)
+    }
+
+    // --- Multi-component swizzle ---
+
+    pub fn swizzle(
+        &mut self,
+        src: Expr,
+        size: naga::VectorSize,
+        pattern: [naga::SwizzleComponent; 4],
+    ) -> Expr {
+        self.append_expr(naga::Expression::Swizzle {
+            size,
+            vector: src,
+            pattern,
+        })
+    }
+
     pub fn f32(&mut self, e: Expr) -> Expr {
         self.append_expr(naga::Expression::As {
             expr: e,
@@ -896,6 +1155,24 @@ impl<'a> FnBodyBuilder<'a> {
             expr: e,
             kind: naga::ScalarKind::Sint,
             convert: Some(4),
+        })
+    }
+
+    /// Bitcast (reinterpret bits) to f32. `convert: None` = bitcast, not value conversion.
+    pub fn bitcast_f32(&mut self, e: Expr) -> Expr {
+        self.append_expr(naga::Expression::As {
+            expr: e,
+            kind: naga::ScalarKind::Float,
+            convert: None,
+        })
+    }
+
+    /// Bitcast (reinterpret bits) to u32. `convert: None` = bitcast, not value conversion.
+    pub fn bitcast_u32(&mut self, e: Expr) -> Expr {
+        self.append_expr(naga::Expression::As {
+            expr: e,
+            kind: naga::ScalarKind::Uint,
+            convert: None,
         })
     }
 
@@ -1191,5 +1468,42 @@ impl<'a> FnBodyBuilder<'a> {
             result: Some(result),
         });
         result
+    }
+
+    /// Declare a mutable local variable. Returns a **pointer** expression.
+    /// In naga: `LocalVariable` + `Expression::LocalVariable(handle)`.
+    pub fn declare_var(
+        &mut self,
+        name: &str,
+        ty: naga::Handle<naga::Type>,
+        init: Option<Expr>,
+    ) -> Expr {
+        let handle = self.function.local_variables.append(
+            naga::LocalVariable {
+                name: Some(name.to_owned()),
+                ty,
+                init: None,
+            },
+            naga::Span::UNDEFINED,
+        );
+        let ptr = self.append_expr(naga::Expression::LocalVariable(handle));
+        // If init provided, emit a store
+        if let Some(init_val) = init {
+            self.push_statement(naga::Statement::Store {
+                pointer: ptr,
+                value: init_val,
+            });
+        }
+        ptr
+    }
+
+    /// Load the current value of a local variable from its pointer.
+    pub fn load_local(&mut self, pointer: Expr) -> Expr {
+        self.append_expr(naga::Expression::Load { pointer })
+    }
+
+    /// Store a value to a local variable pointer.
+    pub fn store_local(&mut self, pointer: Expr, value: Expr) {
+        self.push_statement(naga::Statement::Store { pointer, value });
     }
 }
