@@ -1,9 +1,12 @@
 mod allocator;
+pub mod contract;
 pub mod dsl;
 mod engine;
 mod error_boundary;
+mod mmu;
 mod scheduler;
 mod telemetry;
+mod translator;
 
 #[cfg(test)]
 mod dsl_tests;
@@ -123,56 +126,29 @@ pub fn resume_engine() -> Result<(), JsValue> {
 }
 
 /// Phase 1: Pipeline Install — receives the full PipelineInstallPayload JSON.
-/// Returns an InstallReceipt JSON object.
-///
-/// STUB: Returns error receipt until the MMU + AST translator are implemented.
+/// Returns an InstallReceipt JSON string.
 #[wasm_bindgen]
-pub fn install_pipeline(_payload: JsValue) -> Result<JsValue, JsValue> {
-    // TODO: Deserialize PipelineInstallPayload, run MMU, translate AST, compile pipelines
-    let receipt = js_sys::Object::new();
-    js_sys::Reflect::set(
-        &receipt,
-        &JsValue::from_str("status"),
-        &JsValue::from_str("error"),
-    )?;
-    js_sys::Reflect::set(
-        &receipt,
-        &JsValue::from_str("compilationTimeMs"),
-        &JsValue::from_f64(0.0),
-    )?;
-    let diagnostics = js_sys::Array::new();
-    let diag = js_sys::Object::new();
-    js_sys::Reflect::set(
-        &diag,
-        &JsValue::from_str("severity"),
-        &JsValue::from_str("error"),
-    )?;
-    js_sys::Reflect::set(
-        &diag,
-        &JsValue::from_str("phase"),
-        &JsValue::from_str("manifest_allocation"),
-    )?;
-    js_sys::Reflect::set(
-        &diag,
-        &JsValue::from_str("message"),
-        &JsValue::from_str("install_pipeline not yet implemented"),
-    )?;
-    diagnostics.push(&diag.into());
-    js_sys::Reflect::set(
-        &receipt,
-        &JsValue::from_str("diagnostics"),
-        &diagnostics.into(),
-    )?;
-    Ok(receipt.into())
+pub fn install_pipeline(payload_json: &str) -> Result<String, JsValue> {
+    ENGINE.with(|engine_cell| {
+        let mut engine_ref = engine_cell.borrow_mut();
+        let engine = engine_ref.as_mut().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before install_pipeline")
+        })?;
+        Ok(engine.install_pipeline(payload_json))
+    })
 }
 
 /// Phase 2 Avenue 1: Update globals (Float32Array written to uniform buffer).
-///
-/// STUB: No-op until MMU allocates the globals buffer.
 #[wasm_bindgen]
-pub fn update_globals(_data: &[u8]) -> Result<(), JsValue> {
-    // TODO: queue.write_buffer(globals_buffer, 0, data)
-    Ok(())
+pub fn update_globals(data: &[u8]) -> Result<(), JsValue> {
+    ENGINE.with(|engine_cell| {
+        let engine_ref = engine_cell.borrow();
+        let engine = engine_ref.as_ref().ok_or_else(|| {
+            JsValue::from_str("Rust engine must be initialized before update_globals")
+        })?;
+        engine.update_globals(data);
+        Ok(())
+    })
 }
 
 /// Phase 2: Execute the compiled roster (compute → draw_prep → render → submit).

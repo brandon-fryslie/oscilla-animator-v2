@@ -166,7 +166,51 @@ impl WorkerObservabilityPacket {
         set_num(&hb, "sampleCount", self.heartbeat.sample_count as f64)?;
         set_num(&hb, "lastTickMs", self.heartbeat.last_tick_ms)?;
         set_num(&hb, "lastSuccessMs", self.heartbeat.last_success_ms)?;
-        set_num(&hb, "totalFrameMs", self.heartbeat.telemetry.total_frame_ms)?;
+
+        // Telemetry sub-object (stageTimings, dispatchCounters, resourceStats)
+        let telemetry = Object::new();
+        let stage_timings = Object::new();
+        set_num(&stage_timings, "inputMarshalMs", 0.0)?;
+        set_num(&stage_timings, "simulationDispatchMs", 0.0)?;
+        set_num(&stage_timings, "drawPrepMs", 0.0)?;
+        set_num(&stage_timings, "renderMs", 0.0)?;
+        set_num(&stage_timings, "swapMs", 0.0)?;
+        set_num(
+            &stage_timings,
+            "totalFrameMs",
+            self.heartbeat.telemetry.total_frame_ms,
+        )?;
+        js_sys::Reflect::set(
+            &telemetry,
+            &JsValue::from_str("stageTimings"),
+            &stage_timings,
+        )?;
+        let dispatch_counters = Object::new();
+        set_num(&dispatch_counters, "computeDispatchCount", 0.0)?;
+        set_num(&dispatch_counters, "computeWorkgroupCount", 0.0)?;
+        set_num(&dispatch_counters, "activeLaneCount", 0.0)?;
+        set_num(&dispatch_counters, "guardedLaneCount", 0.0)?;
+        js_sys::Reflect::set(
+            &telemetry,
+            &JsValue::from_str("dispatchCounters"),
+            &dispatch_counters,
+        )?;
+        let resource_stats = Object::new();
+        set_num(&resource_stats, "shapeBankWordCount", 0.0)?;
+        set_num(&resource_stats, "sinkTableWordCount", 0.0)?;
+        set_num(&resource_stats, "indexedRecordCount", 0.0)?;
+        set_num(&resource_stats, "nonIndexedRecordCount", 0.0)?;
+        set_num(&resource_stats, "totalInstanceCount", 0.0)?;
+        set_num(&resource_stats, "canvasWidth", 0.0)?;
+        set_num(&resource_stats, "canvasHeight", 0.0)?;
+        set_num(&resource_stats, "pingPongIndex", 0.0)?;
+        js_sys::Reflect::set(
+            &telemetry,
+            &JsValue::from_str("resourceStats"),
+            &resource_stats,
+        )?;
+        js_sys::Reflect::set(&hb, &JsValue::from_str("telemetry"), &telemetry)?;
+
         js_sys::Reflect::set(&payload, &JsValue::from_str("heartbeat"), &hb)?;
 
         // Events

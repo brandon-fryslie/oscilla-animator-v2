@@ -23,6 +23,7 @@ import type {
   RustRendererWorkerOutboundMessage,
   RustRendererSchedulerState,
 } from './worker-protocol';
+import { PipelineInstallPayloadSchema } from './boundary-contract';
 
 const POLL_INTERVAL_MS = 250;
 
@@ -127,8 +128,30 @@ function handleInstallPipeline(
   if (pollingWasActive) {
     stopRuntimePolling();
   }
+  // [LAW:single-enforcer] Structural validation at the WASM boundary — the one
+  // place where JS-produced payloads are checked before crossing into Rust.
+  const parsed = PipelineInstallPayloadSchema.safeParse(JSON.parse(message.payloadJson));
+  if (!parsed.success) {
+    postWorkerMessage({
+      type: 'INSTALL_PIPELINE_FAILURE',
+      receiptJson: JSON.stringify({
+        status: 'error',
+        compilationTimeMs: 0,
+        globalOffsetMap: {},
+        framePayloadLength: 0,
+        diagnostics: parsed.error.issues.map(issue => ({
+          severity: 'error' as const,
+          phase: 'manifest_allocation' as const,
+          message: `${issue.path.join('.')}: ${issue.message}`,
+        })),
+      }),
+    });
+    return;
+  }
+
   try {
-    const receiptJson = installRustRendererPipeline(message.payloadJson);
+    // parsed.data is guaranteed structurally valid — safe to serialize to Rust
+    const receiptJson = installRustRendererPipeline(JSON.stringify(parsed.data));
     // Parse receipt to check status
     let receipt: { status?: string };
     try {
