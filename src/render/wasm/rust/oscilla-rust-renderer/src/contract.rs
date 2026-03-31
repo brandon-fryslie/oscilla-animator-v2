@@ -238,6 +238,17 @@ pub struct PipelineStateSpec {
     pub depth_compare: String,
     pub stencil_read_mask: Option<u32>,
     pub stencil_write_mask: Option<u32>,
+    pub stencil_front: Option<StencilFaceState>,
+    pub stencil_back: Option<StencilFaceState>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StencilFaceState {
+    pub compare: String,
+    pub fail_op: String,
+    pub depth_fail_op: String,
+    pub pass_op: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -41,14 +41,14 @@ export interface InitOutput {
     readonly resume_engine: () => [number, number];
     readonly take_frame_pacing_packet: () => [number, number, number];
     readonly update_globals: (a: number, b: number) => [number, number];
+    readonly wasm_bindgen__closure__destroy__hc887791a8027d6e0: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__h24eb1beb91406585: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hd99e32614ecba0da: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__hc887791a8027d6e0: (a: number, b: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h3349dc4958f0f5ed: (a: number, b: number, c: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h9ec520a2660f1f16: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h65b27961b9eb595f: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h04f3aea5abe10bac: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h04f3aea5abe10bac_1: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h04f3aea5abe10bac_2: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
