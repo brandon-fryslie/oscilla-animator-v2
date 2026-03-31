@@ -1,14 +1,14 @@
 /**
  * PayloadTesterApp — Root component for the standalone payload tester.
  *
- * Boots the Rust WASM renderer in a dedicated worker, connects the PayloadEditor
- * to INSTALL_PIPELINE, and displays the canvas output.
+ * Boots the Rust WASM renderer in a dedicated worker, connects the
+ * DslPayloadSplitEditor to INSTALL_PIPELINE, and displays the canvas output.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
-import { PayloadEditor } from './PayloadEditor';
+import { DslPayloadSplitEditor, type CompileStatus } from './DslPayloadSplitEditor';
 import { HEARTBEAT_BUFFER_BYTES } from '../render/rust/runtime-input-layout';
 import type {
   RustRendererWorkerOutboundMessage,
@@ -16,30 +16,27 @@ import type {
   RustRendererInstallPipelineMessage,
 } from '../render/rust/worker-protocol';
 
-type StatusMessage =
+type RendererStatus =
   | { kind: 'idle' }
   | { kind: 'booting'; message: string }
   | { kind: 'ready'; message: string }
   | { kind: 'info'; message: string }
   | { kind: 'error'; message: string };
 
+const DEFAULT_FIXTURE = PAYLOAD_FIXTURES[0];
+
 export const PayloadTesterApp: React.FC = () => {
-  const [status, setStatus] = useState<StatusMessage>({ kind: 'idle' });
-  const [json, setJson] = useState(() =>
-    PAYLOAD_FIXTURES.length > 0
-      ? JSON.stringify(PAYLOAD_FIXTURES[0].payload, null, 2)
-      : '{}',
+  const [rendererStatus, setRendererStatus] = useState<RendererStatus>({ kind: 'idle' });
+  const [dslStatus, setDslStatus] = useState<CompileStatus>({ ok: true });
+  const [dslSource, setDslSource] = useState(
+    DEFAULT_FIXTURE?.dslSource ?? JSON.stringify(DEFAULT_FIXTURE?.payload ?? {}, null, 2),
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
-  const latestJsonRef = useRef(json);
+  const latestJsonRef = useRef('');
   const rendererReadyRef = useRef(false);
   const pendingInstallRef = useRef<string | null>(null);
-  const rendererReady = status.kind === 'ready' || status.kind === 'info';
-
-  useEffect(() => {
-    latestJsonRef.current = json;
-  }, [json]);
+  const rendererReady = rendererStatus.kind === 'ready' || rendererStatus.kind === 'info';
 
   useEffect(() => {
     rendererReadyRef.current = rendererReady;
@@ -47,15 +44,12 @@ export const PayloadTesterApp: React.FC = () => {
 
   const installPipeline = useCallback((payloadJson: string) => {
     const worker = workerRef.current;
+    latestJsonRef.current = payloadJson;
 
     // [LAW:one-source-of-truth] All install requests share one dispatch path
-    // so fixture clicks and manual submit behave identically.
     if (!worker || !rendererReadyRef.current) {
       pendingInstallRef.current = payloadJson;
-      setStatus({
-        kind: 'info',
-        message: 'Renderer not ready yet. Queued install request.',
-      });
+      setRendererStatus({ kind: 'info', message: 'Renderer not ready yet. Queued install request.' });
       return;
     }
 
@@ -64,7 +58,7 @@ export const PayloadTesterApp: React.FC = () => {
       payloadJson,
     };
     worker.postMessage(installMsg);
-    setStatus({ kind: 'info', message: 'Installing pipeline...' });
+    setRendererStatus({ kind: 'info', message: 'Installing pipeline...' });
   }, []);
 
   // Boot the renderer worker on mount
@@ -77,9 +71,8 @@ export const PayloadTesterApp: React.FC = () => {
 
     async function boot() {
       if (!canvas) return;
-      setStatus({ kind: 'booting', message: 'Renderer booting...' });
+      setRendererStatus({ kind: 'booting', message: 'Renderer booting...' });
 
-      // Fetch WASM bytes
       const wasmModule = await import('../render/wasm/pkg/oscilla_rust_renderer_bg.wasm?url');
       const wasmUrl = (wasmModule as { default: string }).default;
       const wasmResponse = await fetch(wasmUrl);
@@ -87,20 +80,15 @@ export const PayloadTesterApp: React.FC = () => {
 
       if (aborted) return;
 
-      // Transfer canvas to OffscreenCanvas
       const offscreen = canvas.transferControlToOffscreen();
-
-      // Create shared heartbeat buffer
       const sharedHeartbeat = new SharedArrayBuffer(HEARTBEAT_BUFFER_BYTES);
 
-      // Spawn worker
       worker = new Worker(
         new URL('../render/rust/engine.worker.ts', import.meta.url),
         { type: 'module' },
       );
       workerRef.current = worker;
 
-      // Listen for outbound messages
       worker.onmessage = (event: MessageEvent<RustRendererWorkerOutboundMessage>) => {
         const msg = event.data;
         if (!msg || typeof msg !== 'object' || !('type' in msg)) return;
@@ -108,7 +96,7 @@ export const PayloadTesterApp: React.FC = () => {
         switch (msg.type) {
           case 'BOOTSTRAP_SUCCESS':
             rendererReadyRef.current = true;
-            setStatus({ kind: 'ready', message: 'Renderer ready' });
+            setRendererStatus({ kind: 'ready', message: 'Renderer ready' });
             if (pendingInstallRef.current) {
               const payloadJson = pendingInstallRef.current;
               pendingInstallRef.current = null;
@@ -117,18 +105,17 @@ export const PayloadTesterApp: React.FC = () => {
                   type: 'INSTALL_PIPELINE',
                   payloadJson,
                 } satisfies RustRendererInstallPipelineMessage);
-                setStatus({ kind: 'info', message: 'Installing queued pipeline...' });
+                setRendererStatus({ kind: 'info', message: 'Installing queued pipeline...' });
               }
             }
             break;
           case 'INSTALL_PIPELINE_SUCCESS': {
-            // Count passes from the current payload
             let passCount = 0;
             try {
               const payload = JSON.parse(latestJsonRef.current);
               passCount = Array.isArray(payload?.roster) ? payload.roster.length : 0;
             } catch { /* ignore */ }
-            setStatus({
+            setRendererStatus({
               kind: 'info',
               message: `Installed ${passCount} pass(es) and started frame publication`,
             });
@@ -144,29 +131,22 @@ export const PayloadTesterApp: React.FC = () => {
                 errorMsg = receipt.diagnostics.map((d) => d.message).join('; ');
               }
             } catch { /* ignore */ }
-            setStatus({ kind: 'error', message: errorMsg });
+            setRendererStatus({ kind: 'error', message: errorMsg });
             break;
           }
           case 'FATAL_ERROR':
-            setStatus({
-              kind: 'error',
-              message: `Renderer boot failed: ${msg.message}`,
-            });
+            setRendererStatus({ kind: 'error', message: `Renderer boot failed: ${msg.message}` });
             break;
           case 'ENGINE_ERROR':
-            setStatus({
-              kind: 'error',
-              message: `GPU fault: ${msg.message}`,
-            });
+            setRendererStatus({ kind: 'error', message: `GPU fault: ${msg.message}` });
             break;
         }
       };
 
       worker.onerror = (err) => {
-        setStatus({ kind: 'error', message: `Worker error: ${err.message}` });
+        setRendererStatus({ kind: 'error', message: `Worker error: ${err.message}` });
       };
 
-      // Send bootstrap message
       const bootstrapMsg: RustRendererBootstrapMessage = {
         type: 'BOOTSTRAP',
         canvas: offscreen,
@@ -180,7 +160,7 @@ export const PayloadTesterApp: React.FC = () => {
     }
 
     boot().catch((err) => {
-      setStatus({
+      setRendererStatus({
         kind: 'error',
         message: `Renderer boot failed: ${err instanceof Error ? err.message : String(err)}`,
       });
@@ -197,18 +177,30 @@ export const PayloadTesterApp: React.FC = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
+    // If fixture has DSL source, show it in the DSL editor.
+    // Otherwise, show the raw JSON as fallback DSL source.
+    const source = fixture.dslSource ?? JSON.stringify(fixture.payload, null, 2);
+    setDslSource(source);
+
+    // Also immediately install the fixture payload (don't wait for DSL compile)
     const fixtureJson = JSON.stringify(fixture.payload, null, 2);
     latestJsonRef.current = fixtureJson;
-    setJson(fixtureJson);
     installPipeline(fixtureJson);
   }, [installPipeline]);
 
+  const handleJsonChange = useCallback((json: string) => {
+    latestJsonRef.current = json;
+  }, []);
+
+  const handleCompileStatus = useCallback((cs: CompileStatus) => {
+    setDslStatus(cs);
+  }, []);
+
   const handleSubmit = useCallback((rawJson: string) => {
-    // Validate JSON
     try {
       JSON.parse(rawJson);
     } catch (e) {
-      setStatus({ kind: 'error', message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}` });
+      setRendererStatus({ kind: 'error', message: `Invalid JSON: ${e instanceof Error ? e.message : String(e)}` });
       return;
     }
     latestJsonRef.current = rawJson;
@@ -227,14 +219,14 @@ export const PayloadTesterApp: React.FC = () => {
           />
         </div>
 
-        {/* Center: payload editor */}
+        {/* Center: DSL + JSON split editor */}
         <div style={{ flex: 1, minWidth: 300, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-          <PayloadEditor
-            json={json}
-            onJsonChange={setJson}
+          <DslPayloadSplitEditor
+            dslSource={dslSource}
+            onJsonChange={handleJsonChange}
             onSubmit={handleSubmit}
+            onCompileStatus={handleCompileStatus}
             disabled={!rendererReady}
-            submitLabel="Install + Run"
           />
         </div>
 
@@ -247,22 +239,41 @@ export const PayloadTesterApp: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom: status bar */}
+      {/* Bottom: status bar — DSL status (left) + Renderer status (right) */}
       <div style={{
         height: 32,
         borderTop: '1px solid #333',
         padding: '0 12px',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'space-between',
         fontSize: 12,
         fontFamily: '"SF Mono", Monaco, Consolas, monospace',
         background: '#141517',
+        gap: 16,
       }}>
-        {status.kind === 'idle' && <span style={{ color: '#888' }}>Initializing...</span>}
-        {status.kind === 'booting' && <span style={{ color: '#ffd43b' }}>{status.message}</span>}
-        {status.kind === 'ready' && <span style={{ color: '#69db7c' }}>{status.message}</span>}
-        {status.kind === 'info' && <span style={{ color: '#ffd43b' }}>{status.message}</span>}
-        {status.kind === 'error' && <span style={{ color: '#ff6b6b' }}>{status.message}</span>}
+        {/* Left: DSL compile status */}
+        <span style={{ color: dslStatus.ok ? '#69db7c' : '#ff6b6b', flexShrink: 0 }}>
+          {dslStatus.ok ? 'DSL ✓' : `DSL ✗ ${dslStatus.error ?? ''}`}
+        </span>
+
+        {/* Right: Renderer status */}
+        <span style={{
+          color:
+            rendererStatus.kind === 'error' ? '#ff6b6b' :
+            rendererStatus.kind === 'ready' ? '#69db7c' :
+            rendererStatus.kind === 'info' ? '#ffd43b' :
+            '#888',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {rendererStatus.kind === 'idle' && 'Renderer: initializing...'}
+          {rendererStatus.kind === 'booting' && `Renderer: ${rendererStatus.message}`}
+          {rendererStatus.kind === 'ready' && `Renderer: ${rendererStatus.message}`}
+          {rendererStatus.kind === 'info' && `Renderer: ${rendererStatus.message}`}
+          {rendererStatus.kind === 'error' && `Renderer: ${rendererStatus.message}`}
+        </span>
       </div>
     </div>
   );
