@@ -2,28 +2,26 @@
 /**
  * _payload-tester-cdp.mjs — CDP capture for the payload tester
  *
- * Navigates to the payload tester, waits for boot, clicks a fixture,
- * submits it, waits for result, and captures a screenshot.
+ * Navigates to the payload tester (with ?fixture=name&canvas-only query params),
+ * waits for the renderer to boot and install, then captures a screenshot.
  *
- * Usage: node _payload-tester-cdp.mjs <port> <url> <output-path> <width> <height> <fixture-index>
+ * Usage: node _payload-tester-cdp.mjs <port> <url> <output-path> <width> <height>
  */
 
 import { request as httpRequest } from 'node:http';
 import { randomBytes } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
 
-const [debugPort, targetUrl, outputPath, widthStr, heightStr, fixtureIndexStr] = process.argv.slice(2);
+const [debugPort, targetUrl, outputPath, widthStr, heightStr] = process.argv.slice(2);
 
 if (!debugPort || !targetUrl || !outputPath) {
-  console.error('Usage: node _payload-tester-cdp.mjs <port> <url> <output-path> <width> <height> <fixture-index>');
+  console.error('Usage: node _payload-tester-cdp.mjs <port> <url> <output-path> <width> <height>');
   process.exit(1);
 }
 
 const viewportWidth = parseInt(widthStr) || 720;
 const viewportHeight = parseInt(heightStr) || 720;
-const fixtureIndex = parseInt(fixtureIndexStr) || 0;
 
 setTimeout(() => {
   console.error('Error: Global timeout (60s). Aborting.');
@@ -169,62 +167,43 @@ async function main() {
   console.error(`Navigating: ${targetUrl}`);
   await cdp.send('Page.navigate', { url: targetUrl });
 
-  // Wait for "Ready" in the status bar (Naga shim + renderer booted)
+  // Wait for pipeline install (fixture auto-installs via query param)
   const BOOT_TIMEOUT = 30_000;
   const bootStart = Date.now();
   let booted = false;
 
   while (Date.now() - bootStart < BOOT_TIMEOUT) {
     try {
-      const text = await evalJs(cdp, `document.body?.innerText || ''`);
-      // "Renderer ready" appears briefly, then auto-install changes it to "Installed..."
-      if (text && (text.includes('Renderer ready') || text.includes('Installed') || text.includes('Installing'))) {
+      // In canvas-only mode there's no visible status text, so check via JS
+      const status = await evalJs(cdp, `
+        window.__rendererStatus || document.body?.innerText || ''
+      `);
+      if (status && (status.includes('Installed') || status.includes('Renderer ready'))) {
         booted = true; break;
       }
-
-      // Check for boot errors
-      if (text && (text.includes('GPU fault') || text.includes('Boot failed'))) {
-        console.error(`Boot error detected: ${text.slice(0, 500)}`);
+      if (status && status.includes('GPU fault')) {
+        console.error(`Renderer error: ${status}`);
         process.exit(1);
       }
-    } catch { /* page may be reloading for COI */ }
-    await sleep(500);
+    } catch { /* page may be reloading */ }
+    await sleep(300);
   }
 
   if (!booted) {
-    console.error('Timed out waiting for renderer boot.');
-    // Capture screenshot of the failure state
+    console.error('Timed out waiting for renderer.');
     const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     if (screenshot?.data) {
       mkdirSync(dirname(outputPath), { recursive: true });
       writeFileSync(outputPath, Buffer.from(screenshot.data, 'base64'));
-      console.error(`Failure screenshot saved to: ${outputPath}`);
+      console.error(`Failure screenshot: ${outputPath}`);
     }
     process.exit(1);
   }
 
-  console.error('Renderer booted.');
+  // Let a few frames render
+  await sleep(2000);
 
-  // Click fixture by index
-  console.error(`Clicking fixture #${fixtureIndex}...`);
-  await evalJs(cdp, `document.querySelectorAll('button[title]')[${fixtureIndex}]?.click()`);
-  await sleep(300);
-
-  // Click Submit
-  console.error('Submitting payload...');
-  await evalJs(cdp, `
-    Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Submit'))?.click()
-  `);
-
-  // Wait for submit result
-  await sleep(3000);
-
-  // Read status bar
-  const statusText = await evalJs(cdp, `document.body?.innerText || ''`);
-  const statusLine = (statusText || '').split('\n').filter(l => l.trim()).pop() || '';
-  console.error(`Status: ${statusLine}`);
-
-  // Capture screenshot
+  // Capture
   const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   if (!screenshot?.data) {
     console.error('No screenshot data.');
