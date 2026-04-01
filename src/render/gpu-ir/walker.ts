@@ -536,15 +536,40 @@ function extractStringArg(node: ESTree.Expression, ctx: WalkContext, funcName: s
   return '';
 }
 
-/** Infer WGSL type from an ExprIR value — used for Var dataType derivation */
-function inferDataType(expr: ExprIR): WgslType | undefined {
-  if (expr.type === 'LiteralF32') return 'f32';
-  if (expr.type === 'LiteralU32') return 'u32';
-  if (expr.type === 'LiteralI32') return 'i32';
-  if (expr.type === 'LiteralBool') return 'bool';
-  if (expr.type === 'Cast') return expr.targetType;
-  if (expr.type === 'Construct') return expr.dataType;
-  return undefined;
+/** Infer WGSL type from an ExprIR value — used for Var dataType derivation.
+ * The Rust translator requires a concrete dataType on every Var statement.
+ * Throws on unhandled expression types — no silent defaults. */
+function inferDataType(expr: ExprIR): WgslType {
+  switch (expr.type) {
+    case 'LiteralF32': return 'f32';
+    case 'LiteralU32': return 'u32';
+    case 'LiteralI32': return 'i32';
+    case 'LiteralBool': return 'bool';
+    case 'Cast': return expr.targetType;
+    case 'Construct': return expr.dataType;
+    case 'Intrinsic': return 'u32';
+    case 'CallBuiltin': return 'f32'; // all math builtins return f32
+    case 'LoadGlobal': return 'f32';  // globals are f32 (sys:time etc.)
+    case 'LoadField': return 'f32';   // domain fields are f32
+    case 'LoadScalar': return 'f32';  // arena scalars read as f32
+    case 'TextureLoad': return 'vec4<f32>';
+    case 'TextureSample': return 'vec4<f32>';
+    case 'AtomicLoadField': return 'u32';
+    case 'AtomicLoadScalar': return 'u32';
+    case 'Swizzle': return 'f32'; // single-component swizzle produces scalar
+    case 'IndexAccess': return 'f32';
+    case 'UnaryOp':
+      if (expr.op === '!') return 'bool';
+      return inferDataType(expr.expr); // - and ~ preserve operand type
+    case 'BinaryOp':
+      if (expr.op === '==' || expr.op === '!=' || expr.op === '<' || expr.op === '>' || expr.op === '<=' || expr.op === '>=') return 'bool';
+      if (expr.op === '&&' || expr.op === '||') return 'bool';
+      return inferDataType(expr.left); // arithmetic/bitwise preserves operand type
+    case 'VarRef':
+      throw new Error(`inferDataType: cannot determine type of VarRef('${expr.name}') — Var declarations with VarRef initializers need explicit type annotations`);
+    default:
+      throw new Error(`inferDataType: unhandled expression type '${expr.type}'`);
+  }
 }
 
 /** Walk expression in index context — bare numeric literals become LiteralU32 */
