@@ -604,7 +604,24 @@ impl Engine {
                             let workgroups = (cap + wg - 1) / wg;
                             [workgroups, 1, 1]
                         }
-                        _ => [1, 1, 1],
+                        crate::contract::DispatchMode::Texture { texture_id } => {
+                            let Some(tex_info) = arena.textures.get(texture_id) else {
+                                return install_error_json(
+                                    "manifest_allocation",
+                                    Some(spec.pass_id.as_str()),
+                                    format!(
+                                        "Dispatch texture '{}' not found in arena.textures",
+                                        texture_id
+                                    ),
+                                );
+                            };
+                            let wg_x = spec.workgroup_size[0].max(1);
+                            let wg_y = spec.workgroup_size[1].max(1);
+                            let size = tex_info.texture.size();
+                            let width = size.width;
+                            let height = size.height;
+                            [(width + wg_x - 1) / wg_x, (height + wg_y - 1) / wg_y, 1]
+                        }
                     };
 
                     passes.push(CompiledPass::Compute {
@@ -854,13 +871,21 @@ impl Engine {
                                 });
 
                         // Bind group: domains + textures (matching translator's group 0 layout)
-                        let has_bindings = !render_result.bound_domain_keys.is_empty()
+                        let has_bindings = render_result.uses_globals
+                            || !render_result.bound_domain_keys.is_empty()
                             || !render_result.bound_atomic_domain_keys.is_empty()
                             || !render_result.bound_texture_keys.is_empty()
                             || !render_result.bound_sampler_keys.is_empty();
                         let bind_group = if has_bindings {
                             let mut bg_entries = Vec::new();
                             let mut binding = 0u32;
+                            if render_result.uses_globals {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: arena.globals_buffer.as_entire_binding(),
+                                });
+                                binding += 1;
+                            }
                             for domain_id in &render_result.bound_domain_keys {
                                 bg_entries.push(wgpu::BindGroupEntry {
                                     binding,
