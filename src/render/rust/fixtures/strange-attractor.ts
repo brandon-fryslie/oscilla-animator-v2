@@ -8,9 +8,9 @@
 //   3. Slow color cycling
 gpu({
   globals: { 'sys:time': 'f32' },
-  scalars: { 'sys:active': { u32: 12000 } },
+  scalars: { 'sys:active': { u32: 4000 } },
   domains: {
-    pts: { capacity: 12000, active: 'sys:active', fields: {
+    pts: { capacity: 4000, active: 'sys:active', fields: {
       pos_x: 'f32', pos_y: 'f32',
       next_x: 'f32', next_y: 'f32',
       color_r: 'f32', color_g: 'f32', color_b: 'f32', color_a: 'f32',
@@ -33,7 +33,7 @@ gpu({
       () => {
         const gid = $thread.x;
         const time = $global.time;
-        const rank = f32(gid) / 12000.0;
+        const rank = f32(gid) / 4000.0;
 
         // Fixed seed — NO time dependency in attractor math
         let x = sin(rank * 137.5 + 0.1);
@@ -65,7 +65,7 @@ gpu({
         $domains.pts.color_r[gid] = (sin(hue * 6.283) * 0.4 + 0.5) * fade;
         $domains.pts.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.4 + 0.5) * fade;
         $domains.pts.color_b[gid] = (sin(hue * 6.283 + 4.189) * 0.4 + 0.5) * fade;
-        $domains.pts.color_a[gid] = fade * 0.035;
+        $domains.pts.color_a[gid] = fade * 0.012;
       },
     ),
     drawPrep('prep', 'sys:active', 2),
