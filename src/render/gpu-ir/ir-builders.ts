@@ -97,6 +97,9 @@ export const var_ = (name: string, dataType?: WgslType, value?: ExprIR): Stateme
 export const assign = (target: ExprIR, value: ExprIR): StatementIR =>
   ({ type: 'Assign', target, value }) as const;
 
+export const storeGlobal = (symbolId: SymbolId, value: ExprIR): StatementIR =>
+  ({ type: 'StoreGlobal', symbolId, value }) as const;
+
 export const storeScalar = (symbolId: SymbolId, value: ExprIR): StatementIR =>
   ({ type: 'StoreScalar', symbolId, value }) as const;
 
@@ -134,7 +137,9 @@ export const atomicOpField = (
   value: ExprIR,
   assignResultTo?: string,
 ): StatementIR =>
-  ({ type: 'AtomicOpField', op, symbolId, index, value, assignResultTo }) as const;
+  ({ type: 'AtomicOpField', op, symbolId, index, value,
+    ...(assignResultTo !== undefined ? { assignResultTo } : {}),
+  }) as const;
 
 export const atomicOpScalar = (
   op: AtomicOp,
@@ -142,7 +147,9 @@ export const atomicOpScalar = (
   value: ExprIR,
   assignResultTo?: string,
 ): StatementIR =>
-  ({ type: 'AtomicOpScalar', op, symbolId, value, assignResultTo }) as const;
+  ({ type: 'AtomicOpScalar', op, symbolId, value,
+    ...(assignResultTo !== undefined ? { assignResultTo } : {}),
+  }) as const;
 
 export const returnVertex = (
   position: ExprIR,

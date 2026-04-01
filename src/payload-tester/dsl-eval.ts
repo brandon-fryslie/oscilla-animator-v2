@@ -9,7 +9,7 @@
 
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
-  gpu, compute, render, draw, drawPrep, exact, wg,
+  gpu, compute, render, draw, drawPrep, cameraPass, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
 } from '../render/gpu-ir/compile';
@@ -44,7 +44,7 @@ for (const name of [
 /** All names that must be in scope when evaluating DSL source */
 const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
-  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'exact', 'wg',
+  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'cameraPass', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
   'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget',
   // Pipeline state presets (real)
@@ -58,6 +58,7 @@ const CONTEXT_NAMES = [
   'vec2', 'vec3', 'vec4',
   'vec2i', 'vec3i', 'vec4i',
   'vec2u', 'vec3u', 'vec4u',
+  'mat4x4',
   // Shader terminals (stubs)
   'vertex', 'fragment',
   // Texture/atomic ops (stubs)
@@ -70,7 +71,7 @@ const CONTEXT_NAMES = [
 
 const CONTEXT_VALUES = [
   // Real implementations
-  gpu, compute, render, draw, drawPrep, exact, wg,
+  gpu, compute, render, draw, drawPrep, cameraPass, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
@@ -81,6 +82,7 @@ const CONTEXT_VALUES = [
   STUB, STUB, STUB,
   STUB, STUB, STUB,
   STUB, STUB, STUB,
+  STUB, // mat4x4
   // Terminal stubs
   STUB, STUB,
   // Texture/atomic stubs

@@ -150,6 +150,8 @@ pub fn translate_compute_pass(
     // Group 0: Only declare buffers the AST actually uses.
     // Binding indices are sequential for existing buffers.
     let mut group0_binding = 0u32;
+    // [LAW:single-enforcer] Globals buffer is always read-only from GPU.
+    // CPU→GPU input channel; GPU outputs go to arena scalars.
     let globals_gv = if uses_globals {
         let arr_ty = m.array_type(f32_ty, None, 4);
         let gv = m.add_global_storage(
@@ -434,9 +436,28 @@ fn ast_uses_globals(stmts: &[StatementIR]) -> bool {
     stmts.iter().any(|s| stmt_uses_globals(s))
 }
 
+/// Check if AST writes to globals (StoreGlobal) — determines LOAD|STORE vs LOAD access.
+fn ast_writes_globals(stmts: &[StatementIR]) -> bool {
+    stmts.iter().any(|s| stmt_writes_globals(s))
+}
+
+fn stmt_writes_globals(stmt: &StatementIR) -> bool {
+    match stmt {
+        StatementIR::StoreGlobal { .. } => true,
+        StatementIR::If { accept, reject, .. } => {
+            ast_writes_globals(accept) || ast_writes_globals(reject)
+        }
+        StatementIR::For { init, update, body, .. } => {
+            stmt_writes_globals(init) || stmt_writes_globals(update) || ast_writes_globals(body)
+        }
+        _ => false,
+    }
+}
+
 fn stmt_uses_globals(stmt: &StatementIR) -> bool {
     match stmt {
         StatementIR::Let { value, .. } => expr_uses_globals(value),
+        StatementIR::StoreGlobal { value, .. } => true || expr_uses_globals(value),
         StatementIR::StoreField { index, value, .. } => {
             expr_uses_globals(index) || expr_uses_globals(value)
         }
@@ -497,6 +518,7 @@ fn stmt_uses_scalars(stmt: &StatementIR) -> bool {
     match stmt {
         StatementIR::StoreScalar { .. } => true,
         StatementIR::Let { value, .. } => expr_uses_scalars(value),
+        StatementIR::StoreGlobal { value, .. } => expr_uses_scalars(value),
         StatementIR::StoreField { index, value, .. } => {
             expr_uses_scalars(index) || expr_uses_scalars(value)
         }
@@ -584,6 +606,7 @@ fn collect_domains_from_stmt(
             collect_domains_from_expr(target, arena, out);
             collect_domains_from_expr(value, arena, out);
         }
+        StatementIR::StoreGlobal { value, .. } => collect_domains_from_expr(value, arena, out),
         StatementIR::StoreScalar { value, .. } => collect_domains_from_expr(value, arena, out),
         StatementIR::StoreField {
             symbol_id,
@@ -722,6 +745,7 @@ fn collect_textures_from_stmt(stmt: &StatementIR, out: &mut std::collections::Ha
             collect_textures_from_expr(target, out);
             collect_textures_from_expr(value, out);
         }
+        StatementIR::StoreGlobal { value, .. } => collect_textures_from_expr(value, out),
         StatementIR::StoreScalar { value, .. } => collect_textures_from_expr(value, out),
         StatementIR::StoreField { index, value, .. } => {
             collect_textures_from_expr(index, out);
@@ -834,6 +858,7 @@ fn collect_samplers_from_stmt(stmt: &StatementIR, out: &mut std::collections::Ha
             collect_samplers_from_expr(target, out);
             collect_samplers_from_expr(value, out);
         }
+        StatementIR::StoreGlobal { value, .. } => collect_samplers_from_expr(value, out),
         StatementIR::StoreScalar { value, .. } => collect_samplers_from_expr(value, out),
         StatementIR::StoreField { index, value, .. } => {
             collect_samplers_from_expr(index, out);
@@ -931,6 +956,7 @@ pub struct RenderPassTranslation {
     pub module: naga::Module,
     pub info: naga::valid::ModuleInfo,
     pub uses_globals: bool,
+    pub uses_scalars: bool,
     pub bound_domain_keys: Vec<String>,
     pub bound_atomic_domain_keys: Vec<String>,
     pub bound_texture_keys: Vec<String>,
@@ -1007,6 +1033,24 @@ pub fn translate_render_pass(
         let arr_ty = m.array_type(f32_ty, None, 4);
         let gv = m.add_global_storage(
             "globals",
+            arr_ty,
+            0,
+            group0_binding,
+            naga::StorageAccess::LOAD,
+        );
+        group0_binding += 1;
+        Some(gv)
+    } else {
+        None
+    };
+
+    // Scalars buffer — needed if vertex/fragment reads arena scalars (e.g., VP matrix)
+    let uses_scalars_in_render = ast_uses_scalars(&draw_call.vertex_ast)
+        || ast_uses_scalars(&draw_call.fragment_ast);
+    let render_scalars_gv = if uses_scalars_in_render {
+        let arr_ty = m.array_type(u32_ty, None, 4);
+        let gv = m.add_global_storage(
+            "scalars",
             arr_ty,
             0,
             group0_binding,
@@ -1153,7 +1197,7 @@ pub fn translate_render_pass(
     let vs_ctx = PassContext {
         stage: TranslationStage::Vertex,
         globals_expr: globals_gv.map(|gv| vs.global(gv)),
-        scalars_expr: None,
+        scalars_expr: render_scalars_gv.map(|gv| vs.global(gv)),
         domain_exprs: vs_domain_exprs,
         domain_atomic_exprs: vs_domain_atomic_exprs,
         symbol_map: arena.symbol_map.clone(),
@@ -1228,7 +1272,7 @@ pub fn translate_render_pass(
     let fs_ctx = PassContext {
         stage: TranslationStage::Fragment,
         globals_expr: globals_gv.map(|gv| fs.global(gv)),
-        scalars_expr: None,
+        scalars_expr: render_scalars_gv.map(|gv| fs.global(gv)),
         domain_exprs: fs_domain_exprs,
         domain_atomic_exprs: HashMap::new(),
         symbol_map: arena.symbol_map.clone(),
@@ -1263,6 +1307,7 @@ pub fn translate_render_pass(
         module,
         info,
         uses_globals,
+        uses_scalars: uses_scalars_in_render,
         bound_domain_keys,
         bound_atomic_domain_keys,
         bound_texture_keys,
@@ -1342,22 +1387,28 @@ fn translate_statement_body(
             let val = translate_expr_body(bb, ctx, value, scope);
             bb.store_local(ptr, val);
         }
+        StatementIR::StoreGlobal { symbol_id, value } => {
+            let sym = ctx
+                .symbol_map
+                .get(symbol_id)
+                .unwrap_or_else(|| panic!("StoreGlobal: symbol '{}' not in symbol_map", symbol_id));
+            let globals = ctx
+                .globals_expr
+                .expect("StoreGlobal requires globals buffer");
+            let val = translate_expr_body(bb, ctx, value, scope);
+            store_typed(bb, globals, sym, val);
+        }
         StatementIR::StoreScalar { symbol_id, value } => {
             let sym = ctx
                 .symbol_map
                 .get(symbol_id)
                 .unwrap_or_else(|| panic!("StoreScalar: symbol '{}' not in symbol_map", symbol_id));
-            let val = translate_expr_body(bb, ctx, value, scope);
-            let store_val = if is_u32_expr(value) {
-                val
-            } else {
-                bb.bitcast_u32(val)
-            };
             let scalars = ctx
                 .scalars_expr
                 .expect("StoreScalar requires scalars buffer");
-            let offset = bb.lit_u32(sym.word_offset);
-            bb.store_buffer(scalars, offset, store_val);
+            let val = translate_expr_body(bb, ctx, value, scope);
+            // Multi-word types (vec2, mat4x4, etc.) use the same store_typed helper
+            store_typed(bb, scalars, sym, val);
         }
         StatementIR::StoreField {
             symbol_id,
@@ -1608,6 +1659,117 @@ fn translate_statements_fragment(
 }
 
 // ---------------------------------------------------------------------------
+// Multi-word global load/store helpers
+// ---------------------------------------------------------------------------
+
+/// Load a value of arbitrary type from a flat array<u32> or array<f32> buffer.
+/// Scalar types load one word; vec2/3/4 load N words and compose; mat4x4 loads 16.
+fn load_typed(
+    bb: &mut FnBodyBuilder<'_>,
+    ctx: &PassContext,
+    buffer: Expr,
+    sym: &PhysicalSymbol,
+) -> Expr {
+    let base = sym.word_offset;
+    // Helper: pre-compute offset literal, then load (avoids double-borrow of bb)
+    let load_word = |bb: &mut FnBodyBuilder<'_>, word: u32| -> Expr {
+        let off = bb.lit_u32(word);
+        bb.load_buffer(buffer, off)
+    };
+    match sym.wgsl_type.as_str() {
+        "f32" | "u32" | "i32" => load_word(bb, base),
+        "vec2" => {
+            let ty = ctx.type_handles["vec2<f32>"];
+            let c0 = load_word(bb, base);
+            let c1 = load_word(bb, base + 1);
+            bb.compose(ty, vec![c0, c1])
+        }
+        "vec3" => {
+            let ty = ctx.type_handles["vec3<f32>"];
+            let c0 = load_word(bb, base);
+            let c1 = load_word(bb, base + 1);
+            let c2 = load_word(bb, base + 2);
+            bb.compose(ty, vec![c0, c1, c2])
+        }
+        "vec4" => {
+            let ty = ctx.type_handles["vec4<f32>"];
+            let c0 = load_word(bb, base);
+            let c1 = load_word(bb, base + 1);
+            let c2 = load_word(bb, base + 2);
+            let c3 = load_word(bb, base + 3);
+            bb.compose(ty, vec![c0, c1, c2, c3])
+        }
+        "mat4x4" => {
+            // Column-major: load 4 columns of vec4<f32>, compose into mat4x4<f32>
+            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            let mat4_ty = ctx.type_handles["mat4x4<f32>"];
+            let mut cols = Vec::with_capacity(4);
+            for col in 0..4u32 {
+                let col_base = base + col * 4;
+                let c0 = load_word(bb, col_base);
+                let c1 = load_word(bb, col_base + 1);
+                let c2 = load_word(bb, col_base + 2);
+                let c3 = load_word(bb, col_base + 3);
+                cols.push(bb.compose(vec4_ty, vec![c0, c1, c2, c3]));
+            }
+            bb.compose(mat4_ty, cols)
+        }
+        _ => load_word(bb, base),
+    }
+}
+
+/// Store a value of arbitrary type to a flat array<u32> or array<f32> buffer.
+/// Scalar types store one word; vec2/3/4 decompose and store N words; mat4x4 stores 16.
+fn store_typed(
+    bb: &mut FnBodyBuilder<'_>,
+    buffer: Expr,
+    sym: &PhysicalSymbol,
+    val: Expr,
+) {
+    let base = sym.word_offset;
+    // Helper: pre-compute offset, then store (avoids double-borrow of bb)
+    let store_word = |bb: &mut FnBodyBuilder<'_>, word: u32, v: Expr| {
+        let off = bb.lit_u32(word);
+        bb.store_buffer(buffer, off, v);
+    };
+    match sym.wgsl_type.as_str() {
+        "f32" => {
+            let sv = bb.bitcast_u32(val);
+            store_word(bb, base, sv);
+        }
+        "u32" | "i32" => {
+            store_word(bb, base, val);
+        }
+        "vec2" | "vec3" | "vec4" => {
+            let n: u32 = match sym.wgsl_type.as_str() {
+                "vec2" => 2,
+                "vec3" => 3,
+                _ => 4,
+            };
+            for i in 0..n {
+                let component = bb.access_index(val, i);
+                let sv = bb.bitcast_u32(component);
+                store_word(bb, base + i, sv);
+            }
+        }
+        "mat4x4" => {
+            for col in 0..4u32 {
+                let col_vec = bb.access_index(val, col);
+                for row in 0..4u32 {
+                    let component = bb.access_index(col_vec, row);
+                    let sv = bb.bitcast_u32(component);
+                    store_word(bb, base + col * 4 + row, sv);
+                }
+            }
+        }
+        _ => {
+            let sv = bb.bitcast_u32(val);
+            store_word(bb, base, sv);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Expression translation (operates on FnBodyBuilder for nested block support)
 // ---------------------------------------------------------------------------
 
@@ -1642,8 +1804,7 @@ fn translate_expr_body(
             let globals = ctx
                 .globals_expr
                 .expect("LoadGlobal requires globals buffer");
-            let offset = bb.lit_u32(sym.word_offset);
-            bb.load_buffer(globals, offset)
+            load_typed(bb, ctx, globals, sym)
         }
 
         ExprIR::LoadScalar { symbol_id } => {
@@ -1654,13 +1815,8 @@ fn translate_expr_body(
             let scalars = ctx
                 .scalars_expr
                 .expect("LoadScalar requires scalars buffer");
-            let offset = bb.lit_u32(sym.word_offset);
-            let raw = bb.load_buffer(scalars, offset);
-            if sym.wgsl_type == "f32" {
-                bb.bitcast_f32(raw)
-            } else {
-                raw
-            }
+            // Multi-word types (vec2, mat4x4, etc.) use the same load_typed helper
+            load_typed(bb, ctx, scalars, sym)
         }
 
         ExprIR::LoadField { symbol_id, index } => {

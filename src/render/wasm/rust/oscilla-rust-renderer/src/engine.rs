@@ -45,6 +45,8 @@ struct CompiledRoster {
     passes: Vec<CompiledPass>,
     /// Word offset of "sys:time" in the globals buffer (if present).
     global_time_word_offset: Option<u32>,
+    /// Word offset of "sys:resolution" in the globals buffer (if present).
+    global_resolution_word_offset: Option<u32>,
 }
 
 enum CompiledPass {
@@ -632,6 +634,89 @@ impl Engine {
                     });
                 }
 
+                RosterEntry::SystemCameraUpdate(spec) => {
+                    console::log_1(&JsValue::from_str(&format!(
+                        "[install_pipeline] Translating camera pass '{}' (cameraRef={})...",
+                        spec.pass_id, spec.camera_ref
+                    )));
+                    // Synthesize a ComputePassSpec — camera is a 1-thread compute
+                    let synthetic = crate::contract::ComputePassSpec {
+                        pass_id: spec.pass_id.clone(),
+                        source_block_ids: vec![],
+                        workgroup_size: [1, 1, 1],
+                        dispatch: crate::contract::DispatchMode::Exact { x: 1, y: 1, z: 1 },
+                        dependencies: crate::contract::ComputeDependencies {
+                            requires_globals: true,
+                            domains: std::collections::HashMap::new(),
+                            textures: std::collections::HashMap::new(),
+                        },
+                        ast: spec.ast.clone(),
+                    };
+                    let compute_result =
+                        match std::panic::catch_unwind(AssertUnwindSafe(|| {
+                            translator::translate_compute_pass(&synthetic, &arena)
+                        })) {
+                            Ok(result) => result,
+                            Err(payload) => {
+                                return install_error_json(
+                                    "ast_lowering",
+                                    None,
+                                    format!("Camera pass '{}' translation panicked: {:?}", spec.pass_id, payload),
+                                );
+                            }
+                        };
+                    let shader = self
+                        .device
+                        .create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: Some(&format!("camera_{}", spec.pass_id)),
+                            source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(
+                                compute_result.module,
+                            )),
+                        });
+                    let pipeline =
+                        self.device
+                            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                                label: Some(&format!("camera_{}", spec.pass_id)),
+                                layout: None,
+                                module: &shader,
+                                entry_point: Some("main"),
+                                compilation_options: Default::default(),
+                                cache: None,
+                            });
+                    // Bind globals + scalars (camera reads globals, writes scalars)
+                    let mut entries = Vec::new();
+                    let mut binding = 0u32;
+                    if compute_result.uses_globals {
+                        entries.push(wgpu::BindGroupEntry {
+                            binding,
+                            resource: arena.globals_buffer.as_entire_binding(),
+                        });
+                        binding += 1;
+                    }
+                    if compute_result.uses_scalars {
+                        entries.push(wgpu::BindGroupEntry {
+                            binding,
+                            resource: arena.scalars_buffer.as_entire_binding(),
+                        });
+                        let _ = binding;
+                    }
+                    let group0 = if !entries.is_empty() {
+                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("camera_group0"),
+                            layout: &pipeline.get_bind_group_layout(0),
+                            entries: &entries,
+                        }))
+                    } else {
+                        None
+                    };
+                    passes.push(CompiledPass::Compute {
+                        pipeline,
+                        group0,
+                        group1: None,
+                        dispatch: [1, 1, 1],
+                    });
+                }
+
                 RosterEntry::SystemDrawPrep(spec) => {
                     let (module, _info) = match std::panic::catch_unwind(AssertUnwindSafe(|| {
                         translator::translate_draw_prep(spec, &arena)
@@ -872,6 +957,7 @@ impl Engine {
 
                         // Bind group: domains + textures (matching translator's group 0 layout)
                         let has_bindings = render_result.uses_globals
+                            || render_result.uses_scalars
                             || !render_result.bound_domain_keys.is_empty()
                             || !render_result.bound_atomic_domain_keys.is_empty()
                             || !render_result.bound_texture_keys.is_empty()
@@ -883,6 +969,13 @@ impl Engine {
                                 bg_entries.push(wgpu::BindGroupEntry {
                                     binding,
                                     resource: arena.globals_buffer.as_entire_binding(),
+                                });
+                                binding += 1;
+                            }
+                            if render_result.uses_scalars {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: arena.scalars_buffer.as_entire_binding(),
                                 });
                                 binding += 1;
                             }
@@ -960,8 +1053,9 @@ impl Engine {
             }
         }
 
-        // Check if sys:time global exists
+        // Check if engine-driven globals exist
         let global_time_word_offset = arena.global_offset_map.get("sys:time").copied();
+        let global_resolution_word_offset = arena.global_offset_map.get("sys:resolution").copied();
 
         let elapsed = js_sys::Date::now() - start;
         let receipt = InstallReceipt {
@@ -976,6 +1070,7 @@ impl Engine {
             arena,
             passes,
             global_time_word_offset,
+            global_resolution_word_offset,
         });
 
         serde_json::to_string(&receipt).unwrap()
@@ -999,13 +1094,23 @@ impl Engine {
     fn execute_roster(&mut self) -> Result<(), JsValue> {
         let roster = self.compiled_roster.as_ref().unwrap();
 
-        // Write time to globals buffer (engine-driven for this slice)
+        // Write engine-driven globals (time, resolution) before GPU dispatch
         if let Some(offset) = roster.global_time_word_offset {
             let time_secs = (self.frame_count as f64 / 60.0) as f32;
             self.queue.write_buffer(
                 &roster.arena.globals_buffer,
                 (offset * 4) as u64,
                 bytemuck::bytes_of(&time_secs),
+            );
+        }
+        if let Some(offset) = roster.global_resolution_word_offset {
+            let w = self.surface_config.width as f32;
+            let h = self.surface_config.height as f32;
+            let data: [f32; 2] = [w, h];
+            self.queue.write_buffer(
+                &roster.arena.globals_buffer,
+                (offset * 4) as u64,
+                bytemuck::cast_slice(&data),
             );
         }
 

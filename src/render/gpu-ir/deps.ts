@@ -20,6 +20,7 @@ export interface ComputeDeps {
 
 export interface DrawCallDeps {
   readonly requiresGlobals: boolean;
+  readonly cameraRef: string;
   readonly domains: Record<string, 'read'>;
   readonly textures: Record<string, 'sampled'>;
 }
@@ -37,6 +38,7 @@ export function inferDrawCallDeps(
   vertexStmts: readonly StatementIR[],
   fragmentStmts: readonly StatementIR[],
   _manifest: MemoryManifest,
+  cameraRef: string,
 ): DrawCallDeps {
   const v = collectDeps(vertexStmts);
   const f = collectDeps(fragmentStmts);
@@ -46,6 +48,7 @@ export function inferDrawCallDeps(
   const textureWrites = new Set([...v.textureWrites, ...f.textureWrites]);
   return {
     requiresGlobals: v.usesGlobals || f.usesGlobals,
+    cameraRef,
     domains: Object.fromEntries(
       Object.keys(mergeDomainAccess(domainReads, domainWrites)).map(d => [d, 'read' as const]),
     ),
@@ -75,6 +78,7 @@ function collectDeps(stmts: readonly StatementIR[]) {
       if (e.type === 'TextureLoad') textureReads.add(e.textureId);
     },
     onStmt(s: StatementIR) {
+      if (s.type === 'StoreGlobal') usesGlobals = true;
       if (s.type === 'StoreField') domainWrites.add(extractDomain(s.symbolId));
       if (s.type === 'AtomicOpField') domainWrites.add(extractDomain(s.symbolId));
       if (s.type === 'TextureStore') textureWrites.add(s.textureId);
