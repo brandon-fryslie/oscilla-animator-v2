@@ -54,6 +54,7 @@ interface DeferredComputePass {
   readonly workgroupSize: readonly [number, number, number];
   readonly dispatch: ComputePassSpec['dispatch'];
   readonly bodyFn: Function;
+  readonly constants?: Record<string, number>;
   readonly dispatchDomain?: string;
 }
 
@@ -63,6 +64,7 @@ interface DeferredDrawCall {
   readonly pipelineState: DrawCallSpec['pipelineState'];
   readonly vertexFn: Function;
   readonly fragmentFn: Function;
+  readonly constants?: Record<string, number>;
   readonly domainId: string;
 }
 
@@ -97,8 +99,13 @@ export function compute(
   passId: string,
   dispatch: string | ExactDispatch,
   workgroup: WorkgroupSize,
-  body: Function,
+  constantsOrBody: Record<string, number> | Function,
+  maybeBody?: Function,
 ): DeferredComputePass {
+  const hasConstants = typeof constantsOrBody !== 'function';
+  const constants = hasConstants ? constantsOrBody : undefined;
+  const bodyFn = hasConstants ? maybeBody! : constantsOrBody;
+
   return {
     type: 'Compute',
     passId,
@@ -106,7 +113,8 @@ export function compute(
     dispatch: typeof dispatch === 'string'
       ? { mode: 'Domain', domainId: dispatch }
       : { mode: 'Exact', x: dispatch.x, y: dispatch.y, z: dispatch.z },
-    bodyFn: body,
+    bodyFn,
+    constants,
     dispatchDomain: typeof dispatch === 'string' ? dispatch : undefined,
   };
 }
@@ -204,7 +212,7 @@ function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
 }
 
 function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifest): ComputePassSpec {
-  const ctx: ShaderContext = { stage: 'compute', manifest };
+  const ctx: ShaderContext = { stage: 'compute', manifest, constants: entry.constants };
   const ast = unwrapWalkerResult(compileShaderBody(entry.bodyFn, ctx));
 
   // Auto-append active count for domain-dispatched compute
@@ -235,8 +243,8 @@ function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifes
 
 function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest): RenderPassSpec {
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
-    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest }));
-    const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest }));
+    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
+    const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
 
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest);
 
