@@ -604,7 +604,24 @@ impl Engine {
                             let workgroups = (cap + wg - 1) / wg;
                             [workgroups, 1, 1]
                         }
-                        _ => [1, 1, 1],
+                        crate::contract::DispatchMode::Texture { texture_id } => {
+                            let Some(tex_info) = arena.textures.get(texture_id) else {
+                                return install_error_json(
+                                    "manifest_allocation",
+                                    Some(spec.pass_id.as_str()),
+                                    format!(
+                                        "Dispatch texture '{}' not found in arena.textures",
+                                        texture_id
+                                    ),
+                                );
+                            };
+                            let wg_x = spec.workgroup_size[0].max(1);
+                            let wg_y = spec.workgroup_size[1].max(1);
+                            let size = tex_info.texture.size();
+                            let width = size.width;
+                            let height = size.height;
+                            [(width + wg_x - 1) / wg_x, (height + wg_y - 1) / wg_y, 1]
+                        }
                     };
 
                     passes.push(CompiledPass::Compute {
