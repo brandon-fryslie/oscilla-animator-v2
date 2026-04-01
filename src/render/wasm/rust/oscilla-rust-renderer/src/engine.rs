@@ -871,13 +871,21 @@ impl Engine {
                                 });
 
                         // Bind group: domains + textures (matching translator's group 0 layout)
-                        let has_bindings = !render_result.bound_domain_keys.is_empty()
+                        let has_bindings = render_result.uses_globals
+                            || !render_result.bound_domain_keys.is_empty()
                             || !render_result.bound_atomic_domain_keys.is_empty()
                             || !render_result.bound_texture_keys.is_empty()
                             || !render_result.bound_sampler_keys.is_empty();
                         let bind_group = if has_bindings {
                             let mut bg_entries = Vec::new();
                             let mut binding = 0u32;
+                            if render_result.uses_globals {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: arena.globals_buffer.as_entire_binding(),
+                                });
+                                binding += 1;
+                            }
                             for domain_id in &render_result.bound_domain_keys {
                                 bg_entries.push(wgpu::BindGroupEntry {
                                     binding,

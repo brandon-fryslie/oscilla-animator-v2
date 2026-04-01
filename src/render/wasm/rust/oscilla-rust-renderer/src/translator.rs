@@ -930,6 +930,7 @@ fn extract_varying_keys(stmts: &[StatementIR]) -> Vec<String> {
 pub struct RenderPassTranslation {
     pub module: naga::Module,
     pub info: naga::valid::ModuleInfo,
+    pub uses_globals: bool,
     pub bound_domain_keys: Vec<String>,
     pub bound_atomic_domain_keys: Vec<String>,
     pub bound_texture_keys: Vec<String>,
@@ -998,12 +999,29 @@ pub fn translate_render_pass(
         (None, None)
     };
 
-    // Group 0: domains + textures (only those actually referenced by ASTs)
+    // Group 0: globals + domains + textures (only those actually referenced)
+    let uses_globals = ast_uses_globals(&draw_call.vertex_ast)
+        || ast_uses_globals(&draw_call.fragment_ast);
+    let mut group0_binding = 0u32;
+    let globals_gv = if uses_globals {
+        let arr_ty = m.array_type(f32_ty, None, 4);
+        let gv = m.add_global_storage(
+            "globals",
+            arr_ty,
+            0,
+            group0_binding,
+            naga::StorageAccess::LOAD,
+        );
+        group0_binding += 1;
+        Some(gv)
+    } else {
+        None
+    };
+
     let referenced_domains =
         collect_referenced_domains(&draw_call.vertex_ast, &draw_call.fragment_ast, arena);
     let mut domain_keys: Vec<_> = referenced_domains.iter().collect();
     domain_keys.sort();
-    let mut group0_binding = 0u32;
     let mut domain_gvs = HashMap::new();
     for domain_id in &domain_keys {
         let domain_arr_ty = m.array_type(u32_ty, None, 4);
@@ -1134,7 +1152,7 @@ pub fn translate_render_pass(
     }
     let vs_ctx = PassContext {
         stage: TranslationStage::Vertex,
-        globals_expr: None,
+        globals_expr: globals_gv.map(|gv| vs.global(gv)),
         scalars_expr: None,
         domain_exprs: vs_domain_exprs,
         domain_atomic_exprs: vs_domain_atomic_exprs,
@@ -1209,7 +1227,7 @@ pub fn translate_render_pass(
     }
     let fs_ctx = PassContext {
         stage: TranslationStage::Fragment,
-        globals_expr: None,
+        globals_expr: globals_gv.map(|gv| fs.global(gv)),
         scalars_expr: None,
         domain_exprs: fs_domain_exprs,
         domain_atomic_exprs: HashMap::new(),
@@ -1244,6 +1262,7 @@ pub fn translate_render_pass(
     RenderPassTranslation {
         module,
         info,
+        uses_globals,
         bound_domain_keys,
         bound_atomic_domain_keys,
         bound_texture_keys,
