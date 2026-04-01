@@ -5,9 +5,9 @@
 // 32768 segments with additive blending trace the attractor as a glowing curve.
 gpu({
   globals: { 'sys:time': 'f32' },
-  scalars: { 'sys:active': { u32: 32768 } },
+  scalars: { 'sys:active': { u32: 8192 } },
   domains: {
-    pts: { capacity: 32768, active: 'sys:active', fields: {
+    pts: { capacity: 8192, active: 'sys:active', fields: {
       pos_x: 'f32', pos_y: 'f32',
       next_x: 'f32', next_y: 'f32',
       color_r: 'f32', color_g: 'f32', color_b: 'f32', color_a: 'f32',
@@ -31,7 +31,7 @@ gpu({
       () => {
         const gid = $thread.x;
         const time = $global.time;
-        const rank = f32(gid) / 32768.0;
+        const rank = f32(gid) / 8192.0;
 
         // Seed from rank — spread points across the attractor
         let x = sin(rank * 137.5 + 0.1);
@@ -60,7 +60,7 @@ gpu({
         $domains.pts.color_r[gid] = sin(hue * 6.283) * 0.35 + 0.45;
         $domains.pts.color_g[gid] = sin(hue * 6.283 + 2.094) * 0.35 + 0.45;
         $domains.pts.color_b[gid] = sin(hue * 6.283 + 4.189) * 0.35 + 0.45;
-        $domains.pts.color_a[gid] = 0.08;
+        $domains.pts.color_a[gid] = 0.025;
       },
     ),
     drawPrep('prep', 'sys:active', 2),
