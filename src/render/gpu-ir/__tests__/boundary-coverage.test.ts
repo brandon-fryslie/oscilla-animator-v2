@@ -162,6 +162,7 @@ describe('dispatch mode coverage', () => {
 describe('draw source coverage', () => {
   test('FullScreenQuad source via helper', () => {
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), OPAQUE, {
@@ -171,7 +172,7 @@ describe('draw source coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });
@@ -181,6 +182,7 @@ describe('draw source coverage', () => {
 
   test('Domain source with non-Topology sourceKind', () => {
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       scalars: { 'sys:active': { u32: 1 } },
       domains: {
         pts: { capacity: 1, active: 'sys:active', fields: { x: 'f32' } },
@@ -199,7 +201,7 @@ describe('draw source coverage', () => {
               fragment: () => {
                 return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
               },
-            },
+            }, 'sys:view_proj',
           ),
         ]),
       ],
@@ -223,6 +225,7 @@ describe('pipeline state coverage', () => {
       depthCompare: 'less',
     };
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
@@ -232,7 +235,7 @@ describe('pipeline state coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });
@@ -262,6 +265,7 @@ describe('pipeline state coverage', () => {
       },
     };
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
@@ -271,7 +275,7 @@ describe('pipeline state coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });
@@ -293,6 +297,7 @@ describe('render target coverage', () => {
       ],
     };
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       textures: {
         tex_albedo: { dimension: '2d', width: 512, height: 512, format: 'rgba8unorm', usage: ['render_attachment'] },
       },
@@ -305,7 +310,7 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });
@@ -319,6 +324,7 @@ describe('render target coverage', () => {
       colors: [{ textureId: 'canvas', loadOp: 'load' }],
     };
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       roster: [
         render('pass', targets, [
           draw('fill', fsQuadSource(), OPAQUE, {
@@ -328,7 +334,7 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });
@@ -347,6 +353,7 @@ describe('render target coverage', () => {
       },
     };
     const payload = gpu({
+      globals: { 'sys:view_proj': 'mat4x4' },
       textures: {
         depth_tex: { dimension: '2d', width: 512, height: 512, format: 'depth24plus', usage: ['render_attachment'] },
       },
@@ -359,7 +366,7 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }),
+          }, 'sys:view_proj'),
         ]),
       ],
     });

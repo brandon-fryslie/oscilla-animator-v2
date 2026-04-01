@@ -58,6 +58,7 @@ const CONTEXT_NAMES = [
   'vec2', 'vec3', 'vec4',
   'vec2i', 'vec3i', 'vec4i',
   'vec2u', 'vec3u', 'vec4u',
+  'mat4x4',
   // Shader terminals (stubs)
   'vertex', 'fragment',
   // Texture/atomic ops (stubs)
@@ -81,6 +82,7 @@ const CONTEXT_VALUES = [
   STUB, STUB, STUB,
   STUB, STUB, STUB,
   STUB, STUB, STUB,
+  STUB, // mat4x4
   // Terminal stubs
   STUB, STUB,
   // Texture/atomic stubs

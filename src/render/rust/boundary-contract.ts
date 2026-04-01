@@ -233,6 +233,7 @@ export type StatementIR =
   | { readonly type: 'Let'; readonly name: string; readonly value: ExprIR }
   | { readonly type: 'Var'; readonly name: string; readonly dataType?: WgslType; readonly value?: ExprIR }
   | { readonly type: 'Assign'; readonly target: ExprIR; readonly value: ExprIR }
+  | { readonly type: 'StoreGlobal'; readonly symbolId: SymbolId; readonly value: ExprIR }
   | { readonly type: 'StoreScalar'; readonly symbolId: SymbolId; readonly value: ExprIR }
   | { readonly type: 'StoreField'; readonly symbolId: SymbolId; readonly index: ExprIR; readonly value: ExprIR }
   | { readonly type: 'TextureStore'; readonly textureId: TextureId; readonly coords: ExprIR; readonly value: ExprIR }
@@ -250,6 +251,7 @@ export const StatementIRSchema: z.ZodType<StatementIR> = z.lazy(() =>
     z.object({ type: z.literal('Let'), name: z.string(), value: ExprIRSchema }),
     z.object({ type: z.literal('Var'), name: z.string(), dataType: WgslTypeSchema.optional(), value: ExprIRSchema.optional() }),
     z.object({ type: z.literal('Assign'), target: ExprIRSchema, value: ExprIRSchema }),
+    z.object({ type: z.literal('StoreGlobal'), symbolId: SymbolIdSchema, value: ExprIRSchema }),
     z.object({ type: z.literal('StoreScalar'), symbolId: SymbolIdSchema, value: ExprIRSchema }),
     z.object({ type: z.literal('StoreField'), symbolId: SymbolIdSchema, index: ExprIRSchema, value: ExprIRSchema }),
     z.object({ type: z.literal('TextureStore'), textureId: TextureIdSchema, coords: ExprIRSchema, value: ExprIRSchema }),
@@ -310,7 +312,7 @@ export const DrawCallSpecSchema = z.object({
   pipelineState: PipelineStateSpecSchema,
   dependencies: z.object({
     requiresGlobals: z.boolean(),
-    cameraRef: SymbolIdSchema.optional(),
+    cameraRef: SymbolIdSchema,
     domains: z.record(DomainIdSchema, z.literal('read')),
     textures: z.record(TextureIdSchema, z.literal('sampled')),
   }),
@@ -479,6 +481,8 @@ function validatePayloadSemantics(
           if (!domainIds.has(dc.source.domainId)) issue([...dp, 'source', 'domainId'], `Domain '${dc.source.domainId}' not in manifest`);
           if (!shapeIds.has(dc.source.shapeId)) issue([...dp, 'source', 'shapeId'], `Shape '${dc.source.shapeId}' not in manifest.shapeBank`);
         }
+        if (!lookups.global.has(dc.dependencies.cameraRef))
+          issue([...dp, 'dependencies', 'cameraRef'], `Global '${dc.dependencies.cameraRef}' not in manifest.globals`);
         for (const d of Object.keys(dc.dependencies.domains))
           if (!domainIds.has(d)) issue([...dp, 'dependencies', 'domains', d], `Domain '${d}' not in manifest`);
         for (const t of Object.keys(dc.dependencies.textures))

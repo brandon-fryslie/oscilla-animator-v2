@@ -86,6 +86,7 @@ interface DeferredDrawCall {
   readonly fragmentFn: Function;
   readonly constants?: Record<string, number>;
   readonly domainId: string;
+  readonly cameraRef: string;
 }
 
 interface DeferredRenderPass {
@@ -174,6 +175,7 @@ export function draw(
   source: DrawCallSpec['source'],
   pipelineState: PipelineStateSpec,
   shaders: ShaderFns,
+  cameraRef: string,
 ): DeferredDrawCall {
   return {
     intentId,
@@ -183,6 +185,7 @@ export function draw(
     fragmentFn: shaders.fragment,
     constants: shaders.constants,
     domainId: source.type === 'Domain' ? source.domainId : '',
+    cameraRef,
   };
 }
 
@@ -242,7 +245,7 @@ function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest)
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
     const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
 
-    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest);
+    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, dc.cameraRef);
 
     return {
       intentId: dc.intentId,

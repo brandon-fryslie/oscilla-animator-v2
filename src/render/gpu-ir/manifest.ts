@@ -58,11 +58,21 @@ export function expandManifest(compact: CompactManifest): MemoryManifest {
   };
 }
 
+/** Default initial values for multi-component global types. */
+// [LAW:one-source-of-truth] — identity matrix is column-major mat4x4
+const GLOBAL_TYPE_DEFAULTS: Record<string, readonly number[]> = {
+  vec2: [0, 0],
+  vec3: [0, 0, 0],
+  vec4: [0, 0, 0, 0],
+  mat4x4: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+};
+
 function expandGlobals(input: Record<string, string | CompactGlobalSpec>): Record<string, GlobalSpec> {
   const out: Record<string, GlobalSpec> = {};
   for (const [id, spec] of Object.entries(input)) {
     if (typeof spec === 'string') {
-      out[id] = { type: spec as GlobalSpec['type'], isDynamic: true, defaultValue: 0 };
+      const defaultValue = GLOBAL_TYPE_DEFAULTS[spec] ?? 0;
+      out[id] = { type: spec as GlobalSpec['type'], isDynamic: true, defaultValue };
     } else {
       const [type, defaultValue] = extractTypeAndValue(spec);
       out[id] = { type: type as GlobalSpec['type'], isDynamic: spec.dynamic !== false, defaultValue };
