@@ -1,10 +1,9 @@
-// scalar-accumulator: LoadScalar + AtomicOpScalar(Add). Phase from scalar read.
+// scalar-accumulator: LoadScalar as expression. Phase from scalar read drives ring rotation.
 gpu({
   globals: { 'sys:time': 'f32' },
   scalars: {
     'sys:active': { u32: 64 },
     'sys:phase': { f32: 0 },
-    'sys:counter': { 'atomic<u32>': 0 },
   },
   domains: {
     dots: { capacity: 64, active: 'sys:active', fields: {
@@ -28,7 +27,6 @@ gpu({
       $domains.dots.color_r[gid] = sin(angle) * 0.5 + 0.5;
       $domains.dots.color_g[gid] = sin(angle + 2.094) * 0.5 + 0.5;
       $domains.dots.color_b[gid] = sin(angle + 4.189) * 0.5 + 0.5;
-      atomicAdd('sys:counter', u32(1));
     }),
     drawPrep('prep_dots', 'sys:active', 6),
     render('draw_dots', clearTarget([0.04, 0.04, 0.08, 1]), [
