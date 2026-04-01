@@ -34,7 +34,7 @@ gpu({
         const rank = f32(gid) / 12000.0;
 
         // Flowing seed: shifts with time so points stream along the attractor
-        const moving_rank = fract(rank + time * 0.015);
+        const moving_rank = fract(rank + time * 0.003);
 
         // Seed from moving_rank
         let x = sin(moving_rank * 137.5 + 0.1);
@@ -59,7 +59,7 @@ gpu({
         $domains.pts.next_y[gid] = ny * 0.35;
 
         // Lifecycle: staggered birth/death, each point fades independently
-        const life = fract(rank * 7.0 + time * 0.3);
+        const life = fract(rank * 3.0 + time * 0.06);
         const fade = (1.0 - life) * (1.0 - life);
 
         // Color: rainbow along rank, brightness modulated by lifecycle
