@@ -11,13 +11,14 @@ import type {
   RenderPassSpec,
   SystemPassSpec,
   DrawCallSpec,
+  StatementIR,
   MemoryManifest,
   PipelineStateSpec,
   WgslType,
 } from '../rust/boundary-contract';
 import { expandManifest, type CompactManifest } from './manifest';
 import { inferComputeDeps, inferDrawCallDeps } from './deps';
-import { compileShaderBody, type ShaderContext } from './walker';
+import { compileShaderBody, type ShaderContext, type WalkerResult } from './walker';
 import * as B from './ir-builders';
 
 // ---------------------------------------------------------------------------
@@ -194,9 +195,17 @@ function compileEntry(
   return compileRenderEntry(entry as DeferredRenderPass, manifest);
 }
 
+function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
+  if (result.diagnostics.some(d => d.severity === 'error')) {
+    const msgs = result.diagnostics.map(d => `${d.line}:${d.column}: ${d.message}`).join('\n');
+    throw new Error(`Shader compilation failed:\n${msgs}`);
+  }
+  return result.stmts;
+}
+
 function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifest): ComputePassSpec {
   const ctx: ShaderContext = { stage: 'compute', manifest };
-  const ast = compileShaderBody(entry.bodyFn, ctx);
+  const ast = unwrapWalkerResult(compileShaderBody(entry.bodyFn, ctx));
 
   // Auto-append active count for domain-dispatched compute
   if (entry.dispatchDomain) {
@@ -226,8 +235,8 @@ function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifes
 
 function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest): RenderPassSpec {
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
-    const vertexAst = compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest });
-    const fragmentAst = compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest });
+    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest }));
+    const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest }));
 
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest);
 

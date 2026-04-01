@@ -1,11 +1,12 @@
 /**
  * GPU-IR DSL: Auto-dependency inference from StatementIR[].
  *
- * Walks the IR tree and collects which globals, domains, and textures
+ * Walks the IR tree via walkIR and collects which globals, domains, and textures
  * are referenced, producing the dependency declarations the Rust engine expects.
  */
 
 import type { ExprIR, StatementIR, MemoryManifest } from '../rust/boundary-contract';
+import { walkIR } from './ir-node-rules';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -23,134 +24,78 @@ export interface DrawCallDeps {
   readonly textures: Record<string, 'sampled'>;
 }
 
-export function inferComputeDeps(stmts: readonly StatementIR[], manifest: MemoryManifest): ComputeDeps {
-  const ctx = new DepCollector(manifest);
-  for (const s of stmts) ctx.walkStmt(s);
+export function inferComputeDeps(stmts: readonly StatementIR[], _manifest: MemoryManifest): ComputeDeps {
+  const { usesGlobals, domainReads, domainWrites, textureReads, textureWrites } = collectDeps(stmts);
   return {
-    requiresGlobals: ctx.usesGlobals,
-    domains: ctx.computeDomainAccess(),
-    textures: ctx.computeTextureAccess(),
+    requiresGlobals: usesGlobals,
+    domains: mergeDomainAccess(domainReads, domainWrites),
+    textures: mergeTextureAccess(textureReads, textureWrites),
   };
 }
 
 export function inferDrawCallDeps(
   vertexStmts: readonly StatementIR[],
   fragmentStmts: readonly StatementIR[],
-  manifest: MemoryManifest,
+  _manifest: MemoryManifest,
 ): DrawCallDeps {
-  const ctx = new DepCollector(manifest);
-  for (const s of vertexStmts) ctx.walkStmt(s);
-  for (const s of fragmentStmts) ctx.walkStmt(s);
+  const v = collectDeps(vertexStmts);
+  const f = collectDeps(fragmentStmts);
+  const domainReads = new Set([...v.domainReads, ...f.domainReads]);
+  const domainWrites = new Set([...v.domainWrites, ...f.domainWrites]);
+  const textureReads = new Set([...v.textureReads, ...f.textureReads]);
+  const textureWrites = new Set([...v.textureWrites, ...f.textureWrites]);
   return {
-    requiresGlobals: ctx.usesGlobals,
+    requiresGlobals: v.usesGlobals || f.usesGlobals,
     domains: Object.fromEntries(
-      Object.keys(ctx.computeDomainAccess()).map(d => [d, 'read' as const]),
+      Object.keys(mergeDomainAccess(domainReads, domainWrites)).map(d => [d, 'read' as const]),
     ),
     textures: Object.fromEntries(
-      Object.keys(ctx.computeTextureAccess()).map(t => [t, 'sampled' as const]),
+      Object.keys(mergeTextureAccess(textureReads, textureWrites)).map(t => [t, 'sampled' as const]),
     ),
   };
 }
 
 // ---------------------------------------------------------------------------
-// Collector
+// Collector (walkIR-based)
 // ---------------------------------------------------------------------------
 
-class DepCollector {
-  usesGlobals = false;
-  private domainReads = new Set<string>();
-  private domainWrites = new Set<string>();
-  private textureReads = new Set<string>();
-  private textureWrites = new Set<string>();
-  private manifest: MemoryManifest;
+function collectDeps(stmts: readonly StatementIR[]) {
+  let usesGlobals = false;
+  const domainReads = new Set<string>();
+  const domainWrites = new Set<string>();
+  const textureReads = new Set<string>();
+  const textureWrites = new Set<string>();
 
-  constructor(manifest: MemoryManifest) {
-    this.manifest = manifest;
-  }
+  walkIR(stmts, {
+    onExpr(e: ExprIR) {
+      if (e.type === 'LoadGlobal') usesGlobals = true;
+      if (e.type === 'LoadField') domainReads.add(extractDomain(e.symbolId));
+      if (e.type === 'AtomicLoadField') domainReads.add(extractDomain(e.symbolId));
+      if (e.type === 'TextureSample') textureReads.add(e.textureId);
+      if (e.type === 'TextureLoad') textureReads.add(e.textureId);
+    },
+    onStmt(s: StatementIR) {
+      if (s.type === 'StoreField') domainWrites.add(extractDomain(s.symbolId));
+      if (s.type === 'AtomicOpField') domainWrites.add(extractDomain(s.symbolId));
+      if (s.type === 'TextureStore') textureWrites.add(s.textureId);
+    },
+  });
 
-  computeDomainAccess(): Record<string, 'read' | 'read_write'> {
-    const out: Record<string, 'read' | 'read_write'> = {};
-    for (const d of this.domainReads) out[d] = this.domainWrites.has(d) ? 'read_write' : 'read';
-    for (const d of this.domainWrites) out[d] ??= 'read_write';
-    return out;
-  }
+  return { usesGlobals, domainReads, domainWrites, textureReads, textureWrites };
+}
 
-  computeTextureAccess(): Record<string, 'read' | 'write' | 'read_write'> {
-    const out: Record<string, 'read' | 'write' | 'read_write'> = {};
-    for (const t of this.textureReads) out[t] = this.textureWrites.has(t) ? 'read_write' : 'read';
-    for (const t of this.textureWrites) out[t] ??= 'write';
-    return out;
-  }
+function mergeDomainAccess(reads: Set<string>, writes: Set<string>): Record<string, 'read' | 'read_write'> {
+  const out: Record<string, 'read' | 'read_write'> = {};
+  for (const d of reads) out[d] = writes.has(d) ? 'read_write' : 'read';
+  for (const d of writes) out[d] ??= 'read_write';
+  return out;
+}
 
-  walkStmt(s: StatementIR): void {
-    switch (s.type) {
-      case 'Let': this.walkExpr(s.value); break;
-      case 'Var': if (s.value) this.walkExpr(s.value); break;
-      case 'Assign': this.walkExpr(s.target); this.walkExpr(s.value); break;
-      case 'StoreScalar': this.walkExpr(s.value); break;
-      case 'StoreField': {
-        this.domainWrites.add(extractDomain(s.symbolId));
-        this.walkExpr(s.index); this.walkExpr(s.value); break;
-      }
-      case 'TextureStore': {
-        this.textureWrites.add(s.textureId);
-        this.walkExpr(s.coords); this.walkExpr(s.value); break;
-      }
-      case 'If': {
-        this.walkExpr(s.condition);
-        for (const st of s.accept) this.walkStmt(st);
-        for (const st of s.reject) this.walkStmt(st);
-        break;
-      }
-      case 'For': {
-        this.walkStmt(s.init); this.walkExpr(s.condition);
-        this.walkStmt(s.update);
-        for (const st of s.body) this.walkStmt(st);
-        break;
-      }
-      case 'AtomicOpField': {
-        this.domainWrites.add(extractDomain(s.symbolId));
-        this.walkExpr(s.index); this.walkExpr(s.value); break;
-      }
-      case 'AtomicOpScalar': this.walkExpr(s.value); break;
-      case 'ReturnVertex': {
-        this.walkExpr(s.position);
-        for (const v of Object.values(s.varyings)) this.walkExpr(v);
-        break;
-      }
-      case 'ReturnFragment': {
-        for (const v of Object.values(s.outputs)) this.walkExpr(v);
-        break;
-      }
-      case 'Break': case 'Continue': break;
-    }
-  }
-
-  walkExpr(e: ExprIR): void {
-    switch (e.type) {
-      case 'LoadGlobal': this.usesGlobals = true; break;
-      case 'LoadField': {
-        this.domainReads.add(extractDomain(e.symbolId));
-        this.walkExpr(e.index); break;
-      }
-      case 'AtomicLoadField': {
-        this.domainReads.add(extractDomain(e.symbolId));
-        this.walkExpr(e.index); break;
-      }
-      case 'TextureSample': this.textureReads.add(e.textureId); this.walkExpr(e.uv); break;
-      case 'TextureLoad': this.textureReads.add(e.textureId); this.walkExpr(e.coords); break;
-      case 'BinaryOp': this.walkExpr(e.left); this.walkExpr(e.right); break;
-      case 'UnaryOp': this.walkExpr(e.expr); break;
-      case 'CallBuiltin': for (const a of e.args) this.walkExpr(a); break;
-      case 'Construct': for (const a of e.args) this.walkExpr(a); break;
-      case 'Cast': this.walkExpr(e.expr); break;
-      case 'Swizzle': this.walkExpr(e.source); break;
-      case 'IndexAccess': this.walkExpr(e.target); this.walkExpr(e.index); break;
-      case 'LiteralF32': case 'LiteralU32': case 'LiteralI32': case 'LiteralBool':
-      case 'VarRef': case 'Intrinsic': case 'LoadScalar': case 'AtomicLoadScalar':
-        break;
-    }
-  }
+function mergeTextureAccess(reads: Set<string>, writes: Set<string>): Record<string, 'read' | 'write' | 'read_write'> {
+  const out: Record<string, 'read' | 'write' | 'read_write'> = {};
+  for (const t of reads) out[t] = writes.has(t) ? 'read_write' : 'read';
+  for (const t of writes) out[t] ??= 'write';
+  return out;
 }
 
 function extractDomain(symbolId: string): string {
