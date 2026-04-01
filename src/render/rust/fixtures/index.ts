@@ -51,4 +51,6 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('math-zoo', 'Math Zoo', 'Comprehensive builtins: tan, exp, log, sqrt, sign, fract, ceil, floor, round, pow, atan2, min, step, mix, asin, acos, atan.'),
   fixture('vector-field', 'Vector Field', 'Vector builtins: normalize, length, distance, dot, cross, reflect.'),
   fixture('multi-domain', 'Multi-Domain', 'Two domains, cross-domain reads, multiple draw calls in one render pass.'),
+  fixture('palette-lookup', 'Palette Lookup', 'IndexAccess on vec4, nested Construct, computed index.'),
+  fixture('constant-spiral', 'Constant Spiral', 'Constants map, LiteralI32, Cast(i32), deeply nested expressions.'),
 ];
