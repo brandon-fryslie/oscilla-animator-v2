@@ -40,6 +40,8 @@ export type ShaderStage = 'compute' | 'vertex' | 'fragment';
 export interface ShaderContext {
   readonly stage: ShaderStage;
   readonly manifest: MemoryManifest;
+  /** Named constants: emitted as Let bindings at the top of the body, referenced as VarRef */
+  readonly constants?: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,13 +93,22 @@ export function compileShaderBody(fn: Function, ctx: ShaderContext): WalkerResul
   const localBindings = new Set<string>();
   collectParamNames(arrow.params, localBindings);
 
+  // Emit Let bindings for named constants and add to local scope
+  const preamble: StatementIR[] = [];
+  if (ctx.constants) {
+    for (const [name, value] of Object.entries(ctx.constants)) {
+      localBindings.add(name);
+      preamble.push(B.let_(name, B.litF32(value)));
+    }
+  }
+
   const walkCtx: WalkContext = { ...ctx, localBindings, diagnostics };
 
-  const stmts = arrow.body.type === 'BlockStatement'
+  const body = arrow.body.type === 'BlockStatement'
     ? walkBlock(arrow.body, walkCtx)
     : [walkReturnExpr(arrow.body, walkCtx)];
 
-  return { stmts, diagnostics };
+  return { stmts: [...preamble, ...body], diagnostics };
 }
 
 // ---------------------------------------------------------------------------
