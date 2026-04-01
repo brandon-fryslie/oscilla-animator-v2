@@ -1,9 +1,11 @@
-// strange-attractor: Clifford attractor with flowing motion and lifecycle fading.
+// strange-attractor: Clifford attractor with slow rotation and twinkling lifecycle.
 // From DEMO-PATCHES.md §5: "Strange Attractor"
 //
-// Each point's seed shifts with time → apparent flow along the attractor.
-// Each point has a staggered lifecycle that fades it out and resets,
-// creating a streaming, breathing effect.
+// Points are FIXED on the attractor (no seed animation — chaos amplifies
+// any change into wild jitter). Animation comes from:
+//   1. Slow global rotation of the entire shape
+//   2. Per-point lifecycle fading (twinkle)
+//   3. Slow color cycling
 gpu({
   globals: { 'sys:time': 'f32' },
   scalars: { 'sys:active': { u32: 12000 } },
@@ -33,14 +35,11 @@ gpu({
         const time = $global.time;
         const rank = f32(gid) / 12000.0;
 
-        // Flowing seed: shifts with time so points stream along the attractor
-        const moving_rank = fract(rank + time * 0.000005);
+        // Fixed seed — NO time dependency in attractor math
+        let x = sin(rank * 137.5 + 0.1);
+        let y = cos(rank * 97.3 + 0.2);
 
-        // Seed from moving_rank
-        let x = sin(moving_rank * 137.5 + 0.1);
-        let y = cos(moving_rank * 97.3 + 0.2);
-
-        // Burn-in to converge onto attractor
+        // Burn-in
         for (let i = u32(0); i < u32(200); i = i + u32(1)) {
           const xn = sin(A * y) + C * cos(A * x);
           const yn = sin(B * x) + D * cos(B * y);
@@ -48,27 +47,25 @@ gpu({
           y = yn;
         }
 
-        // Current position
-        $domains.pts.pos_x[gid] = x * 0.35;
-        $domains.pts.pos_y[gid] = y * 0.35;
+        // Store positions (unscaled — rotation applied in vertex shader)
+        $domains.pts.pos_x[gid] = x;
+        $domains.pts.pos_y[gid] = y;
 
-        // Next iteration → line endpoint
         const nx = sin(A * y) + C * cos(A * x);
         const ny = sin(B * x) + D * cos(B * y);
-        $domains.pts.next_x[gid] = nx * 0.35;
-        $domains.pts.next_y[gid] = ny * 0.35;
+        $domains.pts.next_x[gid] = nx;
+        $domains.pts.next_y[gid] = ny;
 
-        // Lifecycle: staggered birth/death, each point fades independently
-        const life = fract(rank * 3.0 + time * 0.0001);
-        const fade = (1.0 - life) * (1.0 - life);
+        // Lifecycle twinkle: staggered per-point fade
+        const life = fract(rank * 5.0 + time * 0.0003);
+        const fade = 1.0 - life * life;
 
-        // Color: rainbow along rank, brightness modulated by lifecycle
-        const hue = rank + time * 0.001;
-        const brightness = 0.5 + 0.5 * fade;
-        $domains.pts.color_r[gid] = (sin(hue * 6.283) * 0.4 + 0.5) * brightness;
-        $domains.pts.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.4 + 0.5) * brightness;
-        $domains.pts.color_b[gid] = (sin(hue * 6.283 + 4.189) * 0.4 + 0.5) * brightness;
-        $domains.pts.color_a[gid] = fade * 0.04;
+        // Color: rainbow along rank, very slow hue rotation
+        const hue = rank + time * 0.00002;
+        $domains.pts.color_r[gid] = (sin(hue * 6.283) * 0.4 + 0.5) * fade;
+        $domains.pts.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.4 + 0.5) * fade;
+        $domains.pts.color_b[gid] = (sin(hue * 6.283 + 4.189) * 0.4 + 0.5) * fade;
+        $domains.pts.color_a[gid] = fade * 0.035;
       },
     ),
     drawPrep('prep', 'sys:active', 2),
@@ -78,13 +75,20 @@ gpu({
         {
           vertex: (position) => {
             const iid = $instance.index;
+            const time = $global.time;
             const t = position.x;
             const x0 = $domains.pts.pos_x[iid];
             const y0 = $domains.pts.pos_y[iid];
             const x1 = $domains.pts.next_x[iid];
             const y1 = $domains.pts.next_y[iid];
-            const px = x0 * (1.0 - t) + x1 * t;
-            const py = y0 * (1.0 - t) + y1 * t;
+            const ax = (x0 * (1.0 - t) + x1 * t) * 0.35;
+            const ay = (y0 * (1.0 - t) + y1 * t) * 0.35;
+            // Slow global rotation
+            const angle = time * 0.00005;
+            const c = cos(angle);
+            const s = sin(angle);
+            const px = ax * c - ay * s;
+            const py = ax * s + ay * c;
             const cr = $domains.pts.color_r[iid];
             const cg = $domains.pts.color_g[iid];
             const cb = $domains.pts.color_b[iid];
