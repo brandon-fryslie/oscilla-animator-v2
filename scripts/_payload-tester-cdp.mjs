@@ -177,9 +177,12 @@ async function main() {
   while (Date.now() - bootStart < BOOT_TIMEOUT) {
     try {
       const text = await evalJs(cdp, `document.body?.innerText || ''`);
-      if (text && text.includes('Renderer ready')) { booted = true; break; }
+      // "Renderer ready" appears briefly, then auto-install changes it to "Installed..."
+      if (text && (text.includes('Renderer ready') || text.includes('Installed') || text.includes('Installing'))) {
+        booted = true; break;
+      }
 
-      // Also check for boot errors
+      // Check for boot errors
       if (text && (text.includes('GPU fault') || text.includes('Boot failed'))) {
         console.error(`Boot error detected: ${text.slice(0, 500)}`);
         process.exit(1);
