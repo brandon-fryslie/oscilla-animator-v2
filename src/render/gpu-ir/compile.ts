@@ -14,7 +14,6 @@ import type {
   StatementIR,
   MemoryManifest,
   PipelineStateSpec,
-  WgslType,
 } from '../rust/boundary-contract';
 import { expandManifest, type CompactManifest } from './manifest';
 import { inferComputeDeps, inferDrawCallDeps } from './deps';
@@ -22,27 +21,48 @@ import { compileShaderBody, type ShaderContext, type WalkerResult } from './walk
 import * as B from './ir-builders';
 
 // ---------------------------------------------------------------------------
-// Dispatch / workgroup helpers
+// Helpers — syntactic sugar returning boundary-contract types directly.
+// Users can always write the object literal instead of using a helper.
 // ---------------------------------------------------------------------------
 
-export interface ExactDispatch {
-  readonly _tag: 'exact';
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
+/** Dispatch helpers — return ComputePassSpec['dispatch'] */
+export const exact = (x: number, y = 1, z = 1): ComputePassSpec['dispatch'] =>
+  ({ mode: 'Exact', x, y, z });
 
-export interface WorkgroupSize {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
+export const domain = (domainId: string): ComputePassSpec['dispatch'] =>
+  ({ mode: 'Domain', domainId });
 
-export const exact = (x: number, y = 1, z = 1): ExactDispatch =>
-  ({ _tag: 'exact', x, y, z });
+export const texDispatch = (textureId: string): ComputePassSpec['dispatch'] =>
+  ({ mode: 'Texture', textureId });
 
-export const wg = (x: number, y = 1, z = 1): WorkgroupSize =>
-  ({ x, y, z });
+/** Workgroup helper — returns ComputePassSpec['workgroupSize'] */
+export const wg = (x: number, y = 1, z = 1): ComputePassSpec['workgroupSize'] =>
+  [x, y, z];
+
+/** Source helpers — return DrawCallSpec['source'] */
+export const domainSource = (
+  domainId: string,
+  shapeId: string,
+  sourceKind: 'Topology' | 'Parametric' | 'Field' | 'SolverResource' = 'Topology',
+): DrawCallSpec['source'] =>
+  ({ type: 'Domain', domainId, sourceKind, shapeId });
+
+export const fsQuadSource = (): DrawCallSpec['source'] =>
+  ({ type: 'FullScreenQuad' });
+
+/** Render target helper — returns RenderPassSpec['targets'] */
+export const clearTarget = (clearColor: readonly [number, number, number, number]): RenderPassSpec['targets'] =>
+  ({ colors: [{ textureId: 'canvas', loadOp: 'clear', clearColor }] });
+
+/** Pipeline state presets — named constants, not default-filling logic */
+export const OPAQUE: PipelineStateSpec =
+  { blendMode: 'opaque', cullMode: 'none', depthWrite: false, depthCompare: 'always' };
+
+export const ALPHA_BLEND: PipelineStateSpec =
+  { blendMode: 'alpha', cullMode: 'none', depthWrite: false, depthCompare: 'always' };
+
+export const DEPTH_TEST: PipelineStateSpec =
+  { blendMode: 'opaque', cullMode: 'none', depthWrite: true, depthCompare: 'less' };
 
 // ---------------------------------------------------------------------------
 // Deferred types — internal, carry arrow fns until gpu() compiles them
@@ -97,8 +117,8 @@ export function gpu(spec: GpuSpec): PipelineInstallPayload {
 
 export function compute(
   passId: string,
-  dispatch: string | ExactDispatch,
-  workgroup: WorkgroupSize,
+  dispatch: ComputePassSpec['dispatch'],
+  workgroupSize: ComputePassSpec['workgroupSize'],
   constantsOrBody: Record<string, number> | Function,
   maybeBody?: Function,
 ): DeferredComputePass {
@@ -109,13 +129,11 @@ export function compute(
   return {
     type: 'Compute',
     passId,
-    workgroupSize: [workgroup.x, workgroup.y, workgroup.z],
-    dispatch: typeof dispatch === 'string'
-      ? { mode: 'Domain', domainId: dispatch }
-      : { mode: 'Exact', x: dispatch.x, y: dispatch.y, z: dispatch.z },
+    workgroupSize,
+    dispatch,
     bodyFn,
     constants,
-    dispatchDomain: typeof dispatch === 'string' ? dispatch : undefined,
+    dispatchDomain: dispatch.mode === 'Domain' ? dispatch.domainId : undefined,
   };
 }
 
@@ -137,56 +155,34 @@ export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount:
 // render() + draw()
 // ---------------------------------------------------------------------------
 
-export interface RenderTargets {
-  readonly clear: readonly [number, number, number, number];
+export interface ShaderFns {
+  readonly vertex: Function;
+  readonly fragment: Function;
+  readonly constants?: Record<string, number>;
 }
 
 export function render(
   passId: string,
-  targets: RenderTargets,
+  targets: RenderPassSpec['targets'],
   drawCalls: readonly DeferredDrawCall[],
 ): DeferredRenderPass {
-  return {
-    type: 'Render',
-    passId,
-    targets: {
-      colors: [{ textureId: 'canvas', loadOp: 'clear' as const, clearColor: targets.clear }],
-    },
-    drawCalls,
-  };
-}
-
-export interface CompactPipelineState {
-  readonly blend?: PipelineStateSpec['blendMode'];
-  readonly cull?: PipelineStateSpec['cullMode'];
-  readonly depthWrite?: boolean;
-  readonly depthCompare?: PipelineStateSpec['depthCompare'];
-}
-
-export interface ShaderFns {
-  readonly vertex: Function;
-  readonly fragment: Function;
+  return { type: 'Render', passId, targets, drawCalls };
 }
 
 export function draw(
   intentId: string,
-  domainId: string,
-  shapeId: string,
-  state: CompactPipelineState,
+  source: DrawCallSpec['source'],
+  pipelineState: PipelineStateSpec,
   shaders: ShaderFns,
 ): DeferredDrawCall {
   return {
     intentId,
-    source: { type: 'Domain', domainId, sourceKind: 'Topology', shapeId },
-    pipelineState: {
-      blendMode: state.blend ?? 'opaque',
-      cullMode: state.cull ?? 'none',
-      depthWrite: state.depthWrite ?? false,
-      depthCompare: state.depthCompare ?? 'always',
-    },
+    source,
+    pipelineState,
     vertexFn: shaders.vertex,
     fragmentFn: shaders.fragment,
-    domainId,
+    constants: shaders.constants,
+    domainId: source.type === 'Domain' ? source.domainId : '',
   };
 }
 

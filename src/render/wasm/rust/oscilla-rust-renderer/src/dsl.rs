@@ -50,10 +50,14 @@ impl ModuleBuilder {
     }
 
     pub fn scalar_type(&mut self, kind: naga::ScalarKind) -> naga::Handle<naga::Type> {
+        let width = match kind {
+            naga::ScalarKind::Bool => 1,
+            _ => 4,
+        };
         self.module.types.insert(
             naga::Type {
                 name: None,
-                inner: naga::TypeInner::Scalar(naga::Scalar { kind, width: 4 }),
+                inner: naga::TypeInner::Scalar(naga::Scalar { kind, width }),
             },
             naga::Span::UNDEFINED,
         )
@@ -100,6 +104,25 @@ impl ModuleBuilder {
 
     pub fn vec4_f32_type(&mut self) -> naga::Handle<naga::Type> {
         self.vector_type(naga::VectorSize::Quad, naga::ScalarKind::Float)
+    }
+
+    pub fn matrix_type(
+        &mut self,
+        columns: naga::VectorSize,
+        rows: naga::VectorSize,
+        kind: naga::ScalarKind,
+    ) -> naga::Handle<naga::Type> {
+        self.module.types.insert(
+            naga::Type {
+                name: None,
+                inner: naga::TypeInner::Matrix {
+                    columns,
+                    rows,
+                    scalar: naga::Scalar { kind, width: 4 },
+                },
+            },
+            naga::Span::UNDEFINED,
+        )
     }
 
     pub fn array_type(

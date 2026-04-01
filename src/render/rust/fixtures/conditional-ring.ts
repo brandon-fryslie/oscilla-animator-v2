@@ -1,4 +1,4 @@
-// instanced-write: 64 instances in a ring via domain dispatch.
+// conditional-ring: If, Var, Assign, LiteralBool, BinaryOp(==, !=, &&, ||, %), UnaryOp(!).
 gpu({
   globals: { 'sys:time': 'f32' },
   scalars: { 'sys:active': { u32: 64 } },
@@ -11,15 +11,31 @@ gpu({
   shapes: { unit_quad: quad(0.03) },
 
   roster: [
-    compute('eval_instances', domain('dots'), wg(64), () => {
+    compute('eval_conditional', domain('dots'), wg(64), () => {
       const gid = $thread.x;
       const time = $global.time;
       const angle = f32(gid) * 0.09817477042468103 + time;
       $domains.dots.pos_x[gid] = cos(angle) * 0.7;
       $domains.dots.pos_y[gid] = sin(angle) * 0.7;
-      $domains.dots.color_r[gid] = sin(angle) * 0.5 + 0.5;
-      $domains.dots.color_g[gid] = sin(angle + 2.094) * 0.5 + 0.5;
-      $domains.dots.color_b[gid] = sin(angle + 4.189) * 0.5 + 0.5;
+
+      let highlight = true;
+      const isEven = gid % u32(2) === u32(0);
+      const isNotFirst = gid !== u32(0);
+      const isEdge = !isNotFirst || gid === u32(63);
+
+      if (isEdge) {
+        highlight = false;
+      }
+
+      if (highlight && isEven) {
+        $domains.dots.color_r[gid] = 0.2;
+        $domains.dots.color_g[gid] = 0.5;
+        $domains.dots.color_b[gid] = 1.0;
+      } else {
+        $domains.dots.color_r[gid] = 1.0;
+        $domains.dots.color_g[gid] = 0.3;
+        $domains.dots.color_b[gid] = 0.2;
+      }
     }),
     drawPrep('prep_dots', 'sys:active', 6),
     render('draw_dots', clearTarget([0.05, 0.05, 0.07, 1]), [

@@ -103,6 +103,39 @@ pub struct ComputePassTranslation {
     pub uses_scalars: bool,
 }
 
+/// Build the complete type_handles map for all 15 WgslType variants.
+/// [LAW:one-source-of-truth] All type registrations live here.
+fn build_type_handles(
+    m: &mut ModuleBuilder,
+    vec3_u32_ty: Option<naga::Handle<naga::Type>>,
+) -> HashMap<String, naga::Handle<naga::Type>> {
+    let mut th = HashMap::new();
+    // Scalars
+    th.insert("f32".into(), m.f32_type());
+    th.insert("u32".into(), m.u32_type());
+    th.insert("i32".into(), m.i32_type());
+    th.insert("bool".into(), m.scalar_type(naga::ScalarKind::Bool));
+    // Vec2
+    th.insert("vec2<f32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Float));
+    th.insert("vec2<i32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Sint));
+    th.insert("vec2<u32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Uint));
+    // Vec3
+    th.insert("vec3<f32>".into(), m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Float));
+    th.insert("vec3<i32>".into(), m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Sint));
+    th.insert(
+        "vec3<u32>".into(),
+        vec3_u32_ty.unwrap_or_else(|| m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Uint)),
+    );
+    // Vec4
+    th.insert("vec4<f32>".into(), m.vec4_f32_type());
+    th.insert("vec4<i32>".into(), m.vector_type(naga::VectorSize::Quad, naga::ScalarKind::Sint));
+    th.insert("vec4<u32>".into(), m.vector_type(naga::VectorSize::Quad, naga::ScalarKind::Uint));
+    // Matrices
+    th.insert("mat3x3<f32>".into(), m.matrix_type(naga::VectorSize::Tri, naga::VectorSize::Tri, naga::ScalarKind::Float));
+    th.insert("mat4x4<f32>".into(), m.matrix_type(naga::VectorSize::Quad, naga::VectorSize::Quad, naga::ScalarKind::Float));
+    th
+}
+
 pub fn translate_compute_pass(
     spec: &ComputePassSpec,
     arena: &GpuMemoryArena,
@@ -208,17 +241,15 @@ pub fn translate_compute_pass(
     let mut texture_is_sampled = HashMap::new();
     for texture_id in &tex_keys {
         let access_str = &spec.dependencies.textures[*texture_id];
-        let tex_info = arena.textures.get(*texture_id);
-        let format = tex_info
-            .map(|t| t.format)
-            .unwrap_or(wgpu::TextureFormat::Rgba8Unorm);
-        let dim = tex_info
-            .map(|t| t.dimension)
-            .unwrap_or(wgpu::TextureViewDimension::D2);
+        let tex_info = arena.textures.get(*texture_id)
+            .unwrap_or_else(|| panic!("texture '{}' not in arena.textures", texture_id));
+        let format = tex_info.format;
+        let dim = tex_info.dimension;
         let naga_dim = match dim {
             wgpu::TextureViewDimension::D1 => naga::ImageDimension::D1,
+            wgpu::TextureViewDimension::D2 | wgpu::TextureViewDimension::D2Array => naga::ImageDimension::D2,
             wgpu::TextureViewDimension::D3 => naga::ImageDimension::D3,
-            _ => naga::ImageDimension::D2,
+            wgpu::TextureViewDimension::Cube | wgpu::TextureViewDimension::CubeArray => naga::ImageDimension::Cube,
         };
         let is_sampled = matches!(access_str.as_str(), "read" | "sampled");
         let class = match access_str.as_str() {
@@ -286,28 +317,7 @@ pub fn translate_compute_pass(
         sampler_exprs.insert(samp_id.clone(), fb.global(*gv));
     }
 
-    let mut type_handles = HashMap::new();
-    type_handles.insert("f32".into(), m.f32_type());
-    type_handles.insert("u32".into(), m.u32_type());
-    type_handles.insert("i32".into(), m.i32_type());
-    type_handles.insert(
-        "vec2<f32>".into(),
-        m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Float),
-    );
-    type_handles.insert(
-        "vec2<i32>".into(),
-        m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Sint),
-    );
-    type_handles.insert(
-        "vec2<u32>".into(),
-        m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Uint),
-    );
-    type_handles.insert(
-        "vec3<f32>".into(),
-        m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Float),
-    );
-    type_handles.insert("vec3<u32>".into(), vec3_u32_ty);
-    type_handles.insert("vec4<f32>".into(), m.vec4_f32_type());
+    let type_handles = build_type_handles(&mut m, Some(vec3_u32_ty));
 
     let ctx = PassContext {
         stage: TranslationStage::Compute,
@@ -1024,17 +1034,15 @@ pub fn translate_render_pass(
     let mut texture_is_sampled = HashMap::new();
     for texture_id in &render_tex_keys {
         let access_str = &draw_call.dependencies.textures[*texture_id];
-        let tex_info = arena.textures.get(*texture_id);
-        let format = tex_info
-            .map(|t| t.format)
-            .unwrap_or(wgpu::TextureFormat::Rgba8Unorm);
-        let dim = tex_info
-            .map(|t| t.dimension)
-            .unwrap_or(wgpu::TextureViewDimension::D2);
+        let tex_info = arena.textures.get(*texture_id)
+            .unwrap_or_else(|| panic!("texture '{}' not in arena.textures", texture_id));
+        let format = tex_info.format;
+        let dim = tex_info.dimension;
         let naga_dim = match dim {
             wgpu::TextureViewDimension::D1 => naga::ImageDimension::D1,
+            wgpu::TextureViewDimension::D2 | wgpu::TextureViewDimension::D2Array => naga::ImageDimension::D2,
             wgpu::TextureViewDimension::D3 => naga::ImageDimension::D3,
-            _ => naga::ImageDimension::D2,
+            wgpu::TextureViewDimension::Cube | wgpu::TextureViewDimension::CubeArray => naga::ImageDimension::Cube,
         };
         let is_sampled = access_str == "sampled";
         let class = match access_str.as_str() {
@@ -1069,19 +1077,7 @@ pub fn translate_render_pass(
         group0_binding += 1;
     }
 
-    let type_handles = {
-        let mut th = HashMap::new();
-        th.insert("f32".into(), f32_ty);
-        th.insert("u32".into(), u32_ty);
-        th.insert("i32".into(), m.i32_type());
-        th.insert("vec2<f32>".into(), vec2_f32_ty);
-        th.insert(
-            "vec2<i32>".into(),
-            m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Sint),
-        );
-        th.insert("vec4<f32>".into(), vec4_f32_ty);
-        th
-    };
+    let type_handles = build_type_handles(&mut m, None);
 
     // --- Vertex shader ---
     let mut vs = FnBuilder::new("vs_main");
@@ -1236,22 +1232,6 @@ pub fn translate_render_pass(
     // Debug: try to emit WGSL before validation (validation may panic)
     let raw_module = m.finish();
     {
-        let mut permissive = naga::valid::Validator::new(
-            naga::valid::ValidationFlags::empty(),
-            naga::valid::Capabilities::all(),
-        );
-        if let Ok(info) = permissive.validate(&raw_module) {
-            if let Ok(wgsl) = naga::back::wgsl::write_string(
-                &raw_module,
-                &info,
-                naga::back::wgsl::WriterFlags::empty(),
-            ) {
-                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
-                    "[translator] Render pass WGSL:\n{}",
-                    wgsl
-                )));
-            }
-        }
     }
 
     let (module, info) = validate_module(raw_module);
@@ -1310,12 +1290,13 @@ fn translate_statement_body(
         } => {
             let ty = data_type
                 .as_ref()
-                .and_then(|dt| ctx.type_handles.get(dt.as_str()))
-                .copied()
+                .map(|dt| {
+                    *ctx.type_handles.get(dt.as_str()).unwrap_or_else(|| {
+                        panic!("Var '{}': no type handle for dataType '{}'", name, dt)
+                    })
+                })
                 .unwrap_or_else(|| {
-                    *ctx.type_handles
-                        .get("f32")
-                        .expect("f32 type handle missing")
+                    panic!("Var '{}': dataType is required but was null", name)
                 });
             let init = value
                 .as_ref()
@@ -1500,6 +1481,10 @@ fn translate_statement_body(
                 "Sub" => naga::AtomicFunction::Subtract,
                 "Max" => naga::AtomicFunction::Max,
                 "Min" => naga::AtomicFunction::Min,
+                "And" => naga::AtomicFunction::And,
+                "Or" => naga::AtomicFunction::InclusiveOr,
+                "Xor" => naga::AtomicFunction::ExclusiveOr,
+                "Exchange" => naga::AtomicFunction::Exchange { compare: None },
                 _ => panic!("AtomicOpScalar: unknown op '{}'", op),
             };
             let result = bb.atomic_op(fun, pointer, val, u32_ty);
@@ -1567,33 +1552,6 @@ fn translate_loop_body_with_continue_update(
             _ => translate_statement_body(bb, ctx, stmt, scope),
         }
     }
-}
-
-/// Translate vertex shader statements. Handles ReturnVertex specially.
-fn translate_statements_vertex(
-    fb: &mut FnBuilder,
-    ctx: &PassContext,
-    stmts: &[StatementIR],
-    scope: &mut TranslationScope,
-    _vec4_f32_ty: naga::Handle<naga::Type>,
-    _f32_ty: naga::Handle<naga::Type>,
-) {
-    fb.with_root(|bb| {
-        for stmt in stmts {
-            match stmt {
-                StatementIR::ReturnVertex {
-                    position,
-                    varyings: _,
-                } => {
-                    let pos = translate_expr_body(bb, ctx, position, scope);
-                    bb.emit_return_value(pos);
-                }
-                _ => {
-                    translate_statement_body(bb, ctx, stmt, scope);
-                }
-            }
-        }
-    });
 }
 
 /// Translate fragment shader statements. Handles ReturnFragment specially.
@@ -1759,6 +1717,7 @@ fn translate_expr_body(
                 "min" => bb.min(translated[0], translated[1]),
                 "max" => bb.max(translated[0], translated[1]),
                 "clamp" => bb.clamp(translated[0], translated[1], translated[2]),
+                "mix" => bb.mix(translated[0], translated[1], translated[2]),
                 "atan2" => bb.atan2(translated[0], translated[1]),
                 "asin" => bb.asin(translated[0]),
                 "acos" => bb.acos(translated[0]),
@@ -1864,7 +1823,7 @@ fn translate_expr_body(
                 .texture_is_sampled
                 .get(texture_id)
                 .copied()
-                .unwrap_or(false)
+                .unwrap_or_else(|| panic!("TextureLoad: texture '{}' not in texture_is_sampled map", texture_id))
             {
                 Some(bb.lit_i32(0))
             } else {
@@ -1973,7 +1932,7 @@ fn wgpu_format_to_naga(format: wgpu::TextureFormat) -> naga::StorageFormat {
         wgpu::TextureFormat::R32Float => naga::StorageFormat::R32Float,
         wgpu::TextureFormat::Rg32Float => naga::StorageFormat::Rg32Float,
         wgpu::TextureFormat::Rgba32Float => naga::StorageFormat::Rgba32Float,
-        _ => naga::StorageFormat::Rgba8Unorm,
+        _ => panic!("wgpu_format_to_naga: unsupported texture format {:?}", format),
     }
 }
 

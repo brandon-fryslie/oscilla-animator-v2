@@ -23,7 +23,7 @@
 
 import * as acorn from 'acorn';
 import type * as ESTree from 'estree';
-import type { ExprIR, StatementIR, BuiltinMathFunc, BinaryOp, WgslType, MemoryManifest } from '../rust/boundary-contract';
+import type { ExprIR, StatementIR, BuiltinMathFunc, BinaryOp, WgslType, AtomicOp, MemoryManifest } from '../rust/boundary-contract';
 import * as B from './ir-builders';
 import {
   BUILTIN_NAMES, CAST_NAMES, CONSTRUCT_MAP,
@@ -204,8 +204,8 @@ function walkStatement(node: ESTree.Statement, ctx: WalkContext): StatementIR[] 
       const name = (decl.id as ESTree.Identifier).name;
       ctx.localBindings.add(name);
       if (node.kind === 'let') {
-        // esbuild strips type annotations — no dataType available at runtime
-        stmts.push(B.var_(name, undefined, decl.init ? walkExpr(decl.init, ctx) : undefined));
+        const initExpr = decl.init ? walkExpr(decl.init, ctx) : undefined;
+        stmts.push(B.var_(name, initExpr ? inferDataType(initExpr) : undefined, initExpr));
       } else {
         stmts.push(B.let_(name, walkExpr(decl.init!, ctx)));
       }
@@ -235,6 +235,27 @@ function walkStatement(node: ESTree.Statement, ctx: WalkContext): StatementIR[] 
 function walkExpressionStatement(expr: ESTree.Expression, ctx: WalkContext): StatementIR[] {
   if (expr.type === 'AssignmentExpression' && expr.operator === '=') {
     return [walkAssignment(expr, ctx)];
+  }
+  // textureStore('textureId', coords, value) → TextureStore statement
+  if (expr.type === 'CallExpression' && expr.callee.type === 'Identifier' && expr.callee.name === 'textureStore') {
+    const textureId = extractStringArg(expr.arguments[0] as ESTree.Expression, ctx, 'textureStore');
+    const coords = walkExpr(expr.arguments[1] as ESTree.Expression, ctx);
+    const value = walkExpr(expr.arguments[2] as ESTree.Expression, ctx);
+    return [B.textureStore_(textureId, coords, value)];
+  }
+  // atomicAdd/atomicExchange/etc. → AtomicOpField (3 args) or AtomicOpScalar (2 args)
+  if (expr.type === 'CallExpression' && expr.callee.type === 'Identifier') {
+    const atomicOp = ATOMIC_FUNC_TO_OP[expr.callee.name];
+    if (atomicOp) {
+      const symbolId = extractStringArg(expr.arguments[0] as ESTree.Expression, ctx, expr.callee.name);
+      if (expr.arguments.length === 3) {
+        const index = walkExpr(expr.arguments[1] as ESTree.Expression, ctx);
+        const value = walkExpr(expr.arguments[2] as ESTree.Expression, ctx);
+        return [B.atomicOpField(atomicOp, symbolId, index, value)];
+      }
+      const value = walkExpr(expr.arguments[1] as ESTree.Expression, ctx);
+      return [B.atomicOpScalar(atomicOp, symbolId, value)];
+    }
   }
   addError(ctx, expr, `Unsupported expression statement: ${expr.type}`);
   return [];
@@ -339,8 +360,12 @@ function walkForStatement(node: ESTree.ForStatement, ctx: WalkContext): Statemen
     const decl = node.init.declarations[0];
     const name = (decl.id as ESTree.Identifier).name;
     childCtx.localBindings.add(name);
-    // esbuild strips type annotations — no dataType
-    init = B.var_(name, undefined, decl.init ? walkExpr(decl.init, childCtx) : undefined);
+    if (node.init.kind === 'let') {
+      const initExpr = decl.init ? walkExpr(decl.init, childCtx) : undefined;
+      init = B.var_(name, initExpr ? inferDataType(initExpr) : undefined, initExpr);
+    } else {
+      init = B.let_(name, walkExpr(decl.init!, childCtx));
+    }
   } else {
     addError(ctx, node, 'For loop init must be a variable declaration');
     init = B.var_('_err', undefined, undefined);
@@ -459,6 +484,21 @@ function walkCallExpr(node: ESTree.CallExpression, ctx: WalkContext): ExprIR {
   }
 
   const name = node.callee.name;
+
+  // Texture ops — checked BEFORE generic arg walk because first arg is a string literal
+  // [LAW:one-source-of-truth] textureLoad/textureSample walk their own args
+  if (name === 'textureLoad') {
+    const textureId = extractStringArg(node.arguments[0] as ESTree.Expression, ctx, 'textureLoad');
+    const coords = walkExpr(node.arguments[1] as ESTree.Expression, ctx);
+    return B.textureLoad(textureId, coords);
+  }
+  if (name === 'textureSample') {
+    const textureId = extractStringArg(node.arguments[0] as ESTree.Expression, ctx, 'textureSample');
+    const samplerId = extractStringArg(node.arguments[1] as ESTree.Expression, ctx, 'textureSample');
+    const uv = walkExpr(node.arguments[2] as ESTree.Expression, ctx);
+    return B.textureSample(textureId, samplerId, uv);
+  }
+
   const args = (node.arguments as ESTree.Expression[]).map(a => walkExpr(a, ctx));
 
   // Cast: f32(x), u32(x), i32(x) — optimize literal args to typed literals
@@ -479,6 +519,32 @@ function walkCallExpr(node: ESTree.CallExpression, ctx: WalkContext): ExprIR {
   if (BUILTIN_NAMES.has(name)) return B.callBuiltin(name as BuiltinMathFunc, args);
 
   return errorExpr(ctx, node, `Unknown function call: ${name}`);
+}
+
+/** DSL function name → AtomicOp enum value */
+const ATOMIC_FUNC_TO_OP: Record<string, AtomicOp> = {
+  atomicAdd: 'Add', atomicSub: 'Sub',
+  atomicMax: 'Max', atomicMin: 'Min',
+  atomicAnd: 'And', atomicOr: 'Or', atomicXor: 'Xor',
+  atomicExchange: 'Exchange',
+};
+
+/** Extract a string literal argument (for textureId, samplerId references) */
+function extractStringArg(node: ESTree.Expression, ctx: WalkContext, funcName: string): string {
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  addError(ctx, node, `${funcName}() first argument must be a string literal`);
+  return '';
+}
+
+/** Infer WGSL type from an ExprIR value — used for Var dataType derivation */
+function inferDataType(expr: ExprIR): WgslType | undefined {
+  if (expr.type === 'LiteralF32') return 'f32';
+  if (expr.type === 'LiteralU32') return 'u32';
+  if (expr.type === 'LiteralI32') return 'i32';
+  if (expr.type === 'LiteralBool') return 'bool';
+  if (expr.type === 'Cast') return expr.targetType;
+  if (expr.type === 'Construct') return expr.dataType;
+  return undefined;
 }
 
 /** Walk expression in index context — bare numeric literals become LiteralU32 */
