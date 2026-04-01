@@ -46,6 +46,16 @@ npm run test:webgpu-matrix
 ./scripts/get-screenshot-of-demo-patch.sh simple.hcl --no-burst
 ```
 
+### GPU-IR Fixture Validation (required for GPU-IR DSL fixture changes)
+```bash
+# Canvas-only screenshot of a fixture by name (requires dev server + --no-headless for WebGPU)
+./scripts/get-screenshot-of-payload-tester.sh strange-attractor --no-headless
+./scripts/get-screenshot-of-payload-tester.sh aurora-field --no-headless --output /tmp/aurora.png
+```
+- **Always validate visually** before committing fixture changes — GPU bugs are invisible in unit tests
+- Must use `--no-headless` because WebGPU requires a real GPU
+- Iterate: change → screenshot → evaluate → adjust → screenshot again
+
 ## Multi-Language Architecture
 
 This project has two execution planes:
