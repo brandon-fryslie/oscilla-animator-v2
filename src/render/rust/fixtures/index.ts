@@ -61,4 +61,8 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('fire-rain', 'Fire Rain', '12288 falling embers with heat color gradient, wind turbulence, and tumble rotation.'),
   fixture('strange-attractor', 'Strange Attractor', '4000-point Clifford attractor with velocity-driven color. From DEMO-PATCHES.md.'),
   fixture('grid-of-squares', 'Grid of Squares', '100 rotating squares with HSL rainbow color. From DEMO-PATCHES.md.'),
+  fixture('test-lines', 'TEST: Lines', '8 static line segments in a star. Tests line-list topology.'),
+  fixture('test-additive', 'TEST: Additive', '64 overlapping dots with additive blend. Tests blend mode.'),
+  fixture('test-vertex-time', 'TEST: Vertex Time', 'Single rotating quad. Tests $global.time in vertex shader.'),
+  fixture('test-additive-lines', 'TEST: Additive Lines', '16 line segments with additive blend. Tests both together.'),
 ];

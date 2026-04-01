@@ -23,24 +23,61 @@ type RendererStatus =
   | { kind: 'info'; message: string }
   | { kind: 'error'; message: string };
 
-const DEFAULT_FIXTURE = PAYLOAD_FIXTURES[0];
+const STORAGE_KEY = 'oscilla-payload-tester-fixture';
+
+function getQueryParams(): { fixture?: string; canvasOnly: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    fixture: params.get('fixture') ?? undefined,
+    canvasOnly: params.has('canvas-only'),
+  };
+}
+
+function getInitialFixture(): PayloadFixture {
+  // Query param takes priority over sessionStorage
+  const qp = getQueryParams();
+  if (qp.fixture) {
+    const found = PAYLOAD_FIXTURES.find(f => f.id === qp.fixture);
+    if (found) return found;
+  }
+  try {
+    const savedId = sessionStorage.getItem(STORAGE_KEY);
+    if (savedId) {
+      const found = PAYLOAD_FIXTURES.find(f => f.id === savedId);
+      if (found) return found;
+    }
+  } catch { /* sessionStorage unavailable */ }
+  return PAYLOAD_FIXTURES[0];
+}
 
 export const PayloadTesterApp: React.FC = () => {
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>({ kind: 'idle' });
   const [dslStatus, setDslStatus] = useState<CompileStatus>({ ok: true });
+  const { canvasOnly } = getQueryParams();
+  const initialFixture = getInitialFixture();
   const [dslSource, setDslSource] = useState(
-    DEFAULT_FIXTURE?.dslSource ?? JSON.stringify(DEFAULT_FIXTURE?.payload ?? {}, null, 2),
+    initialFixture.dslSource ?? JSON.stringify(initialFixture.payload ?? {}, null, 2),
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const latestJsonRef = useRef('');
   const rendererReadyRef = useRef(false);
-  const pendingInstallRef = useRef<string | null>(null);
+  const pendingInstallRef = useRef<string | null>(
+    JSON.stringify(initialFixture.payload, null, 2),
+  );
   const rendererReady = rendererStatus.kind === 'ready' || rendererStatus.kind === 'info';
 
   useEffect(() => {
     rendererReadyRef.current = rendererReady;
-  }, [rendererReady]);
+    // Expose status for CDP screenshot script
+    (window as any).__rendererStatus = rendererStatus.kind === 'error'
+      ? `GPU fault: ${rendererStatus.message}`
+      : rendererStatus.kind === 'info'
+        ? rendererStatus.message
+        : rendererStatus.kind === 'ready'
+          ? 'Renderer ready'
+          : '';
+  }, [rendererReady, rendererStatus]);
 
   const installPipeline = useCallback((payloadJson: string) => {
     const worker = workerRef.current;
@@ -200,8 +237,7 @@ export const PayloadTesterApp: React.FC = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
-    // If fixture has DSL source, show it in the DSL editor.
-    // Otherwise, show the raw JSON as fallback DSL source.
+    try { sessionStorage.setItem(STORAGE_KEY, fixture.id); } catch { /* ignore */ }
     const source = fixture.dslSource ?? JSON.stringify(fixture.payload, null, 2);
     setDslSource(source);
 
@@ -230,6 +266,14 @@ export const PayloadTesterApp: React.FC = () => {
     installPipeline(rawJson);
   }, [installPipeline]);
 
+  if (canvasOnly) {
+    return (
+      <div style={{ width: '100%', height: '100%', background: '#000' }}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
       {/* Main content area */}
@@ -238,6 +282,7 @@ export const PayloadTesterApp: React.FC = () => {
         <div style={{ width: 220, minWidth: 180, borderRight: '1px solid #333', overflow: 'auto' }}>
           <FixtureSelector
             fixtures={PAYLOAD_FIXTURES}
+            initialSelectedId={initialFixture.id}
             onSelect={handleFixtureSelect}
           />
         </div>
