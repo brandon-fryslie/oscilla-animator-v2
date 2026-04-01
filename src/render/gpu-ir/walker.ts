@@ -203,7 +203,11 @@ function walkStatement(node: ESTree.Statement, ctx: WalkContext): StatementIR[] 
     for (const decl of node.declarations) {
       const name = (decl.id as ESTree.Identifier).name;
       ctx.localBindings.add(name);
-      if (node.kind === 'let') {
+      // const x = atomicAdd(...) → AtomicOpField/Scalar with assignResultTo
+      const atomicStmt = tryWalkAtomicAssignResult(decl.init, name, ctx);
+      if (atomicStmt) {
+        stmts.push(atomicStmt);
+      } else if (node.kind === 'let') {
         const initExpr = decl.init ? walkExpr(decl.init, ctx) : undefined;
         stmts.push(B.var_(name, initExpr ? inferDataType(initExpr) : undefined, initExpr));
       } else {
@@ -498,6 +502,16 @@ function walkCallExpr(node: ESTree.CallExpression, ctx: WalkContext): ExprIR {
     const uv = walkExpr(node.arguments[2] as ESTree.Expression, ctx);
     return B.textureSample(textureId, samplerId, uv);
   }
+  // atomicLoad('symbolId', index) → AtomicLoadField
+  // atomicLoad('symbolId') → AtomicLoadScalar
+  if (name === 'atomicLoad') {
+    const symbolId = extractStringArg(node.arguments[0] as ESTree.Expression, ctx, 'atomicLoad');
+    if (node.arguments.length >= 2) {
+      const index = walkExpr(node.arguments[1] as ESTree.Expression, ctx);
+      return B.atomicLoadField(symbolId, index);
+    }
+    return B.atomicLoadScalar(symbolId);
+  }
 
   const args = (node.arguments as ESTree.Expression[]).map(a => walkExpr(a, ctx));
 
@@ -519,6 +533,26 @@ function walkCallExpr(node: ESTree.CallExpression, ctx: WalkContext): ExprIR {
   if (BUILTIN_NAMES.has(name)) return B.callBuiltin(name as BuiltinMathFunc, args);
 
   return errorExpr(ctx, node, `Unknown function call: ${name}`);
+}
+
+/** Try to walk `const name = atomicAdd(...)` as AtomicOpField/Scalar with assignResultTo.
+ * Returns null if the init expression is not an atomic call. */
+function tryWalkAtomicAssignResult(
+  init: ESTree.Expression | null | undefined,
+  name: string,
+  ctx: WalkContext,
+): StatementIR | null {
+  if (!init || init.type !== 'CallExpression' || init.callee.type !== 'Identifier') return null;
+  const atomicOp = ATOMIC_FUNC_TO_OP[init.callee.name];
+  if (!atomicOp) return null;
+  const symbolId = extractStringArg(init.arguments[0] as ESTree.Expression, ctx, init.callee.name);
+  if (init.arguments.length === 3) {
+    const index = walkExpr(init.arguments[1] as ESTree.Expression, ctx);
+    const value = walkExpr(init.arguments[2] as ESTree.Expression, ctx);
+    return B.atomicOpField(atomicOp, symbolId, index, value, name);
+  }
+  const value = walkExpr(init.arguments[1] as ESTree.Expression, ctx);
+  return B.atomicOpScalar(atomicOp, symbolId, value, name);
 }
 
 /** DSL function name → AtomicOp enum value */
