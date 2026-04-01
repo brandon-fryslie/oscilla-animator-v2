@@ -6,12 +6,12 @@
  * sin, vec4, etc.) that are provided as stubs — they appear in fn.toString()
  * source but are never called. The walker parses them from source text.
  *
- * Supports two source formats:
- * - Single expression: `gpu({...})` — returned directly
- * - Statement block: `const cam = defaultCamera(); gpu({...})` — last expression returned
- * Comments (// and /* *‌/) are supported in both formats.
+ * Supports both single expressions (`gpu({...})`) and statement blocks
+ * (`const cam = defaultCamera(); gpu({...})`). Uses acorn to parse the
+ * source and auto-return the last expression statement.
  */
 
+import * as acorn from 'acorn';
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
   gpu, compute, render, draw, drawPrep, cameraPass, defaultCamera, exact, wg,
@@ -116,43 +116,44 @@ export interface DslEvalError {
 export type DslResult = DslEvalResult | DslEvalError;
 
 /**
- * Transform DSL source into a function body that returns the gpu() result.
- *
- * Single expression (gpu({...})): wrapped as `return (source);`
- * Statement block (const x = ...; gpu({...})): last expression gets `return` prepended.
- * Comments are stripped before detection but preserved in the function body.
+ * Transform DSL source into a function body that returns the last expression.
+ * Uses acorn to parse the source and find the last ExpressionStatement,
+ * then splices `return` before it. Handles comments, variable declarations,
+ * and arbitrary JS statements before the final gpu() call.
  */
 function wrapSource(source: string): string {
-  // Strip comments to detect structure (don't modify the actual source)
-  const stripped = source
-    .replace(/\/\/[^\n]*/g, '')       // line comments
-    .replace(/\/\*[\s\S]*?\*\//g, '') // block comments
-    .trim();
-
-  // If the stripped source starts with gpu( or (gpu(, it's a single expression
-  if (/^gpu\s*\(/.test(stripped)) {
+  let program: acorn.Node;
+  try {
+    program = acorn.parse(source, { ecmaVersion: 2022, sourceType: 'script' });
+  } catch {
+    // If acorn can't parse it as a script, try as a single expression
     return `"use strict"; return (${source});`;
   }
 
-  // Statement block: find the last gpu(...) call and insert return before it.
-  // We search the stripped source for the last occurrence of `gpu(` at statement level.
-  const lastGpu = source.lastIndexOf('gpu(');
-  if (lastGpu === -1) {
-    // No gpu() call found — try as expression anyway (will produce a useful error)
+  const body = (program as any).body as acorn.Node[];
+  if (body.length === 0) {
     return `"use strict"; return (${source});`;
   }
 
-  const before = source.slice(0, lastGpu);
-  const after = source.slice(lastGpu);
-  return `"use strict"; ${before}return ${after}`;
+  // Find the last ExpressionStatement — that's the return value
+  const lastStmt = body[body.length - 1];
+  if (lastStmt.type === 'ExpressionStatement') {
+    // Insert `return` before the last expression statement's start position
+    const before = source.slice(0, lastStmt.start);
+    const expr = source.slice(lastStmt.start);
+    return `"use strict"; ${before}return ${expr}`;
+  }
+
+  // No trailing expression — wrap entire source and hope for a useful error
+  return `"use strict"; return (${source});`;
 }
 
 /**
  * Evaluate a GPU-IR DSL source string and return the PipelineInstallPayload.
  *
  * Supports single expressions (`gpu({...})`) and statement blocks
- * (`const cam = defaultCamera(); gpu({...})`).
- * Comments (// and /* *‌/) are preserved.
+ * (`const cam = defaultCamera(); gpu({...})`). The last expression
+ * statement becomes the return value. Comments are preserved.
  */
 export function evalDsl(source: string): DslResult {
   try {
