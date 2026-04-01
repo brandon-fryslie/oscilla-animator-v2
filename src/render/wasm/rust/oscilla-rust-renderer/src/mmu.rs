@@ -123,6 +123,30 @@ pub fn allocate_arena(
         mapped_at_creation: false,
     });
 
+    // Phase A.1: Write global initial values from manifest
+    if globals_word_count > 0 {
+        let mut init_data = vec![0u32; globals_padded as usize];
+        for key in &global_keys {
+            let spec = &manifest.globals[*key];
+            let sym = &symbol_map[*key];
+            let offset = sym.word_offset as usize;
+            match &spec.default_value {
+                serde_json::Value::Number(n) => {
+                    let f = n.as_f64().unwrap_or(0.0) as f32;
+                    init_data[offset] = f.to_bits();
+                }
+                serde_json::Value::Array(arr) => {
+                    for (i, v) in arr.iter().enumerate() {
+                        let f = v.as_f64().unwrap_or(0.0) as f32;
+                        init_data[offset + i] = f.to_bits();
+                    }
+                }
+                _ => {}
+            }
+        }
+        queue.write_buffer(&globals_buffer, 0, bytemuck::cast_slice(&init_data));
+    }
+
     // Phase A.5: Arena scalars (Storage buffer, packed)
     let mut scalars_word_count: u32 = 0;
     let mut scalar_keys: Vec<_> = manifest.arena_scalars.keys().collect();
