@@ -10,6 +10,7 @@ import type {
   ComputePassSpec,
   RenderPassSpec,
   SystemPassSpec,
+  SystemCameraUpdateSpec,
   DrawCallSpec,
   StatementIR,
   MemoryManifest,
@@ -96,7 +97,13 @@ interface DeferredRenderPass {
   readonly drawCalls: readonly DeferredDrawCall[];
 }
 
-type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | SystemPassSpec;
+interface DeferredCameraPass {
+  readonly type: 'System_CameraUpdate';
+  readonly cameraRef: string;
+  readonly bodyFn: Function;
+}
+
+type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCameraPass | SystemPassSpec;
 
 // ---------------------------------------------------------------------------
 // gpu()
@@ -141,6 +148,10 @@ export function compute(
 // ---------------------------------------------------------------------------
 // drawPrep()
 // ---------------------------------------------------------------------------
+
+export function cameraPass(cameraRef: string, bodyFn: Function): DeferredCameraPass {
+  return { type: 'System_CameraUpdate', cameraRef, bodyFn };
+}
 
 export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount: number): SystemPassSpec {
   return {
@@ -196,9 +207,10 @@ export function draw(
 function compileEntry(
   entry: DeferredRosterEntry,
   manifest: MemoryManifest,
-): ComputePassSpec | RenderPassSpec | SystemPassSpec {
+): ComputePassSpec | RenderPassSpec | SystemPassSpec | SystemCameraUpdateSpec {
   if (entry.type === 'System_DrawPrep') return entry;
   if (entry.type === 'Compute') return compileComputeEntry(entry as DeferredComputePass, manifest);
+  if (entry.type === 'System_CameraUpdate') return compileCameraEntry(entry as DeferredCameraPass, manifest);
   return compileRenderEntry(entry as DeferredRenderPass, manifest);
 }
 
@@ -208,6 +220,17 @@ function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
     throw new Error(`Shader compilation failed:\n${msgs}`);
   }
   return result.stmts;
+}
+
+function compileCameraEntry(entry: DeferredCameraPass, manifest: MemoryManifest): SystemCameraUpdateSpec {
+  const ctx: ShaderContext = { stage: 'compute', manifest };
+  const ast = unwrapWalkerResult(compileShaderBody(entry.bodyFn, ctx));
+  return {
+    type: 'System_CameraUpdate',
+    passId: 'camera',
+    cameraRef: entry.cameraRef,
+    ast,
+  };
 }
 
 function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifest): ComputePassSpec {

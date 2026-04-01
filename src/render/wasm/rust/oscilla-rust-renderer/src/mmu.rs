@@ -153,6 +153,11 @@ pub fn allocate_arena(
     scalar_keys.sort();
     for key in &scalar_keys {
         let spec = &manifest.arena_scalars[*key];
+        let words = scalar_type_word_count(&spec.wgsl_type);
+        // Align multi-word types to 4-word boundary (std430)
+        if words >= 4 && scalars_word_count % 4 != 0 {
+            scalars_word_count = align_up(scalars_word_count, 4);
+        }
         symbol_map.insert(
             (*key).clone(),
             PhysicalSymbol {
@@ -162,7 +167,7 @@ pub fn allocate_arena(
                 wgsl_type: spec.wgsl_type.clone(),
             },
         );
-        scalars_word_count += 1;
+        scalars_word_count += words;
     }
     let scalars_buffer_size = ((scalars_word_count.max(4) * 4) as u64).max(MIN_BUFFER_BYTES);
     let scalars_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -403,13 +408,30 @@ pub fn allocate_arena(
     }
 
     // Phase G: Clear — write clearValues to scalars and domain buffers
-    // Scalars: write clear values
+    // Scalars: write clear/initial values (supports multi-word types)
     if scalars_word_count > 0 {
         let mut clear_data = vec![0u32; scalars_word_count as usize];
         for key in &scalar_keys {
             let spec = &manifest.arena_scalars[*key];
             let sym = &symbol_map[*key];
-            clear_data[sym.word_offset as usize] = spec.clear_value as u32;
+            let offset = sym.word_offset as usize;
+            match &spec.clear_value {
+                serde_json::Value::Number(n) => {
+                    let v = n.as_f64().unwrap_or(0.0);
+                    clear_data[offset] = if spec.wgsl_type == "f32" {
+                        (v as f32).to_bits()
+                    } else {
+                        v as u32
+                    };
+                }
+                serde_json::Value::Array(arr) => {
+                    for (i, val) in arr.iter().enumerate() {
+                        let f = val.as_f64().unwrap_or(0.0) as f32;
+                        clear_data[offset + i] = f.to_bits();
+                    }
+                }
+                _ => {}
+            }
         }
         queue.write_buffer(&scalars_buffer, 0, bytemuck::cast_slice(&clear_data));
     }
@@ -468,6 +490,17 @@ fn align_up(value: u32, alignment: u32) -> u32 {
         value
     } else {
         value + alignment - remainder
+    }
+}
+
+fn scalar_type_word_count(wgsl_type: &str) -> u32 {
+    match wgsl_type {
+        "f32" | "u32" | "i32" | "atomic<u32>" | "atomic<i32>" => 1,
+        "vec2" => 2,
+        "vec3" => 3,
+        "vec4" => 4,
+        "mat4x4" => 16,
+        _ => 1,
     }
 }
 
