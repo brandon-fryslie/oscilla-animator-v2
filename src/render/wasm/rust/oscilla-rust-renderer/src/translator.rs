@@ -251,20 +251,25 @@ pub fn translate_compute_pass(
             wgpu::TextureViewDimension::D3 => naga::ImageDimension::D3,
             wgpu::TextureViewDimension::Cube | wgpu::TextureViewDimension::CubeArray => naga::ImageDimension::Cube,
         };
-        let is_sampled = matches!(access_str.as_str(), "read" | "sampled");
+        let is_sampled = access_str == "sampled";
         let class = match access_str.as_str() {
-            "read" | "sampled" => naga::ImageClass::Sampled {
+            "sampled" => naga::ImageClass::Sampled {
                 kind: naga::ScalarKind::Float,
                 multi: false,
             },
-            _ => naga::ImageClass::Storage {
+            "read" => naga::ImageClass::Storage {
                 format: wgpu_format_to_naga(format),
-                access: if access_str == "read_write" {
-                    naga::StorageAccess::LOAD | naga::StorageAccess::STORE
-                } else {
-                    naga::StorageAccess::STORE
-                },
+                access: naga::StorageAccess::LOAD,
             },
+            "read_write" => naga::ImageClass::Storage {
+                format: wgpu_format_to_naga(format),
+                access: naga::StorageAccess::LOAD | naga::StorageAccess::STORE,
+            },
+            "write" => naga::ImageClass::Storage {
+                format: wgpu_format_to_naga(format),
+                access: naga::StorageAccess::STORE,
+            },
+            _ => panic!("Unknown texture access mode: '{}'", access_str),
         };
         let img_ty = m.image_type(naga_dim, false, class);
         let gv = m.add_global_handle(*texture_id, img_ty, 1, group1_binding);
