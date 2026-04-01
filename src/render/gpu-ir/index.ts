@@ -14,6 +14,9 @@ export * as IR from './ir-builders';
 // Reverse translator (IR → DSL source text)
 export { stmtsToSource, exprToSource } from './reverse';
 
+// Full payload reverse translator (PipelineInstallPayload → gpu({...}) source)
+export { payloadToSource } from './reverse-payload';
+
 // Types (re-exported for convenience)
 export type { Domains, DomainProxy, DomainFieldProxy } from './types';
 export type { f32, u32, i32, vec2f, vec3f, vec4f, vec2i, vec3i, vec2u, vec3u } from './types';

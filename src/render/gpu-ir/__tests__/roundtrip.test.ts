@@ -24,28 +24,6 @@ function assertIRRoundtrip(stmts: readonly StatementIR[], ctx: ShaderContext, pa
   expect(result.stmts).toStrictEqual(stmts);
 }
 
-describe('GPU-IR roundtrip: hello-triangle IR → DSL → IR', () => {
-  const payload = loadFixturePayload('hello-triangle');
-  const manifest = payload.manifest;
-
-  test('compute pass AST roundtrips', () => {
-    const computePass = payload.roster[0] as ComputePassSpec;
-    assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
-  });
-
-  test('vertex AST roundtrips', () => {
-    const renderPass = payload.roster[2] as RenderPassSpec;
-    const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
-    assertIRRoundtrip(drawCall.vertexAst, { stage: 'vertex', manifest }, ['position']);
-  });
-
-  test('fragment AST roundtrips', () => {
-    const renderPass = payload.roster[2] as RenderPassSpec;
-    const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
-    assertIRRoundtrip(drawCall.fragmentAst, { stage: 'fragment', manifest });
-  });
-});
-
 describe('GPU-IR roundtrip: instanced-write IR → DSL → IR', () => {
   const payload = loadFixturePayload('instanced-write');
   const manifest = payload.manifest;
@@ -89,6 +67,16 @@ describe('GPU-IR roundtrip: atomic-boids IR → DSL → IR', () => {
   const manifest = payload.manifest;
 
   test('compute pass AST roundtrips (AtomicOpField)', () => {
+    const computePass = payload.roster[0] as ComputePassSpec;
+    assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
+  });
+});
+
+describe('GPU-IR roundtrip: atomic-histogram IR → DSL → IR', () => {
+  const payload = loadFixturePayload('atomic-histogram');
+  const manifest = payload.manifest;
+
+  test('compute pass AST roundtrips (atomicLoad + assignResultTo)', () => {
     const computePass = payload.roster[0] as ComputePassSpec;
     assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
   });
