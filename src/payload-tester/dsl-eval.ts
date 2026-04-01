@@ -5,6 +5,11 @@
  * in scope. Arrow function bodies reference well-known objects ($global, $domains,
  * sin, vec4, etc.) that are provided as stubs — they appear in fn.toString()
  * source but are never called. The walker parses them from source text.
+ *
+ * Supports two source formats:
+ * - Single expression: `gpu({...})` — returned directly
+ * - Statement block: `const cam = defaultCamera(); gpu({...})` — last expression returned
+ * Comments (// and /* *‌/) are supported in both formats.
  */
 
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
@@ -111,15 +116,48 @@ export interface DslEvalError {
 export type DslResult = DslEvalResult | DslEvalError;
 
 /**
+ * Transform DSL source into a function body that returns the gpu() result.
+ *
+ * Single expression (gpu({...})): wrapped as `return (source);`
+ * Statement block (const x = ...; gpu({...})): last expression gets `return` prepended.
+ * Comments are stripped before detection but preserved in the function body.
+ */
+function wrapSource(source: string): string {
+  // Strip comments to detect structure (don't modify the actual source)
+  const stripped = source
+    .replace(/\/\/[^\n]*/g, '')       // line comments
+    .replace(/\/\*[\s\S]*?\*\//g, '') // block comments
+    .trim();
+
+  // If the stripped source starts with gpu( or (gpu(, it's a single expression
+  if (/^gpu\s*\(/.test(stripped)) {
+    return `"use strict"; return (${source});`;
+  }
+
+  // Statement block: find the last gpu(...) call and insert return before it.
+  // We search the stripped source for the last occurrence of `gpu(` at statement level.
+  const lastGpu = source.lastIndexOf('gpu(');
+  if (lastGpu === -1) {
+    // No gpu() call found — try as expression anyway (will produce a useful error)
+    return `"use strict"; return (${source});`;
+  }
+
+  const before = source.slice(0, lastGpu);
+  const after = source.slice(lastGpu);
+  return `"use strict"; ${before}return ${after}`;
+}
+
+/**
  * Evaluate a GPU-IR DSL source string and return the PipelineInstallPayload.
  *
- * The source should be a single expression that calls gpu({...}).
- * Example: `gpu({ globals: {...}, domains: {...}, roster: [...] })`
+ * Supports single expressions (`gpu({...})`) and statement blocks
+ * (`const cam = defaultCamera(); gpu({...})`).
+ * Comments (// and /* *‌/) are preserved.
  */
 export function evalDsl(source: string): DslResult {
   try {
-    // Wrap source in a function with all DSL symbols in scope
-    const fn = new Function(...CONTEXT_NAMES, `"use strict"; return (${source});`);
+    const body = wrapSource(source);
+    const fn = new Function(...CONTEXT_NAMES, body);
     const payload = fn(...CONTEXT_VALUES) as PipelineInstallPayload;
 
     // Basic validation
