@@ -16,7 +16,7 @@ import type {
   MemoryManifest,
   PipelineStateSpec,
 } from '../rust/boundary-contract';
-import { expandManifest, type CompactManifest } from './manifest';
+import { expandManifest, type CompactManifest, type CompactGlobalSpec, type CompactScalarSpec } from './manifest';
 import { inferComputeDeps, inferDrawCallDeps } from './deps';
 import { compileShaderBody, type ShaderContext, type WalkerResult } from './walker';
 import * as B from './ir-builders';
@@ -153,6 +153,59 @@ export function cameraPass(cameraRef: string, bodyFn: Function): DeferredCameraP
   return { type: 'System_CameraUpdate', cameraRef, bodyFn };
 }
 
+// ---------------------------------------------------------------------------
+// defaultCamera() — one-liner camera setup for fixtures
+// ---------------------------------------------------------------------------
+
+export interface CameraKit {
+  readonly globals: Record<string, string | CompactGlobalSpec>;
+  readonly scalars: Record<string, CompactScalarSpec>;
+  readonly pass: DeferredCameraPass;
+  readonly ref: string;
+}
+
+/**
+ * Create a default orthographic camera kit.
+ * Returns globals (center, zoom), a scalar (VP matrix), and the camera pass.
+ * Spread into gpu(): `...cam.globals`, `...cam.scalars`, `cam.pass`, `cam.ref`.
+ */
+export function defaultCamera(opts?: { vpSymbol?: string }): CameraKit {
+  const vpSymbol = opts?.vpSymbol ?? 'sys:view_proj';
+  return {
+    globals: {
+      'cam:center_x': { f32: 0.5, dynamic: true },
+      'cam:center_y': { f32: 0.5, dynamic: true },
+      'cam:zoom': { f32: 1.0, dynamic: true },
+    },
+    scalars: { [vpSymbol]: 'mat4x4' },
+    pass: cameraPass(vpSymbol, () => {
+      // Stubs — parsed from source by the walker, never called
+      const res = $global.resolution;
+      const aspect = res.x / res.y;
+      const cx = $global['cam:center_x'];
+      const cy = $global['cam:center_y'];
+      const zoom = $global['cam:zoom'];
+      // Ortho VP: maps [0,1] → [-1,1] with aspect correction, pan, zoom
+      const sx = 2.0 * zoom / max(aspect, 1.0);
+      const sy = 2.0 * zoom * min(aspect, 1.0);
+      $scalar.view_proj = mat4x4(
+        sx,  0.0, 0.0, 0.0,
+        0.0, sy,  0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        -sx * cx, -sy * cy, 0.0, 1.0,
+      );
+    }),
+    ref: vpSymbol,
+  };
+}
+
+// Ambient stubs for defaultCamera body — walker parses fn.toString(), never calls these
+declare const $global: any;
+declare const $scalar: any;
+declare function max(a: any, b: any): any;
+declare function min(a: any, b: any): any;
+declare function mat4x4(...args: any[]): any;
+
 export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount: number): SystemPassSpec {
   return {
     type: 'System_DrawPrep',
@@ -267,6 +320,22 @@ function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest)
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
     const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
+
+    // [LAW:single-enforcer] Auto-inject VP multiply: ReturnVertex.position → vp * position
+    // The cameraRef tells us which arena scalar holds the VP matrix.
+    // Fixture authors write world-space positions; the camera transform is automatic.
+    if (dc.cameraRef) {
+      const vpLoad = B.loadScalar(dc.cameraRef);
+      for (let i = 0; i < vertexAst.length; i++) {
+        const stmt = vertexAst[i];
+        if (stmt.type === 'ReturnVertex') {
+          vertexAst[i] = B.returnVertex(
+            B.binop('*', vpLoad, stmt.position),
+            stmt.varyings,
+          );
+        }
+      }
+    }
 
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, dc.cameraRef);
 
