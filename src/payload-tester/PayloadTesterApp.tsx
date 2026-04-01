@@ -47,7 +47,9 @@ export const PayloadTesterApp: React.FC = () => {
   const workerRef = useRef<Worker | null>(null);
   const latestJsonRef = useRef('');
   const rendererReadyRef = useRef(false);
-  const pendingInstallRef = useRef<string | null>(null);
+  const pendingInstallRef = useRef<string | null>(
+    JSON.stringify(initialFixture.payload, null, 2),
+  );
   const rendererReady = rendererStatus.kind === 'ready' || rendererStatus.kind === 'info';
 
   useEffect(() => {
