@@ -111,6 +111,10 @@ function emitRosterEntry(entry: RosterEntry, manifest: MemoryManifest): string {
   switch (entry.type) {
     case 'Compute': return emitCompute(entry, manifest);
     case 'System_DrawPrep': return emitDrawPrep(entry);
+    case 'System_CameraUpdate': {
+      const body = stmtsToSource(entry.ast, 2);
+      return `    cameraPass('${entry.cameraRef}', () => {\n${body}\n    })`;
+    }
     case 'Render': return emitRender(entry, manifest);
   }
 }

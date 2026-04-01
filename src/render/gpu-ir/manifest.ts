@@ -31,7 +31,7 @@ export interface CompactManifest {
 }
 
 export type CompactGlobalSpec = string | { readonly f32?: number; readonly u32?: number; readonly i32?: number; readonly dynamic?: boolean };
-export type CompactScalarSpec = { readonly f32?: number; readonly u32?: number; readonly i32?: number };
+export type CompactScalarSpec = string | { readonly f32?: number; readonly u32?: number; readonly i32?: number };
 
 export interface CompactDomainSpec {
   readonly capacity: number;
@@ -81,11 +81,24 @@ function expandGlobals(input: Record<string, string | CompactGlobalSpec>): Recor
   return out;
 }
 
+/** Default clear values for multi-component arena scalar types. */
+const SCALAR_TYPE_DEFAULTS: Record<string, readonly number[]> = {
+  vec2: [0, 0],
+  vec3: [0, 0, 0],
+  vec4: [0, 0, 0, 0],
+  mat4x4: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+};
+
 function expandScalars(input: Record<string, CompactScalarSpec>): Record<string, ArenaScalarSpec> {
   const out: Record<string, ArenaScalarSpec> = {};
   for (const [id, spec] of Object.entries(input)) {
-    const [type, clearValue] = extractTypeAndValue(spec);
-    out[id] = { type: type as ArenaScalarSpec['type'], clearValue };
+    if (typeof spec === 'string') {
+      const clearValue = SCALAR_TYPE_DEFAULTS[spec] ?? 0;
+      out[id] = { type: spec as ArenaScalarSpec['type'], clearValue };
+    } else {
+      const [type, clearValue] = extractTypeAndValue(spec);
+      out[id] = { type: type as ArenaScalarSpec['type'], clearValue };
+    }
   }
   return out;
 }

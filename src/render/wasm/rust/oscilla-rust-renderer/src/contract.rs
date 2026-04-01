@@ -49,7 +49,7 @@ pub struct GlobalSpec {
 pub struct ArenaScalarSpec {
     #[serde(rename = "type")]
     pub wgsl_type: String,
-    pub clear_value: f64,
+    pub clear_value: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,6 +131,8 @@ pub enum RosterEntry {
     Render(RenderPassSpec),
     #[serde(rename = "System_DrawPrep")]
     SystemDrawPrep(SystemPassSpec),
+    #[serde(rename = "System_CameraUpdate")]
+    SystemCameraUpdate(SystemCameraUpdateSpec),
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,11 +271,19 @@ pub struct SystemPassSpec {
     pub vertex_count: u32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemCameraUpdateSpec {
+    pub pass_id: String,
+    pub camera_ref: String,
+    pub ast: Vec<StatementIR>,
+}
+
 // ---------------------------------------------------------------------------
 // Math IR: ExprIR
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum ExprIR {
     // Primitive literals
@@ -374,7 +384,7 @@ pub enum ExprIR {
 // Math IR: StatementIR
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum StatementIR {
     // Declarations

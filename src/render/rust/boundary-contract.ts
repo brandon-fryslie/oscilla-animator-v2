@@ -95,8 +95,8 @@ export const GlobalSpecSchema = z.object({
 export type GlobalSpec = z.infer<typeof GlobalSpecSchema>;
 
 export const ArenaScalarSpecSchema = z.object({
-  type: z.enum(['f32', 'u32', 'i32', 'atomic<u32>', 'atomic<i32>']),
-  clearValue: z.number(),
+  type: z.enum(['f32', 'u32', 'i32', 'atomic<u32>', 'atomic<i32>', 'vec2', 'vec3', 'vec4', 'mat4x4']),
+  clearValue: z.union([z.number(), z.array(z.number()).readonly()]),
 });
 export type ArenaScalarSpec = z.infer<typeof ArenaScalarSpecSchema>;
 
@@ -298,6 +298,14 @@ export const SystemPassSpecSchema = z.object({
 });
 export type SystemPassSpec = z.infer<typeof SystemPassSpecSchema>;
 
+export const SystemCameraUpdateSpecSchema = z.object({
+  type: z.literal('System_CameraUpdate'),
+  passId: z.string(),
+  cameraRef: SymbolIdSchema,
+  ast: z.array(StatementIRSchema).readonly(),
+});
+export type SystemCameraUpdateSpec = z.infer<typeof SystemCameraUpdateSpecSchema>;
+
 export const DrawCallSpecSchema = z.object({
   intentId: z.string(),
   source: z.discriminatedUnion('type', [
@@ -347,6 +355,7 @@ export const RosterEntrySchema = z.discriminatedUnion('type', [
   ComputePassSpecSchema,
   RenderPassSpecSchema,
   SystemPassSpecSchema,
+  SystemCameraUpdateSpecSchema,
 ]);
 export type RosterEntry = z.infer<typeof RosterEntrySchema>;
 

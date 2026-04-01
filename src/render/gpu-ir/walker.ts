@@ -598,7 +598,10 @@ function inferDataType(expr: ExprIR, manifest: MemoryManifest): WgslType {
       return GLOBAL_TYPE_TO_WGSL[spec?.type ?? 'f32'] ?? 'f32';
     }
     case 'LoadField': return 'f32';   // domain fields are f32
-    case 'LoadScalar': return 'f32';  // arena scalars read as f32
+    case 'LoadScalar': {
+      const spec = manifest.arenaScalars[expr.symbolId];
+      return GLOBAL_TYPE_TO_WGSL[spec?.type ?? 'f32'] ?? 'f32';
+    }
     case 'TextureLoad': return 'vec4<f32>';
     case 'TextureSample': return 'vec4<f32>';
     case 'AtomicLoadField': return 'u32';
