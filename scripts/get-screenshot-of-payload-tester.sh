@@ -20,7 +20,7 @@ fi
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
 
-FIXTURE_INDEX=0
+FIXTURE_NAME=""
 FRAME_WIDTH=720
 FRAME_HEIGHT=720
 
@@ -28,21 +28,19 @@ FRAME_HEIGHT=720
 
 show_help() {
   cat <<'HELP'
-Usage: ./scripts/get-screenshot-of-payload-tester.sh [options]
+Usage: ./scripts/get-screenshot-of-payload-tester.sh <fixture-name> [options]
 
-Captures a screenshot of the payload tester after submitting a fixture.
-Boots the standalone payload tester (no main app), waits for the Naga
-shim + renderer to be ready, clicks a fixture, submits it, and captures.
+Captures a canvas-only screenshot of a payload tester fixture.
+Uses query params (?fixture=name&canvas-only) so no clicking is needed.
 
 Options:
-  --fixture N               Zero-indexed fixture to submit (default: 0)
   --output <path>           Output path (file or directory)
   --no-headless             Show the browser window
 
 Examples:
-  ./scripts/get-screenshot-of-payload-tester.sh
-  ./scripts/get-screenshot-of-payload-tester.sh --fixture 1
-  ./scripts/get-screenshot-of-payload-tester.sh --output ./evidence/
+  ./scripts/get-screenshot-of-payload-tester.sh strange-attractor
+  ./scripts/get-screenshot-of-payload-tester.sh aurora-field --output ./evidence/
+  ./scripts/get-screenshot-of-payload-tester.sh hello-triangle --no-headless
 HELP
   exit 0
 }
@@ -56,14 +54,25 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h)        show_help ;;
     --output)         OUTPUT="${2:-}"; shift 2 ;;
-    --fixture)        FIXTURE_INDEX="${2:-0}"; shift 2 ;;
     --no-headless)    HEADLESS=false; shift ;;
-    *)
+    -*)
       echo "${RED}Error:${RESET} Unknown option: $1 (try --help)" >&2
       exit 1
       ;;
+    *)
+      if [[ -z "$FIXTURE_NAME" ]]; then
+        FIXTURE_NAME="$1"; shift
+      else
+        echo "${RED}Error:${RESET} Unexpected argument: $1" >&2; exit 1
+      fi
+      ;;
   esac
 done
+
+if [[ -z "$FIXTURE_NAME" ]]; then
+  echo "${RED}Error:${RESET} Fixture name required. Example: ./scripts/get-screenshot-of-payload-tester.sh strange-attractor" >&2
+  exit 1
+fi
 
 # ─── Dev server detection ───────────────────────────────────────────────────
 
@@ -113,7 +122,7 @@ fi
 # ─── Output path ─────────────────────────────────────────────────────────────
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-AUTO_FILENAME="payload-tester_fixture${FIXTURE_INDEX}_${TIMESTAMP}.png"
+AUTO_FILENAME="${FIXTURE_NAME}_${TIMESTAMP}.png"
 
 if [[ -z "$OUTPUT" ]]; then
   mkdir -p "$DEFAULT_OUTPUT_DIR"
@@ -127,7 +136,7 @@ fi
 
 # ─── Print settings ────────────────────────────────────────────────────────
 
-printf "${DIM}%-12s${RESET} %s\n" "Fixture:" "${CYAN}#${FIXTURE_INDEX}${RESET}" >&2
+printf "${DIM}%-12s${RESET} %s\n" "Fixture:" "${CYAN}${FIXTURE_NAME}${RESET}" >&2
 printf "${DIM}%-12s${RESET} %s\n" "Viewport:" "${FRAME_WIDTH}x${FRAME_HEIGHT}" >&2
 printf "${DIM}%-12s${RESET} %s\n" "Port:" "${APP_PORT}" >&2
 
@@ -185,10 +194,10 @@ done
 # ─── CDP capture ─────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_URL="http://localhost:${APP_PORT}/payload-tester.html"
+APP_URL="http://localhost:${APP_PORT}/payload-tester.html?fixture=${FIXTURE_NAME}&canvas-only"
 
 node "${SCRIPT_DIR}/_payload-tester-cdp.mjs" \
-  "$DEBUG_PORT" "$APP_URL" "$SCREENSHOT_PATH" "$FRAME_WIDTH" "$FRAME_HEIGHT" "$FIXTURE_INDEX"
+  "$DEBUG_PORT" "$APP_URL" "$SCREENSHOT_PATH" "$FRAME_WIDTH" "$FRAME_HEIGHT"
 
 echo "${GREEN}Screenshot path:${RESET}" >&2
 echo "$SCREENSHOT_PATH"

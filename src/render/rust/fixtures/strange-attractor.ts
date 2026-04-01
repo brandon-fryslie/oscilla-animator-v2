@@ -65,13 +65,13 @@ gpu({
         $domains.pts.color_r[gid] = (sin(hue * 6.283) * 0.4 + 0.5) * fade;
         $domains.pts.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.4 + 0.5) * fade;
         $domains.pts.color_b[gid] = (sin(hue * 6.283 + 4.189) * 0.4 + 0.5) * fade;
-        $domains.pts.color_a[gid] = fade * 0.012;
+        $domains.pts.color_a[gid] = fade * 0.25;
       },
     ),
     drawPrep('prep', 'sys:active', 2),
     render('draw', clearTarget([0.008, 0.005, 0.018, 1]), [
       draw('pts_fill', domainSource('pts', 'segment'),
-        { blendMode: 'additive', cullMode: 'none', depthWrite: false, depthCompare: 'always' },
+        { blendMode: 'alpha', cullMode: 'none', depthWrite: false, depthCompare: 'always' },
         {
           vertex: (position) => {
             const iid = $instance.index;
@@ -81,8 +81,8 @@ gpu({
             const y0 = $domains.pts.pos_y[iid];
             const x1 = $domains.pts.next_x[iid];
             const y1 = $domains.pts.next_y[iid];
-            const ax = (x0 * (1.0 - t) + x1 * t) * 0.35;
-            const ay = (y0 * (1.0 - t) + y1 * t) * 0.35;
+            const ax = (x0 * (1.0 - t) + x1 * t) * 0.45;
+            const ay = (y0 * (1.0 - t) + y1 * t) * 0.45;
             // Slow global rotation
             const angle = time * 0.00005;
             const c = cos(angle);

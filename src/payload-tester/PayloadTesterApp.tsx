@@ -25,7 +25,21 @@ type RendererStatus =
 
 const STORAGE_KEY = 'oscilla-payload-tester-fixture';
 
+function getQueryParams(): { fixture?: string; canvasOnly: boolean } {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    fixture: params.get('fixture') ?? undefined,
+    canvasOnly: params.has('canvas-only'),
+  };
+}
+
 function getInitialFixture(): PayloadFixture {
+  // Query param takes priority over sessionStorage
+  const qp = getQueryParams();
+  if (qp.fixture) {
+    const found = PAYLOAD_FIXTURES.find(f => f.id === qp.fixture);
+    if (found) return found;
+  }
   try {
     const savedId = sessionStorage.getItem(STORAGE_KEY);
     if (savedId) {
@@ -39,6 +53,7 @@ function getInitialFixture(): PayloadFixture {
 export const PayloadTesterApp: React.FC = () => {
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>({ kind: 'idle' });
   const [dslStatus, setDslStatus] = useState<CompileStatus>({ ok: true });
+  const { canvasOnly } = getQueryParams();
   const initialFixture = getInitialFixture();
   const [dslSource, setDslSource] = useState(
     initialFixture.dslSource ?? JSON.stringify(initialFixture.payload ?? {}, null, 2),
@@ -54,7 +69,15 @@ export const PayloadTesterApp: React.FC = () => {
 
   useEffect(() => {
     rendererReadyRef.current = rendererReady;
-  }, [rendererReady]);
+    // Expose status for CDP screenshot script
+    (window as any).__rendererStatus = rendererStatus.kind === 'error'
+      ? `GPU fault: ${rendererStatus.message}`
+      : rendererStatus.kind === 'info'
+        ? rendererStatus.message
+        : rendererStatus.kind === 'ready'
+          ? 'Renderer ready'
+          : '';
+  }, [rendererReady, rendererStatus]);
 
   const installPipeline = useCallback((payloadJson: string) => {
     const worker = workerRef.current;
@@ -242,6 +265,14 @@ export const PayloadTesterApp: React.FC = () => {
     latestJsonRef.current = rawJson;
     installPipeline(rawJson);
   }, [installPipeline]);
+
+  if (canvasOnly) {
+    return (
+      <div style={{ width: '100%', height: '100%', background: '#000' }}>
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
