@@ -1,117 +1,51 @@
 /**
  * Payload Tester Fixtures — Registry
  *
- * [LAW:one-source-of-truth] Each fixture is a complete PipelineInstallPayload
- * in its own file. This index collects them into the ordered fixture array.
+ * [LAW:one-source-of-truth] Each fixture file is pure DSL text (a gpu({...}) expression).
+ * Loaded as raw strings via import.meta.glob, evaluated via evalDsl() to produce payloads.
+ * The same text is displayed in the DSL editor.
  */
 
 import type { PipelineInstallPayload } from '../boundary-contract';
-import { helloTriangle } from './hello-triangle';
-import { instancedWrite } from './instanced-write';
-import { forLoopGradient } from './for-loop-gradient';
-import { hashColor } from './hash-color';
-import { varyingGradient } from './varying-gradient';
-import { textureReadwrite } from './texture-readwrite';
-import { sdfCircle } from './sdf-circle';
-import { atomicBoids } from './atomic-boids';
-import { spirographTrace } from './spirograph-trace';
+import { evalDsl } from '../../../payload-tester/dsl-eval';
+
+// Load all fixture files as raw text at build time
+const rawSources = import.meta.glob('./*.ts', { query: '?raw', eager: true, import: 'default' }) as Record<string, string>;
+
+function loadFixture(filename: string): { payload: PipelineInstallPayload; dslSource: string } {
+  const key = `./${filename}.ts`;
+  const dslSource = rawSources[key];
+  if (!dslSource) throw new Error(`Fixture file not found: ${key}`);
+  const result = evalDsl(dslSource);
+  if (!result.ok) throw new Error(`Fixture '${filename}' failed to compile: ${result.error}`);
+  return { payload: result.payload, dslSource };
+}
 
 export interface PayloadFixture {
   readonly id: string;
   readonly name: string;
   readonly description: string;
   readonly payload: PipelineInstallPayload;
-  /** GPU-IR DSL source that compiles to this payload. Shown in the DSL editor pane. */
-  readonly dslSource?: string;
+  readonly dslSource: string;
+}
+
+function fixture(id: string, name: string, description: string): PayloadFixture {
+  const { payload, dslSource } = loadFixture(id);
+  return { id, name, description, payload, dslSource };
 }
 
 export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
-  {
-    id: 'hello-triangle',
-    name: 'Visible Triangle',
-    description: 'Minimal vertical slice: compute pass writes time-varying RGB, draw_prep fills indirect buffer, render pass draws a single colored triangle.',
-    payload: helloTriangle,
-    dslSource: `gpu({
-  globals: { 'sys:time': 'f32' },
-  scalars: { 'sys:tri_active': { u32: 1 } },
-  domains: {
-    tri: { capacity: 1, active: 'sys:tri_active', fields: {
-      color_r: 'f32', color_g: 'f32', color_b: 'f32',
-    }},
-  },
-  shapes: { unit_triangle: tri([0.0, 0.5, -0.5, -0.5, 0.5, -0.5]) },
-
-  roster: [
-    compute('eval_color', exact(1), wg(1), () => {
-      const time = $global.time;
-      $domains.tri.color_r[0] = sin(time) * 0.5 + 0.5;
-      $domains.tri.color_g[0] = sin(time + 2.094) * 0.5 + 0.5;
-      $domains.tri.color_b[0] = sin(time + 4.189) * 0.5 + 0.5;
-      $domains.tri.$active = u32(1);
-    }),
-    drawPrep('prep_tri', 'sys:tri_active', 3),
-    render('draw', { clear: [0, 0, 0, 1] }, [
-      draw('tri_fill', 'tri', 'unit_triangle', {}, {
-        vertex: (position) => {
-          return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
-        },
-        fragment: () => {
-          const r = $domains.tri.color_r[0];
-          const g = $domains.tri.color_g[0];
-          const b = $domains.tri.color_b[0];
-          return fragment({ color: vec4(r, g, b, 1.0) });
-        },
-      }),
-    ]),
-  ],
-})`,
-  },
-  {
-    id: 'instanced-write',
-    name: 'Instanced Ring',
-    description: 'Gate 1: 64 instances placed in a ring via parallel compute (global_invocation_id). Tests domain dispatch, Cast, and instanced draw_indirect.',
-    payload: instancedWrite,
-  },
-  {
-    id: 'for-loop-gradient',
-    name: 'Loop Gradient',
-    description: 'Gate 2: 32 bars with brightness from a For loop accumulator. Tests Var, Assign, For, control flow.',
-    payload: forLoopGradient,
-  },
-  {
-    id: 'hash-color',
-    name: 'Hash Colors',
-    description: 'Gate 3: 64 instances in 8x8 grid with PCG-hash-derived colors. Tests bitwise XOR, shift, AND, multiply.',
-    payload: hashColor,
-  },
-  {
-    id: 'varying-gradient',
-    name: 'Gradient Triangle',
-    description: 'Gate 5: Per-vertex color passed as varying, GPU-interpolated across triangle face. Tests vertex→fragment data passing.',
-    payload: varyingGradient,
-  },
-  {
-    id: 'texture-readwrite',
-    name: 'Texture Pattern',
-    description: 'Gate 6+7: Compute writes animated gradient to storage texture, render reads via TextureLoad. Tests texture allocation, TextureStore, TextureLoad.',
-    payload: textureReadwrite,
-  },
-  {
-    id: 'sdf-circle',
-    name: 'SDF Circle',
-    description: 'Gate 8: Anti-aliased signed distance circle. Tests fragment-stage dpdx, dpdy, and fwidth derivatives.',
-    payload: sdfCircle,
-  },
-  {
-    id: 'atomic-boids',
-    name: 'Atomic Boids',
-    description: 'Gate 9: 10,000 boids with atomic<u32> grid_cell. Forces MMU to bifurcate standard + atomic fields into separate GPU buffers. Tests AtomicOpField, AtomicLoadField.',
-    payload: atomicBoids,
-  },
-  {
-    id: 'spirograph-trace',
-    name: 'Spirograph Trace',
-    description: '600 points tracing a Lissajous figure. rank-as-phase, two oscillators at different frequencies, rainbow color, additive-style blending.',
-    payload: spirographTrace,
-  },
+  fixture('hello-triangle', 'Visible Triangle', 'Compute writes time-varying RGB, render draws a colored triangle.'),
+  fixture('instanced-write', 'Instanced Ring', '64 instances in a ring via domain dispatch. Tests Cast, Intrinsic, instanced draw.'),
+  fixture('for-loop-gradient', 'Loop Gradient', '32 bars with brightness from a For loop accumulator. Tests Var, Assign, For.'),
+  fixture('hash-color', 'Hash Colors', '64 instances with PCG-hash-derived colors. Tests bitwise XOR, shift, AND.'),
+  fixture('varying-gradient', 'Gradient Triangle', 'Per-vertex color as varying, GPU-interpolated. Tests vertex_index, varyings.'),
+  fixture('texture-readwrite', 'Texture Pattern', 'Compute writes to storage texture, render reads via TextureLoad.'),
+  fixture('sdf-circle', 'SDF Circle', 'Anti-aliased SDF circle. Tests dpdx, dpdy, fwidth, smoothstep.'),
+  fixture('atomic-boids', 'Atomic Boids', '10,000 boids with atomic<u32> grid_cell. Tests AtomicOpField(Exchange).'),
+  fixture('spirograph-trace', 'Spirograph Trace', '1000 points tracing a hypotrochoid. Rainbow color, alpha blending.'),
+  fixture('conditional-ring', 'Conditional Ring', 'If, Var, Assign, LiteralBool, BinaryOp(==, !=, &&, ||, %), UnaryOp(!).'),
+  fixture('search-break', 'Search Break', 'For+If+Break (nested early exit), Continue, BinaryOp(<=, >).'),
+  fixture('bitfield-palette', 'Bitfield Palette', 'BinaryOp(|, <<, >=), UnaryOp(~). Bitfield manipulation for color.'),
+  fixture('scalar-accumulator', 'Scalar Accumulator', 'LoadScalar + AtomicOpScalar(Add). Phase from scalar read, atomic counter.'),
 ];

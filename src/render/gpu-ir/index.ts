@@ -3,7 +3,7 @@
  */
 
 // Compilation orchestrator
-export { gpu, compute, render, draw, drawPrep, exact, wg } from './compile';
+export { gpu, compute, render, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, OPAQUE, ALPHA_BLEND, DEPTH_TEST } from './compile';
 
 // Shape helpers
 export { quad, fullscreenQuad, tri } from './shapes';

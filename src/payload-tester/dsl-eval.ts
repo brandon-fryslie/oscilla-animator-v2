@@ -8,7 +8,11 @@
  */
 
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
-import { gpu, compute, render, draw, drawPrep, exact, wg } from '../render/gpu-ir/compile';
+import {
+  gpu, compute, render, draw, drawPrep, exact, wg,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget,
+  OPAQUE, ALPHA_BLEND, DEPTH_TEST,
+} from '../render/gpu-ir/compile';
 import { quad, fullscreenQuad, tri } from '../render/gpu-ir/shapes';
 
 // ---------------------------------------------------------------------------
@@ -41,6 +45,10 @@ for (const name of [
 const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
   'gpu', 'compute', 'render', 'draw', 'drawPrep', 'exact', 'wg',
+  // Dispatch/source/target helpers (real)
+  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget',
+  // Pipeline state presets (real)
+  'OPAQUE', 'ALPHA_BLEND', 'DEPTH_TEST',
   // Shape helpers (real)
   'quad', 'fullscreenQuad', 'tri',
   // Well-known $-prefixed roots (stubs — parsed, not called)
@@ -63,6 +71,8 @@ const CONTEXT_NAMES = [
 const CONTEXT_VALUES = [
   // Real implementations
   gpu, compute, render, draw, drawPrep, exact, wg,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget,
+  OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
   // $-prefixed stubs
   STUB, STUB, STUB, STUB, STUB, STUB,

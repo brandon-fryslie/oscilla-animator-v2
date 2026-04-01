@@ -285,7 +285,7 @@ describe('walker-acorn: control flow', () => {
     expect(stmts).toHaveLength(1);
     const forStmt = stmts[0] as any;
     expect(forStmt.type).toBe('For');
-    expect(forStmt.init).toEqual(B.var_('i', undefined, B.litF32(0)));
+    expect(forStmt.init).toEqual(B.var_('i', 'f32', B.litF32(0)));
     expect(forStmt.condition).toEqual(B.binop('<', B.ref('i'), B.litF32(10)));
     // i++ → Assign(ref(i), BinaryOp(+, ref(i), litU32(1)))
     expect(forStmt.update).toEqual(B.assign(B.ref('i'), B.binop('+', B.ref('i'), B.litU32(1))));

@@ -131,20 +131,43 @@ export const PayloadTesterApp: React.FC = () => {
                 errorMsg = receipt.diagnostics.map((d) => d.message).join('; ');
               }
             } catch { /* ignore */ }
-            setRendererStatus({ kind: 'error', message: errorMsg });
+            // Don't overwrite a GPU fault (RUST_PANIC) — the catch block only has
+            // "Unreachable code" while the panic hook has the real message.
+            setRendererStatus((prev) =>
+              prev.kind === 'error' && prev.message.includes('GPU fault')
+                ? prev
+                : { kind: 'error', message: errorMsg },
+            );
             break;
           }
           case 'FATAL_ERROR':
-            setRendererStatus({ kind: 'error', message: `Renderer boot failed: ${msg.message}` });
+            // Don't overwrite a specific ENGINE_ERROR with the generic "Unreachable code"
+            // RuntimeError that follows every WASM panic.
+            setRendererStatus((prev) =>
+              prev.kind === 'error' && prev.message.includes('GPU fault')
+                ? prev
+                : { kind: 'error', message: `Renderer: ${msg.message}` },
+            );
             break;
           case 'ENGINE_ERROR':
-            setRendererStatus({ kind: 'error', message: `GPU fault: ${msg.message}` });
+            // Keep the FIRST engine error — subsequent panics (e.g. "RefCell already borrowed")
+            // are cascade failures from the original panic leaving a borrow unreleased.
+            setRendererStatus((prev) =>
+              prev.kind === 'error' && prev.message.includes('GPU fault')
+                ? prev
+                : { kind: 'error', message: `GPU fault [${msg.source}]: ${msg.message} (${msg.location})` },
+            );
             break;
         }
       };
 
       worker.onerror = (err) => {
-        setRendererStatus({ kind: 'error', message: `Worker error: ${err.message}` });
+        // Don't overwrite ENGINE_ERROR with generic worker error either
+        setRendererStatus((prev) =>
+          prev.kind === 'error' && prev.message.includes('GPU fault')
+            ? prev
+            : { kind: 'error', message: `Worker error: ${err.message}` },
+        );
       };
 
       const bootstrapMsg: RustRendererBootstrapMessage = {
