@@ -17,7 +17,7 @@ gpu({
       color_r: 'f32', color_g: 'f32', color_b: 'f32', color_a: 'f32',
     }},
   },
-  shapes: { dot: quad(0.004) },
+  shapes: { dot: quad(0.001) },
 
   roster: [
     compute('iterate_attractor', domain('pts'), wg(64),
@@ -28,18 +28,18 @@ gpu({
         const time = $global.time;
         const rank = f32(gid) / 4000.0;
 
-        // Slowly morph the attractor constants
-        const a = A_BASE + sin(time * 0.13) * 0.15;
-        const b = B_BASE + cos(time * 0.17) * 0.12;
-        const c = C_BASE + sin(time * 0.11 + 1.0) * 0.1;
-        const d = D_BASE + cos(time * 0.19 + 2.0) * 0.08;
+        // Fixed constants — chaotic systems amplify any per-frame variation into jitter
+        const a = A_BASE;
+        const b = B_BASE;
+        const c = C_BASE;
+        const d = D_BASE;
 
         // Seed from rank — each point starts at a different place
         let x = sin(rank * 137.5 + 0.1);
         let y = cos(rank * 97.3 + 0.2);
 
         // Iterate to converge onto the attractor (burn-in)
-        for (let i = u32(0); i < u32(80); i = i + u32(1)) {
+        for (let i = u32(0); i < u32(200); i = i + u32(1)) {
           const xn = sin(a * y) + c * cos(a * x);
           const yn = sin(b * x) + d * cos(b * y);
           x = xn;
@@ -63,8 +63,8 @@ gpu({
         $domains.pts.pos_x[gid] = fx * 0.35;
         $domains.pts.pos_y[gid] = fy * 0.35;
 
-        // Color from velocity magnitude — spec: hue = speed * 0.3
-        const hue = speed * 2.5 + time * 0.1;
+        // Color from velocity magnitude — spec: hue = speed * 0.3, slow time rotation
+        const hue = speed * 2.5 + rank * 0.5 + time * 0.05;
         const brightness = 0.5 + clamp(speed * 3.0, 0.0, 0.5);
         $domains.pts.color_r[gid] = (sin(hue * 6.283) * 0.5 + 0.5) * brightness;
         $domains.pts.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.5 + 0.5) * brightness;
