@@ -48,4 +48,7 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('search-break', 'Search Break', 'For+If+Break (nested early exit), Continue, BinaryOp(<=, >).'),
   fixture('bitfield-palette', 'Bitfield Palette', 'BinaryOp(|, <<, >=), UnaryOp(~). Bitfield manipulation for color.'),
   fixture('scalar-accumulator', 'Scalar Accumulator', 'LoadScalar + AtomicOpScalar(Add). Phase from scalar read, atomic counter.'),
+  fixture('math-zoo', 'Math Zoo', 'Comprehensive builtins: tan, exp, log, sqrt, sign, fract, ceil, floor, round, pow, atan2, min, step, mix, asin, acos, atan.'),
+  fixture('vector-field', 'Vector Field', 'Vector builtins: normalize, length, distance, dot, cross, reflect.'),
+  fixture('multi-domain', 'Multi-Domain', 'Two domains, cross-domain reads, multiple draw calls in one render pass.'),
 ];
