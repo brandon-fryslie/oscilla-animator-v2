@@ -21,6 +21,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export interface CompactManifest {
+  readonly preserveStateOnRecompile?: boolean;
   readonly globals?: Record<string, string | CompactGlobalSpec>;
   readonly scalars?: Record<string, CompactScalarSpec>;
   readonly domains?: Record<string, CompactDomainSpec>;
@@ -46,7 +47,7 @@ export type CompactFieldSpec = { readonly f32?: number; readonly u32?: number; r
 
 export function expandManifest(compact: CompactManifest): MemoryManifest {
   return {
-    preserveStateOnRecompile: false,
+    preserveStateOnRecompile: compact.preserveStateOnRecompile ?? false,
     globals: expandGlobals(compact.globals ?? {}),
     arenaScalars: expandScalars(compact.scalars ?? {}),
     domains: expandDomains(compact.domains ?? {}),
