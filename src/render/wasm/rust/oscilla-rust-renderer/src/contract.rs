@@ -255,7 +255,7 @@ pub struct StencilFaceState {
 #[serde(rename_all = "camelCase")]
 pub struct DrawCallDependencies {
     pub requires_globals: bool,
-    pub camera_ref: Option<String>,
+    pub camera_ref: String,
     pub domains: HashMap<String, String>,
     pub textures: HashMap<String, String>,
 }
@@ -393,6 +393,11 @@ pub enum StatementIR {
         value: ExprIR,
     },
     // Symbolic memory writes
+    StoreGlobal {
+        #[serde(rename = "symbolId")]
+        symbol_id: String,
+        value: ExprIR,
+    },
     StoreScalar {
         #[serde(rename = "symbolId")]
         symbol_id: String,

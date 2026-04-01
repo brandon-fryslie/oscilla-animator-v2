@@ -45,6 +45,8 @@ struct CompiledRoster {
     passes: Vec<CompiledPass>,
     /// Word offset of "sys:time" in the globals buffer (if present).
     global_time_word_offset: Option<u32>,
+    /// Word offset of "sys:resolution" in the globals buffer (if present).
+    global_resolution_word_offset: Option<u32>,
 }
 
 enum CompiledPass {
@@ -960,8 +962,9 @@ impl Engine {
             }
         }
 
-        // Check if sys:time global exists
+        // Check if engine-driven globals exist
         let global_time_word_offset = arena.global_offset_map.get("sys:time").copied();
+        let global_resolution_word_offset = arena.global_offset_map.get("sys:resolution").copied();
 
         let elapsed = js_sys::Date::now() - start;
         let receipt = InstallReceipt {
@@ -976,6 +979,7 @@ impl Engine {
             arena,
             passes,
             global_time_word_offset,
+            global_resolution_word_offset,
         });
 
         serde_json::to_string(&receipt).unwrap()
@@ -999,13 +1003,23 @@ impl Engine {
     fn execute_roster(&mut self) -> Result<(), JsValue> {
         let roster = self.compiled_roster.as_ref().unwrap();
 
-        // Write time to globals buffer (engine-driven for this slice)
+        // Write engine-driven globals (time, resolution) before GPU dispatch
         if let Some(offset) = roster.global_time_word_offset {
             let time_secs = (self.frame_count as f64 / 60.0) as f32;
             self.queue.write_buffer(
                 &roster.arena.globals_buffer,
                 (offset * 4) as u64,
                 bytemuck::bytes_of(&time_secs),
+            );
+        }
+        if let Some(offset) = roster.global_resolution_word_offset {
+            let w = self.surface_config.width as f32;
+            let h = self.surface_config.height as f32;
+            let data: [f32; 2] = [w, h];
+            self.queue.write_buffer(
+                &roster.arena.globals_buffer,
+                (offset * 4) as u64,
+                bytemuck::cast_slice(&data),
             );
         }
 
