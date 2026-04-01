@@ -55,4 +55,8 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('constant-spiral', 'Constant Spiral', 'Constants map, LiteralI32, Cast(i32), deeply nested expressions.'),
   fixture('texture-blur', 'Texture Blur', 'Texture dispatch mode, 5-tap cross blur, multiple TextureLoad/TextureStore.'),
   fixture('sampled-texture', 'Sampled Texture', 'TextureSample with linear sampler. First sampler fixture.'),
+  fixture('aurora-field', 'Aurora Field', '8192 rotating petals with curl dynamics. Inspired by aurora-petal-showcase.'),
+  fixture('galaxy-swirl', 'Galaxy Swirl', '16384 stars in a rotating galaxy with spiral arms, Keplerian orbits, and core glow.'),
+  fixture('jellyfish-bloom', 'Jellyfish Bloom', '6144 bioluminescent tendrils on 3 pulsing jellyfish with wave dynamics.'),
+  fixture('fire-rain', 'Fire Rain', '12288 falling embers with heat color gradient, wind turbulence, and tumble rotation.'),
 ];
