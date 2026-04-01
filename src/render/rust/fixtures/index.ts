@@ -53,4 +53,6 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('multi-domain', 'Multi-Domain', 'Two domains, cross-domain reads, multiple draw calls in one render pass.'),
   fixture('palette-lookup', 'Palette Lookup', 'IndexAccess on vec4, nested Construct, computed index.'),
   fixture('constant-spiral', 'Constant Spiral', 'Constants map, LiteralI32, Cast(i32), deeply nested expressions.'),
+  fixture('texture-blur', 'Texture Blur', 'Texture dispatch mode, 5-tap cross blur, multiple TextureLoad/TextureStore.'),
+  fixture('sampled-texture', 'Sampled Texture', 'TextureSample with linear sampler. First sampler fixture.'),
 ];
