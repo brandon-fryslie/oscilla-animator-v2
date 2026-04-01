@@ -73,6 +73,9 @@ function stmtToSource(stmt: StatementIR, indent: number): string {
     case 'Assign':
       return `${pad}${emitExpr(stmt.target, 0)} = ${emitExpr(stmt.value, 0)};`;
 
+    case 'StoreGlobal':
+      return `${pad}$global.${stmt.symbolId.replace('sys:', '')} = ${emitExpr(stmt.value, 0)};`;
+
     case 'StoreScalar':
       return `${pad}${emitScalarAccess(stmt.symbolId)} = ${emitExpr(stmt.value, 0)};`;
 

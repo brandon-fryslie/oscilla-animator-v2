@@ -88,6 +88,7 @@ export const STMT_RULES: Record<StatementIR['type'], StmtRule> = {
   Let:             { refs: [], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
   Var:             { refs: [], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
   Assign:          { refs: [], children: ['target', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
+  StoreGlobal:     { refs: [['symbolId', 'global']], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
   StoreScalar:     { refs: [['symbolId', 'scalar']], children: ['value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
   StoreField:      { refs: [['symbolId', 'field']], children: ['index', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
   TextureStore:    { refs: [['textureId', 'texture']], children: ['coords', 'value'], childArrays: [], stmtChildren: [], stmtChildArrays: [], exprRecords: [] },
@@ -123,6 +124,7 @@ export const CONSTRUCT_MAP: Record<string, WgslType> = {
   vec2: 'vec2<f32>', vec3: 'vec3<f32>', vec4: 'vec4<f32>',
   vec2i: 'vec2<i32>', vec3i: 'vec3<i32>', vec4i: 'vec4<i32>',
   vec2u: 'vec2<u32>', vec3u: 'vec3<u32>', vec4u: 'vec4<u32>',
+  mat4x4: 'mat4x4<f32>',
 };
 
 /** Inverse of CONSTRUCT_MAP — WgslType → DSL constructor name */

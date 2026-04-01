@@ -209,7 +209,7 @@ function walkStatement(node: ESTree.Statement, ctx: WalkContext): StatementIR[] 
         stmts.push(atomicStmt);
       } else if (node.kind === 'let') {
         const initExpr = decl.init ? walkExpr(decl.init, ctx) : undefined;
-        stmts.push(B.var_(name, initExpr ? inferDataType(initExpr) : undefined, initExpr));
+        stmts.push(B.var_(name, initExpr ? inferDataType(initExpr, ctx.manifest) : undefined, initExpr));
       } else {
         stmts.push(B.let_(name, walkExpr(decl.init!, ctx)));
       }
@@ -289,6 +289,9 @@ function walkAssignment(expr: ESTree.AssignmentExpression, ctx: WalkContext): St
   if (lhs.type === 'MemberExpression' && !lhs.computed) {
     const resolved = tryResolveDollarChain(lhs as unknown as ESTree.Expression, ctx);
     if (resolved) {
+      if (resolved.kind === 'global') {
+        return B.storeGlobal(resolved.symbolId, value);
+      }
       if (resolved.kind === 'scalar' || resolved.kind === 'domainActive') {
         return B.storeScalar(resolved.symbolId, value);
       }
@@ -366,7 +369,7 @@ function walkForStatement(node: ESTree.ForStatement, ctx: WalkContext): Statemen
     childCtx.localBindings.add(name);
     if (node.init.kind === 'let') {
       const initExpr = decl.init ? walkExpr(decl.init, childCtx) : undefined;
-      init = B.var_(name, initExpr ? inferDataType(initExpr) : undefined, initExpr);
+      init = B.var_(name, initExpr ? inferDataType(initExpr, ctx.manifest) : undefined, initExpr);
     } else {
       init = B.let_(name, walkExpr(decl.init!, childCtx));
     }
@@ -570,10 +573,17 @@ function extractStringArg(node: ESTree.Expression, ctx: WalkContext, funcName: s
   return '';
 }
 
+/** Map GlobalSpec.type to WgslType */
+const GLOBAL_TYPE_TO_WGSL: Record<string, WgslType> = {
+  f32: 'f32', u32: 'u32', i32: 'i32',
+  vec2: 'vec2<f32>', vec3: 'vec3<f32>', vec4: 'vec4<f32>',
+  mat4x4: 'mat4x4<f32>',
+};
+
 /** Infer WGSL type from an ExprIR value — used for Var dataType derivation.
  * The Rust translator requires a concrete dataType on every Var statement.
  * Throws on unhandled expression types — no silent defaults. */
-function inferDataType(expr: ExprIR): WgslType {
+function inferDataType(expr: ExprIR, manifest: MemoryManifest): WgslType {
   switch (expr.type) {
     case 'LiteralF32': return 'f32';
     case 'LiteralU32': return 'u32';
@@ -583,7 +593,10 @@ function inferDataType(expr: ExprIR): WgslType {
     case 'Construct': return expr.dataType;
     case 'Intrinsic': return 'u32';
     case 'CallBuiltin': return 'f32'; // all math builtins return f32
-    case 'LoadGlobal': return 'f32';  // globals are f32 (sys:time etc.)
+    case 'LoadGlobal': {
+      const spec = manifest.globals[expr.symbolId];
+      return GLOBAL_TYPE_TO_WGSL[spec?.type ?? 'f32'] ?? 'f32';
+    }
     case 'LoadField': return 'f32';   // domain fields are f32
     case 'LoadScalar': return 'f32';  // arena scalars read as f32
     case 'TextureLoad': return 'vec4<f32>';
@@ -594,15 +607,21 @@ function inferDataType(expr: ExprIR): WgslType {
     case 'IndexAccess': return 'f32';
     case 'UnaryOp':
       if (expr.op === '!') return 'bool';
-      return inferDataType(expr.expr); // - and ~ preserve operand type
-    case 'BinaryOp':
+      return inferDataType(expr.expr, manifest); // - and ~ preserve operand type
+    case 'BinaryOp': {
       if (expr.op === '==' || expr.op === '!=' || expr.op === '<' || expr.op === '>' || expr.op === '<=' || expr.op === '>=') return 'bool';
       if (expr.op === '&&' || expr.op === '||') return 'bool';
-      return inferDataType(expr.left); // arithmetic/bitwise preserves operand type
+      // mat4x4 * vec4 → vec4
+      if (expr.op === '*') {
+        const leftType = inferDataType(expr.left, manifest);
+        if (leftType === 'mat4x4<f32>') return 'vec4<f32>';
+      }
+      return inferDataType(expr.left, manifest); // arithmetic/bitwise preserves operand type
+    }
     case 'VarRef':
       throw new Error(`inferDataType: cannot determine type of VarRef('${expr.name}') — Var declarations with VarRef initializers need explicit type annotations`);
     default:
-      throw new Error(`inferDataType: unhandled expression type '${expr.type}'`);
+      throw new Error(`inferDataType: unhandled expression type '${(expr as ExprIR).type}'`);
   }
 }
 
