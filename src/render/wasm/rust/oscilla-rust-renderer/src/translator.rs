@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::contract::{ComputePassSpec, DrawCallSpec, ExprIR, StatementIR, SystemPassSpec};
 use crate::dsl::{Expr, FnBodyBuilder, FnBuilder, ModuleBuilder};
-use crate::mmu::{GpuMemoryArena, PhysicalSymbol};
+use crate::mmu::{BufferKind, GpuMemoryArena, PhysicalSymbol};
 
 // ---------------------------------------------------------------------------
 // Translation context
@@ -505,6 +505,20 @@ fn expr_uses_globals(expr: &ExprIR) -> bool {
         ExprIR::IndexAccess { target, index } => {
             expr_uses_globals(target) || expr_uses_globals(index)
         }
+        ExprIR::ApplyVP { position, .. } => expr_uses_globals(position),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            expr_uses_globals(position)
+                || expr_uses_globals(translate_x)
+                || expr_uses_globals(translate_y)
+                || expr_uses_globals(rotation)
+                || expr_uses_globals(scale)
+        }
         _ => false,
     }
 }
@@ -538,6 +552,10 @@ fn stmt_uses_scalars(stmt: &StatementIR) -> bool {
                 || stmt_uses_scalars(update)
                 || ast_uses_scalars(body)
         }
+        StatementIR::ReturnVertex { position, varyings } => {
+            expr_uses_scalars(position) || varyings.values().any(|v| expr_uses_scalars(v))
+        }
+        StatementIR::ReturnFragment { outputs } => outputs.values().any(|v| expr_uses_scalars(v)),
         _ => false,
     }
 }
@@ -545,12 +563,32 @@ fn stmt_uses_scalars(stmt: &StatementIR) -> bool {
 fn expr_uses_scalars(expr: &ExprIR) -> bool {
     match expr {
         ExprIR::LoadScalar { .. } => true,
+        // ApplyVP loads a scalar VP matrix
+        ExprIR::ApplyVP { .. } => true,
         ExprIR::BinaryOp { left, right, .. } => expr_uses_scalars(left) || expr_uses_scalars(right),
         ExprIR::UnaryOp { expr: inner, .. } | ExprIR::Cast { expr: inner, .. } => {
             expr_uses_scalars(inner)
         }
         ExprIR::CallBuiltin { args, .. } | ExprIR::Construct { args, .. } => {
             args.iter().any(|a| expr_uses_scalars(a))
+        }
+        ExprIR::Swizzle { source, .. } => expr_uses_scalars(source),
+        ExprIR::LoadField { index, .. } => expr_uses_scalars(index),
+        ExprIR::IndexAccess { target, index } => {
+            expr_uses_scalars(target) || expr_uses_scalars(index)
+        }
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            expr_uses_scalars(position)
+                || expr_uses_scalars(translate_x)
+                || expr_uses_scalars(translate_y)
+                || expr_uses_scalars(rotation)
+                || expr_uses_scalars(scale)
         }
         _ => false,
     }
@@ -717,6 +755,20 @@ fn collect_domains_from_expr(
             }
             collect_domains_from_expr(index, arena, out);
         }
+        ExprIR::ApplyVP { position, .. } => collect_domains_from_expr(position, arena, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_domains_from_expr(position, arena, out);
+            collect_domains_from_expr(translate_x, arena, out);
+            collect_domains_from_expr(translate_y, arena, out);
+            collect_domains_from_expr(rotation, arena, out);
+            collect_domains_from_expr(scale, arena, out);
+        }
         _ => {}
     }
 }
@@ -830,6 +882,20 @@ fn collect_textures_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
         ExprIR::LoadField { index, .. } | ExprIR::AtomicLoadField { index, .. } => {
             collect_textures_from_expr(index, out);
         }
+        ExprIR::ApplyVP { position, .. } => collect_textures_from_expr(position, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_textures_from_expr(position, out);
+            collect_textures_from_expr(translate_x, out);
+            collect_textures_from_expr(translate_y, out);
+            collect_textures_from_expr(rotation, out);
+            collect_textures_from_expr(scale, out);
+        }
         _ => {}
     }
 }
@@ -934,6 +1000,20 @@ fn collect_samplers_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
         }
         ExprIR::LoadField { index, .. } | ExprIR::AtomicLoadField { index, .. } => {
             collect_samplers_from_expr(index, out);
+        }
+        ExprIR::ApplyVP { position, .. } => collect_samplers_from_expr(position, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_samplers_from_expr(position, out);
+            collect_samplers_from_expr(translate_x, out);
+            collect_samplers_from_expr(translate_y, out);
+            collect_samplers_from_expr(rotation, out);
+            collect_samplers_from_expr(scale, out);
         }
         _ => {}
     }
@@ -1396,7 +1476,7 @@ fn translate_statement_body(
                 .globals_expr
                 .expect("StoreGlobal requires globals buffer");
             let val = translate_expr_body(bb, ctx, value, scope);
-            store_typed(bb, globals, sym, val);
+            store_typed(bb, ctx, globals, sym, val);
         }
         StatementIR::StoreScalar { symbol_id, value } => {
             let sym = ctx
@@ -1407,8 +1487,7 @@ fn translate_statement_body(
                 .scalars_expr
                 .expect("StoreScalar requires scalars buffer");
             let val = translate_expr_body(bb, ctx, value, scope);
-            // Multi-word types (vec2, mat4x4, etc.) use the same store_typed helper
-            store_typed(bb, scalars, sym, val);
+            store_typed(bb, ctx, scalars, sym, val);
         }
         StatementIR::StoreField {
             symbol_id,
@@ -1671,50 +1750,57 @@ fn load_typed(
     sym: &PhysicalSymbol,
 ) -> Expr {
     let base = sym.word_offset;
-    // Helper: pre-compute offset literal, then load (avoids double-borrow of bb)
-    let load_word = |bb: &mut FnBodyBuilder<'_>, word: u32| -> Expr {
+    // Scalars/domain buffers are array<u32> — f32 values need bitcast.
+    // Globals buffer is array<f32> — no bitcast needed.
+    let needs_bitcast = sym.buffer_kind != BufferKind::GlobalUniform;
+    // Helper: load one word, optionally bitcast to f32
+    let load_f32_word = |bb: &mut FnBodyBuilder<'_>, word: u32| -> Expr {
         let off = bb.lit_u32(word);
-        bb.load_buffer(buffer, off)
+        let raw = bb.load_buffer(buffer, off);
+        if needs_bitcast { bb.bitcast_f32(raw) } else { raw }
     };
     match sym.wgsl_type.as_str() {
-        "f32" | "u32" | "i32" => load_word(bb, base),
+        "f32" => load_f32_word(bb, base),
+        "u32" | "i32" => {
+            let off = bb.lit_u32(base);
+            bb.load_buffer(buffer, off) // u32/i32: no bitcast
+        }
         "vec2" => {
             let ty = ctx.type_handles["vec2<f32>"];
-            let c0 = load_word(bb, base);
-            let c1 = load_word(bb, base + 1);
+            let c0 = load_f32_word(bb, base);
+            let c1 = load_f32_word(bb, base + 1);
             bb.compose(ty, vec![c0, c1])
         }
         "vec3" => {
             let ty = ctx.type_handles["vec3<f32>"];
-            let c0 = load_word(bb, base);
-            let c1 = load_word(bb, base + 1);
-            let c2 = load_word(bb, base + 2);
+            let c0 = load_f32_word(bb, base);
+            let c1 = load_f32_word(bb, base + 1);
+            let c2 = load_f32_word(bb, base + 2);
             bb.compose(ty, vec![c0, c1, c2])
         }
         "vec4" => {
             let ty = ctx.type_handles["vec4<f32>"];
-            let c0 = load_word(bb, base);
-            let c1 = load_word(bb, base + 1);
-            let c2 = load_word(bb, base + 2);
-            let c3 = load_word(bb, base + 3);
+            let c0 = load_f32_word(bb, base);
+            let c1 = load_f32_word(bb, base + 1);
+            let c2 = load_f32_word(bb, base + 2);
+            let c3 = load_f32_word(bb, base + 3);
             bb.compose(ty, vec![c0, c1, c2, c3])
         }
         "mat4x4" => {
-            // Column-major: load 4 columns of vec4<f32>, compose into mat4x4<f32>
             let vec4_ty = ctx.type_handles["vec4<f32>"];
             let mat4_ty = ctx.type_handles["mat4x4<f32>"];
             let mut cols = Vec::with_capacity(4);
             for col in 0..4u32 {
                 let col_base = base + col * 4;
-                let c0 = load_word(bb, col_base);
-                let c1 = load_word(bb, col_base + 1);
-                let c2 = load_word(bb, col_base + 2);
-                let c3 = load_word(bb, col_base + 3);
+                let c0 = load_f32_word(bb, col_base);
+                let c1 = load_f32_word(bb, col_base + 1);
+                let c2 = load_f32_word(bb, col_base + 2);
+                let c3 = load_f32_word(bb, col_base + 3);
                 cols.push(bb.compose(vec4_ty, vec![c0, c1, c2, c3]));
             }
             bb.compose(mat4_ty, cols)
         }
-        _ => load_word(bb, base),
+        _ => load_f32_word(bb, base),
     }
 }
 
@@ -1722,6 +1808,7 @@ fn load_typed(
 /// Scalar types store one word; vec2/3/4 decompose and store N words; mat4x4 stores 16.
 fn store_typed(
     bb: &mut FnBodyBuilder<'_>,
+    ctx: &PassContext,
     buffer: Expr,
     sym: &PhysicalSymbol,
     val: Expr,
@@ -1746,18 +1833,35 @@ fn store_typed(
                 "vec3" => 3,
                 _ => 4,
             };
+            let vec_ty = ctx.type_handles[match sym.wgsl_type.as_str() {
+                "vec2" => "vec2<f32>",
+                "vec3" => "vec3<f32>",
+                _ => "vec4<f32>",
+            }];
+            // Store to local var first — Naga requires AccessIndex on pointers
+            let vec_ptr = bb.declare_var("_store_vec", vec_ty, Some(val));
             for i in 0..n {
-                let component = bb.access_index(val, i);
-                let sv = bb.bitcast_u32(component);
+                let comp_ptr = bb.access_index(vec_ptr, i);
+                let comp_val = bb.load_local(comp_ptr);
+                let sv = bb.bitcast_u32(comp_val);
                 store_word(bb, base + i, sv);
             }
         }
         "mat4x4" => {
+            // Store mat4x4 to a local var first — Naga requires AccessIndex on pointers,
+            // not on value expressions (Compose results).
+            let mat4_ty = ctx.type_handles["mat4x4<f32>"];
+            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            let mat_ptr = bb.declare_var("_store_mat", mat4_ty, Some(val));
             for col in 0..4u32 {
-                let col_vec = bb.access_index(val, col);
+                let col_ptr = bb.access_index(mat_ptr, col);
+                let col_val = bb.load_local(col_ptr);
+                // Store vec4 column to a local var for component access
+                let col_var = bb.declare_var(&format!("_store_col{}", col), vec4_ty, Some(col_val));
                 for row in 0..4u32 {
-                    let component = bb.access_index(col_vec, row);
-                    let sv = bb.bitcast_u32(component);
+                    let comp_ptr = bb.access_index(col_var, row);
+                    let comp_val = bb.load_local(comp_ptr);
+                    let sv = bb.bitcast_u32(comp_val);
                     store_word(bb, base + col * 4 + row, sv);
                 }
             }
@@ -1935,7 +2039,23 @@ fn translate_expr_body(
             let ty = ctx.type_handles.get(data_type.as_str()).unwrap_or_else(|| {
                 panic!("Construct: no type handle for '{}' in context", data_type)
             });
-            bb.compose(*ty, translated)
+            // Naga Compose for mat4x4 expects 4 vec4 columns, not 16 scalars.
+            // When DSL provides 16 scalar args, group into 4 columns.
+            if data_type == "mat4x4<f32>" && translated.len() == 16 {
+                let vec4_ty = ctx.type_handles["vec4<f32>"];
+                let cols: Vec<Expr> = (0..4)
+                    .map(|col| {
+                        let base = col * 4;
+                        bb.compose(vec4_ty, vec![
+                            translated[base], translated[base + 1],
+                            translated[base + 2], translated[base + 3],
+                        ])
+                    })
+                    .collect();
+                bb.compose(*ty, cols)
+            } else {
+                bb.compose(*ty, translated)
+            }
         }
 
         ExprIR::Swizzle { source, mask } => {
@@ -2073,6 +2193,65 @@ fn translate_expr_body(
                 "i32" => bb.i32(e),
                 _ => panic!("Cast to '{}' not yet implemented", target_type),
             }
+        }
+
+        ExprIR::ApplyVP { vp_symbol, position } => {
+            // Expand to: load_scalar(vp_symbol) * position
+            let sym = ctx
+                .symbol_map
+                .get(vp_symbol)
+                .unwrap_or_else(|| panic!("ApplyVP: symbol '{}' not in symbol_map", vp_symbol));
+            let scalars = ctx
+                .scalars_expr
+                .expect("ApplyVP requires scalars buffer");
+            let vp_mat = load_typed(bb, ctx, scalars, sym);
+            let pos = translate_expr_body(bb, ctx, position, scope);
+            bb.mul(vp_mat, pos)
+        }
+
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            // Expand to 2D TRS:
+            //   c = cos(rotation), s = sin(rotation)
+            //   lx = position.x * scale, ly = position.y * scale
+            //   result = vec4(lx*c - ly*s + tx, lx*s + ly*c + ty, position.z, position.w)
+            let pos = translate_expr_body(bb, ctx, position, scope);
+            let tx = translate_expr_body(bb, ctx, translate_x, scope);
+            let ty_val = translate_expr_body(bb, ctx, translate_y, scope);
+            let rot = translate_expr_body(bb, ctx, rotation, scope);
+            let sc = translate_expr_body(bb, ctx, scale, scope);
+
+            let c = bb.cos(rot);
+            let s = bb.sin(rot);
+
+            // Extract position components via AccessIndex
+            let px = bb.access_index(pos, 0); // .x
+            let py = bb.access_index(pos, 1); // .y
+            let pz = bb.access_index(pos, 2); // .z
+            let pw = bb.access_index(pos, 3); // .w
+
+            // Scale
+            let lx = bb.mul(px, sc);
+            let ly = bb.mul(py, sc);
+
+            // Rotate + translate
+            let lx_c = bb.mul(lx, c);
+            let ly_s = bb.mul(ly, s);
+            let lx_s = bb.mul(lx, s);
+            let ly_c = bb.mul(ly, c);
+
+            let out_x = bb.sub(lx_c, ly_s);
+            let out_x = bb.add(out_x, tx);
+            let out_y = bb.add(lx_s, ly_c);
+            let out_y = bb.add(out_y, ty_val);
+
+            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            bb.compose(vec4_ty, vec![out_x, out_y, pz, pw])
         }
 
         _ => {

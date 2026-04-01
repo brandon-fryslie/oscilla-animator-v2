@@ -25,7 +25,7 @@ gpu({
       $domains.boids.cell_val[gid] = f32(cell_value);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.02, 0.02, 0.04, 1]), [
+    render('draw', ortho(), clearTarget([0.02, 0.02, 0.04, 1]), [
       draw('boids_fill', domainSource('boids', 'dot'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

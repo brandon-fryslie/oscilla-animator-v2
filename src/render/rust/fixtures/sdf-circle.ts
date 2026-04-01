@@ -13,7 +13,7 @@ gpu({
       $scalar.active = u32(1);
     }),
     drawPrep('prep', 'sys:active', 3),
-    render('draw', clearTarget([0.02, 0.02, 0.03, 1.0]), [
+    render('draw', ortho(), clearTarget([0.02, 0.02, 0.03, 1.0]), [
       draw('sdf_circle', domainSource('tri', 'fullscreen_triangle'), OPAQUE, {
         vertex: (position) => {
           return vertex(

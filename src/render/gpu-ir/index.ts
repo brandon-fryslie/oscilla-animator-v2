@@ -3,7 +3,8 @@
  */
 
 // Compilation orchestrator
-export { gpu, compute, render, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, OPAQUE, ALPHA_BLEND, DEPTH_TEST } from './compile';
+export { gpu, compute, render, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, OPAQUE, ALPHA_BLEND, DEPTH_TEST, MATH_CONSTANTS, PI, TAU, HALF_PI, E, SQRT2, PHI } from './compile';
+export type { Transform2DSpec } from './compile';
 
 // Shape helpers
 export { quad, fullscreenQuad, tri } from './shapes';

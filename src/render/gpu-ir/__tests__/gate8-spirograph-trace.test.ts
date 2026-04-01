@@ -4,6 +4,6 @@ import { loadFixturePayload } from './fixture-helpers';
 describe('GPU-IR DSL', () => {
   test('Gate: spirograph-trace produces valid payload', () => {
     const payload = loadFixturePayload('spirograph-trace');
-    expect(payload.roster).toHaveLength(3);
+    expect(payload.roster).toHaveLength(4);
   });
 });

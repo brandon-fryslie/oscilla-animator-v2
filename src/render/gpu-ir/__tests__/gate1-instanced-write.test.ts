@@ -8,7 +8,7 @@ describe('GPU-IR DSL', () => {
   test('Gate 1: instanced-write produces valid payload', () => {
     const payload = loadFixturePayload('instanced-write');
     expect(payload.manifest).toBeDefined();
-    expect(payload.roster).toHaveLength(3);
+    expect(payload.roster).toHaveLength(4);
     expect(payload.roster[0].type).toBe('Compute');
   });
 });

@@ -26,7 +26,7 @@ import type * as ESTree from 'estree';
 import type { ExprIR, StatementIR, BuiltinMathFunc, BinaryOp, WgslType, AtomicOp, MemoryManifest } from '../rust/boundary-contract';
 import * as B from './ir-builders';
 import {
-  BUILTIN_NAMES, CAST_NAMES, CONSTRUCT_MAP,
+  BUILTIN_NAMES, CAST_NAMES, CONSTRUCT_MAP, MATH_CONSTANTS,
   DOLLAR_CHAIN_RULES, WELL_KNOWN_ROOTS,
   ESTREE_TO_BINOP,
 } from './ir-node-rules';
@@ -269,24 +269,20 @@ function walkAssignment(expr: ESTree.AssignmentExpression, ctx: WalkContext): St
   const lhs = expr.left;
   const value = walkExpr(expr.right, ctx);
 
-  // $domains.D.F[idx] = value → StoreField
-  if (lhs.type === 'MemberExpression' && lhs.computed) {
-    const resolved = tryResolveDollarChain(lhs.object as ESTree.Expression, ctx);
-    if (resolved) {
-      if (resolved.kind !== 'domainField') {
-        addError(ctx, lhs, `Cannot index-access ${resolved.kind}`);
-        return B.assign(B.litF32(NaN), value);
+  // Try resolving the LHS as a $-chain (handles both dot and bracket notation)
+  if (lhs.type === 'MemberExpression') {
+    // $domains.D.F[idx] = value → StoreField (computed, domain field)
+    if (lhs.computed) {
+      const resolved = tryResolveDollarChain(lhs.object as ESTree.Expression, ctx);
+      if (resolved && resolved.kind === 'domainField') {
+        const index = walkExprAsIndex(lhs.property as ESTree.Expression, ctx);
+        return B.storeField(resolved.symbolId, index, value);
       }
-      const index = walkExprAsIndex(lhs.property as ESTree.Expression, ctx);
-      return B.storeField(resolved.symbolId, index, value);
     }
-    addError(ctx, lhs, 'Assignment to unresolved element access');
-    return B.assign(B.litF32(NaN), value);
-  }
 
-  // $scalar.X = value → StoreScalar
-  // $domains.D.$active = value → StoreScalar
-  if (lhs.type === 'MemberExpression' && !lhs.computed) {
+    // $global.X = value, $global['cam:X'] = value → StoreGlobal
+    // $scalar.X = value, $scalar['cam:vp'] = value → StoreScalar
+    // $domains.D.$active = value → StoreScalar
     const resolved = tryResolveDollarChain(lhs as unknown as ESTree.Expression, ctx);
     if (resolved) {
       if (resolved.kind === 'global') {
@@ -296,6 +292,11 @@ function walkAssignment(expr: ESTree.AssignmentExpression, ctx: WalkContext): St
         return B.storeScalar(resolved.symbolId, value);
       }
       addError(ctx, lhs, `Cannot assign to ${resolved.kind}: ${resolved.symbolId}`);
+      return B.assign(B.litF32(NaN), value);
+    }
+
+    if (lhs.computed) {
+      addError(ctx, lhs, 'Assignment to unresolved element access');
       return B.assign(B.litF32(NaN), value);
     }
   }
@@ -434,6 +435,7 @@ function walkExpr(node: ESTree.Expression, ctx: WalkContext): ExprIR {
     const name = node.name;
     if (ctx.localBindings.has(name)) return B.ref(name);
     if (WELL_KNOWN_ROOTS.has(name)) return B.ref(name); // intermediate — resolved by property access
+    if (name in MATH_CONSTANTS) return B.litF32(MATH_CONSTANTS[name]);
     // Free variable → JS constant placeholder (NaN replaced by compile.ts)
     return { type: 'LiteralF32', value: NaN } as ExprIR;
   }
@@ -473,8 +475,16 @@ function walkExpr(node: ESTree.Expression, ctx: WalkContext): ExprIR {
     return B.swizzle(walkExpr(node.object as ESTree.Expression, ctx), propName);
   }
 
-  // Computed member access — element access
+  // Computed member access — bracket notation
   if (node.type === 'MemberExpression' && node.computed) {
+    // Try full chain resolution: $global['cam:X'] → LoadGlobal, $scalar['cam:vp'] → LoadScalar
+    const fullResolved = tryResolveDollarChain(node as unknown as ESTree.Expression, ctx);
+    if (fullResolved) {
+      if (fullResolved.kind === 'global') return B.loadGlobal(fullResolved.symbolId);
+      if (fullResolved.kind === 'scalar') return B.loadScalar(fullResolved.symbolId);
+      if (fullResolved.kind === 'domainActive') return B.loadScalar(fullResolved.symbolId);
+    }
+    // $domains.D.F[idx] → LoadField
     const resolved = tryResolveDollarChain(node.object as ESTree.Expression, ctx);
     if (resolved && resolved.kind === 'domainField') {
       return B.loadField(resolved.symbolId, walkExprAsIndex(node.property as ESTree.Expression, ctx));
@@ -644,17 +654,29 @@ interface ResolvedChain {
 }
 
 function tryResolveDollarChain(node: ESTree.Expression, ctx: WalkContext): ResolvedChain | null {
-  if (node.type !== 'MemberExpression' || node.computed) return null;
+  if (node.type !== 'MemberExpression') return null;
 
-  const prop = (node.property as ESTree.Identifier).name;
+  // Support both dot notation ($global.X → 'sys:X') and bracket notation
+  // with string literal ($global['cam:center_x'] → 'cam:center_x' as-is).
+  // Bracket notation passes the string through as a fully-qualified symbol ID.
+  let prop: string;
+  let fullyQualified = false;
+  if (!node.computed) {
+    prop = (node.property as ESTree.Identifier).name;
+  } else if (node.property.type === 'Literal' && typeof (node.property as ESTree.Literal).value === 'string') {
+    prop = (node.property as ESTree.Literal).value as string;
+    fullyQualified = true;
+  } else {
+    return null;
+  }
 
   // Simple one-level chains: $global.X, $scalar.X, $thread.x, $instance.index, $vertex.index
   if (node.object.type === 'Identifier') {
     const rootName = node.object.name;
     const rule = DOLLAR_CHAIN_RULES[rootName as keyof typeof DOLLAR_CHAIN_RULES];
     if (rule) {
-      const symbolId = rule.resolve(prop);
-      // Map irType to ResolvedChain kind
+      // Bracket notation with string literal passes through as fully-qualified symbol ID
+      const symbolId = fullyQualified ? prop : rule.resolve(prop);
       const kindMap: Record<string, ResolvedChain['kind']> = {
         LoadGlobal: 'global',
         LoadScalar: 'scalar',

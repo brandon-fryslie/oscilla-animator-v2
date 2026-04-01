@@ -52,7 +52,7 @@ gpu({
     drawPrep('prep_emitters', 'sys:emitter_active', 6),
     drawPrep('prep_particles', 'sys:particle_active', 6),
     // Single render pass with two draw calls
-    render('draw_all', clearTarget([0.03, 0.03, 0.06, 1]), [
+    render('draw_all', ortho(), clearTarget([0.03, 0.03, 0.06, 1]), [
       draw('emitter_fill', domainSource('emitters', 'emitter_quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

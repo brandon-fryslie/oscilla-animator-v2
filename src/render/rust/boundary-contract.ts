@@ -199,7 +199,9 @@ export type ExprIR =
   | { readonly type: 'BinaryOp'; readonly op: BinaryOp; readonly left: ExprIR; readonly right: ExprIR }
   | { readonly type: 'UnaryOp'; readonly op: UnaryOp; readonly expr: ExprIR }
   | { readonly type: 'CallBuiltin'; readonly func: BuiltinMathFunc; readonly args: readonly ExprIR[] }
-  | { readonly type: 'VarRef'; readonly name: string };
+  | { readonly type: 'VarRef'; readonly name: string }
+  | { readonly type: 'ApplyVP'; readonly vpSymbol: SymbolId; readonly position: ExprIR }
+  | { readonly type: 'ApplyTransform2D'; readonly position: ExprIR; readonly translateX: ExprIR; readonly translateY: ExprIR; readonly rotation: ExprIR; readonly scale: ExprIR };
 
 export const ExprIRSchema: z.ZodType<ExprIR> = z.lazy(() =>
   z.discriminatedUnion('type', [
@@ -226,6 +228,8 @@ export const ExprIRSchema: z.ZodType<ExprIR> = z.lazy(() =>
     z.object({ type: z.literal('UnaryOp'), op: UnaryOpSchema, expr: ExprIRSchema }),
     z.object({ type: z.literal('CallBuiltin'), func: BuiltinMathFuncSchema, args: z.array(ExprIRSchema).readonly() }),
     z.object({ type: z.literal('VarRef'), name: z.string() }),
+    z.object({ type: z.literal('ApplyVP'), vpSymbol: SymbolIdSchema, position: ExprIRSchema }),
+    z.object({ type: z.literal('ApplyTransform2D'), position: ExprIRSchema, translateX: ExprIRSchema, translateY: ExprIRSchema, rotation: ExprIRSchema, scale: ExprIRSchema }),
   ]),
 );
 
@@ -490,8 +494,8 @@ function validatePayloadSemantics(
           if (!domainIds.has(dc.source.domainId)) issue([...dp, 'source', 'domainId'], `Domain '${dc.source.domainId}' not in manifest`);
           if (!shapeIds.has(dc.source.shapeId)) issue([...dp, 'source', 'shapeId'], `Shape '${dc.source.shapeId}' not in manifest.shapeBank`);
         }
-        if (!lookups.global.has(dc.dependencies.cameraRef))
-          issue([...dp, 'dependencies', 'cameraRef'], `Global '${dc.dependencies.cameraRef}' not in manifest.globals`);
+        if (dc.dependencies.cameraRef && !lookups.global.has(dc.dependencies.cameraRef) && !lookups.scalar.has(dc.dependencies.cameraRef))
+          issue([...dp, 'dependencies', 'cameraRef'], `'${dc.dependencies.cameraRef}' not in manifest.globals or manifest.arenaScalars`);
         for (const d of Object.keys(dc.dependencies.domains))
           if (!domainIds.has(d)) issue([...dp, 'dependencies', 'domains', d], `Domain '${d}' not in manifest`);
         for (const t of Object.keys(dc.dependencies.textures))

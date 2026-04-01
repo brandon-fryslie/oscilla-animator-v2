@@ -13,6 +13,7 @@ import {
   BINOP_TO_JS,
   BINOP_PRECEDENCE,
   DOLLAR_CHAIN_RULES,
+  MATH_CONSTANTS_INVERSE,
 } from './ir-node-rules';
 
 // ---------------------------------------------------------------------------
@@ -150,7 +151,7 @@ function stmtToSource(stmt: StatementIR, indent: number): string {
  */
 function emitExpr(expr: ExprIR, parentPrec: number): string {
   switch (expr.type) {
-    case 'LiteralF32': return emitFloat(expr.value);
+    case 'LiteralF32': return emitConstant(expr.value) ?? emitFloat(expr.value);
     case 'LiteralU32': return `u32(${expr.value})`;
     case 'LiteralI32': return `i32(${expr.value})`;
     case 'LiteralBool': return String(expr.value);
@@ -207,6 +208,14 @@ function emitExpr(expr: ExprIR, parentPrec: number): string {
 
     case 'TextureSample':
       return `textureSample('${expr.textureId}', '${expr.samplerId}', ${emitExpr(expr.uv, 0)})`;
+
+    // Semantic nodes — ApplyVP is stripped (auto-injected), ApplyTransform2D emits inner position
+    // (the transform declaration is reconstructed at the draw-call level by reverse-payload.ts)
+    case 'ApplyVP':
+      return emitExpr(expr.position, parentPrec);
+
+    case 'ApplyTransform2D':
+      return emitExpr(expr.position, parentPrec);
   }
 }
 
@@ -239,6 +248,11 @@ function emitFieldAccess(symbolId: string): string {
 // ---------------------------------------------------------------------------
 // Numeric formatting
 // ---------------------------------------------------------------------------
+
+/** Return named constant if value matches exactly, else undefined. */
+function emitConstant(value: number): string | undefined {
+  return MATH_CONSTANTS_INVERSE.get(value);
+}
 
 function emitFloat(value: number): string {
   if (Object.is(value, -0)) return '-0.0';

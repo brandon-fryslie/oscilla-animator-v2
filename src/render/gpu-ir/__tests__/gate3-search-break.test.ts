@@ -4,6 +4,6 @@ import { loadFixturePayload } from './fixture-helpers';
 describe('GPU-IR DSL', () => {
   test('Gate: search-break produces valid payload', () => {
     const payload = loadFixturePayload('search-break');
-    expect(payload.roster).toHaveLength(3);
+    expect(payload.roster).toHaveLength(4);
   });
 });

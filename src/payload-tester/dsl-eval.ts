@@ -5,15 +5,21 @@
  * in scope. Arrow function bodies reference well-known objects ($global, $domains,
  * sin, vec4, etc.) that are provided as stubs — they appear in fn.toString()
  * source but are never called. The walker parses them from source text.
+ *
+ * Supports both single expressions (`gpu({...})`) and statement blocks
+ * (`const scene = [...]; gpu({...})`). Uses acorn to parse the
+ * source and auto-return the last expression statement.
  */
 
+import * as acorn from 'acorn';
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
-  gpu, compute, render, draw, drawPrep, cameraPass, exact, wg,
+  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
 } from '../render/gpu-ir/compile';
 import { quad, fullscreenQuad, tri } from '../render/gpu-ir/shapes';
+import { MATH_CONSTANTS } from '../render/gpu-ir/ir-node-rules';
 
 // ---------------------------------------------------------------------------
 // Stub objects for well-known DSL symbols
@@ -44,7 +50,7 @@ for (const name of [
 /** All names that must be in scope when evaluating DSL source */
 const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
-  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'cameraPass', 'exact', 'wg',
+  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
   'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget',
   // Pipeline state presets (real)
@@ -67,11 +73,13 @@ const CONTEXT_NAMES = [
   'atomicAnd', 'atomicOr', 'atomicXor',
   // Builtins (spread)
   ...Object.keys(BUILTIN_STUBS),
+  // Math constants (real values — walker also resolves them, but they must be in scope)
+  ...Object.keys(MATH_CONSTANTS),
 ] as const;
 
 const CONTEXT_VALUES = [
   // Real implementations
-  gpu, compute, render, draw, drawPrep, cameraPass, exact, wg,
+  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
@@ -91,6 +99,8 @@ const CONTEXT_VALUES = [
   STUB, STUB, STUB,
   // Builtin stubs
   ...Object.values(BUILTIN_STUBS),
+  // Math constants
+  ...Object.values(MATH_CONSTANTS),
 ];
 
 // ---------------------------------------------------------------------------
@@ -111,15 +121,49 @@ export interface DslEvalError {
 export type DslResult = DslEvalResult | DslEvalError;
 
 /**
+ * Transform DSL source into a function body that returns the last expression.
+ * Uses acorn to parse the source and find the last ExpressionStatement,
+ * then splices `return` before it. Handles comments, variable declarations,
+ * and arbitrary JS statements before the final gpu() call.
+ */
+function wrapSource(source: string): string {
+  let program: acorn.Node;
+  try {
+    program = acorn.parse(source, { ecmaVersion: 2022, sourceType: 'script' });
+  } catch {
+    // If acorn can't parse it as a script, try as a single expression
+    return `"use strict"; return (${source});`;
+  }
+
+  const body = (program as any).body as acorn.Node[];
+  if (body.length === 0) {
+    return `"use strict"; return (${source});`;
+  }
+
+  // Find the last ExpressionStatement — that's the return value
+  const lastStmt = body[body.length - 1];
+  if (lastStmt.type === 'ExpressionStatement') {
+    // Insert `return` before the last expression statement's start position
+    const before = source.slice(0, lastStmt.start);
+    const expr = source.slice(lastStmt.start);
+    return `"use strict"; ${before}return ${expr}`;
+  }
+
+  // No trailing expression — wrap entire source and hope for a useful error
+  return `"use strict"; return (${source});`;
+}
+
+/**
  * Evaluate a GPU-IR DSL source string and return the PipelineInstallPayload.
  *
- * The source should be a single expression that calls gpu({...}).
- * Example: `gpu({ globals: {...}, domains: {...}, roster: [...] })`
+ * Supports single expressions (`gpu({...})`) and statement blocks
+ * (`const scene = [...]; gpu({...})`). The last expression
+ * statement becomes the return value. Comments are preserved.
  */
 export function evalDsl(source: string): DslResult {
   try {
-    // Wrap source in a function with all DSL symbols in scope
-    const fn = new Function(...CONTEXT_NAMES, `"use strict"; return (${source});`);
+    const body = wrapSource(source);
+    const fn = new Function(...CONTEXT_NAMES, body);
     const payload = fn(...CONTEXT_VALUES) as PipelineInstallPayload;
 
     // Basic validation

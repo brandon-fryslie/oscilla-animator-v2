@@ -151,6 +151,16 @@ export const atomicOpScalar = (
     ...(assignResultTo !== undefined ? { assignResultTo } : {}),
   }) as const;
 
+// Semantic expression nodes — expanded by Naga translator, collapsed by reverse translator
+export const applyVP = (vpSymbol: string, position: ExprIR): ExprIR =>
+  ({ type: 'ApplyVP', vpSymbol, position }) as const;
+
+export const applyTransform2D = (
+  position: ExprIR, translateX: ExprIR, translateY: ExprIR,
+  rotation: ExprIR, scale: ExprIR,
+): ExprIR =>
+  ({ type: 'ApplyTransform2D', position, translateX, translateY, rotation, scale }) as const;
+
 export const returnVertex = (
   position: ExprIR,
   varyings: Record<string, ExprIR>,

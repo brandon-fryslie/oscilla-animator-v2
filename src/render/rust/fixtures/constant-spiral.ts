@@ -34,7 +34,7 @@ gpu({
       },
     ),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.02, 0.02, 0.05, 1]), [
+    render('draw', ortho(), clearTarget([0.02, 0.02, 0.05, 1]), [
       draw('pts_fill', domainSource('pts', 'dot'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

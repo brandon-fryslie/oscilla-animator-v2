@@ -69,7 +69,7 @@ gpu({
       },
     ),
     drawPrep('prep', 'sys:active', 2),
-    render('draw', clearTarget([0.008, 0.005, 0.018, 1]), [
+    render('draw', ortho(), clearTarget([0.008, 0.005, 0.018, 1]), [
       draw('pts_fill', domainSource('pts', 'segment'),
         { blendMode: 'alpha', cullMode: 'none', depthWrite: false, depthCompare: 'always' },
         {

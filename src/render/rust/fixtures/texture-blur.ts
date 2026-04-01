@@ -55,7 +55,7 @@ gpu({
       $scalar.active = u32(1);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0, 0, 0, 1]), [
+    render('draw', ortho(), clearTarget([0, 0, 0, 1]), [
       draw('fullscreen', domainSource('quad', 'fullscreen_quad'), OPAQUE, {
         vertex: (position) => {
           return vertex(
