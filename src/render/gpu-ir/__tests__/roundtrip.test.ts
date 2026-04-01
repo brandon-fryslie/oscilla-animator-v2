@@ -67,3 +67,29 @@ describe('GPU-IR roundtrip: instanced-write IR → DSL → IR', () => {
     assertIRRoundtrip(drawCall.fragmentAst, { stage: 'fragment', manifest }, ['color']);
   });
 });
+
+describe('GPU-IR roundtrip: texture-readwrite IR → DSL → IR', () => {
+  const payload = loadFixturePayload('texture-readwrite');
+  const manifest = payload.manifest;
+
+  test('compute pass AST roundtrips (TextureStore)', () => {
+    const computePass = payload.roster[0] as ComputePassSpec;
+    assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
+  });
+
+  test('fragment AST roundtrips (TextureLoad)', () => {
+    const renderPass = payload.roster[3] as RenderPassSpec;
+    const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
+    assertIRRoundtrip(drawCall.fragmentAst, { stage: 'fragment', manifest }, ['uv']);
+  });
+});
+
+describe('GPU-IR roundtrip: atomic-boids IR → DSL → IR', () => {
+  const payload = loadFixturePayload('atomic-boids');
+  const manifest = payload.manifest;
+
+  test('compute pass AST roundtrips (AtomicOpField)', () => {
+    const computePass = payload.roster[0] as ComputePassSpec;
+    assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
+  });
+});

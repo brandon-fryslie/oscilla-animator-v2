@@ -80,7 +80,7 @@ function stmtToSource(stmt: StatementIR, indent: number): string {
       return `${pad}${emitFieldAccess(stmt.symbolId)}[${emitExpr(stmt.index, 0)}] = ${emitExpr(stmt.value, 0)};`;
 
     case 'TextureStore':
-      return `${pad}textureStore(${stmt.textureId}, ${emitExpr(stmt.coords, 0)}, ${emitExpr(stmt.value, 0)});`;
+      return `${pad}textureStore('${stmt.textureId}', ${emitExpr(stmt.coords, 0)}, ${emitExpr(stmt.value, 0)});`;
 
     case 'If': {
       const lines = [`${pad}if (${emitExpr(stmt.condition, 0)}) {`];
@@ -109,13 +109,13 @@ function stmtToSource(stmt: StatementIR, indent: number): string {
     case 'AtomicOpField': {
       const fnName = `atomic${stmt.op}`;
       const result = stmt.assignResultTo ? `const ${stmt.assignResultTo} = ` : '';
-      return `${pad}${result}${fnName}(${emitFieldAccess(stmt.symbolId)}, ${emitExpr(stmt.index, 0)}, ${emitExpr(stmt.value, 0)});`;
+      return `${pad}${result}${fnName}('${stmt.symbolId}', ${emitExpr(stmt.index, 0)}, ${emitExpr(stmt.value, 0)});`;
     }
 
     case 'AtomicOpScalar': {
       const fnName = `atomic${stmt.op}`;
       const result = stmt.assignResultTo ? `const ${stmt.assignResultTo} = ` : '';
-      return `${pad}${result}${fnName}(${emitScalarAccess(stmt.symbolId)}, ${emitExpr(stmt.value, 0)});`;
+      return `${pad}${result}${fnName}('${stmt.symbolId}', ${emitExpr(stmt.value, 0)});`;
     }
 
     case 'ReturnVertex': {
@@ -166,10 +166,10 @@ function emitExpr(expr: ExprIR, parentPrec: number): string {
       return `${emitFieldAccess(expr.symbolId)}[${emitExpr(expr.index, 0)}]`;
 
     case 'AtomicLoadField':
-      return `atomicLoad(${emitFieldAccess(expr.symbolId)}, ${emitExpr(expr.index, 0)})`;
+      return `atomicLoad('${expr.symbolId}', ${emitExpr(expr.index, 0)})`;
 
     case 'AtomicLoadScalar':
-      return `atomicLoad(${emitScalarAccess(expr.symbolId)})`;
+      return `atomicLoad('${expr.symbolId}')`;
 
     case 'BinaryOp': {
       const prec = BINOP_PRECEDENCE[expr.op] ?? 0;
@@ -200,10 +200,10 @@ function emitExpr(expr: ExprIR, parentPrec: number): string {
       return `${emitExpr(expr.target, 99)}[${emitExpr(expr.index, 0)}]`;
 
     case 'TextureLoad':
-      return `textureLoad(${expr.textureId}, ${emitExpr(expr.coords, 0)})`;
+      return `textureLoad('${expr.textureId}', ${emitExpr(expr.coords, 0)})`;
 
     case 'TextureSample':
-      return `textureSample(${expr.textureId}, ${expr.samplerId}, ${emitExpr(expr.uv, 0)})`;
+      return `textureSample('${expr.textureId}', '${expr.samplerId}', ${emitExpr(expr.uv, 0)})`;
   }
 }
 
