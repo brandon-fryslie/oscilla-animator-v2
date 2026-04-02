@@ -162,9 +162,9 @@ describe('dispatch mode coverage', () => {
 describe('draw source coverage', () => {
   test('FullScreenQuad source via helper', () => {
     const payload = gpu({
-      camera: ortho(),
+
       roster: [
-        render('pass', clearTarget([0, 0, 0, 1]), [
+        render('pass', ortho(), clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), OPAQUE, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
@@ -182,7 +182,7 @@ describe('draw source coverage', () => {
 
   test('Domain source with non-Topology sourceKind', () => {
     const payload = gpu({
-      camera: ortho(),
+
       scalars: { 'sys:active': { u32: 1 } },
       domains: {
         pts: { capacity: 1, active: 'sys:active', fields: { x: 'f32' } },
@@ -190,7 +190,7 @@ describe('draw source coverage', () => {
       shapes: { unit_quad: quad(0.03) },
       roster: [
         drawPrep('prep', 'sys:active', 6),
-        render('pass', clearTarget([0, 0, 0, 1]), [
+        render('pass', ortho(), clearTarget([0, 0, 0, 1]), [
           draw('fill',
             domainSource('pts', 'unit_quad', 'Parametric'),
             OPAQUE,
@@ -225,9 +225,9 @@ describe('pipeline state coverage', () => {
       depthCompare: 'less',
     };
     const payload = gpu({
-      camera: ortho(),
+
       roster: [
-        render('pass', clearTarget([0, 0, 0, 1]), [
+        render('pass', ortho(), clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
@@ -265,9 +265,9 @@ describe('pipeline state coverage', () => {
       },
     };
     const payload = gpu({
-      camera: ortho(),
+
       roster: [
-        render('pass', clearTarget([0, 0, 0, 1]), [
+        render('pass', ortho(), clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
@@ -297,12 +297,12 @@ describe('render target coverage', () => {
       ],
     };
     const payload = gpu({
-      camera: ortho(),
+
       textures: {
         tex_albedo: { dimension: '2d', width: 512, height: 512, format: 'rgba8unorm', usage: ['render_attachment'] },
       },
       roster: [
-        render('pass', targets, [
+        render('pass', ortho(), targets, [
           draw('fill', fsQuadSource(), OPAQUE, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
@@ -324,9 +324,9 @@ describe('render target coverage', () => {
       colors: [{ textureId: 'canvas', loadOp: 'load' }],
     };
     const payload = gpu({
-      camera: ortho(),
+
       roster: [
-        render('pass', targets, [
+        render('pass', ortho(), targets, [
           draw('fill', fsQuadSource(), OPAQUE, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
@@ -353,12 +353,12 @@ describe('render target coverage', () => {
       },
     };
     const payload = gpu({
-      camera: ortho(),
+
       textures: {
         depth_tex: { dimension: '2d', width: 512, height: 512, format: 'depth24plus', usage: ['render_attachment'] },
       },
       roster: [
-        render('pass', targets, [
+        render('pass', ortho(), targets, [
           draw('fill', fsQuadSource(), OPAQUE, {
             vertex: (position: any) => {
               return vertex(vec4(position.x, position.y, 0.0, 1.0), {});

@@ -32,8 +32,7 @@ function assertPayloadRoundtrip(name: string): void {
 
 describe('GPU-IR payload roundtrip', () => {
   // Core fixtures
-  // instanced-write uses camera: ortho() — reverse translator doesn't yet reconstruct the authoring form
-  test.skip('instanced-write', () => assertPayloadRoundtrip('instanced-write'));
+  test('instanced-write', () => assertPayloadRoundtrip('instanced-write'));
   test('for-loop-gradient', () => assertPayloadRoundtrip('for-loop-gradient'));
   test('hash-color', () => assertPayloadRoundtrip('hash-color'));
   test('varying-gradient', () => assertPayloadRoundtrip('varying-gradient'));

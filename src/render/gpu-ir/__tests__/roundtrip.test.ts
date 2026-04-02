@@ -52,12 +52,12 @@ describe('GPU-IR roundtrip: texture-readwrite IR → DSL → IR', () => {
   const manifest = payload.manifest;
 
   test('compute pass AST roundtrips (TextureStore)', () => {
-    const computePass = payload.roster[0] as ComputePassSpec;
+    const computePass = payload.roster.find(e => e.type === 'Compute') as ComputePassSpec;
     assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
   });
 
   test('fragment AST roundtrips (TextureLoad)', () => {
-    const renderPass = payload.roster[3] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
     assertIRRoundtrip(drawCall.fragmentAst, { stage: 'fragment', manifest }, ['uv']);
   });
@@ -68,7 +68,7 @@ describe('GPU-IR roundtrip: atomic-boids IR → DSL → IR', () => {
   const manifest = payload.manifest;
 
   test('compute pass AST roundtrips (AtomicOpField)', () => {
-    const computePass = payload.roster[0] as ComputePassSpec;
+    const computePass = payload.roster.find(e => e.type === 'Compute') as ComputePassSpec;
     assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
   });
 });
@@ -78,7 +78,7 @@ describe('GPU-IR roundtrip: atomic-histogram IR → DSL → IR', () => {
   const manifest = payload.manifest;
 
   test('compute pass AST roundtrips (atomicLoad + assignResultTo)', () => {
-    const computePass = payload.roster[0] as ComputePassSpec;
+    const computePass = payload.roster.find(e => e.type === 'Compute') as ComputePassSpec;
     assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
   });
 });
