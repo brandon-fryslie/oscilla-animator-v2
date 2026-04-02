@@ -247,6 +247,8 @@ pub struct Engine {
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
     sample_count: u32,
+    /// MSAA intermediate render target (None when sample_count == 1)
+    msaa_view: Option<wgpu::TextureView>,
     scheduler: WorkerScheduler,
     frame_count: u64,
     pending_fatal_gpu_error: Arc<AtomicBool>,
@@ -357,6 +359,27 @@ impl Engine {
             ));
         }
 
+        // Create MSAA render target when multisampling is active
+        let msaa_view = if sample_count > 1 {
+            let msaa_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("msaa_target"),
+                size: wgpu::Extent3d {
+                    width: surface_config.width,
+                    height: surface_config.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: surface_config.format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            Some(msaa_texture.create_view(&wgpu::TextureViewDescriptor::default()))
+        } else {
+            None
+        };
+
         let now_ms = js_sys::Date::now();
 
         Ok(Self {
@@ -365,6 +388,7 @@ impl Engine {
             surface,
             surface_config,
             sample_count,
+            msaa_view,
             scheduler: WorkerScheduler::new(now_ms),
             frame_count: 0,
             pending_fatal_gpu_error,
@@ -950,7 +974,11 @@ impl Engine {
                                         conservative: false,
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
-                                    multisample: wgpu::MultisampleState::default(),
+                                    multisample: wgpu::MultisampleState {
+                                        count: self.sample_count,
+                                        mask: !0,
+                                        alpha_to_coverage_enabled: false,
+                                    },
                                     multiview_mask: None,
                                     cache: None,
                                 });
@@ -1211,12 +1239,18 @@ impl Engine {
                         .transpose()?;
 
                     {
+                        // MSAA: render into multisampled target, resolve to surface.
+                        // When sample_count == 1, msaa_view is None — render direct to surface.
+                        let (color_view, resolve_target) = match &self.msaa_view {
+                            Some(msaa) => (msaa, Some(view as &wgpu::TextureView)),
+                            None => (view, None),
+                        };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view,
+                                view: color_view,
                                 depth_slice: None,
-                                resolve_target: None,
+                                resolve_target,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Clear(wgpu::Color {
                                         r: clear_color[0],

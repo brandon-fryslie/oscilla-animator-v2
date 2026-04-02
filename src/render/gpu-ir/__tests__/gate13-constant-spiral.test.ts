@@ -5,7 +5,7 @@ import type { ComputePassSpec } from '../../rust/boundary-contract';
 describe('GPU-IR DSL', () => {
   test('Gate 13: constant-spiral exercises constants map and LiteralI32', () => {
     const payload = loadFixturePayload('constant-spiral');
-    expect(payload.roster).toHaveLength(3);
+    expect(payload.roster).toHaveLength(4);
     const compute = payload.roster[0] as ComputePassSpec;
     // Constants become Let bindings in the AST preamble
     const firstThreeStmts = compute.ast.slice(0, 3);

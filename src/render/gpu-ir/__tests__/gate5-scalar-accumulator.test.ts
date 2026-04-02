@@ -5,7 +5,7 @@ import type { ComputePassSpec } from '../../rust/boundary-contract';
 describe('GPU-IR DSL', () => {
   test('Gate 5: scalar-accumulator uses LoadScalar as expression', () => {
     const payload = loadFixturePayload('scalar-accumulator');
-    expect(payload.roster).toHaveLength(4);
+    expect(payload.roster).toHaveLength(5); // 2 compute + drawPrep + camera + render
 
     // Second compute reads the scalar written by the first
     const evalPass = payload.roster[1] as ComputePassSpec;

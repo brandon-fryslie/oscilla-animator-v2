@@ -5,7 +5,7 @@ import type { ComputePassSpec } from '../../rust/boundary-contract';
 describe('GPU-IR DSL', () => {
   test('Gate 6: math-zoo exercises comprehensive builtins', () => {
     const payload = loadFixturePayload('math-zoo');
-    expect(payload.roster).toHaveLength(3);
+    expect(payload.roster).toHaveLength(4);
     const compute = payload.roster[0] as ComputePassSpec;
     // Verify many builtins appear in the AST
     const builtinNames = new Set<string>();

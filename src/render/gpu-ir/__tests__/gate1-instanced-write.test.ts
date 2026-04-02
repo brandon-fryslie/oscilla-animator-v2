@@ -9,7 +9,6 @@ describe('GPU-IR DSL', () => {
     const payload = loadFixturePayload('instanced-write');
     expect(payload.manifest).toBeDefined();
     expect(payload.roster).toHaveLength(4);
-    expect(payload.roster[0].type).toBe('System_CameraUpdate');
-    expect(payload.roster[1].type).toBe('Compute');
+    expect(payload.roster[0].type).toBe('Compute');
   });
 });

@@ -140,9 +140,9 @@ interface DeferredDrawCall {
 interface DeferredRenderPass {
   readonly type: 'Render';
   readonly passId: string;
+  readonly camera: CameraSpec;
   readonly targets: RenderPassSpec['targets'];
   readonly drawCalls: readonly DeferredDrawCall[];
-  readonly cameraName?: string;
 }
 
 interface DeferredCameraPass {
@@ -158,136 +158,54 @@ type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCa
 // ---------------------------------------------------------------------------
 
 export interface GpuSpec extends CompactManifest {
-  readonly camera?: CameraSpec;
-  readonly cameras?: Record<string, CameraSpec>;
   readonly roster: readonly DeferredRosterEntry[];
 }
 
-/** Resolved camera: name → VP symbol + spec */
-interface ResolvedCamera {
-  readonly name: string;
-  readonly vpSymbol: string;
-  readonly spec: CameraSpec;
-  readonly globals: Record<string, CompactGlobalSpec>;
-  readonly scalars: Record<string, CompactScalarSpec>;
-  readonly pass: DeferredCameraPass;
-}
-
 export function gpu(spec: GpuSpec): PipelineInstallPayload {
-  // Resolve cameras
-  const cameras = resolveCameras(spec);
-  const cameraMap = new Map(cameras.map(c => [c.name, c]));
-
-  // Merge camera globals/scalars into the manifest
-  const mergedGlobals: Record<string, string | CompactGlobalSpec> = {
-    ...(spec.globals ?? {}),
-    // sys:resolution always injected when cameras exist
-    ...(cameras.length > 0 ? { 'sys:resolution': 'vec2' } : {}),
-  };
+  // Pre-scan: collect camera globals/scalars from render entries
+  const mergedGlobals: Record<string, string | CompactGlobalSpec> = { ...(spec.globals ?? {}) };
   const mergedScalars: Record<string, CompactScalarSpec> = { ...(spec.scalars ?? {}) };
-  for (const cam of cameras) {
-    Object.assign(mergedGlobals, cam.globals);
-    Object.assign(mergedScalars, cam.scalars);
+  let hasCamera = false;
+
+  for (const entry of spec.roster) {
+    if (entry.type !== 'Render') continue;
+    const rp = entry as DeferredRenderPass;
+    const prefix = `cam:${rp.passId}`;
+    const vpSymbol = `${prefix}:vp`;
+    hasCamera = true;
+
+    // Camera parameter globals (initial values from spec)
+    for (const [key, value] of Object.entries(rp.camera.params)) {
+      mergedGlobals[`${prefix}:${key}`] = { f32: value, dynamic: true };
+    }
+    // VP matrix scalar output
+    mergedScalars[vpSymbol] = 'mat4x4';
   }
 
-  const mergedSpec: CompactManifest = {
-    ...spec,
-    globals: mergedGlobals,
-    scalars: mergedScalars,
-  };
-  const manifest = expandManifest(mergedSpec);
+  // sys:resolution injected when any camera exists
+  if (hasCamera) mergedGlobals['sys:resolution'] = 'vec2';
 
-  // Compile camera passes, then roster entries
-  const cameraPasses = cameras.map(cam =>
-    compileCameraEntry(cam.pass, manifest),
-  );
+  const manifest = expandManifest({ ...spec, globals: mergedGlobals, scalars: mergedScalars });
 
-  const compiledRoster = spec.roster.map(entry => {
-    // Resolve camera name for render passes
+  // Compile roster — render entries produce [cameraPass, renderPass]
+  const roster: PipelineInstallPayload['roster'][number][] = [];
+  for (const entry of spec.roster) {
     if (entry.type === 'Render') {
-      const renderEntry = entry as DeferredRenderPass;
-      const cameraRef = resolveRenderPassCamera(renderEntry, cameras, cameraMap);
-      return compileRenderEntry(renderEntry, manifest, cameraRef);
+      const [camPass, renderPass] = compileRenderEntry(entry as DeferredRenderPass, manifest);
+      roster.push(camPass, renderPass);
+    } else {
+      roster.push(compileEntry(entry, manifest));
     }
-    return compileEntry(entry, manifest);
-  });
+  }
 
-  const roster = [...cameraPasses, ...compiledRoster];
   return { manifest, roster };
 }
 
 // ---------------------------------------------------------------------------
-// Camera resolution helpers
+// Camera body builders — produce Functions with literal symbol references.
+// Uses new Function() so fn.toString() contains only literal strings
+// (the walker parses fn.toString(); closures with template literals don't work).
 // ---------------------------------------------------------------------------
-
-function resolveCameras(spec: GpuSpec): ResolvedCamera[] {
-  if (spec.camera && spec.cameras) {
-    throw new Error('gpu(): specify either `camera` or `cameras`, not both');
-  }
-
-  const cameraEntries: [string, CameraSpec][] = [];
-  if (spec.camera) {
-    cameraEntries.push(['default', spec.camera]);
-  } else if (spec.cameras) {
-    for (const [name, camSpec] of Object.entries(spec.cameras)) {
-      cameraEntries.push([name, camSpec]);
-    }
-  }
-
-  return cameraEntries.map(([name, camSpec]) => {
-    const prefix = cameraEntries.length === 1 ? 'cam' : `cam:${name}`;
-    const vpSymbol = `${prefix}:vp`;
-
-    // Camera parameter globals (initial values from spec)
-    const globals: Record<string, CompactGlobalSpec> = {};
-    for (const [key, value] of Object.entries(camSpec.params)) {
-      globals[`${prefix}:${key}`] = { f32: value, dynamic: true };
-    }
-
-    // VP matrix scalar output
-    const scalars: Record<string, CompactScalarSpec> = { [vpSymbol]: 'mat4x4' };
-
-    // Camera compute pass body
-    const pass = buildCameraPass(camSpec, prefix, vpSymbol);
-
-    return { name, vpSymbol, spec: camSpec, globals, scalars, pass };
-  });
-}
-
-function resolveRenderPassCamera(
-  entry: DeferredRenderPass,
-  cameras: ResolvedCamera[],
-  cameraMap: Map<string, ResolvedCamera>,
-): string {
-  if (cameras.length === 0) return '';
-
-  if (entry.cameraName) {
-    const cam = cameraMap.get(entry.cameraName);
-    if (!cam) throw new Error(`render('${entry.passId}'): camera '${entry.cameraName}' not found. Available: ${cameras.map(c => c.name).join(', ')}`);
-    return cam.vpSymbol;
-  }
-
-  // No explicit camera name — if only one camera, use it implicitly
-  if (cameras.length === 1) return cameras[0].vpSymbol;
-
-  throw new Error(`render('${entry.passId}'): multiple cameras defined but no { camera: '...' } specified`);
-}
-
-
-
-/**
- * Build a camera pass with literal symbol references (no template literals).
- * Uses new Function() to construct a function whose toString() contains
- * only literal strings — the walker parses fn.toString(), so closures
- * with template literals don't work.
- */
-function buildCameraPass(spec: CameraSpec, prefix: string, vpSymbol: string): DeferredCameraPass {
-  const body = spec.type === 'ortho'
-    ? buildOrthoCameraBody(prefix, vpSymbol)
-    : buildPerspectiveCameraBody(prefix, vpSymbol);
-
-  return { type: 'System_CameraUpdate', cameraRef: vpSymbol, bodyFn: body };
-}
 
 function buildOrthoCameraBody(prefix: string, vpSymbol: string): Function {
   // Construct source with literal strings — no template literals in the output
@@ -405,11 +323,11 @@ export interface ShaderFns {
 
 export function render(
   passId: string,
+  camera: CameraSpec,
   targets: RenderPassSpec['targets'],
   drawCalls: readonly DeferredDrawCall[],
-  opts?: { camera?: string },
 ): DeferredRenderPass {
-  return { type: 'Render', passId, targets, drawCalls, cameraName: opts?.camera };
+  return { type: 'Render', passId, camera, targets, drawCalls };
 }
 
 export function draw(
@@ -436,11 +354,11 @@ export function draw(
 function compileEntry(
   entry: DeferredRosterEntry,
   manifest: MemoryManifest,
-): ComputePassSpec | RenderPassSpec | SystemPassSpec | SystemCameraUpdateSpec {
+): ComputePassSpec | SystemPassSpec | SystemCameraUpdateSpec {
   if (entry.type === 'System_DrawPrep') return entry;
   if (entry.type === 'Compute') return compileComputeEntry(entry as DeferredComputePass, manifest);
   if (entry.type === 'System_CameraUpdate') return compileCameraEntry(entry as DeferredCameraPass, manifest);
-  return compileRenderEntry(entry as DeferredRenderPass, manifest, '');
+  throw new Error(`Unexpected roster entry type: ${(entry as { type: string }).type}`);
 }
 
 function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
@@ -495,29 +413,39 @@ function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifes
 function compileRenderEntry(
   entry: DeferredRenderPass,
   manifest: MemoryManifest,
-  cameraRef: string,
-): RenderPassSpec {
+): [SystemCameraUpdateSpec, RenderPassSpec] {
+  // Derive camera symbols from passId
+  const prefix = `cam:${entry.passId}`;
+  const vpSymbol = `${prefix}:vp`;
+
+  // Build and compile the camera pass
+  const cameraBodyFn = entry.camera.type === 'ortho'
+    ? buildOrthoCameraBody(prefix, vpSymbol)
+    : buildPerspectiveCameraBody(prefix, vpSymbol);
+  const cameraPass = compileCameraEntry(
+    { type: 'System_CameraUpdate', cameraRef: vpSymbol, bodyFn: cameraBodyFn },
+    manifest,
+  );
+
+  // Compile draw calls with VP auto-injection
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
     const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
 
     // [LAW:single-enforcer] Auto-inject VP multiply: ReturnVertex.position → vp * position
-    // Camera association comes from the render pass, not the draw call.
     // Fixture authors write world-space positions; the camera transform is automatic.
-    if (cameraRef) {
-      const vpLoad = B.loadScalar(cameraRef);
-      for (let i = 0; i < vertexAst.length; i++) {
-        const stmt = vertexAst[i];
-        if (stmt.type === 'ReturnVertex') {
-          vertexAst[i] = B.returnVertex(
-            B.binop('*', vpLoad, stmt.position),
-            stmt.varyings,
-          );
-        }
+    const vpLoad = B.loadScalar(vpSymbol);
+    for (let i = 0; i < vertexAst.length; i++) {
+      const stmt = vertexAst[i];
+      if (stmt.type === 'ReturnVertex') {
+        vertexAst[i] = B.returnVertex(
+          B.binop('*', vpLoad, stmt.position),
+          stmt.varyings,
+        );
       }
     }
 
-    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, cameraRef);
+    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, vpSymbol);
 
     return {
       intentId: dc.intentId,
@@ -529,11 +457,13 @@ function compileRenderEntry(
     };
   });
 
-  return {
+  const renderPass: RenderPassSpec = {
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
     targets: entry.targets,
     drawCalls,
   };
+
+  return [cameraPass, renderPass];
 }
