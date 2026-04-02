@@ -14,7 +14,7 @@ gpu({
       $scalar.active = u32(1);
     }),
     drawPrep('prep', 'sys:active', 3),
-    render('draw', clearTarget([0.05, 0.05, 0.07, 1]), [
+    render('draw', ortho(), clearTarget([0.05, 0.05, 0.07, 1]), [
       draw('gradient_tri', domainSource('tri', 'big_triangle'), OPAQUE, {
         vertex: (position) => {
           const vid = $vertex.index;

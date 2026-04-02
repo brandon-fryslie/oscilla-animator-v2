@@ -41,7 +41,7 @@ gpu({
       $domains.cells.brightness[gid] = clamp(f32(current) / 100.0, 0.1, 1.0);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.04, 0.04, 0.07, 1]), [
+    render('draw', ortho(), clearTarget([0.04, 0.04, 0.07, 1]), [
       draw('cells_fill', domainSource('cells', 'cell_quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

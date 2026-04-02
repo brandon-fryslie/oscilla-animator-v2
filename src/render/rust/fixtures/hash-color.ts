@@ -24,7 +24,7 @@ gpu({
       $domains.dots.color_b[gid] = f32((h2 >> u32(16)) & u32(255)) / 255.0;
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.08, 0.08, 0.1, 1]), [
+    render('draw', ortho(), clearTarget([0.08, 0.08, 0.1, 1]), [
       draw('dots_fill', domainSource('dots', 'quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

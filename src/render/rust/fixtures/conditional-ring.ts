@@ -38,7 +38,7 @@ gpu({
       }
     }),
     drawPrep('prep_dots', 'sys:active', 6),
-    render('draw_dots', clearTarget([0.05, 0.05, 0.07, 1]), [
+    render('draw_dots', ortho(), clearTarget([0.05, 0.05, 0.07, 1]), [
       draw('dots_fill', domainSource('dots', 'unit_quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

@@ -65,7 +65,7 @@ gpu({
       $domains.tendrils.color_a[gid] = (0.2 + 0.6 * (1.0 - tendril_depth)) * (0.5 + 0.5 * glow);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.005, 0.008, 0.02, 1]), [
+    render('draw', ortho(), clearTarget([0.005, 0.008, 0.02, 1]), [
       draw('tendrils_fill', domainSource('tendrils', 'strand'), ALPHA_BLEND, {
         vertex: (position) => {
           const iid = $instance.index;

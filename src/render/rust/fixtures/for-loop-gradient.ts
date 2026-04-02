@@ -28,7 +28,7 @@ gpu({
       $domains.bars.pos_x[gid] = f32(gid) / 32.0 * 1.8 - 0.9;
     }),
     drawPrep('prep_bars', 'sys:active', 6),
-    render('draw_bars', clearTarget([0.02, 0.02, 0.04, 1]), [
+    render('draw_bars', ortho(), clearTarget([0.02, 0.02, 0.04, 1]), [
       draw('bars_fill', domainSource('bars', 'bar'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

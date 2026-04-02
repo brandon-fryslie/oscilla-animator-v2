@@ -57,7 +57,7 @@ gpu({
       $domains.embers.color_a[gid] = life * (0.3 + 0.7 * sin(time * 8.0 + rank * 100.0) * 0.5 + 0.5);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.02, 0.008, 0.005, 1]), [
+    render('draw', ortho(), clearTarget([0.02, 0.008, 0.005, 1]), [
       draw('embers_fill', domainSource('embers', 'spark'), ALPHA_BLEND, {
         vertex: (position) => {
           const iid = $instance.index;

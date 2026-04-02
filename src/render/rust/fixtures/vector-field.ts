@@ -47,7 +47,7 @@ gpu({
       $domains.arrows.color_b[gid] = clamp(abs(c.z) + abs(r.x) * 0.2, 0.0, 1.0);
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.04, 0.04, 0.07, 1]), [
+    render('draw', ortho(), clearTarget([0.04, 0.04, 0.07, 1]), [
       draw('arrows_fill', domainSource('arrows', 'unit_quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;

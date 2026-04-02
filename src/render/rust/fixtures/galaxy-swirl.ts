@@ -57,7 +57,7 @@ gpu({
       $domains.stars.color_a[gid] = (0.3 + core_glow * 0.7) * (0.7 + 0.3 * sin(time * 3.0 + rank * 100.0));
     }),
     drawPrep('prep', 'sys:active', 6),
-    render('draw', clearTarget([0.005, 0.003, 0.015, 1]), [
+    render('draw', ortho(), clearTarget([0.005, 0.003, 0.015, 1]), [
       draw('stars_fill', domainSource('stars', 'dot'), ALPHA_BLEND, {
         vertex: (position) => {
           const iid = $instance.index;

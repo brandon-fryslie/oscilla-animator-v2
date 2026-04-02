@@ -25,7 +25,7 @@ gpu({
       $domains.pts.color_b[gid] = sin(hue_angle + 4.189) * 0.5 + 0.5;
     }),
     drawPrep('prep_pts', 'sys:active', 6),
-    render('draw_pts', clearTarget([0.02, 0.02, 0.04, 1]), [
+    render('draw_pts', ortho(), clearTarget([0.02, 0.02, 0.04, 1]), [
       draw('pts_fill', domainSource('pts', 'point_quad'), ALPHA_BLEND, {
         vertex: (position) => {
           const iid = $instance.index;
