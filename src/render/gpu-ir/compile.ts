@@ -14,6 +14,7 @@ import type {
   SystemCameraUpdateSpec,
   DrawCallSpec,
   StatementIR,
+  ExprIR,
   MemoryManifest,
   PipelineStateSpec,
 } from '../rust/boundary-contract';
@@ -137,7 +138,7 @@ interface DeferredDrawCall {
   readonly source: DrawCallSpec['source'];
   readonly pipelineState: DrawCallSpec['pipelineState'];
   readonly vertexFn: Function;
-  readonly fragmentFn: Function;
+  readonly fragmentFn?: Function;
   readonly constants?: Record<string, number>;
   readonly domainId: string;
 }
@@ -322,7 +323,7 @@ export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount:
 
 export interface ShaderFns {
   readonly vertex: Function;
-  readonly fragment: Function;
+  readonly fragment?: Function;
   readonly constants?: Record<string, number>;
 }
 
@@ -346,7 +347,7 @@ export function draw(
     source,
     pipelineState,
     vertexFn: shaders.vertex,
-    fragmentFn: shaders.fragment,
+    fragmentFn: shaders.fragment ?? undefined,
     constants: shaders.constants,
     domainId: source.type === 'Domain' ? source.domainId : '',
   };
@@ -364,6 +365,22 @@ function compileEntry(
   if (entry.type === 'Compute') return compileComputeEntry(entry as DeferredComputePass, manifest);
   if (entry.type === 'System_CameraUpdate') return compileCameraEntry(entry as DeferredCameraPass, manifest);
   throw new Error(`Unexpected roster entry type: ${(entry as { type: string }).type}`);
+}
+
+/** Generate passthrough fragment AST: forward each varying as a fragment output. */
+function generatePassthroughFragment(vertexAst: readonly StatementIR[]): StatementIR[] {
+  // Extract varying names from ReturnVertex statements
+  for (const stmt of vertexAst) {
+    if (stmt.type === 'ReturnVertex') {
+      const outputs: Record<string, ExprIR> = {};
+      for (const name of Object.keys(stmt.varyings)) {
+        outputs[name] = B.ref(name);
+      }
+      return [B.returnFragment(outputs)];
+    }
+  }
+  // No ReturnVertex found — empty fragment (shouldn't happen in valid shaders)
+  return [B.returnFragment({ color: B.ref('color') })];
 }
 
 function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
@@ -435,16 +452,19 @@ function compileRenderEntry(
   // Compile draw calls with VP auto-injection
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
-    const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
 
-    // [LAW:single-enforcer] Auto-inject VP multiply: ReturnVertex.position → vp * position
-    // Fixture authors write world-space positions; the camera transform is automatic.
-    const vpLoad = B.loadScalar(vpSymbol);
+    // Default passthrough fragment: if omitted, forward all varyings as-is
+    const fragmentAst = dc.fragmentFn
+      ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+      : generatePassthroughFragment(vertexAst);
+
+    // [LAW:single-enforcer] Auto-inject VP: ReturnVertex.position → ApplyVP(vpSym, position)
+    // Fixture authors write world-space positions; camera transform is a semantic IR node.
     for (let i = 0; i < vertexAst.length; i++) {
       const stmt = vertexAst[i];
       if (stmt.type === 'ReturnVertex') {
         vertexAst[i] = B.returnVertex(
-          B.binop('*', vpLoad, stmt.position),
+          B.applyVP(vpSymbol, stmt.position),
           stmt.varyings,
         );
       }

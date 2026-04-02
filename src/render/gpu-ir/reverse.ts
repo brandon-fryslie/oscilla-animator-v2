@@ -208,6 +208,14 @@ function emitExpr(expr: ExprIR, parentPrec: number): string {
 
     case 'TextureSample':
       return `textureSample('${expr.textureId}', '${expr.samplerId}', ${emitExpr(expr.uv, 0)})`;
+
+    // Semantic nodes — ApplyVP is stripped (auto-injected), ApplyTransform2D emits inner position
+    // (the transform declaration is reconstructed at the draw-call level by reverse-payload.ts)
+    case 'ApplyVP':
+      return emitExpr(expr.position, parentPrec);
+
+    case 'ApplyTransform2D':
+      return emitExpr(expr.position, parentPrec);
   }
 }
 

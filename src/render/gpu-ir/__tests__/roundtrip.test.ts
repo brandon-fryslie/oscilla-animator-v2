@@ -7,9 +7,25 @@
 
 import { describe, test, expect } from 'vitest';
 import { loadFixturePayload } from './fixture-helpers';
-import type { StatementIR, ComputePassSpec, DrawCallSpec, RenderPassSpec } from '../../rust/boundary-contract';
+import type { StatementIR, ExprIR, ComputePassSpec, DrawCallSpec, RenderPassSpec } from '../../rust/boundary-contract';
 import { stmtsToSource } from '../reverse';
 import { compileShaderBody, type ShaderContext } from '../walker';
+
+/** Strip auto-injected semantic nodes (ApplyVP, ApplyTransform2D) for roundtrip comparison.
+ *  These are injected by compileRenderEntry, not compileShaderBody, so the
+ *  reverse → recompile cycle correctly excludes them. */
+function stripSemanticNodes(stmts: readonly StatementIR[]): StatementIR[] {
+  return stmts.map(s => {
+    if (s.type !== 'ReturnVertex') return s;
+    return { ...s, position: stripExpr(s.position) };
+  });
+}
+
+function stripExpr(e: ExprIR): ExprIR {
+  if (e.type === 'ApplyVP') return stripExpr(e.position);
+  if (e.type === 'ApplyTransform2D') return stripExpr(e.position);
+  return e;
+}
 
 function assertIRRoundtrip(stmts: readonly StatementIR[], ctx: ShaderContext, params: string[] = []): void {
   const source = stmtsToSource(stmts);
@@ -21,7 +37,8 @@ function assertIRRoundtrip(stmts: readonly StatementIR[], ctx: ShaderContext, pa
   if (result.diagnostics.length > 0) {
     throw new Error(`Roundtrip compilation failed:\n${result.diagnostics.map(d => d.message).join('\n')}\n\nGenerated source:\n${wrappedSource}`);
   }
-  expect(result.stmts).toStrictEqual(stmts);
+  // Compare with semantic nodes stripped — they're auto-injected at compile level, not shader level
+  expect(result.stmts).toStrictEqual(stripSemanticNodes(stmts));
 }
 
 describe('GPU-IR roundtrip: instanced-write IR → DSL → IR', () => {
