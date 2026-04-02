@@ -35,7 +35,7 @@ gpu({
       $domains.bars.color_b[gid] = brightness * 0.2;
     }),
     drawPrep('prep_bars', 'sys:active', 6),
-    render('draw_bars', clearTarget([0.02, 0.02, 0.05, 1]), [
+    render('draw_bars', ortho(), clearTarget([0.02, 0.02, 0.05, 1]), [
       draw('bars_fill', domainSource('bars', 'unit_quad'), OPAQUE, {
         vertex: (position) => {
           const iid = $instance.index;
