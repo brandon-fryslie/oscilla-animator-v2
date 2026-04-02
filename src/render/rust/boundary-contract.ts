@@ -490,8 +490,8 @@ function validatePayloadSemantics(
           if (!domainIds.has(dc.source.domainId)) issue([...dp, 'source', 'domainId'], `Domain '${dc.source.domainId}' not in manifest`);
           if (!shapeIds.has(dc.source.shapeId)) issue([...dp, 'source', 'shapeId'], `Shape '${dc.source.shapeId}' not in manifest.shapeBank`);
         }
-        if (!lookups.global.has(dc.dependencies.cameraRef))
-          issue([...dp, 'dependencies', 'cameraRef'], `Global '${dc.dependencies.cameraRef}' not in manifest.globals`);
+        if (dc.dependencies.cameraRef && !lookups.global.has(dc.dependencies.cameraRef) && !lookups.scalar.has(dc.dependencies.cameraRef))
+          issue([...dp, 'dependencies', 'cameraRef'], `'${dc.dependencies.cameraRef}' not in manifest.globals or manifest.arenaScalars`);
         for (const d of Object.keys(dc.dependencies.domains))
           if (!domainIds.has(d)) issue([...dp, 'dependencies', 'domains', d], `Domain '${d}' not in manifest`);
         for (const t of Object.keys(dc.dependencies.textures))
