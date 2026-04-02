@@ -31,8 +31,8 @@ gpu({
       const y0 = fract(0.5 + a2 * f32(gid)) * 2.0 - 1.0;
 
       // Per-instance phase offsets
-      const phase_a = time * 0.57 + rank * 6.283;
-      const phase_b = time * 0.41 + rank * 4.189;
+      const phase_a = time * 0.57 + rank * TAU;
+      const phase_b = time * 0.41 + rank * TAU * 2.0 / 3.0;
       const sin_a = sin(phase_a);
       const cos_a = cos(phase_a);
       const sin_b = sin(phase_b);
@@ -69,9 +69,9 @@ gpu({
       // Hue from final y-position — creates horizontal rainbow bands
       const hue = fy * 1.2 + time * 0.08;
       const brightness = 0.65 + 0.35 * ripple * radial;
-      $domains.petals.color_r[gid] = (sin(hue * 6.283) * 0.5 + 0.5) * brightness;
-      $domains.petals.color_g[gid] = (sin(hue * 6.283 + 2.094) * 0.5 + 0.5) * brightness;
-      $domains.petals.color_b[gid] = (sin(hue * 6.283 + 4.189) * 0.5 + 0.5) * brightness;
+      $domains.petals.color_r[gid] = (sin(hue * TAU) * 0.5 + 0.5) * brightness;
+      $domains.petals.color_g[gid] = (sin(hue * TAU + TAU / 3.0) * 0.5 + 0.5) * brightness;
+      $domains.petals.color_b[gid] = (sin(hue * TAU + TAU * 2.0 / 3.0) * 0.5 + 0.5) * brightness;
       $domains.petals.color_a[gid] = 0.35 + 0.55 * sin(rank * 37.0 + time * 1.3);
     }),
     drawPrep('prep', 'sys:active', 6),

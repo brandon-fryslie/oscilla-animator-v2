@@ -19,6 +19,7 @@ import {
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
 } from '../render/gpu-ir/compile';
 import { quad, fullscreenQuad, tri } from '../render/gpu-ir/shapes';
+import { MATH_CONSTANTS } from '../render/gpu-ir/ir-node-rules';
 
 // ---------------------------------------------------------------------------
 // Stub objects for well-known DSL symbols
@@ -72,6 +73,8 @@ const CONTEXT_NAMES = [
   'atomicAnd', 'atomicOr', 'atomicXor',
   // Builtins (spread)
   ...Object.keys(BUILTIN_STUBS),
+  // Math constants (real values — walker also resolves them, but they must be in scope)
+  ...Object.keys(MATH_CONSTANTS),
 ] as const;
 
 const CONTEXT_VALUES = [
@@ -96,6 +99,8 @@ const CONTEXT_VALUES = [
   STUB, STUB, STUB,
   // Builtin stubs
   ...Object.values(BUILTIN_STUBS),
+  // Math constants
+  ...Object.values(MATH_CONSTANTS),
 ];
 
 // ---------------------------------------------------------------------------

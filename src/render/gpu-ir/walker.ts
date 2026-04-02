@@ -26,7 +26,7 @@ import type * as ESTree from 'estree';
 import type { ExprIR, StatementIR, BuiltinMathFunc, BinaryOp, WgslType, AtomicOp, MemoryManifest } from '../rust/boundary-contract';
 import * as B from './ir-builders';
 import {
-  BUILTIN_NAMES, CAST_NAMES, CONSTRUCT_MAP,
+  BUILTIN_NAMES, CAST_NAMES, CONSTRUCT_MAP, MATH_CONSTANTS,
   DOLLAR_CHAIN_RULES, WELL_KNOWN_ROOTS,
   ESTREE_TO_BINOP,
 } from './ir-node-rules';
@@ -435,6 +435,7 @@ function walkExpr(node: ESTree.Expression, ctx: WalkContext): ExprIR {
     const name = node.name;
     if (ctx.localBindings.has(name)) return B.ref(name);
     if (WELL_KNOWN_ROOTS.has(name)) return B.ref(name); // intermediate — resolved by property access
+    if (name in MATH_CONSTANTS) return B.litF32(MATH_CONSTANTS[name]);
     // Free variable → JS constant placeholder (NaN replaced by compile.ts)
     return { type: 'LiteralF32', value: NaN } as ExprIR;
   }
