@@ -378,6 +378,22 @@ pub enum ExprIR {
     VarRef {
         name: String,
     },
+    // Semantic: VP camera projection (expands to mat4x4 * position)
+    ApplyVP {
+        #[serde(rename = "vpSymbol")]
+        vp_symbol: String,
+        position: Box<ExprIR>,
+    },
+    // Semantic: 2D instance transform (scale → rotate → translate)
+    ApplyTransform2D {
+        position: Box<ExprIR>,
+        #[serde(rename = "translateX")]
+        translate_x: Box<ExprIR>,
+        #[serde(rename = "translateY")]
+        translate_y: Box<ExprIR>,
+        rotation: Box<ExprIR>,
+        scale: Box<ExprIR>,
+    },
 }
 
 // ---------------------------------------------------------------------------

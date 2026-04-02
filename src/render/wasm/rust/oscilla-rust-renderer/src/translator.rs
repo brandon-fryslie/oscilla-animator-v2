@@ -505,6 +505,20 @@ fn expr_uses_globals(expr: &ExprIR) -> bool {
         ExprIR::IndexAccess { target, index } => {
             expr_uses_globals(target) || expr_uses_globals(index)
         }
+        ExprIR::ApplyVP { position, .. } => expr_uses_globals(position),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            expr_uses_globals(position)
+                || expr_uses_globals(translate_x)
+                || expr_uses_globals(translate_y)
+                || expr_uses_globals(rotation)
+                || expr_uses_globals(scale)
+        }
         _ => false,
     }
 }
@@ -549,12 +563,32 @@ fn stmt_uses_scalars(stmt: &StatementIR) -> bool {
 fn expr_uses_scalars(expr: &ExprIR) -> bool {
     match expr {
         ExprIR::LoadScalar { .. } => true,
+        // ApplyVP loads a scalar VP matrix
+        ExprIR::ApplyVP { .. } => true,
         ExprIR::BinaryOp { left, right, .. } => expr_uses_scalars(left) || expr_uses_scalars(right),
         ExprIR::UnaryOp { expr: inner, .. } | ExprIR::Cast { expr: inner, .. } => {
             expr_uses_scalars(inner)
         }
         ExprIR::CallBuiltin { args, .. } | ExprIR::Construct { args, .. } => {
             args.iter().any(|a| expr_uses_scalars(a))
+        }
+        ExprIR::Swizzle { source, .. } => expr_uses_scalars(source),
+        ExprIR::LoadField { index, .. } => expr_uses_scalars(index),
+        ExprIR::IndexAccess { target, index } => {
+            expr_uses_scalars(target) || expr_uses_scalars(index)
+        }
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            expr_uses_scalars(position)
+                || expr_uses_scalars(translate_x)
+                || expr_uses_scalars(translate_y)
+                || expr_uses_scalars(rotation)
+                || expr_uses_scalars(scale)
         }
         _ => false,
     }
@@ -721,6 +755,20 @@ fn collect_domains_from_expr(
             }
             collect_domains_from_expr(index, arena, out);
         }
+        ExprIR::ApplyVP { position, .. } => collect_domains_from_expr(position, arena, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_domains_from_expr(position, arena, out);
+            collect_domains_from_expr(translate_x, arena, out);
+            collect_domains_from_expr(translate_y, arena, out);
+            collect_domains_from_expr(rotation, arena, out);
+            collect_domains_from_expr(scale, arena, out);
+        }
         _ => {}
     }
 }
@@ -834,6 +882,20 @@ fn collect_textures_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
         ExprIR::LoadField { index, .. } | ExprIR::AtomicLoadField { index, .. } => {
             collect_textures_from_expr(index, out);
         }
+        ExprIR::ApplyVP { position, .. } => collect_textures_from_expr(position, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_textures_from_expr(position, out);
+            collect_textures_from_expr(translate_x, out);
+            collect_textures_from_expr(translate_y, out);
+            collect_textures_from_expr(rotation, out);
+            collect_textures_from_expr(scale, out);
+        }
         _ => {}
     }
 }
@@ -938,6 +1000,20 @@ fn collect_samplers_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
         }
         ExprIR::LoadField { index, .. } | ExprIR::AtomicLoadField { index, .. } => {
             collect_samplers_from_expr(index, out);
+        }
+        ExprIR::ApplyVP { position, .. } => collect_samplers_from_expr(position, out),
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            collect_samplers_from_expr(position, out);
+            collect_samplers_from_expr(translate_x, out);
+            collect_samplers_from_expr(translate_y, out);
+            collect_samplers_from_expr(rotation, out);
+            collect_samplers_from_expr(scale, out);
         }
         _ => {}
     }
@@ -2117,6 +2193,65 @@ fn translate_expr_body(
                 "i32" => bb.i32(e),
                 _ => panic!("Cast to '{}' not yet implemented", target_type),
             }
+        }
+
+        ExprIR::ApplyVP { vp_symbol, position } => {
+            // Expand to: load_scalar(vp_symbol) * position
+            let sym = ctx
+                .symbol_map
+                .get(vp_symbol)
+                .unwrap_or_else(|| panic!("ApplyVP: symbol '{}' not in symbol_map", vp_symbol));
+            let scalars = ctx
+                .scalars_expr
+                .expect("ApplyVP requires scalars buffer");
+            let vp_mat = load_typed(bb, ctx, scalars, sym);
+            let pos = translate_expr_body(bb, ctx, position, scope);
+            bb.mul(vp_mat, pos)
+        }
+
+        ExprIR::ApplyTransform2D {
+            position,
+            translate_x,
+            translate_y,
+            rotation,
+            scale,
+        } => {
+            // Expand to 2D TRS:
+            //   c = cos(rotation), s = sin(rotation)
+            //   lx = position.x * scale, ly = position.y * scale
+            //   result = vec4(lx*c - ly*s + tx, lx*s + ly*c + ty, position.z, position.w)
+            let pos = translate_expr_body(bb, ctx, position, scope);
+            let tx = translate_expr_body(bb, ctx, translate_x, scope);
+            let ty_val = translate_expr_body(bb, ctx, translate_y, scope);
+            let rot = translate_expr_body(bb, ctx, rotation, scope);
+            let sc = translate_expr_body(bb, ctx, scale, scope);
+
+            let c = bb.cos(rot);
+            let s = bb.sin(rot);
+
+            // Extract position components via AccessIndex
+            let px = bb.access_index(pos, 0); // .x
+            let py = bb.access_index(pos, 1); // .y
+            let pz = bb.access_index(pos, 2); // .z
+            let pw = bb.access_index(pos, 3); // .w
+
+            // Scale
+            let lx = bb.mul(px, sc);
+            let ly = bb.mul(py, sc);
+
+            // Rotate + translate
+            let lx_c = bb.mul(lx, c);
+            let ly_s = bb.mul(ly, s);
+            let lx_s = bb.mul(lx, s);
+            let ly_c = bb.mul(ly, c);
+
+            let out_x = bb.sub(lx_c, ly_s);
+            let out_x = bb.add(out_x, tx);
+            let out_y = bb.add(lx_s, ly_c);
+            let out_y = bb.add(out_y, ty_val);
+
+            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            bb.compose(vec4_ty, vec![out_x, out_y, pz, pw])
         }
 
         _ => {

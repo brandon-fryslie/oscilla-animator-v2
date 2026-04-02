@@ -199,7 +199,9 @@ export type ExprIR =
   | { readonly type: 'BinaryOp'; readonly op: BinaryOp; readonly left: ExprIR; readonly right: ExprIR }
   | { readonly type: 'UnaryOp'; readonly op: UnaryOp; readonly expr: ExprIR }
   | { readonly type: 'CallBuiltin'; readonly func: BuiltinMathFunc; readonly args: readonly ExprIR[] }
-  | { readonly type: 'VarRef'; readonly name: string };
+  | { readonly type: 'VarRef'; readonly name: string }
+  | { readonly type: 'ApplyVP'; readonly vpSymbol: SymbolId; readonly position: ExprIR }
+  | { readonly type: 'ApplyTransform2D'; readonly position: ExprIR; readonly translateX: ExprIR; readonly translateY: ExprIR; readonly rotation: ExprIR; readonly scale: ExprIR };
 
 export const ExprIRSchema: z.ZodType<ExprIR> = z.lazy(() =>
   z.discriminatedUnion('type', [
@@ -226,6 +228,8 @@ export const ExprIRSchema: z.ZodType<ExprIR> = z.lazy(() =>
     z.object({ type: z.literal('UnaryOp'), op: UnaryOpSchema, expr: ExprIRSchema }),
     z.object({ type: z.literal('CallBuiltin'), func: BuiltinMathFuncSchema, args: z.array(ExprIRSchema).readonly() }),
     z.object({ type: z.literal('VarRef'), name: z.string() }),
+    z.object({ type: z.literal('ApplyVP'), vpSymbol: SymbolIdSchema, position: ExprIRSchema }),
+    z.object({ type: z.literal('ApplyTransform2D'), position: ExprIRSchema, translateX: ExprIRSchema, translateY: ExprIRSchema, rotation: ExprIRSchema, scale: ExprIRSchema }),
   ]),
 );
 

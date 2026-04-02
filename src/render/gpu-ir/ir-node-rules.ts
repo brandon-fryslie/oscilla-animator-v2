@@ -81,6 +81,8 @@ export const EXPR_RULES: Record<ExprIR['type'], ExprRule> = {
   IndexAccess:     { refs: [], children: ['target', 'index'], childArrays: [] },
   Construct:       { refs: [], children: [], childArrays: ['args'] },
   CallBuiltin:     { refs: [], children: [], childArrays: ['args'], special: 'builtinArgCount' },
+  ApplyVP:         { refs: [['vpSymbol', 'scalar']], children: ['position'], childArrays: [] },
+  ApplyTransform2D:{ refs: [], children: ['position', 'translateX', 'translateY', 'rotation', 'scale'], childArrays: [] },
 };
 
 // Exhaustive: Record<StatementIR['type'], StmtRule>
