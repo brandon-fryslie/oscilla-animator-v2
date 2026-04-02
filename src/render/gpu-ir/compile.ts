@@ -75,7 +75,7 @@ export interface CameraSpec {
   readonly params: Record<string, number>;
 }
 
-/** Orthographic camera (default 2D view). Maps world [0,1] to clip [-1,1]. */
+/** Orthographic camera (default 2D view). Origin-centered, [-1,1] visible at zoom 1. */
 export function ortho(opts?: {
   centerX?: number;
   centerY?: number;
@@ -84,8 +84,8 @@ export function ortho(opts?: {
   return {
     type: 'ortho',
     params: {
-      center_x: opts?.centerX ?? 0.5,
-      center_y: opts?.centerY ?? 0.5,
+      center_x: opts?.centerX ?? 0.0,
+      center_y: opts?.centerY ?? 0.0,
       zoom: opts?.zoom ?? 1.0,
     },
   };
@@ -107,8 +107,8 @@ export function perspective(opts?: {
       distance: opts?.distance ?? 2.0,
       tilt: opts?.tilt ?? 35.0,
       yaw: opts?.yaw ?? 0.0,
-      center_x: opts?.centerX ?? 0.5,
-      center_y: opts?.centerY ?? 0.5,
+      center_x: opts?.centerX ?? 0.0,
+      center_y: opts?.centerY ?? 0.0,
     },
   };
 }
@@ -215,8 +215,8 @@ function buildOrthoCameraBody(prefix: string, vpSymbol: string): Function {
   const cx = $global['${prefix}:center_x'];
   const cy = $global['${prefix}:center_y'];
   const zoom = $global['${prefix}:zoom'];
-  const sx = 2.0 * zoom / max(aspect, 1.0);
-  const sy = 2.0 * zoom * min(aspect, 1.0);
+  const sx = zoom / max(aspect, 1.0);
+  const sy = zoom * min(aspect, 1.0);
   $scalar['${vpSymbol}'] = mat4x4(
     sx,  0.0, 0.0, 0.0,
     0.0, sy,  0.0, 0.0,
