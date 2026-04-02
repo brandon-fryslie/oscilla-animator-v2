@@ -66,6 +66,11 @@ export const ALPHA_BLEND: PipelineStateSpec =
 export const DEPTH_TEST: PipelineStateSpec =
   { blendMode: 'opaque', cullMode: 'none', depthWrite: true, depthCompare: 'less' };
 
+/** Math constants — available in DSL shader bodies */
+import { MATH_CONSTANTS } from './ir-node-rules';
+export { MATH_CONSTANTS } from './ir-node-rules';
+export const { PI, TAU, HALF_PI, E, SQRT2, PHI } = MATH_CONSTANTS;
+
 // ---------------------------------------------------------------------------
 // Camera specs — describe projection type + initial parameters
 // ---------------------------------------------------------------------------

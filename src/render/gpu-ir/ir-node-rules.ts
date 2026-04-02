@@ -127,6 +127,21 @@ export const CONSTRUCT_MAP: Record<string, WgslType> = {
   mat4x4: 'mat4x4<f32>',
 };
 
+/** Math constants — inlined as LiteralF32 by walker, emitted as names by reverse */
+export const MATH_CONSTANTS: Record<string, number> = {
+  PI:      3.141592653589793,
+  TAU:     6.283185307179586,
+  HALF_PI: 1.5707963267948966,
+  E:       2.718281828459045,
+  SQRT2:   1.4142135623730951,
+  PHI:     1.618033988749895,
+};
+
+/** Inverse of MATH_CONSTANTS — value → name (for reverse translator) */
+export const MATH_CONSTANTS_INVERSE: Map<number, string> = new Map(
+  Object.entries(MATH_CONSTANTS).map(([name, value]) => [value, name]),
+);
+
 /** Inverse of CONSTRUCT_MAP — WgslType → DSL constructor name */
 export const CONSTRUCT_INVERSE: Record<string, string> = Object.entries(CONSTRUCT_MAP)
   .reduce<Record<string, string>>((acc, [name, wgsl]) => { acc[wgsl] = name; return acc; }, {});
