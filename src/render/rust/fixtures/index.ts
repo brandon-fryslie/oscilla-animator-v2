@@ -18,6 +18,24 @@ import { atomicCounter } from './atomic-counter';
 import { audioReactive } from './audio-reactive';
 import { hashPositions } from './hash-positions';
 import { noiseTerrain } from './noise-terrain';
+import {
+  demoGridSquares,
+  demoSpirographTrace,
+  demoMouseReactiveField,
+  demoColorRampPalette,
+  demoTwoDomainScene,
+  demoFillAndOutline,
+  demoReactionDiffusionSurface,
+  demoStrangeAttractor,
+} from './demo-behaviors';
+import {
+  demoKaleidoscope,
+  demoConditionalVisibility,
+  demoAdditiveRippleRings,
+  demoTwistedParametricRibbon,
+  demoVelocityStretchedParticles,
+  demoNoiseDisplacedGrid,
+} from './demo-behaviors-extra';
 
 export interface PayloadFixture {
   readonly id: string;
@@ -98,5 +116,89 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
     name: 'Noise Terrain',
     description: 'Gate 13: Procedural fullscreen color from noise_simplex_2d and noise_simplex_3d.',
     payload: noiseTerrain,
+  },
+  {
+    id: 'demo-grid-squares',
+    name: 'Demo: Grid of Squares',
+    description: 'DEMO-PATCHES #1: index/rank math drives 10x10 layout, per-instance rotation, and animated color.',
+    payload: demoGridSquares,
+  },
+  {
+    id: 'demo-spirograph-trace',
+    name: 'Demo: Spirograph Trace',
+    description: 'DEMO-PATCHES #2: rank phase offsets create Lissajous-like point trails with additive blending.',
+    payload: demoSpirographTrace,
+  },
+  {
+    id: 'demo-kaleidoscope',
+    name: 'Demo: Kaleidoscope',
+    description: 'DEMO-PATCHES #3: N-fold rotational symmetry from index-derived angles around a shared origin.',
+    payload: demoKaleidoscope,
+  },
+  {
+    id: 'demo-conditional-visibility',
+    name: 'Demo: Conditional Visibility',
+    description: 'DEMO-PATCHES #4: scalar threshold gates per-instance opacity from sampled noise.',
+    payload: demoConditionalVisibility,
+  },
+  {
+    id: 'demo-mouse-reactive-field',
+    name: 'Demo: Mouse-Reactive Field',
+    description: 'DEMO-PATCHES #5 analog: uniform input mixed with per-instance scatter to drive size and lightness.',
+    payload: demoMouseReactiveField,
+  },
+  {
+    id: 'demo-additive-ripple-rings',
+    name: 'Demo: Additive Ripple Rings',
+    description: 'DEMO-PATCHES #6: rank-staggered lifecycle drives ring scale/opacity with additive accumulation.',
+    payload: demoAdditiveRippleRings,
+  },
+  {
+    id: 'demo-color-ramp-palette',
+    name: 'Demo: Color Ramp Palette',
+    description: 'DEMO-PATCHES #7: palette texture sample by rank (color path from texture, not HSL math).',
+    payload: demoColorRampPalette,
+  },
+  {
+    id: 'demo-twisted-parametric-ribbon',
+    name: 'Demo: Twisted Parametric Ribbon',
+    description: 'DEMO-PATCHES #8 analog: parametric ribbon segments with time-driven twist and rank-driven hue.',
+    payload: demoTwistedParametricRibbon,
+  },
+  {
+    id: 'demo-velocity-stretched-particles',
+    name: 'Demo: Velocity-Stretched Particles',
+    description: 'DEMO-PATCHES #9 analog: velocity-derived orientation/stretch for motion blur style rendering.',
+    payload: demoVelocityStretchedParticles,
+  },
+  {
+    id: 'demo-noise-displaced-grid',
+    name: 'Demo: Noise-Displaced Grid',
+    description: 'DEMO-PATCHES #10 analog: regular grid displaced by animated noise field.',
+    payload: demoNoiseDisplacedGrid,
+  },
+  {
+    id: 'demo-two-domain-scene',
+    name: 'Demo: Two-Domain Scene',
+    description: 'DEMO-PATCHES #11: independent background and foreground domains composed in draw order.',
+    payload: demoTwoDomainScene,
+  },
+  {
+    id: 'demo-fill-and-outline',
+    name: 'Demo: Fill and Outline',
+    description: 'DEMO-PATCHES #12: one transformed source fanned out to separate fill and outline intents.',
+    payload: demoFillAndOutline,
+  },
+  {
+    id: 'demo-reaction-diffusion-surface',
+    name: 'Demo: Reaction-Diffusion Surface',
+    description: 'DEMO-PATCHES #13 analog: solver-like texture simulation driving a fullscreen render.',
+    payload: demoReactionDiffusionSurface,
+  },
+  {
+    id: 'demo-strange-attractor',
+    name: 'Demo: Strange Attractor',
+    description: 'DEMO-PATCHES #14: dense additive attractor cloud with color from velocity magnitude.',
+    payload: demoStrangeAttractor,
   },
 ];
