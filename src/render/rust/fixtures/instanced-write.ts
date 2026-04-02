@@ -1,5 +1,6 @@
 // instanced-write: 64 instances in a ring via domain dispatch.
 gpu({
+  camera: ortho(),
   globals: { 'sys:time': 'f32' },
   scalars: { 'sys:active': { u32: 64 } },
   domains: {
@@ -15,8 +16,8 @@ gpu({
       const gid = $thread.x;
       const time = $global.time;
       const angle = f32(gid) * 0.09817477042468103 + time;
-      $domains.dots.pos_x[gid] = cos(angle) * 0.7;
-      $domains.dots.pos_y[gid] = sin(angle) * 0.7;
+      $domains.dots.pos_x[gid] = cos(angle) * 0.35 + 0.5;
+      $domains.dots.pos_y[gid] = sin(angle) * 0.35 + 0.5;
       $domains.dots.color_r[gid] = sin(angle) * 0.5 + 0.5;
       $domains.dots.color_g[gid] = sin(angle + 2.094) * 0.5 + 0.5;
       $domains.dots.color_b[gid] = sin(angle + 4.189) * 0.5 + 0.5;

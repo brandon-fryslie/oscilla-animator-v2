@@ -1,7 +1,8 @@
 /**
  * GPU-IR DSL: Compilation orchestrator.
  *
- * Public API: gpu(), compute(), render(), draw(), drawPrep(), exact(), wg()
+ * Public API: gpu(), compute(), render(), draw(), drawPrep(), exact(), wg(),
+ *             ortho(), perspective(), clearTarget(), domainSource(), fsQuadSource()
  * Transforms compact DSL specs + arrow function bodies into PipelineInstallPayload.
  */
 
@@ -66,6 +67,53 @@ export const DEPTH_TEST: PipelineStateSpec =
   { blendMode: 'opaque', cullMode: 'none', depthWrite: true, depthCompare: 'less' };
 
 // ---------------------------------------------------------------------------
+// Camera specs — describe projection type + initial parameters
+// ---------------------------------------------------------------------------
+
+export interface CameraSpec {
+  readonly type: 'ortho' | 'perspective';
+  readonly params: Record<string, number>;
+}
+
+/** Orthographic camera (default 2D view). Maps world [0,1] to clip [-1,1]. */
+export function ortho(opts?: {
+  centerX?: number;
+  centerY?: number;
+  zoom?: number;
+}): CameraSpec {
+  return {
+    type: 'ortho',
+    params: {
+      center_x: opts?.centerX ?? 0.5,
+      center_y: opts?.centerY ?? 0.5,
+      zoom: opts?.zoom ?? 1.0,
+    },
+  };
+}
+
+/** Perspective camera (3D view). */
+export function perspective(opts?: {
+  fov?: number;
+  distance?: number;
+  tilt?: number;
+  yaw?: number;
+  centerX?: number;
+  centerY?: number;
+}): CameraSpec {
+  return {
+    type: 'perspective',
+    params: {
+      fov: opts?.fov ?? 45.0,
+      distance: opts?.distance ?? 2.0,
+      tilt: opts?.tilt ?? 35.0,
+      yaw: opts?.yaw ?? 0.0,
+      center_x: opts?.centerX ?? 0.5,
+      center_y: opts?.centerY ?? 0.5,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Deferred types — internal, carry arrow fns until gpu() compiles them
 // ---------------------------------------------------------------------------
 
@@ -87,7 +135,6 @@ interface DeferredDrawCall {
   readonly fragmentFn: Function;
   readonly constants?: Record<string, number>;
   readonly domainId: string;
-  readonly cameraRef: string;
 }
 
 interface DeferredRenderPass {
@@ -95,6 +142,7 @@ interface DeferredRenderPass {
   readonly passId: string;
   readonly targets: RenderPassSpec['targets'];
   readonly drawCalls: readonly DeferredDrawCall[];
+  readonly cameraName?: string;
 }
 
 interface DeferredCameraPass {
@@ -110,13 +158,199 @@ type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCa
 // ---------------------------------------------------------------------------
 
 export interface GpuSpec extends CompactManifest {
+  readonly camera?: CameraSpec;
+  readonly cameras?: Record<string, CameraSpec>;
   readonly roster: readonly DeferredRosterEntry[];
 }
 
+/** Resolved camera: name → VP symbol + spec */
+interface ResolvedCamera {
+  readonly name: string;
+  readonly vpSymbol: string;
+  readonly spec: CameraSpec;
+  readonly globals: Record<string, CompactGlobalSpec>;
+  readonly scalars: Record<string, CompactScalarSpec>;
+  readonly pass: DeferredCameraPass;
+}
+
 export function gpu(spec: GpuSpec): PipelineInstallPayload {
-  const manifest = expandManifest(spec);
-  const roster = spec.roster.map(entry => compileEntry(entry, manifest));
+  // Resolve cameras
+  const cameras = resolveCameras(spec);
+  const cameraMap = new Map(cameras.map(c => [c.name, c]));
+
+  // Merge camera globals/scalars into the manifest
+  const mergedGlobals: Record<string, string | CompactGlobalSpec> = {
+    ...(spec.globals ?? {}),
+    // sys:resolution always injected when cameras exist
+    ...(cameras.length > 0 ? { 'sys:resolution': 'vec2' } : {}),
+  };
+  const mergedScalars: Record<string, CompactScalarSpec> = { ...(spec.scalars ?? {}) };
+  for (const cam of cameras) {
+    Object.assign(mergedGlobals, cam.globals);
+    Object.assign(mergedScalars, cam.scalars);
+  }
+
+  const mergedSpec: CompactManifest = {
+    ...spec,
+    globals: mergedGlobals,
+    scalars: mergedScalars,
+  };
+  const manifest = expandManifest(mergedSpec);
+
+  // Compile camera passes, then roster entries
+  const cameraPasses = cameras.map(cam =>
+    compileCameraEntry(cam.pass, manifest),
+  );
+
+  const compiledRoster = spec.roster.map(entry => {
+    // Resolve camera name for render passes
+    if (entry.type === 'Render') {
+      const renderEntry = entry as DeferredRenderPass;
+      const cameraRef = resolveRenderPassCamera(renderEntry, cameras, cameraMap);
+      return compileRenderEntry(renderEntry, manifest, cameraRef);
+    }
+    return compileEntry(entry, manifest);
+  });
+
+  const roster = [...cameraPasses, ...compiledRoster];
   return { manifest, roster };
+}
+
+// ---------------------------------------------------------------------------
+// Camera resolution helpers
+// ---------------------------------------------------------------------------
+
+function resolveCameras(spec: GpuSpec): ResolvedCamera[] {
+  if (spec.camera && spec.cameras) {
+    throw new Error('gpu(): specify either `camera` or `cameras`, not both');
+  }
+
+  const cameraEntries: [string, CameraSpec][] = [];
+  if (spec.camera) {
+    cameraEntries.push(['default', spec.camera]);
+  } else if (spec.cameras) {
+    for (const [name, camSpec] of Object.entries(spec.cameras)) {
+      cameraEntries.push([name, camSpec]);
+    }
+  }
+
+  return cameraEntries.map(([name, camSpec]) => {
+    const prefix = cameraEntries.length === 1 ? 'cam' : `cam:${name}`;
+    const vpSymbol = `${prefix}:vp`;
+
+    // Camera parameter globals (initial values from spec)
+    const globals: Record<string, CompactGlobalSpec> = {};
+    for (const [key, value] of Object.entries(camSpec.params)) {
+      globals[`${prefix}:${key}`] = { f32: value, dynamic: true };
+    }
+
+    // VP matrix scalar output
+    const scalars: Record<string, CompactScalarSpec> = { [vpSymbol]: 'mat4x4' };
+
+    // Camera compute pass body
+    const pass = buildCameraPass(camSpec, prefix, vpSymbol);
+
+    return { name, vpSymbol, spec: camSpec, globals, scalars, pass };
+  });
+}
+
+function resolveRenderPassCamera(
+  entry: DeferredRenderPass,
+  cameras: ResolvedCamera[],
+  cameraMap: Map<string, ResolvedCamera>,
+): string {
+  if (cameras.length === 0) return '';
+
+  if (entry.cameraName) {
+    const cam = cameraMap.get(entry.cameraName);
+    if (!cam) throw new Error(`render('${entry.passId}'): camera '${entry.cameraName}' not found. Available: ${cameras.map(c => c.name).join(', ')}`);
+    return cam.vpSymbol;
+  }
+
+  // No explicit camera name — if only one camera, use it implicitly
+  if (cameras.length === 1) return cameras[0].vpSymbol;
+
+  throw new Error(`render('${entry.passId}'): multiple cameras defined but no { camera: '...' } specified`);
+}
+
+
+
+/**
+ * Build a camera pass with literal symbol references (no template literals).
+ * Uses new Function() to construct a function whose toString() contains
+ * only literal strings — the walker parses fn.toString(), so closures
+ * with template literals don't work.
+ */
+function buildCameraPass(spec: CameraSpec, prefix: string, vpSymbol: string): DeferredCameraPass {
+  const body = spec.type === 'ortho'
+    ? buildOrthoCameraBody(prefix, vpSymbol)
+    : buildPerspectiveCameraBody(prefix, vpSymbol);
+
+  return { type: 'System_CameraUpdate', cameraRef: vpSymbol, bodyFn: body };
+}
+
+function buildOrthoCameraBody(prefix: string, vpSymbol: string): Function {
+  // Construct source with literal strings — no template literals in the output
+  const src = `() => {
+  const res = $global.resolution;
+  const aspect = res.x / res.y;
+  const cx = $global['${prefix}:center_x'];
+  const cy = $global['${prefix}:center_y'];
+  const zoom = $global['${prefix}:zoom'];
+  const sx = 2.0 * zoom / max(aspect, 1.0);
+  const sy = 2.0 * zoom * min(aspect, 1.0);
+  $scalar['${vpSymbol}'] = mat4x4(
+    sx,  0.0, 0.0, 0.0,
+    0.0, sy,  0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    -sx * cx, -sy * cy, 0.0, 1.0
+  );
+}`;
+  // eslint-disable-next-line no-new-func
+  return new Function(`return (${src})`)();
+}
+
+function buildPerspectiveCameraBody(prefix: string, vpSymbol: string): Function {
+  const src = `() => {
+  const res = $global.resolution;
+  const aspect = res.x / res.y;
+  const cx = $global['${prefix}:center_x'];
+  const cy = $global['${prefix}:center_y'];
+  const fov_val = $global['${prefix}:fov'];
+  const dist = $global['${prefix}:distance'];
+  const tilt_deg = $global['${prefix}:tilt'];
+  const yaw_deg = $global['${prefix}:yaw'];
+  const deg2rad = 3.14159265358979 / 180.0;
+  const fov_rad = fov_val * deg2rad;
+  const f = 1.0 / tan(fov_rad * 0.5);
+  const near_val = 0.01;
+  const far_val = 100.0;
+  const range_inv = 1.0 / (near_val - far_val);
+  const p00 = f / aspect;
+  const p11 = f;
+  const p22 = far_val * range_inv;
+  const p23 = near_val * far_val * range_inv;
+  const tilt_r = tilt_deg * deg2rad;
+  const yaw_r = yaw_deg * deg2rad;
+  const ct = cos(tilt_r);
+  const st = sin(tilt_r);
+  const cy_r = cos(yaw_r);
+  const sy_r = sin(yaw_r);
+  const ex = cx + dist * sy_r * ct;
+  const ey = cy - dist * st;
+  const ez = dist * cy_r * ct;
+  $scalar['${vpSymbol}'] = mat4x4(
+    p00 * cy_r,  p00 * sy_r * st,  p00 * sy_r * ct,  0.0,
+    0.0,         p11 * ct,         -p11 * st,         0.0,
+    -sy_r * p22, cy_r * st * p22,  cy_r * ct * p22,   p23,
+    -p00 * cy_r * ex + p00 * sy_r * ez,
+    -p11 * ct * ey + p11 * st * ez,
+    sy_r * p22 * ex - cy_r * st * p22 * ey - cy_r * ct * p22 * ez + p23,
+    1.0
+  );
+}`;
+  // eslint-disable-next-line no-new-func
+  return new Function(`return (${src})`)();
 }
 
 // ---------------------------------------------------------------------------
@@ -149,63 +383,6 @@ export function compute(
 // drawPrep()
 // ---------------------------------------------------------------------------
 
-export function cameraPass(cameraRef: string, bodyFn: Function): DeferredCameraPass {
-  return { type: 'System_CameraUpdate', cameraRef, bodyFn };
-}
-
-// ---------------------------------------------------------------------------
-// defaultCamera() — one-liner camera setup for fixtures
-// ---------------------------------------------------------------------------
-
-export interface CameraKit {
-  readonly globals: Record<string, string | CompactGlobalSpec>;
-  readonly scalars: Record<string, CompactScalarSpec>;
-  readonly pass: DeferredCameraPass;
-  readonly ref: string;
-}
-
-/**
- * Create a default orthographic camera kit.
- * Returns globals (center, zoom), a scalar (VP matrix), and the camera pass.
- * Spread into gpu(): `...cam.globals`, `...cam.scalars`, `cam.pass`, `cam.ref`.
- */
-export function defaultCamera(opts?: { vpSymbol?: string }): CameraKit {
-  const vpSymbol = opts?.vpSymbol ?? 'sys:view_proj';
-  return {
-    globals: {
-      'cam:center_x': { f32: 0.5, dynamic: true },
-      'cam:center_y': { f32: 0.5, dynamic: true },
-      'cam:zoom': { f32: 1.0, dynamic: true },
-    },
-    scalars: { [vpSymbol]: 'mat4x4' },
-    pass: cameraPass(vpSymbol, () => {
-      // Stubs — parsed from source by the walker, never called
-      const res = $global.resolution;
-      const aspect = res.x / res.y;
-      const cx = $global['cam:center_x'];
-      const cy = $global['cam:center_y'];
-      const zoom = $global['cam:zoom'];
-      // Ortho VP: maps [0,1] → [-1,1] with aspect correction, pan, zoom
-      const sx = 2.0 * zoom / max(aspect, 1.0);
-      const sy = 2.0 * zoom * min(aspect, 1.0);
-      $scalar.view_proj = mat4x4(
-        sx,  0.0, 0.0, 0.0,
-        0.0, sy,  0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        -sx * cx, -sy * cy, 0.0, 1.0,
-      );
-    }),
-    ref: vpSymbol,
-  };
-}
-
-// Ambient stubs for defaultCamera body — walker parses fn.toString(), never calls these
-declare const $global: any;
-declare const $scalar: any;
-declare function max(a: any, b: any): any;
-declare function min(a: any, b: any): any;
-declare function mat4x4(...args: any[]): any;
-
 export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount: number): SystemPassSpec {
   return {
     type: 'System_DrawPrep',
@@ -230,8 +407,9 @@ export function render(
   passId: string,
   targets: RenderPassSpec['targets'],
   drawCalls: readonly DeferredDrawCall[],
+  opts?: { camera?: string },
 ): DeferredRenderPass {
-  return { type: 'Render', passId, targets, drawCalls };
+  return { type: 'Render', passId, targets, drawCalls, cameraName: opts?.camera };
 }
 
 export function draw(
@@ -239,7 +417,6 @@ export function draw(
   source: DrawCallSpec['source'],
   pipelineState: PipelineStateSpec,
   shaders: ShaderFns,
-  cameraRef: string,
 ): DeferredDrawCall {
   return {
     intentId,
@@ -249,7 +426,6 @@ export function draw(
     fragmentFn: shaders.fragment,
     constants: shaders.constants,
     domainId: source.type === 'Domain' ? source.domainId : '',
-    cameraRef,
   };
 }
 
@@ -264,7 +440,7 @@ function compileEntry(
   if (entry.type === 'System_DrawPrep') return entry;
   if (entry.type === 'Compute') return compileComputeEntry(entry as DeferredComputePass, manifest);
   if (entry.type === 'System_CameraUpdate') return compileCameraEntry(entry as DeferredCameraPass, manifest);
-  return compileRenderEntry(entry as DeferredRenderPass, manifest);
+  return compileRenderEntry(entry as DeferredRenderPass, manifest, '');
 }
 
 function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
@@ -280,7 +456,7 @@ function compileCameraEntry(entry: DeferredCameraPass, manifest: MemoryManifest)
   const ast = unwrapWalkerResult(compileShaderBody(entry.bodyFn, ctx));
   return {
     type: 'System_CameraUpdate',
-    passId: 'camera',
+    passId: `camera_${entry.cameraRef}`,
     cameraRef: entry.cameraRef,
     ast,
   };
@@ -316,16 +492,20 @@ function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifes
   };
 }
 
-function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest): RenderPassSpec {
+function compileRenderEntry(
+  entry: DeferredRenderPass,
+  manifest: MemoryManifest,
+  cameraRef: string,
+): RenderPassSpec {
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
     const fragmentAst = unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }));
 
     // [LAW:single-enforcer] Auto-inject VP multiply: ReturnVertex.position → vp * position
-    // The cameraRef tells us which arena scalar holds the VP matrix.
+    // Camera association comes from the render pass, not the draw call.
     // Fixture authors write world-space positions; the camera transform is automatic.
-    if (dc.cameraRef) {
-      const vpLoad = B.loadScalar(dc.cameraRef);
+    if (cameraRef) {
+      const vpLoad = B.loadScalar(cameraRef);
       for (let i = 0; i < vertexAst.length; i++) {
         const stmt = vertexAst[i];
         if (stmt.type === 'ReturnVertex') {
@@ -337,7 +517,7 @@ function compileRenderEntry(entry: DeferredRenderPass, manifest: MemoryManifest)
       }
     }
 
-    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, dc.cameraRef);
+    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, cameraRef);
 
     return {
       intentId: dc.intentId,
