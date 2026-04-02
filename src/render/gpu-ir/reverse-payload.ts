@@ -180,24 +180,38 @@ function emitRender(
   return `    render(${quote(pass.passId)}, ${camera}, ${targets}, [\n${draws}\n    ]),`;
 }
 
-function emitDrawCall(dc: DrawCallSpec, manifest: MemoryManifest, vpSymbol: string): string {
+function emitDrawCall(dc: DrawCallSpec, manifest: MemoryManifest, _vpSymbol: string): string {
   const source = emitDrawSource(dc.source);
   const state = emitPipelineState(dc.pipelineState);
+  const domainId = dc.source.type === 'Domain' ? dc.source.domainId : '';
 
-  // Strip VP auto-injection from vertex AST before emitting
-  const vertexAst = stripVpInjection(dc.vertexAst, vpSymbol);
+  // Strip semantic nodes (ApplyVP, ApplyTransform2D) and reconstruct declarations
+  const { ast: vertexAst, transform } = stripSemanticNodes(dc.vertexAst, domainId);
 
   // Infer vertex params from shape vertex layout
   const vertexParams = inferVertexParams(dc, manifest);
   const vertexBody = stmtsToSource(vertexAst, 5);
   const vertexArrow = `(${vertexParams.join(', ')}) => {\n${vertexBody}\n          }`;
 
-  // Infer fragment params from vertex varyings
-  const fragmentParams = inferFragmentParams(dc);
-  const fragmentBody = stmtsToSource(dc.fragmentAst, 5);
-  const fragmentArrow = `(${fragmentParams.join(', ')}) => {\n${fragmentBody}\n          }`;
+  // Build shader options
+  const shaderOpts: string[] = [];
+  if (transform) {
+    const fields = [`posX: ${quote(transform.posX)}, posY: ${quote(transform.posY)}`];
+    if (transform.rotation) fields.push(`rotation: ${quote(transform.rotation)}`);
+    if (transform.scale) fields.push(`scale: ${quote(transform.scale)}`);
+    shaderOpts.push(`        transform: { ${fields.join(', ')} },`);
+  }
+  shaderOpts.push(`        vertex: ${vertexArrow},`);
 
-  return `      draw(${quote(dc.intentId)}, ${source}, ${state}, {\n        vertex: ${vertexArrow},\n        fragment: ${fragmentArrow},\n      }),`;
+  // Omit fragment if it's a passthrough
+  if (!isPassthroughFragment(dc.fragmentAst)) {
+    const fragmentParams = inferFragmentParams(dc);
+    const fragmentBody = stmtsToSource(dc.fragmentAst, 5);
+    const fragmentArrow = `(${fragmentParams.join(', ')}) => {\n${fragmentBody}\n          }`;
+    shaderOpts.push(`        fragment: ${fragmentArrow},`);
+  }
+
+  return `      draw(${quote(dc.intentId)}, ${source}, ${state}, {\n${shaderOpts.join('\n')}\n      }),`;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +327,7 @@ function reconstructCamera(
     const params = PERSPECTIVE_PARAMS.map(p => manifest.globals[`${prefix}:${p}`]?.defaultValue);
     // Only emit non-default params
     const opts: string[] = [];
-    const defaults = { centerX: 0.5, centerY: 0.5, fov: 45, distance: 2, tilt: 35, yaw: 0 };
+    const defaults = { centerX: 0, centerY: 0, fov: 45, distance: 2, tilt: 35, yaw: 0 };
     const names = ['centerX', 'centerY', 'fov', 'distance', 'tilt', 'yaw'] as const;
     for (let i = 0; i < PERSPECTIVE_PARAMS.length; i++) {
       const val = params[i] ?? 0;
@@ -327,7 +341,7 @@ function reconstructCamera(
   // Ortho
   const params = ORTHO_PARAMS.map(p => manifest.globals[`${prefix}:${p}`]?.defaultValue);
   const opts: string[] = [];
-  const defaults = { centerX: 0.5, centerY: 0.5, zoom: 1 };
+  const defaults = { centerX: 0, centerY: 0, zoom: 1 };
   const names = ['centerX', 'centerY', 'zoom'] as const;
   for (let i = 0; i < ORTHO_PARAMS.length; i++) {
     const val = params[i] ?? 0;
@@ -342,23 +356,58 @@ function reconstructCamera(
 // VP injection stripping — reverse of compile's auto-inject
 // ---------------------------------------------------------------------------
 
+/** Result of stripping semantic nodes from vertex AST. */
+interface StrippedVertex {
+  readonly ast: StatementIR[];
+  readonly transform?: { posX: string; posY: string; rotation?: string; scale?: string };
+}
+
 /**
- * Strip VP auto-injection from vertex AST.
- * The forward compiler wraps `ReturnVertex.position` with `LoadScalar(vpSymbol) * position`.
- * We undo this: if position is `BinaryOp(*, LoadScalar(vpSymbol), X)`, extract X.
+ * Strip auto-injected semantic nodes (ApplyVP, ApplyTransform2D) from vertex AST.
+ * Returns the cleaned AST plus any reconstructed transform declaration.
  */
-function stripVpInjection(ast: readonly StatementIR[], vpSymbol: string): StatementIR[] {
-  return ast.map(stmt => {
+function stripSemanticNodes(ast: readonly StatementIR[], domainId: string): StrippedVertex {
+  let transform: StrippedVertex['transform'];
+  const stripped = ast.map(stmt => {
     if (stmt.type !== 'ReturnVertex') return stmt;
-    const pos = stmt.position;
-    if (
-      pos.type === 'BinaryOp' &&
-      pos.op === '*' &&
-      pos.left.type === 'LoadScalar' &&
-      pos.left.symbolId === vpSymbol
-    ) {
-      return { ...stmt, position: pos.right };
+    let pos = stmt.position;
+
+    // Strip ApplyVP (outermost wrapper)
+    if (pos.type === 'ApplyVP') pos = pos.position;
+
+    // Strip ApplyTransform2D and reconstruct transform declaration
+    if (pos.type === 'ApplyTransform2D') {
+      const t = pos;
+      const prefix = domainId + ':';
+      const fieldName = (e: StatementIR['type'] extends string ? any : never) =>
+        e.type === 'LoadField' && e.symbolId.startsWith(prefix)
+          ? e.symbolId.slice(prefix.length)
+          : undefined;
+
+      const posX = fieldName(t.translateX);
+      const posY = fieldName(t.translateY);
+      const rotation = fieldName(t.rotation);
+      const scale = fieldName(t.scale);
+
+      if (posX && posY) {
+        transform = {
+          posX, posY,
+          ...(rotation && t.rotation.type !== 'LiteralF32' ? { rotation } : {}),
+          ...(scale && t.scale.type !== 'LiteralF32' ? { scale } : {}),
+        };
+      }
+      pos = t.position;
     }
-    return stmt;
+
+    return { ...stmt, position: pos };
   });
+  return { ast: stripped, transform };
+}
+
+/** Detect passthrough fragment: single ReturnFragment whose outputs are all VarRefs. */
+function isPassthroughFragment(ast: readonly StatementIR[]): boolean {
+  if (ast.length !== 1) return false;
+  const stmt = ast[0];
+  if (stmt.type !== 'ReturnFragment') return false;
+  return Object.values(stmt.outputs).every(e => e.type === 'VarRef');
 }

@@ -137,6 +137,7 @@ interface DeferredDrawCall {
   readonly intentId: string;
   readonly source: DrawCallSpec['source'];
   readonly pipelineState: DrawCallSpec['pipelineState'];
+  readonly transform?: Transform2DSpec;
   readonly vertexFn: Function;
   readonly fragmentFn?: Function;
   readonly constants?: Record<string, number>;
@@ -321,7 +322,16 @@ export function drawPrep(passId: string, activeLanesSymbol: string, vertexCount:
 // render() + draw()
 // ---------------------------------------------------------------------------
 
+/** Per-instance 2D transform declaration — fields are domain field names. */
+export interface Transform2DSpec {
+  readonly posX: string;
+  readonly posY: string;
+  readonly rotation?: string;
+  readonly scale?: string;
+}
+
 export interface ShaderFns {
+  readonly transform?: Transform2DSpec;
   readonly vertex: Function;
   readonly fragment?: Function;
   readonly constants?: Record<string, number>;
@@ -346,6 +356,7 @@ export function draw(
     intentId,
     source,
     pipelineState,
+    transform: shaders.transform,
     vertexFn: shaders.vertex,
     fragmentFn: shaders.fragment ?? undefined,
     constants: shaders.constants,
@@ -458,16 +469,31 @@ function compileRenderEntry(
       ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
       : generatePassthroughFragment(vertexAst);
 
-    // [LAW:single-enforcer] Auto-inject VP: ReturnVertex.position → ApplyVP(vpSym, position)
-    // Fixture authors write world-space positions; camera transform is a semantic IR node.
+    // [LAW:single-enforcer] Auto-inject transforms: local → model (TRS) → clip (VP)
     for (let i = 0; i < vertexAst.length; i++) {
       const stmt = vertexAst[i];
-      if (stmt.type === 'ReturnVertex') {
-        vertexAst[i] = B.returnVertex(
-          B.applyVP(vpSymbol, stmt.position),
-          stmt.varyings,
+      if (stmt.type !== 'ReturnVertex') continue;
+
+      // Model transform: wrap position with ApplyTransform2D if declared
+      let position = stmt.position;
+      if (dc.transform) {
+        const t = dc.transform;
+        const domId = dc.domainId;
+        const iid = B.intrinsic('instance_index');
+        position = B.applyTransform2D(
+          position,
+          B.loadField(`${domId}:${t.posX}`, iid),
+          B.loadField(`${domId}:${t.posY}`, iid),
+          t.rotation ? B.loadField(`${domId}:${t.rotation}`, iid) : B.litF32(0.0),
+          t.scale ? B.loadField(`${domId}:${t.scale}`, iid) : B.litF32(1.0),
         );
       }
+
+      // VP projection: wrap with camera transform
+      vertexAst[i] = B.returnVertex(
+        B.applyVP(vpSymbol, position),
+        stmt.varyings,
+      );
     }
 
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, vpSymbol);

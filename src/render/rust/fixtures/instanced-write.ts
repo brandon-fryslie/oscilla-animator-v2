@@ -1,5 +1,6 @@
 // instanced-write: 2048 instances in a breathing double-ring via domain dispatch.
-// Tests: domain-dispatched compute, per-instance field writes, instanced draw.
+// Tests: domain-dispatched compute, per-instance field writes, instanced draw,
+//        transform declaration (ApplyTransform2D), default passthrough fragment.
 gpu({
   globals: { 'sys:time': 'f32' },
   scalars: { 'sys:active': { u32: 2048 } },
@@ -27,7 +28,7 @@ gpu({
       // Three concentric rings
       const ring = f32(gid % u32(3));
       const base_radius = 0.25 + ring * 0.2;
-      const angle = rank * 6.283185 + time * (0.8 + ring * 0.3);
+      const angle = rank * TAU + time * (0.8 + ring * 0.3);
 
       // Breathing radius + per-instance wobble
       const breath = sin(time * 1.8 + ring * 2.094) * 0.06;
@@ -41,7 +42,7 @@ gpu({
       $domains.dots.scale[gid] = 0.5 + 0.5 * sin(fi * 0.5 + time * 4.0);
 
       // Rotation: tangent to ring + gentle oscillation
-      $domains.dots.rotation[gid] = angle + 1.5708 + sin(fi * 0.2 + time * 2.0) * 0.4;
+      $domains.dots.rotation[gid] = angle + HALF_PI + sin(fi * 0.2 + time * 2.0) * 0.4;
 
       // Rainbow hue from angle, brightness modulated by ring
       const hue = angle * 0.5 + time * 0.3 + ring * 0.7;
@@ -54,29 +55,17 @@ gpu({
     drawPrep('prep_dots', 'sys:active', 6),
     render('draw_dots', ortho(), clearTarget([0.03, 0.02, 0.06, 1]), [
       draw('dots_fill', domainSource('dots', 'petal'), ALPHA_BLEND, {
+        transform: { posX: 'pos_x', posY: 'pos_y', rotation: 'rotation', scale: 'scale' },
         vertex: (position) => {
           const iid = $instance.index;
-          const px = $domains.dots.pos_x[iid];
-          const py = $domains.dots.pos_y[iid];
-          const sc = $domains.dots.scale[iid];
-          const rot = $domains.dots.rotation[iid];
           const cr = $domains.dots.color_r[iid];
           const cg = $domains.dots.color_g[iid];
           const cb = $domains.dots.color_b[iid];
           const ca = $domains.dots.color_a[iid];
-          const c = cos(rot);
-          const s = sin(rot);
-          const lx = position.x * sc;
-          const ly = position.y * sc;
-          const rx = lx * c - ly * s;
-          const ry = lx * s + ly * c;
           return vertex(
-            vec4(rx + px, ry + py, 0.0, 1.0),
+            vec4(position.x, position.y, 0.0, 1.0),
             { color: vec4(cr, cg, cb, ca) },
           );
-        },
-        fragment: (color) => {
-          return fragment({ color });
         },
       }),
     ]),
