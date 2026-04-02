@@ -29,18 +29,19 @@ describe('GPU-IR roundtrip: instanced-write IR → DSL → IR', () => {
   const manifest = payload.manifest;
 
   test('compute pass AST roundtrips (Intrinsic + Cast)', () => {
-    const computePass = payload.roster[0] as ComputePassSpec;
+    const computePass = payload.roster.find(e => e.type === 'Compute') as ComputePassSpec;
     assertIRRoundtrip(computePass.ast, { stage: 'compute', manifest });
   });
 
   test('vertex AST roundtrips (instance_index + varyings)', () => {
-    const renderPass = payload.roster[2] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
+    // VP auto-injection wraps ReturnVertex.position — roundtrip tests the full injected AST
     assertIRRoundtrip(drawCall.vertexAst, { stage: 'vertex', manifest }, ['position']);
   });
 
   test('fragment AST roundtrips (varying passthrough)', () => {
-    const renderPass = payload.roster[2] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     const drawCall = renderPass.drawCalls[0] as DrawCallSpec;
     assertIRRoundtrip(drawCall.fragmentAst, { stage: 'fragment', manifest }, ['color']);
   });

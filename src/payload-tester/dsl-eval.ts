@@ -7,14 +7,14 @@
  * source but are never called. The walker parses them from source text.
  *
  * Supports both single expressions (`gpu({...})`) and statement blocks
- * (`const cam = defaultCamera(); gpu({...})`). Uses acorn to parse the
+ * (`const scene = [...]; gpu({...})`). Uses acorn to parse the
  * source and auto-return the last expression statement.
  */
 
 import * as acorn from 'acorn';
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
-  gpu, compute, render, draw, drawPrep, cameraPass, defaultCamera, exact, wg,
+  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
 } from '../render/gpu-ir/compile';
@@ -49,7 +49,7 @@ for (const name of [
 /** All names that must be in scope when evaluating DSL source */
 const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
-  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'cameraPass', 'defaultCamera', 'exact', 'wg',
+  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
   'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget',
   // Pipeline state presets (real)
@@ -76,7 +76,7 @@ const CONTEXT_NAMES = [
 
 const CONTEXT_VALUES = [
   // Real implementations
-  gpu, compute, render, draw, drawPrep, cameraPass, defaultCamera, exact, wg,
+  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
@@ -152,7 +152,7 @@ function wrapSource(source: string): string {
  * Evaluate a GPU-IR DSL source string and return the PipelineInstallPayload.
  *
  * Supports single expressions (`gpu({...})`) and statement blocks
- * (`const cam = defaultCamera(); gpu({...})`). The last expression
+ * (`const scene = [...]; gpu({...})`). The last expression
  * statement becomes the return value. Comments are preserved.
  */
 export function evalDsl(source: string): DslResult {

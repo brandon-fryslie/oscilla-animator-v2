@@ -11,7 +11,7 @@ import type {
   ComputePassSpec, RenderPassSpec, DrawCallSpec, PipelineStateSpec,
 } from '../../rust/boundary-contract';
 import {
-  gpu, compute, render, draw, drawPrep,
+  gpu, compute, render, draw, drawPrep, ortho,
   exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE,
 } from '../compile';
@@ -162,7 +162,7 @@ describe('dispatch mode coverage', () => {
 describe('draw source coverage', () => {
   test('FullScreenQuad source via helper', () => {
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), OPAQUE, {
@@ -172,17 +172,17 @@ describe('draw source coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.drawCalls[0].source).toStrictEqual({ type: 'FullScreenQuad' });
   });
 
   test('Domain source with non-Topology sourceKind', () => {
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       scalars: { 'sys:active': { u32: 1 } },
       domains: {
         pts: { capacity: 1, active: 'sys:active', fields: { x: 'f32' } },
@@ -201,12 +201,12 @@ describe('draw source coverage', () => {
               fragment: () => {
                 return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
               },
-            }, 'sys:view_proj',
+            },
           ),
         ]),
       ],
     });
-    const renderPass = payload.roster[1] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     const src = renderPass.drawCalls[0].source;
     expect(src).toStrictEqual({ type: 'Domain', domainId: 'pts', sourceKind: 'Parametric', shapeId: 'unit_quad' });
   });
@@ -225,7 +225,7 @@ describe('pipeline state coverage', () => {
       depthCompare: 'less',
     };
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
@@ -235,11 +235,11 @@ describe('pipeline state coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.drawCalls[0].pipelineState).toStrictEqual(state);
   });
 
@@ -265,7 +265,7 @@ describe('pipeline state coverage', () => {
       },
     };
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       roster: [
         render('pass', clearTarget([0, 0, 0, 1]), [
           draw('fill', fsQuadSource(), state, {
@@ -275,11 +275,11 @@ describe('pipeline state coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.drawCalls[0].pipelineState).toStrictEqual(state);
   });
 });
@@ -297,7 +297,7 @@ describe('render target coverage', () => {
       ],
     };
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       textures: {
         tex_albedo: { dimension: '2d', width: 512, height: 512, format: 'rgba8unorm', usage: ['render_attachment'] },
       },
@@ -310,11 +310,11 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.targets.colors).toHaveLength(2);
     expect(renderPass.targets.colors[1].textureId).toBe('tex_albedo');
   });
@@ -324,7 +324,7 @@ describe('render target coverage', () => {
       colors: [{ textureId: 'canvas', loadOp: 'load' }],
     };
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       roster: [
         render('pass', targets, [
           draw('fill', fsQuadSource(), OPAQUE, {
@@ -334,11 +334,11 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.targets.colors[0].loadOp).toBe('load');
     expect(renderPass.targets.colors[0].clearColor).toBeUndefined();
   });
@@ -353,7 +353,7 @@ describe('render target coverage', () => {
       },
     };
     const payload = gpu({
-      globals: { 'sys:view_proj': 'mat4x4' },
+      camera: ortho(),
       textures: {
         depth_tex: { dimension: '2d', width: 512, height: 512, format: 'depth24plus', usage: ['render_attachment'] },
       },
@@ -366,11 +366,11 @@ describe('render target coverage', () => {
             fragment: () => {
               return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
             },
-          }, 'sys:view_proj'),
+          }),
         ]),
       ],
     });
-    const renderPass = payload.roster[0] as RenderPassSpec;
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.targets.depthStencil).toStrictEqual({
       textureId: 'depth_tex',
       depthLoadOp: 'clear',
