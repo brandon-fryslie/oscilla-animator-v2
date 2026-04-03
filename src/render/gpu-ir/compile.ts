@@ -53,9 +53,12 @@ export const domainSource = (
 export const fsQuadSource = (): DrawCallSpec['source'] =>
   ({ type: 'FullScreenQuad' });
 
-/** Render target helper — returns RenderPassSpec['targets'] */
+/** Render target helpers — return RenderPassSpec['targets'] */
 export const clearTarget = (clearColor: readonly [number, number, number, number]): RenderPassSpec['targets'] =>
   ({ colors: [{ textureId: 'canvas', loadOp: 'clear', clearColor }] });
+
+export const loadTarget = (): RenderPassSpec['targets'] =>
+  ({ colors: [{ textureId: 'canvas', loadOp: 'load' }] });
 
 /** Pipeline state presets — named constants, not default-filling logic */
 export const OPAQUE: PipelineStateSpec =
@@ -144,12 +147,20 @@ interface DeferredDrawCall {
   readonly domainId: string;
 }
 
+/** Render pass options — viewport, scissor */
+export interface RenderPassOpts {
+  readonly viewport?: { x: number; y: number; width: number; height: number; minDepth?: number; maxDepth?: number };
+  readonly scissorRect?: { x: number; y: number; width: number; height: number };
+}
+
 interface DeferredRenderPass {
   readonly type: 'Render';
   readonly passId: string;
   readonly camera: CameraSpec;
   readonly targets: RenderPassSpec['targets'];
   readonly drawCalls: readonly DeferredDrawCall[];
+  readonly viewport?: RenderPassOpts['viewport'];
+  readonly scissorRect?: RenderPassOpts['scissorRect'];
 }
 
 interface DeferredCameraPass {
@@ -342,8 +353,9 @@ export function render(
   camera: CameraSpec,
   targets: RenderPassSpec['targets'],
   drawCalls: readonly DeferredDrawCall[],
+  opts?: RenderPassOpts,
 ): DeferredRenderPass {
-  return { type: 'Render', passId, camera, targets, drawCalls };
+  return { type: 'Render', passId, camera, targets, drawCalls, viewport: opts?.viewport, scissorRect: opts?.scissorRect };
 }
 
 export function draw(
@@ -513,6 +525,8 @@ function compileRenderEntry(
     passId: entry.passId,
     sourceBlockIds: [],
     targets: entry.targets,
+    ...(entry.viewport ? { viewport: entry.viewport } : {}),
+    ...(entry.scissorRect ? { scissorRect: entry.scissorRect } : {}),
     drawCalls,
   };
 

@@ -65,8 +65,10 @@ enum CompiledPass {
         bind_group: Option<wgpu::BindGroup>,
         vertex_buffer_id: String,
         draw_mode: RenderDrawMode,
-        clear_color: [f64; 4],
+        color_load_op: ColorLoadOp,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
+        viewport: Option<[f32; 6]>,
+        scissor_rect: Option<[u32; 4]>,
     },
 }
 
@@ -76,6 +78,11 @@ enum RenderDrawMode {
         vertex_count: u32,
         instance_count: u32,
     },
+}
+
+enum ColorLoadOp {
+    Clear(wgpu::Color),
+    Load,
 }
 
 struct CompiledDepthStencilAttachment {
@@ -1050,7 +1057,14 @@ impl Engine {
                             None
                         };
 
-                        let clear_color = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                        // Respect color loadOp from spec
+                        let color_load_op = match color_target.load_op.as_str() {
+                            "load" => ColorLoadOp::Load,
+                            _ => {
+                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
+                            }
+                        };
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
@@ -1067,14 +1081,24 @@ impl Engine {
                                     ),
                                 }
                             });
+                        // Viewport and scissor from render pass spec
+                        let viewport = spec.viewport.as_ref().map(|vp| {
+                            [vp.x, vp.y, vp.width, vp.height,
+                             vp.min_depth.unwrap_or(0.0), vp.max_depth.unwrap_or(1.0)]
+                        });
+                        let scissor_rect = spec.scissor_rect.as_ref().map(|sc| {
+                            [sc.x, sc.y, sc.width, sc.height]
+                        });
 
                         passes.push(CompiledPass::Render {
                             pipeline,
                             bind_group,
                             vertex_buffer_id: shape_id,
                             draw_mode,
-                            clear_color,
+                            color_load_op,
                             depth_stencil,
+                            viewport,
+                            scissor_rect,
                         });
                     }
                 }
@@ -1190,8 +1214,10 @@ impl Engine {
                     bind_group,
                     vertex_buffer_id,
                     draw_mode,
-                    clear_color,
+                    color_load_op,
                     depth_stencil,
+                    viewport,
+                    scissor_rect,
                 } => {
                     // Acquire surface texture if we haven't already
                     if surface_output.is_none() {
@@ -1245,6 +1271,10 @@ impl Engine {
                             Some(msaa) => (msaa, Some(view as &wgpu::TextureView)),
                             None => (view, None),
                         };
+                        let load = match color_load_op {
+                            ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
+                            ColorLoadOp::Load => wgpu::LoadOp::Load,
+                        };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1252,12 +1282,7 @@ impl Engine {
                                 depth_slice: None,
                                 resolve_target,
                                 ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                                        r: clear_color[0],
-                                        g: clear_color[1],
-                                        b: clear_color[2],
-                                        a: clear_color[3],
-                                    }),
+                                    load,
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
@@ -1266,6 +1291,14 @@ impl Engine {
                             occlusion_query_set: None,
                             multiview_mask: None,
                         });
+
+                        // Viewport and scissor — applied after begin_render_pass
+                        if let Some(vp) = viewport {
+                            rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
+                        }
+                        if let Some(sc) = scissor_rect {
+                            rpass.set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
+                        }
 
                         rpass.set_pipeline(pipeline);
                         if let Some(bg) = bind_group {
