@@ -187,6 +187,7 @@ export const PayloadTesterApp: React.FC = () => {
             );
             break;
           case 'ENGINE_ERROR':
+            console.error(`[GPU fault] [${msg.source}] ${msg.message} (${msg.location})`);
             // Keep the FIRST engine error — subsequent panics (e.g. "RefCell already borrowed")
             // are cascade failures from the original panic leaving a borrow unreleased.
             setRendererStatus((prev) =>
@@ -199,6 +200,7 @@ export const PayloadTesterApp: React.FC = () => {
       };
 
       worker.onerror = (err) => {
+        console.error('[Worker error]', err.message);
         // Don't overwrite ENGINE_ERROR with generic worker error either
         setRendererStatus((prev) =>
           prev.kind === 'error' && prev.message.includes('GPU fault')
