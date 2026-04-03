@@ -3,6 +3,8 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 > **Full architectural guide**: `.claude/CLAUDE.md` — comprehensive layer-by-layer breakdown, design patterns, invariants, and common task guides. Read that before making significant changes.
+>
+> **DSL reference**: `docs/DSLs.md` — the five DSLs (Boundary IR, Boundary DSL, Naga DSL, Block DSL, Patch DSL) with entry points and key files.
 
 ## Development Commands
 
