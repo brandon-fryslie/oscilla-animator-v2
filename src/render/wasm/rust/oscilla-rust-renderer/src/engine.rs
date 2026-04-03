@@ -1278,19 +1278,11 @@ impl Engine {
                         .transpose()?;
 
                     {
-                        // MSAA: render into multisampled target, resolve to surface.
-                        // When sample_count == 1 or loadOp is Load, render direct to surface.
-                        // Safari's WebGPU does not preserve MSAA content between render passes
-                        // (StoreOp::Store on multisampled attachments after resolve is unreliable),
-                        // so loadOp:Load passes bypass MSAA and render directly to the surface.
-                        let use_msaa = matches!(color_load_op, ColorLoadOp::Clear(_));
-                        let (color_view, resolve_target) = match (&self.msaa_view, use_msaa) {
-                            (Some(msaa), true) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
-                            _ => (view, None),
-                        };
-                        let load = match color_load_op {
-                            ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
-                            ColorLoadOp::Load => wgpu::LoadOp::Load,
+                        // Every render pass loads the surface and sets scissor to its viewport.
+                        // Clear is viewport-scoped: a fill rect drawn by the engine, not GPU loadOp.
+                        let (color_view, resolve_target) = match &self.msaa_view {
+                            Some(msaa) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
+                            None => (view, None),
                         };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
@@ -1299,7 +1291,7 @@ impl Engine {
                                 depth_slice: None,
                                 resolve_target,
                                 ops: wgpu::Operations {
-                                    load,
+                                    load: wgpu::LoadOp::Load,
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
@@ -1309,22 +1301,13 @@ impl Engine {
                             multiview_mask: None,
                         });
 
-                        // Viewport and scissor — applied after begin_render_pass
-                        if let Some(vp) = viewport {
-                            if log_frame {
-                                console::log_1(&JsValue::from_str(&format!(
-                                    "[FRAME {}] pass {}: set_viewport({}, {}, {}, {}, {}, {}) surface={}x{} msaa={} load={:?}",
-                                    self.frame_count, pass_idx,
-                                    vp[0], vp[1], vp[2], vp[3], vp[4], vp[5],
-                                    self.surface_config.width, self.surface_config.height,
-                                    use_msaa, color_load_op,
-                                )));
-                            }
-                            rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
-                        }
-                        if let Some(sc) = scissor_rect {
-                            rpass.set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
-                        }
+                        // Viewport and scissor — every pass sets both
+                        let sw = self.surface_config.width as f32;
+                        let sh = self.surface_config.height as f32;
+                        let vp = viewport.unwrap_or([0.0, 0.0, sw, sh, 0.0, 1.0]);
+                        let sc = scissor_rect.unwrap_or([0, 0, self.surface_config.width, self.surface_config.height]);
+                        rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
+                        rpass.set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
 
                         rpass.set_pipeline(pipeline);
                         if let Some(bg) = bind_group {
