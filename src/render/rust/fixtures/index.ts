@@ -60,4 +60,5 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('fire-rain', 'Fire Rain', '12288 falling embers with heat color gradient, wind turbulence, and tumble rotation.'),
   fixture('strange-attractor', 'Strange Attractor', '4000-point Clifford attractor with velocity-driven color. From DEMO-PATCHES.md.'),
   fixture('atomic-histogram', 'Atomic Histogram', 'AtomicLoadField, assignResultTo on AtomicOpField. Phase 3 walker gate.'),
+  fixture('quad-camera', 'Quad Camera', '4 viewports, 4 cameras, one canvas. Tests viewport scissoring, loadOp:load, multi-pass rendering.'),
 ];
