@@ -679,13 +679,31 @@ fn remap_statement(
 
     match stmt {
         Statement::Emit(range) => {
-            // Remap the range: map each handle in the source range to its new handle.
-            // Expressions are appended in order so remapped handles stay contiguous.
-            let new_handles: Vec<_> = range.clone().map(|h| expr_map[&h]).collect();
-            // Emit ranges must be non-empty; skip degenerate ranges
-            let first = new_handles[0];
-            let last = *new_handles.last().unwrap();
-            Statement::Emit(Range::new_from_bounds(first, last))
+            // Naga's WGSL frontend can produce empty Emit ranges (valid IR — backends skip them).
+            // first_and_last() returns None for empty ranges.
+            match range.first_and_last() {
+                None => {
+                    // Empty Emit range — no expressions to remap. Produce an empty block
+                    // (Naga has no public constructor for an empty Range, and Block::new()
+                    // is the semantic equivalent of "do nothing").
+                    Statement::Block(Block::new())
+                }
+                Some((first_src, last_src)) => {
+                    let first = *expr_map.get(&first_src).unwrap_or_else(|| {
+                        panic!(
+                            "transplant: Emit references expression {:?} not in expr_map",
+                            first_src,
+                        )
+                    });
+                    let last = *expr_map.get(&last_src).unwrap_or_else(|| {
+                        panic!(
+                            "transplant: Emit references expression {:?} not in expr_map",
+                            last_src,
+                        )
+                    });
+                    Statement::Emit(Range::new_from_bounds(first, last))
+                }
+            }
         }
         Statement::Block(block) => Statement::Block(remap_block(block, expr_map, ctx)),
         Statement::If { condition, accept, reject } => Statement::If {
