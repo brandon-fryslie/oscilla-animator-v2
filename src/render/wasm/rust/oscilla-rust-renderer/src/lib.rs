@@ -7,6 +7,7 @@ mod mmu;
 mod scheduler;
 mod telemetry;
 mod translator;
+pub mod wgsl_functions;
 
 #[cfg(test)]
 mod dsl_tests;

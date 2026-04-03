@@ -16,6 +16,20 @@ use serde::{Deserialize, Serialize};
 pub struct PipelineInstallPayload {
     pub manifest: MemoryManifest,
     pub roster: Vec<RosterEntry>,
+    #[serde(default)]
+    pub functions: Vec<WgslFunction>,
+}
+
+/// A registered WGSL function — shipped with the payload, parsed at install time.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WgslFunction {
+    /// Callable name in the DSL (matches a BuiltinMathFunc entry)
+    pub name: String,
+    /// Complete WGSL source — may contain helper functions
+    pub wgsl: String,
+    /// Which function in the WGSL source is the callable entrypoint
+    pub entrypoint: String,
 }
 
 // ---------------------------------------------------------------------------

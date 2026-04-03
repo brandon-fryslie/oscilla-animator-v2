@@ -463,6 +463,33 @@ impl Engine {
             }
         };
 
+        // Parse registered WGSL functions
+        let parsed_functions = if !payload.functions.is_empty() {
+            console::log_1(&JsValue::from_str(&format!(
+                "[install_pipeline] Parsing {} registered WGSL functions...",
+                payload.functions.len()
+            )));
+            match crate::wgsl_functions::parse_registered_functions(&payload.functions) {
+                Ok(parsed) => {
+                    console::log_1(&JsValue::from_str(&format!(
+                        "[install_pipeline] Parsed {} WGSL functions OK",
+                        parsed.len()
+                    )));
+                    parsed
+                }
+                Err(e) => {
+                    let receipt = InstallReceipt::fatal(
+                        "ast_lowering",
+                        format!("WGSL function parse error: {}", e),
+                    );
+                    return serde_json::to_string(&receipt).unwrap();
+                }
+            }
+        } else {
+            std::collections::HashMap::new()
+        };
+        let _ = &parsed_functions; // TODO: pass to translator once transplant is implemented
+
         // MMU: allocate GPU memory arena
         console::log_1(&JsValue::from_str("[install_pipeline] Allocating arena..."));
         let mut arena = match mmu::allocate_arena(&self.device, &self.queue, &payload.manifest) {
