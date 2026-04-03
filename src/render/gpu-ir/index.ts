@@ -3,7 +3,7 @@
  */
 
 // Compilation orchestrator
-export { gpu, compute, render, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, OPAQUE, ALPHA_BLEND, DEPTH_TEST, MATH_CONSTANTS, PI, TAU, HALF_PI, E, SQRT2, PHI } from './compile';
+export { gpu, compute, render, composite, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture, OPAQUE, ALPHA_BLEND, DEPTH_TEST, MATH_CONSTANTS, PI, TAU, HALF_PI, E, SQRT2, PHI } from './compile';
 export type { Transform2DSpec, RenderPassOpts } from './compile';
 
 // Shape helpers
@@ -17,6 +17,9 @@ export { stmtsToSource, exprToSource } from './reverse';
 
 // Full payload reverse translator (PipelineInstallPayload → gpu({...}) source)
 export { payloadToSource } from './reverse-payload';
+
+// Shader standard library (WGSL function definitions)
+export { STDLIB, HASH_U32, NOISE_SIMPLEX_2D, NOISE_SIMPLEX_3D } from './stdlib';
 
 // Types (re-exported for convenience)
 export type { Domains, DomainProxy, DomainFieldProxy } from './types';

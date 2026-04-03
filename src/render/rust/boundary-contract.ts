@@ -333,18 +333,18 @@ export const DrawCallSpecSchema = z.object({
 });
 export type DrawCallSpec = z.infer<typeof DrawCallSpecSchema>;
 
-/** Viewport in normalized coordinates (0.0–1.0). Resolved to pixels at render time. */
+/** Viewport in pixel coordinates. Resolved by the TS compiler from declared target dimensions. */
 export const ViewportSchema = z.object({
   x: z.number(),
   y: z.number(),
   width: z.number(),
   height: z.number(),
-  minDepth: z.number().optional(),
-  maxDepth: z.number().optional(),
+  minDepth: z.number(),
+  maxDepth: z.number(),
 });
 export type Viewport = z.infer<typeof ViewportSchema>;
 
-/** Scissor rect in normalized coordinates (0.0–1.0). Resolved to pixels at render time. */
+/** Scissor rect in pixel coordinates. Resolved by the TS compiler from declared target dimensions. */
 export const ScissorRectSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -357,6 +357,7 @@ export const RenderPassSpecSchema = z.object({
   type: z.literal('Render'),
   passId: z.string(),
   sourceBlockIds: z.array(z.string()).readonly(),
+  sampleCount: z.number(),
   targets: z.object({
     colors: z.array(z.object({
       textureId: z.union([TextureIdSchema, z.literal('canvas')]),
@@ -371,15 +372,34 @@ export const RenderPassSpecSchema = z.object({
       stencilClearValue: z.number().optional(),
     }).optional(),
   }),
-  viewport: ViewportSchema.optional(),
-  scissorRect: ScissorRectSchema.optional(),
+  viewport: ViewportSchema,
+  scissorRect: ScissorRectSchema,
   drawCalls: z.array(DrawCallSpecSchema).readonly(),
 });
 export type RenderPassSpec = z.infer<typeof RenderPassSpecSchema>;
 
+export const CompositePassSpecSchema = z.object({
+  type: z.literal('Composite'),
+  passId: z.string(),
+  sourceBlockIds: z.array(z.string()).readonly(),
+  sampleCount: z.number(),
+  targets: z.object({
+    colors: z.array(z.object({
+      textureId: z.union([TextureIdSchema, z.literal('canvas')]),
+      loadOp: z.enum(['load', 'clear']),
+      clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
+    })).readonly(),
+  }),
+  viewport: ViewportSchema,
+  scissorRect: ScissorRectSchema,
+  drawCalls: z.array(DrawCallSpecSchema).readonly(),
+});
+export type CompositePassSpec = z.infer<typeof CompositePassSpecSchema>;
+
 export const RosterEntrySchema = z.discriminatedUnion('type', [
   ComputePassSpecSchema,
   RenderPassSpecSchema,
+  CompositePassSpecSchema,
   SystemPassSpecSchema,
   SystemCameraUpdateSpecSchema,
 ]);
@@ -529,9 +549,42 @@ function validatePayloadSemantics(
   }
 }
 
+// ---------------------------------------------------------------------------
+// WGSL function registration — arbitrary functions shipped with the payload
+// ---------------------------------------------------------------------------
+
+export const WgslFunctionSchema = z.object({
+  /** Callable name in the DSL — must match the public function in the WGSL source */
+  name: z.string(),
+  /** Complete WGSL source — may contain helper functions */
+  wgsl: z.string(),
+});
+export type WgslFunction = z.infer<typeof WgslFunctionSchema>;
+
+// ---------------------------------------------------------------------------
+// WGSL function metadata — extracted from WGSL source via wgsl_reflect.
+// TS-side only (NOT sent to Rust). Used for validation and tooling.
+// ---------------------------------------------------------------------------
+
+/** A single parameter extracted from a WGSL function signature. */
+export interface WgslFunctionParam {
+  readonly name: string;
+  /** WGSL type name (e.g., 'f32', 'vec2f', 'u32') */
+  readonly type: string;
+}
+
+/** Metadata extracted from a registered WGSL function's source. */
+export interface WgslFunctionMeta {
+  readonly name: string;
+  readonly params: readonly WgslFunctionParam[];
+  /** WGSL return type name, or null for void functions. */
+  readonly returnType: string | null;
+}
+
 const PipelineInstallPayloadBaseSchema = z.object({
   manifest: MemoryManifestSchema,
   roster: z.array(RosterEntrySchema).readonly(),
+  functions: z.array(WgslFunctionSchema).readonly().optional(),
 });
 
 export const PipelineInstallPayloadSchema = PipelineInstallPayloadBaseSchema

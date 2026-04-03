@@ -8,6 +8,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { evalDsl, type DslResult } from './dsl-eval';
+import type { GpuContext } from '../render/gpu-ir/compile';
 
 export interface CompileStatus {
   readonly ok: boolean;
@@ -24,6 +25,8 @@ interface DslPayloadSplitEditorProps {
   /** Called on every compile attempt — lets parent update status bar */
   onCompileStatus: (status: CompileStatus) => void;
   disabled: boolean;
+  /** Canvas dimensions for viewport/scissor resolution */
+  gpuCtx?: GpuContext;
 }
 
 const MONO_FONT = '"SF Mono", Monaco, Consolas, "Liberation Mono", monospace';
@@ -35,14 +38,15 @@ export const DslPayloadSplitEditor: React.FC<DslPayloadSplitEditorProps> = ({
   onSubmit,
   onCompileStatus,
   disabled,
+  gpuCtx,
 }) => {
   const [dsl, setDsl] = useState(initialDsl);
-  const [result, setResult] = useState<DslResult>(() => evalDsl(initialDsl));
+  const [result, setResult] = useState<DslResult>(() => evalDsl(initialDsl, gpuCtx));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Compile and notify parent
   const compile = useCallback((source: string): DslResult => {
-    const r = evalDsl(source);
+    const r = evalDsl(source, gpuCtx);
     setResult(r);
     if (r.ok) {
       onJsonChange(r.json);
@@ -51,7 +55,7 @@ export const DslPayloadSplitEditor: React.FC<DslPayloadSplitEditorProps> = ({
       onCompileStatus({ ok: false, error: r.error });
     }
     return r;
-  }, [onJsonChange, onCompileStatus]);
+  }, [onJsonChange, onCompileStatus, gpuCtx]);
 
   // When external DSL source changes (fixture selected), update both panes
   useEffect(() => {

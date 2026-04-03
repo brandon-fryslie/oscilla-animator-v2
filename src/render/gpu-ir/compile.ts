@@ -17,11 +17,14 @@ import type {
   ExprIR,
   MemoryManifest,
   PipelineStateSpec,
+  CompositePassSpec,
+  WgslFunction,
 } from '../rust/boundary-contract';
 import { expandManifest, type CompactManifest, type CompactGlobalSpec, type CompactScalarSpec } from './manifest';
 import { inferComputeDeps, inferDrawCallDeps } from './deps';
 import { compileShaderBody, type ShaderContext, type WalkerResult } from './walker';
 import * as B from './ir-builders';
+import { STDLIB } from './stdlib';
 
 // ---------------------------------------------------------------------------
 // Helpers — syntactic sugar returning boundary-contract types directly.
@@ -59,6 +62,13 @@ export const clearTarget = (clearColor: readonly [number, number, number, number
 
 export const loadTarget = (): RenderPassSpec['targets'] =>
   ({ colors: [{ textureId: 'canvas', loadOp: 'load' }] });
+
+/** Named texture target helpers */
+export const clearTexture = (
+  textureId: string,
+  clearColor: readonly [number, number, number, number],
+): RenderPassSpec['targets'] =>
+  ({ colors: [{ textureId, loadOp: 'clear', clearColor }] });
 
 /** Pipeline state presets — named constants, not default-filling logic */
 export const OPAQUE: PipelineStateSpec =
@@ -163,13 +173,20 @@ interface DeferredRenderPass {
   readonly scissorRect?: RenderPassOpts['scissorRect'];
 }
 
+interface DeferredCompositePass {
+  readonly type: 'Composite';
+  readonly passId: string;
+  readonly targets: RenderPassSpec['targets'];
+  readonly drawCalls: readonly DeferredDrawCall[];
+}
+
 interface DeferredCameraPass {
   readonly type: 'System_CameraUpdate';
   readonly cameraRef: string;
   readonly bodyFn: Function;
 }
 
-type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCameraPass | SystemPassSpec;
+type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCompositePass | DeferredCameraPass | SystemPassSpec;
 
 // ---------------------------------------------------------------------------
 // gpu()
@@ -177,9 +194,19 @@ type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCa
 
 export interface GpuSpec extends CompactManifest {
   readonly roster: readonly DeferredRosterEntry[];
+  /** Additional WGSL functions to register (merged with stdlib) */
+  readonly functions?: readonly WgslFunction[];
 }
 
-export function gpu(spec: GpuSpec): PipelineInstallPayload {
+/** Rendering context — canvas dimensions and MSAA policy, known to the caller. */
+export interface GpuContext {
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+  /** MSAA sample count for canvas targets (default 4). Named textures always use 1. */
+  readonly sampleCount?: number;
+}
+
+export function gpu(spec: GpuSpec, ctx?: GpuContext): PipelineInstallPayload {
   // Pre-scan: collect camera globals/scalars from render entries
   const mergedGlobals: Record<string, string | CompactGlobalSpec> = { ...(spec.globals ?? {}) };
   const mergedScalars: Record<string, CompactScalarSpec> = { ...(spec.scalars ?? {}) };
@@ -203,20 +230,29 @@ export function gpu(spec: GpuSpec): PipelineInstallPayload {
   // sys:resolution injected when any camera exists
   if (hasCamera) mergedGlobals['sys:resolution'] = 'vec2';
 
-  const manifest = expandManifest({ ...spec, globals: mergedGlobals, scalars: mergedScalars });
+  const manifest = expandManifest(
+    { ...spec, globals: mergedGlobals, scalars: mergedScalars },
+    ctx?.canvasWidth,
+    ctx?.canvasHeight,
+  );
 
-  // Compile roster — render entries produce [cameraPass, renderPass]
+  // Compile roster — render entries produce [cameraPass, renderPass], composite entries pass through
   const roster: PipelineInstallPayload['roster'][number][] = [];
   for (const entry of spec.roster) {
     if (entry.type === 'Render') {
-      const [camPass, renderPass] = compileRenderEntry(entry as DeferredRenderPass, manifest);
+      const [camPass, renderPass] = compileRenderEntry(entry as DeferredRenderPass, manifest, spec, ctx);
       roster.push(camPass, renderPass);
+    } else if (entry.type === 'Composite') {
+      roster.push(compileCompositeEntry(entry as DeferredCompositePass, manifest, spec, ctx));
     } else {
       roster.push(compileEntry(entry, manifest));
     }
   }
 
-  return { manifest, roster };
+  // Merge stdlib + user-supplied WGSL functions
+  const functions: WgslFunction[] = [...STDLIB, ...(spec.functions ?? [])];
+
+  return { manifest, roster, functions };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +394,14 @@ export function render(
   return { type: 'Render', passId, camera, targets, drawCalls, viewport: opts?.viewport, scissorRect: opts?.scissorRect };
 }
 
+export function composite(
+  passId: string,
+  targets: RenderPassSpec['targets'],
+  drawCalls: readonly DeferredDrawCall[],
+): DeferredCompositePass {
+  return { type: 'Composite', passId, targets, drawCalls };
+}
+
 export function draw(
   intentId: string,
   source: DrawCallSpec['source'],
@@ -374,6 +418,59 @@ export function draw(
     constants: shaders.constants,
     domainId: source.type === 'Domain' ? source.domainId : '',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Viewport/scissor/sampleCount resolution
+// [LAW:single-enforcer] All render target resolution lives here.
+// The Rust renderer reads pre-resolved pixel values — no interpretation.
+// ---------------------------------------------------------------------------
+
+/** Resolve the pixel dimensions of a color target from the spec. */
+function resolveTargetDims(
+  textureId: string,
+  spec: GpuSpec,
+  ctx: GpuContext | undefined,
+): { width: number; height: number } {
+  const cw = ctx?.canvasWidth ?? 800;
+  const ch = ctx?.canvasHeight ?? 600;
+  if (textureId === 'canvas') return { width: cw, height: ch };
+  const tex = spec.textures?.[textureId];
+  if (!tex) return { width: cw, height: ch }; // missing texture — validator will catch
+  const w = typeof tex.width === 'number' ? tex.width : tex.width.scale * cw;
+  const h = tex.height == null ? w
+    : typeof tex.height === 'number' ? tex.height : tex.height.scale * ch;
+  return { width: w, height: h };
+}
+
+/** Resolve viewport to pixel coords. Full-target default when omitted. */
+function resolveViewport(
+  viewport: RenderPassOpts['viewport'] | undefined,
+  targetDims: { width: number; height: number },
+): RenderPassSpec['viewport'] {
+  if (viewport) {
+    return {
+      x: viewport.x, y: viewport.y,
+      width: viewport.width, height: viewport.height,
+      minDepth: viewport.minDepth ?? 0, maxDepth: viewport.maxDepth ?? 1,
+    };
+  }
+  return { x: 0, y: 0, width: targetDims.width, height: targetDims.height, minDepth: 0, maxDepth: 1 };
+}
+
+/** Resolve scissor rect to pixel coords. Full-target default when omitted. */
+function resolveScissorRect(
+  scissor: RenderPassOpts['scissorRect'] | undefined,
+  targetDims: { width: number; height: number },
+): RenderPassSpec['scissorRect'] {
+  if (scissor) return scissor;
+  return { x: 0, y: 0, width: targetDims.width, height: targetDims.height };
+}
+
+/** Resolve MSAA sample count. Canvas uses ctx.sampleCount; textures always 1. */
+function resolveSampleCount(textureId: string, ctx: GpuContext | undefined): number {
+  if (textureId === 'canvas') return ctx?.sampleCount ?? 4;
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +555,8 @@ function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifes
 function compileRenderEntry(
   entry: DeferredRenderPass,
   manifest: MemoryManifest,
+  spec: GpuSpec,
+  ctx: GpuContext | undefined,
 ): [SystemCameraUpdateSpec, RenderPassSpec] {
   // Derive camera symbols from passId
   const prefix = `cam:${entry.passId}`;
@@ -520,15 +619,62 @@ function compileRenderEntry(
     };
   });
 
+  // Resolve target dimensions, viewport, scissor, and MSAA from declared spec
+  const colorTarget = entry.targets.colors[0];
+  const targetDims = resolveTargetDims(colorTarget?.textureId ?? 'canvas', spec, ctx);
+
   const renderPass: RenderPassSpec = {
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
+    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
     targets: entry.targets,
-    ...(entry.viewport ? { viewport: entry.viewport } : {}),
-    ...(entry.scissorRect ? { scissorRect: entry.scissorRect } : {}),
+    viewport: resolveViewport(entry.viewport, targetDims),
+    scissorRect: resolveScissorRect(entry.scissorRect, targetDims),
     drawCalls,
   };
 
   return [cameraPass, renderPass];
+}
+
+function compileCompositeEntry(
+  entry: DeferredCompositePass,
+  manifest: MemoryManifest,
+  spec: GpuSpec,
+  ctx: GpuContext | undefined,
+): CompositePassSpec {
+  // Composite passes compile draw calls without VP or transform injection
+  const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
+    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
+
+    const fragmentAst = dc.fragmentFn
+      ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+      : generatePassthroughFragment(vertexAst);
+
+    // No ApplyVP, no ApplyTransform2D — clip-space positions pass through directly
+    const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, '');
+
+    return {
+      intentId: dc.intentId,
+      source: dc.source,
+      pipelineState: dc.pipelineState,
+      dependencies: deps,
+      vertexAst,
+      fragmentAst,
+    };
+  });
+
+  const colorTarget = entry.targets.colors[0];
+  const targetDims = resolveTargetDims(colorTarget?.textureId ?? 'canvas', spec, ctx);
+
+  return {
+    type: 'Composite',
+    passId: entry.passId,
+    sourceBlockIds: [],
+    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
+    targets: entry.targets,
+    viewport: resolveViewport(undefined, targetDims),
+    scissorRect: resolveScissorRect(undefined, targetDims),
+    drawCalls,
+  };
 }

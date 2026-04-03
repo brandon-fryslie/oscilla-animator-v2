@@ -47,6 +47,10 @@ struct CompiledRoster {
     global_time_word_offset: Option<u32>,
     /// Word offset of "sys:resolution" in the globals buffer (if present).
     global_resolution_word_offset: Option<u32>,
+    /// True when any render pass targets the canvas surface.
+    /// [LAW:dataflow-not-control-flow] Pre-resolved so execute_roster acquires
+    /// the surface texture unconditionally before the pass loop.
+    needs_surface: bool,
 }
 
 enum CompiledPass {
@@ -66,9 +70,14 @@ enum CompiledPass {
         vertex_buffer_id: String,
         draw_mode: RenderDrawMode,
         color_load_op: ColorLoadOp,
+        /// Color target texture ID — "canvas" or a named texture. All targets are
+        /// looked up uniformly in the arena (canvas is registered at frame start).
+        color_target_id: String,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
-        viewport: Option<[f32; 6]>,
-        scissor_rect: Option<[u32; 4]>,
+        /// Pixel-resolved viewport from TS compiler — used directly, no per-frame math.
+        viewport: [f32; 6],
+        /// Pixel-resolved scissor rect from TS compiler — used directly, no per-frame math.
+        scissor_rect: [u32; 4],
     },
 }
 
@@ -231,6 +240,27 @@ fn load_op_for_u32(
         },
         store: wgpu::StoreOp::Store,
     })
+}
+
+/// Look up the color view and optional MSAA resolve target for a render pass.
+/// The canvas surface is acquired per-frame; named textures live in the arena.
+/// MSAA resolve is active when `msaa_view` is Some (engine negotiated 4x at init).
+fn lookup_color_view<'a>(
+    target_id: &str,
+    surface_view: &'a Option<wgpu::TextureView>,
+    msaa_view: &'a Option<wgpu::TextureView>,
+    arena: &'a GpuMemoryArena,
+) -> (&'a wgpu::TextureView, Option<&'a wgpu::TextureView>) {
+    if target_id == "canvas" {
+        let view = surface_view.as_ref().unwrap();
+        match msaa_view {
+            Some(msaa) => (msaa, Some(view)),
+            None => (view, None),
+        }
+    } else {
+        let tex = arena.textures.get(target_id).unwrap();
+        (&tex.view, None)
+    }
 }
 
 fn is_depth_or_stencil_format(format: wgpu::TextureFormat) -> bool {
@@ -463,6 +493,33 @@ impl Engine {
             }
         };
 
+        // Parse registered WGSL functions
+        let parsed_functions = if !payload.functions.is_empty() {
+            console::log_1(&JsValue::from_str(&format!(
+                "[install_pipeline] Parsing {} registered WGSL functions...",
+                payload.functions.len()
+            )));
+            match crate::wgsl_functions::parse_registered_functions(&payload.functions) {
+                Ok(parsed) => {
+                    console::log_1(&JsValue::from_str(&format!(
+                        "[install_pipeline] Parsed {} WGSL functions OK",
+                        parsed.len()
+                    )));
+                    parsed
+                }
+                Err(e) => {
+                    let receipt = InstallReceipt::fatal(
+                        "ast_lowering",
+                        format!("WGSL function parse error: {}", e),
+                    );
+                    return serde_json::to_string(&receipt).unwrap();
+                }
+            }
+        } else {
+            std::collections::HashMap::new()
+        };
+        // parsed_functions is passed to translate_compute_pass and translate_render_pass below
+
         // MMU: allocate GPU memory arena
         console::log_1(&JsValue::from_str("[install_pipeline] Allocating arena..."));
         let mut arena = match mmu::allocate_arena(&self.device, &self.queue, &payload.manifest) {
@@ -491,7 +548,7 @@ impl Engine {
                         spec.pass_id
                     )));
                     let compute_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        translator::translate_compute_pass(spec, &arena)
+                        translator::translate_compute_pass(spec, &arena, Some(&parsed_functions))
                     })) {
                         Ok(result) => result,
                         Err(payload) => {
@@ -693,7 +750,7 @@ impl Engine {
                     };
                     let compute_result =
                         match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_compute_pass(&synthetic, &arena)
+                            translator::translate_compute_pass(&synthetic, &arena, Some(&parsed_functions))
                         })) {
                             Ok(result) => result,
                             Err(payload) => {
@@ -812,6 +869,154 @@ impl Engine {
                     });
                 }
 
+                RosterEntry::Composite(spec) => {
+                    // Composite passes compile identically to Render at the engine level
+                    let pass_id = &spec.pass_id;
+                    let targets = &spec.targets;
+                    let draw_calls = &spec.draw_calls;
+
+                    for draw_call in draw_calls {
+                        let (shape_id, draw_mode) = match &draw_call.source {
+                            DrawCallSource::Domain { shape_id, .. } => {
+                                (shape_id.clone(), RenderDrawMode::Indirect)
+                            }
+                            DrawCallSource::FullScreenQuad => {
+                                let builtin_shape_id = "__builtin:fullscreen-triangle".to_string();
+                                if !arena.shape_bank.contains_key(&builtin_shape_id) {
+                                    arena.shape_bank.insert(
+                                        builtin_shape_id.clone(),
+                                        built_in_fullscreen_shape(&self.device),
+                                    );
+                                }
+                                (builtin_shape_id, RenderDrawMode::Direct { vertex_count: 3, instance_count: 1 })
+                            }
+                        };
+                        let Some(shape) = arena.shape_bank.get(&shape_id) else {
+                            return install_error_json("manifest_allocation", Some(pass_id.as_str()),
+                                format!("Shape '{}' not found", shape_id));
+                        };
+                        let Some(color_target) = targets.colors.first() else {
+                            return install_error_json("manifest_allocation", Some(pass_id.as_str()),
+                                "Composite pass must declare at least one color target");
+                        };
+                        let color_format = if color_target.texture_id == "canvas" {
+                            self.surface_config.format
+                        } else {
+                            match arena.textures.get(&color_target.texture_id) {
+                                Some(tex) => tex.format,
+                                None => return install_error_json("pipeline_creation", Some(pass_id.as_str()),
+                                    format!("Color target texture '{}' not found", color_target.texture_id)),
+                            }
+                        };
+                        let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
+                            translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
+                        })) {
+                            Ok(result) => result,
+                            Err(payload) => return install_error_json("ast_lowering", Some(pass_id.as_str()),
+                                format!("Composite translation panic: {}", panic_to_message(payload))),
+                        };
+                        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: Some(&format!("composite_{}", pass_id)),
+                            source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(render_result.module)),
+                        });
+                        let vertex_buffer_layout = wgpu::VertexBufferLayout {
+                            array_stride: shape.vertex_stride as u64,
+                            step_mode: wgpu::VertexStepMode::Vertex,
+                            attributes: &[wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 0, shader_location: 0 }],
+                        };
+                        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                            label: Some(&format!("composite_{}", pass_id)),
+                            layout: None,
+                            vertex: wgpu::VertexState {
+                                module: &shader, entry_point: Some("vs_main"),
+                                compilation_options: Default::default(), buffers: &[vertex_buffer_layout],
+                            },
+                            fragment: Some(wgpu::FragmentState {
+                                module: &shader, entry_point: Some("fs_main"),
+                                compilation_options: Default::default(),
+                                targets: &[Some(wgpu::ColorTargetState {
+                                    format: color_format,
+                                    blend: blend_state_for(&draw_call.pipeline_state.blend_mode),
+                                    write_mask: wgpu::ColorWrites::ALL,
+                                })],
+                            }),
+                            primitive: wgpu::PrimitiveState {
+                                topology: shape.topology, strip_index_format: None,
+                                front_face: wgpu::FrontFace::Ccw,
+                                cull_mode: cull_mode_for(&draw_call.pipeline_state.cull_mode),
+                                polygon_mode: wgpu::PolygonMode::Fill, unclipped_depth: false, conservative: false,
+                            },
+                            depth_stencil: None,
+                            multisample: wgpu::MultisampleState {
+                                count: spec.sample_count,
+                                mask: !0, alpha_to_coverage_enabled: false,
+                            },
+                            multiview_mask: None, cache: None,
+                        });
+                        // Bind group
+                        let has_bindings = render_result.uses_globals || render_result.uses_scalars
+                            || !render_result.bound_domain_keys.is_empty()
+                            || !render_result.bound_atomic_domain_keys.is_empty()
+                            || !render_result.bound_texture_keys.is_empty()
+                            || !render_result.bound_sampler_keys.is_empty();
+                        let bind_group = if has_bindings {
+                            let mut bg_entries = Vec::new();
+                            let mut binding = 0u32;
+                            if render_result.uses_globals {
+                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: arena.globals_buffer.as_entire_binding() });
+                                binding += 1;
+                            }
+                            if render_result.uses_scalars {
+                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: arena.scalars_buffer.as_entire_binding() });
+                                binding += 1;
+                            }
+                            for domain_key in &render_result.bound_domain_keys {
+                                let buf = arena.domain_buffers.get(domain_key).unwrap();
+                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: buf.as_entire_binding() });
+                                binding += 1;
+                            }
+                            for domain_key in &render_result.bound_atomic_domain_keys {
+                                let buf = arena.domain_buffers.get(domain_key).unwrap();
+                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: buf.as_entire_binding() });
+                                binding += 1;
+                            }
+                            for tex_id in &render_result.bound_texture_keys {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: wgpu::BindingResource::TextureView(&arena.textures[tex_id].view),
+                                });
+                                binding += 1;
+                            }
+                            for sampler_id in &render_result.bound_sampler_keys {
+                                bg_entries.push(wgpu::BindGroupEntry {
+                                    binding,
+                                    resource: wgpu::BindingResource::Sampler(&arena.samplers[sampler_id]),
+                                });
+                                binding += 1;
+                            }
+                            Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: Some("composite_group0"), layout: &pipeline.get_bind_group_layout(0), entries: &bg_entries,
+                            }))
+                        } else { None };
+                        let color_load_op = match color_target.load_op.as_str() {
+                            "load" => ColorLoadOp::Load,
+                            _ => {
+                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
+                            }
+                        };
+                        let vp = &spec.viewport;
+                        let sc = &spec.scissor_rect;
+                        passes.push(CompiledPass::Render {
+                            pipeline, bind_group, vertex_buffer_id: shape_id, draw_mode,
+                            color_load_op, color_target_id: color_target.texture_id.clone(),
+                            depth_stencil: None,
+                            viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
+                            scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
+                        });
+                    }
+                }
+
                 RosterEntry::Render(spec) => {
                     for draw_call in &spec.draw_calls {
                         let (shape_id, draw_mode) = match &draw_call.source {
@@ -851,19 +1056,24 @@ impl Engine {
                                 "Render pass must declare at least one color target",
                             );
                         };
-                        if color_target.texture_id != "canvas" {
-                            return install_error_json(
-                                "pipeline_creation",
-                                Some(spec.pass_id.as_str()),
-                                format!(
-                                    "Only canvas color target is currently supported, got '{}'",
-                                    color_target.texture_id
-                                ),
-                            );
-                        }
+                        // Resolve color target format
+                        let color_format = if color_target.texture_id == "canvas" {
+                            self.surface_config.format
+                        } else {
+                            match arena.textures.get(&color_target.texture_id) {
+                                Some(tex) => tex.format,
+                                None => {
+                                    return install_error_json(
+                                        "pipeline_creation",
+                                        Some(spec.pass_id.as_str()),
+                                        format!("Color target texture '{}' not found in manifest", color_target.texture_id),
+                                    );
+                                }
+                            }
+                        };
 
                         let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_render_pass(draw_call, &arena)
+                            translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
                         })) {
                             Ok(result) => result,
                             Err(payload) => {
@@ -970,7 +1180,7 @@ impl Engine {
                                         entry_point: Some("fs_main"),
                                         compilation_options: Default::default(),
                                         targets: &[Some(wgpu::ColorTargetState {
-                                            format: self.surface_config.format,
+                                            format: color_format,
                                             blend: blend_state_for(
                                                 &draw_call.pipeline_state.blend_mode,
                                             ),
@@ -990,8 +1200,7 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        // loadOp:load bypasses MSAA (Safari compatibility)
-                                        count: if color_target.load_op == "load" { 1 } else { self.sample_count },
+                                        count: spec.sample_count,
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1090,27 +1299,18 @@ impl Engine {
                                     ),
                                 }
                             });
-                        // Viewport and scissor — resolve normalized (0–1) to pixel coords
-                        let sw = self.surface_config.width as f32;
-                        let sh = self.surface_config.height as f32;
-                        let viewport = spec.viewport.as_ref().map(|vp| {
-                            [vp.x * sw, vp.y * sh, vp.width * sw, vp.height * sh,
-                             vp.min_depth.unwrap_or(0.0), vp.max_depth.unwrap_or(1.0)]
-                        });
-                        let scissor_rect = spec.scissor_rect.as_ref().map(|sc| {
-                            [(sc.x * sw) as u32, (sc.y * sh) as u32,
-                             (sc.width * sw) as u32, (sc.height * sh) as u32]
-                        });
-
+                        let vp = &spec.viewport;
+                        let sc = &spec.scissor_rect;
                         passes.push(CompiledPass::Render {
                             pipeline,
                             bind_group,
                             vertex_buffer_id: shape_id,
                             draw_mode,
                             color_load_op,
+                            color_target_id: color_target.texture_id.clone(),
                             depth_stencil,
-                            viewport,
-                            scissor_rect,
+                            viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
+                            scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
                     }
                 }
@@ -1130,11 +1330,19 @@ impl Engine {
             diagnostics: vec![],
         };
 
+        // [LAW:dataflow-not-control-flow] Pre-resolve whether any pass targets the
+        // canvas, so execute_roster acquires the surface unconditionally before the loop.
+        let needs_surface = passes.iter().any(|p| matches!(
+            p,
+            CompiledPass::Render { color_target_id, .. } if color_target_id == "canvas"
+        ));
+
         self.compiled_roster = Some(CompiledRoster {
             arena,
             passes,
             global_time_word_offset,
             global_resolution_word_offset,
+            needs_surface,
         });
 
         serde_json::to_string(&receipt).unwrap()
@@ -1184,10 +1392,30 @@ impl Engine {
                 label: Some("roster_frame"),
             });
 
-        // Track whether we need to present a surface texture
+        let log_frame = self.frame_count < 3; // Log first 3 frames for diagnostics
+
+        // [LAW:dataflow-not-control-flow] Acquire surface once before the loop.
+        // The needs_surface flag was pre-resolved at compile time.
         let mut surface_output: Option<wgpu::SurfaceTexture> = None;
         let mut surface_view: Option<wgpu::TextureView> = None;
-        let log_frame = self.frame_count < 3; // Log first 3 frames for diagnostics
+        if roster.needs_surface {
+            let output = match self.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(output)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
+                wgpu::CurrentSurfaceTexture::Timeout
+                | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
+                other => {
+                    return Err(JsValue::from_str(&format!(
+                        "get_current_texture failed: {other:?}"
+                    )));
+                }
+            };
+            let view = output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            surface_view = Some(view);
+            surface_output = Some(output);
+        }
 
         for (pass_idx, pass) in roster.passes.iter().enumerate() {
             match pass {
@@ -1222,37 +1450,19 @@ impl Engine {
                     cpass.set_bind_group(0, Some(bind_group), &[]);
                     cpass.dispatch_workgroups(1, 1, 1);
                 }
+                // [LAW:dataflow-not-control-flow] The render arm reads only pre-resolved
+                // CompiledPass fields. No string comparisons, no unwrap_or defaults.
                 CompiledPass::Render {
                     pipeline,
                     bind_group,
                     vertex_buffer_id,
                     draw_mode,
                     color_load_op,
+                    color_target_id,
                     depth_stencil,
                     viewport,
                     scissor_rect,
                 } => {
-                    // Acquire surface texture if we haven't already
-                    if surface_output.is_none() {
-                        let output = match self.surface.get_current_texture() {
-                            wgpu::CurrentSurfaceTexture::Success(output)
-                            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-                            wgpu::CurrentSurfaceTexture::Timeout
-                            | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
-                            other => {
-                                return Err(JsValue::from_str(&format!(
-                                    "get_current_texture failed: {other:?}"
-                                )));
-                            }
-                        };
-                        let view = output
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default());
-                        surface_view = Some(view);
-                        surface_output = Some(output);
-                    }
-
-                    let view = surface_view.as_ref().unwrap();
                     let Some(shape) = roster.arena.shape_bank.get(vertex_buffer_id) else {
                         return Err(JsValue::from_str(&format!(
                             "Compiled shape '{}' missing from arena",
@@ -1277,13 +1487,15 @@ impl Engine {
                         })
                         .transpose()?;
 
+                    // Look up color target view. Canvas uses the per-frame surface
+                    // (with MSAA resolve if active); named textures use the arena.
+                    let (color_view, resolve_target) =
+                        lookup_color_view(color_target_id, &surface_view, &self.msaa_view, &roster.arena);
+                    let load = match color_load_op {
+                        ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
+                        ColorLoadOp::Load => wgpu::LoadOp::Load,
+                    };
                     {
-                        // Every render pass loads the surface and sets scissor to its viewport.
-                        // Clear is viewport-scoped: a fill rect drawn by the engine, not GPU loadOp.
-                        let (color_view, resolve_target) = match &self.msaa_view {
-                            Some(msaa) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
-                            None => (view, None),
-                        };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
                             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1291,7 +1503,7 @@ impl Engine {
                                 depth_slice: None,
                                 resolve_target,
                                 ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
+                                    load,
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
@@ -1301,13 +1513,8 @@ impl Engine {
                             multiview_mask: None,
                         });
 
-                        // Viewport and scissor — every pass sets both
-                        let sw = self.surface_config.width as f32;
-                        let sh = self.surface_config.height as f32;
-                        let vp = viewport.unwrap_or([0.0, 0.0, sw, sh, 0.0, 1.0]);
-                        let sc = scissor_rect.unwrap_or([0, 0, self.surface_config.width, self.surface_config.height]);
-                        rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
-                        rpass.set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
+                        rpass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], viewport[4], viewport[5]);
+                        rpass.set_scissor_rect(scissor_rect[0], scissor_rect[1], scissor_rect[2], scissor_rect[3]);
 
                         rpass.set_pipeline(pipeline);
                         if let Some(bg) = bind_group {

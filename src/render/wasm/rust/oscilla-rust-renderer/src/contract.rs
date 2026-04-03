@@ -16,6 +16,18 @@ use serde::{Deserialize, Serialize};
 pub struct PipelineInstallPayload {
     pub manifest: MemoryManifest,
     pub roster: Vec<RosterEntry>,
+    #[serde(default)]
+    pub functions: Vec<WgslFunction>,
+}
+
+/// A registered WGSL function — shipped with the payload, parsed at install time.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WgslFunction {
+    /// Callable name in the DSL — must match the public function in the WGSL source
+    pub name: String,
+    /// Complete WGSL source — may contain helper functions
+    pub wgsl: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +141,7 @@ pub struct SamplerSpec {
 pub enum RosterEntry {
     Compute(ComputePassSpec),
     Render(RenderPassSpec),
+    Composite(CompositePassSpec),
     #[serde(rename = "System_DrawPrep")]
     SystemDrawPrep(SystemPassSpec),
     #[serde(rename = "System_CameraUpdate")]
@@ -177,25 +190,38 @@ pub struct ComputeDependencies {
 pub struct RenderPassSpec {
     pub pass_id: String,
     pub source_block_ids: Vec<String>,
+    pub sample_count: u32,
     pub targets: RenderTargets,
-    pub viewport: Option<ViewportSpec>,
-    pub scissor_rect: Option<ScissorRectSpec>,
+    pub viewport: ViewportSpec,
+    pub scissor_rect: ScissorRectSpec,
     pub draw_calls: Vec<DrawCallSpec>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-/// Viewport in normalized coordinates (0.0–1.0). Resolved to pixels at render time.
+pub struct CompositePassSpec {
+    pub pass_id: String,
+    pub source_block_ids: Vec<String>,
+    pub sample_count: u32,
+    pub targets: RenderTargets,
+    pub viewport: ViewportSpec,
+    pub scissor_rect: ScissorRectSpec,
+    pub draw_calls: Vec<DrawCallSpec>,
+}
+
+/// Viewport in pixel coordinates. Resolved by the TS compiler from declared target dimensions.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ViewportSpec {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
-    pub min_depth: Option<f32>,
-    pub max_depth: Option<f32>,
+    pub min_depth: f32,
+    pub max_depth: f32,
 }
 
-/// Scissor rect in normalized coordinates (0.0–1.0). Resolved to pixels at render time.
+/// Scissor rect in pixel coordinates. Resolved by the TS compiler from declared target dimensions.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScissorRectSpec {

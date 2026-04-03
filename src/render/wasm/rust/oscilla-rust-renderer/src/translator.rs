@@ -42,6 +42,8 @@ struct PassContext {
     symbol_map: HashMap<String, PhysicalSymbol>,
     /// WgslType string → naga type handle (pre-created by caller)
     type_handles: HashMap<String, naga::Handle<naga::Type>>,
+    /// Transplanted WGSL function handles (name → Handle<Function>)
+    stdlib_handles: HashMap<String, naga::Handle<naga::Function>>,
 }
 
 /// Scope for variable resolution. `let_scope` holds immutable expression handles,
@@ -139,6 +141,7 @@ fn build_type_handles(
 pub fn translate_compute_pass(
     spec: &ComputePassSpec,
     arena: &GpuMemoryArena,
+    parsed_functions: Option<&HashMap<String, crate::wgsl_functions::ParsedFunction>>,
 ) -> ComputePassTranslation {
     let mut m = ModuleBuilder::new();
     let f32_ty = m.f32_type();
@@ -326,6 +329,20 @@ pub fn translate_compute_pass(
 
     let type_handles = build_type_handles(&mut m, Some(vec3_u32_ty));
 
+    // Transplant any referenced stdlib/registered functions into the module
+    let stdlib_handles = if let Some(pf) = parsed_functions {
+        crate::wgsl_functions::transplant_referenced_functions(
+            m.module_mut(), pf, &spec.ast,
+        ).unwrap_or_else(|e| {
+            web_sys::console::warn_1(&wasm_bindgen::JsValue::from_str(
+                &format!("[translate_compute_pass] stdlib transplant warning: {}", e),
+            ));
+            HashMap::new()
+        })
+    } else {
+        HashMap::new()
+    };
+
     let ctx = PassContext {
         stage: TranslationStage::Compute,
         globals_expr,
@@ -337,6 +354,7 @@ pub fn translate_compute_pass(
         texture_exprs,
         texture_is_sampled,
         sampler_exprs,
+        stdlib_handles,
     };
 
     // Register global_invocation_id in scope so Intrinsic expressions can resolve it
@@ -1046,6 +1064,7 @@ pub struct RenderPassTranslation {
 pub fn translate_render_pass(
     draw_call: &DrawCallSpec,
     arena: &GpuMemoryArena,
+    parsed_functions: Option<&HashMap<String, crate::wgsl_functions::ParsedFunction>>,
 ) -> RenderPassTranslation {
     let mut m = ModuleBuilder::new();
     let f32_ty = m.f32_type();
@@ -1226,6 +1245,32 @@ pub fn translate_render_pass(
 
     let type_handles = build_type_handles(&mut m, None);
 
+    // Transplant any referenced stdlib/registered functions into the module.
+    // Scan both vertex and fragment ASTs — the module is shared between stages.
+    // ensure_transplanted() is idempotent, so calling twice is safe (deduplicates by name).
+    let stdlib_handles = if let Some(pf) = parsed_functions {
+        let mut handles = crate::wgsl_functions::transplant_referenced_functions(
+            m.module_mut(), pf, &draw_call.vertex_ast,
+        ).unwrap_or_else(|e| {
+            web_sys::console::warn_1(&wasm_bindgen::JsValue::from_str(
+                &format!("[translate_render_pass] stdlib transplant warning (vertex): {}", e),
+            ));
+            HashMap::new()
+        });
+        let frag_handles = crate::wgsl_functions::transplant_referenced_functions(
+            m.module_mut(), pf, &draw_call.fragment_ast,
+        ).unwrap_or_else(|e| {
+            web_sys::console::warn_1(&wasm_bindgen::JsValue::from_str(
+                &format!("[translate_render_pass] stdlib transplant warning (fragment): {}", e),
+            ));
+            HashMap::new()
+        });
+        handles.extend(frag_handles);
+        handles
+    } else {
+        HashMap::new()
+    };
+
     // --- Vertex shader ---
     let mut vs = FnBuilder::new("vs_main");
     if let Some(struct_ty) = vs_output_ty {
@@ -1285,6 +1330,7 @@ pub fn translate_render_pass(
         texture_exprs: HashMap::new(),
         texture_is_sampled: HashMap::new(),
         sampler_exprs: HashMap::new(),
+        stdlib_handles: stdlib_handles.clone(),
     };
 
     // Translate vertex body — handle ReturnVertex with varyings
@@ -1360,6 +1406,7 @@ pub fn translate_render_pass(
         texture_exprs: fs_texture_exprs,
         texture_is_sampled,
         sampler_exprs: fs_sampler_exprs,
+        stdlib_handles,
     };
 
     translate_statements_fragment(
@@ -2027,7 +2074,14 @@ fn translate_expr_body(
                     ensure_fragment_derivative(ctx, "fwidth");
                     bb.fwidth(translated[0])
                 }
-                _ => panic!("CallBuiltin: not yet implemented: '{}'", func),
+                _ => {
+                    // Check if this is a transplanted stdlib/registered function
+                    if let Some(&func_handle) = ctx.stdlib_handles.get(func.as_str()) {
+                        bb.call_function(func_handle, &translated)
+                    } else {
+                        panic!("CallBuiltin: not yet implemented: '{}'", func)
+                    }
+                }
             }
         }
 
