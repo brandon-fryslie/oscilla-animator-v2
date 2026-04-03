@@ -61,4 +61,5 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('strange-attractor', 'Strange Attractor', '4000-point Clifford attractor with velocity-driven color. From DEMO-PATCHES.md.'),
   fixture('atomic-histogram', 'Atomic Histogram', 'AtomicLoadField, assignResultTo on AtomicOpField. Phase 3 walker gate.'),
   fixture('quad-camera', 'Quad Camera', '4 viewports, 4 cameras, one canvas. Tests viewport scissoring, loadOp:load, multi-pass rendering.'),
+  fixture('simplex-noise', 'Simplex Noise', '10000 dots displaced and colored by noise_simplex_2d. Tests WGSL function transplant.'),
 ];
