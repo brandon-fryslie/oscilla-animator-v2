@@ -17,11 +17,13 @@ import type {
   ExprIR,
   MemoryManifest,
   PipelineStateSpec,
+  WgslFunction,
 } from '../rust/boundary-contract';
 import { expandManifest, type CompactManifest, type CompactGlobalSpec, type CompactScalarSpec } from './manifest';
 import { inferComputeDeps, inferDrawCallDeps } from './deps';
 import { compileShaderBody, type ShaderContext, type WalkerResult } from './walker';
 import * as B from './ir-builders';
+import { STDLIB } from './stdlib';
 
 // ---------------------------------------------------------------------------
 // Helpers — syntactic sugar returning boundary-contract types directly.
@@ -177,6 +179,8 @@ type DeferredRosterEntry = DeferredComputePass | DeferredRenderPass | DeferredCa
 
 export interface GpuSpec extends CompactManifest {
   readonly roster: readonly DeferredRosterEntry[];
+  /** Additional WGSL functions to register (merged with stdlib) */
+  readonly functions?: readonly WgslFunction[];
 }
 
 export function gpu(spec: GpuSpec): PipelineInstallPayload {
@@ -216,7 +220,10 @@ export function gpu(spec: GpuSpec): PipelineInstallPayload {
     }
   }
 
-  return { manifest, roster };
+  // Merge stdlib + user-supplied WGSL functions
+  const functions: WgslFunction[] = [...STDLIB, ...(spec.functions ?? [])];
+
+  return { manifest, roster, functions };
 }
 
 // ---------------------------------------------------------------------------

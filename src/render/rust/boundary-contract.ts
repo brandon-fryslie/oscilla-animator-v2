@@ -529,9 +529,24 @@ function validatePayloadSemantics(
   }
 }
 
+// ---------------------------------------------------------------------------
+// WGSL function registration — arbitrary functions shipped with the payload
+// ---------------------------------------------------------------------------
+
+export const WgslFunctionSchema = z.object({
+  /** Callable name in the DSL (must match a BuiltinMathFunc entry) */
+  name: z.string(),
+  /** Complete WGSL source — may contain helper functions */
+  wgsl: z.string(),
+  /** Which function in the WGSL source is the callable entrypoint */
+  entrypoint: z.string(),
+});
+export type WgslFunction = z.infer<typeof WgslFunctionSchema>;
+
 const PipelineInstallPayloadBaseSchema = z.object({
   manifest: MemoryManifestSchema,
   roster: z.array(RosterEntrySchema).readonly(),
+  functions: z.array(WgslFunctionSchema).readonly().optional(),
 });
 
 export const PipelineInstallPayloadSchema = PipelineInstallPayloadBaseSchema

@@ -18,6 +18,9 @@ export { stmtsToSource, exprToSource } from './reverse';
 // Full payload reverse translator (PipelineInstallPayload → gpu({...}) source)
 export { payloadToSource } from './reverse-payload';
 
+// Shader standard library (WGSL function definitions)
+export { STDLIB, HASH_U32, NOISE_SIMPLEX_2D, NOISE_SIMPLEX_3D } from './stdlib';
+
 // Types (re-exported for convenience)
 export type { Domains, DomainProxy, DomainFieldProxy } from './types';
 export type { f32, u32, i32, vec2f, vec3f, vec4f, vec2i, vec3i, vec2u, vec3u } from './types';
