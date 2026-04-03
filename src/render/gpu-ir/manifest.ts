@@ -45,17 +45,37 @@ export type CompactFieldSpec = { readonly f32?: number; readonly u32?: number; r
 // Expansion
 // ---------------------------------------------------------------------------
 
-export function expandManifest(compact: CompactManifest): MemoryManifest {
+export function expandManifest(
+  compact: CompactManifest,
+  canvasWidth?: number,
+  canvasHeight?: number,
+): MemoryManifest {
   return {
     preserveStateOnRecompile: compact.preserveStateOnRecompile ?? false,
     globals: expandGlobals(compact.globals ?? {}),
     arenaScalars: expandScalars(compact.scalars ?? {}),
     domains: expandDomains(compact.domains ?? {}),
-    textures: compact.textures ?? {},
+    textures: resolveTextureDims(compact.textures ?? {}, canvasWidth ?? 800, canvasHeight ?? 600),
     shapeBank: compact.shapes ?? {},
     dataStreams: {},
     samplers: compact.samplers ?? {},
   };
+}
+
+/** Resolve relativeTo texture specs into absolute pixel dimensions. */
+function resolveTextureDims(
+  textures: Record<string, TextureSpec>,
+  cw: number,
+  ch: number,
+): Record<string, TextureSpec> {
+  const out: Record<string, TextureSpec> = {};
+  for (const [id, tex] of Object.entries(textures)) {
+    const width = typeof tex.width === 'number' ? tex.width : Math.floor(tex.width.scale * cw);
+    const rawHeight = tex.height == null ? width
+      : typeof tex.height === 'number' ? tex.height : Math.floor(tex.height.scale * ch);
+    out[id] = { ...tex, width, height: rawHeight };
+  }
+  return out;
 }
 
 /** Default initial values for multi-component global types. */

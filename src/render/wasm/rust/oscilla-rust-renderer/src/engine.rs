@@ -70,24 +70,15 @@ enum CompiledPass {
         vertex_buffer_id: String,
         draw_mode: RenderDrawMode,
         color_load_op: ColorLoadOp,
-        /// [LAW:dataflow-not-control-flow] Typed target replaces string comparison.
-        color_target: CompiledColorTarget,
+        /// Color target texture ID — "canvas" or a named texture. All targets are
+        /// looked up uniformly in the arena (canvas is registered at frame start).
+        color_target_id: String,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
-        /// Pixel-resolved viewport — always concrete, no per-frame defaults.
+        /// Pixel-resolved viewport from TS compiler — used directly, no per-frame math.
         viewport: [f32; 6],
-        /// Pixel-resolved scissor rect — always concrete, no per-frame defaults.
+        /// Pixel-resolved scissor rect from TS compiler — used directly, no per-frame math.
         scissor_rect: [u32; 4],
     },
-}
-
-/// [LAW:dataflow-not-control-flow] The canvas vs texture decision is resolved at
-/// compile time. The execute path matches structurally — no string comparisons.
-enum CompiledColorTarget {
-    /// Render to the canvas surface. `use_msaa` is pre-resolved from the engine's
-    /// sample_count at compile time.
-    Canvas { use_msaa: bool },
-    /// Render to a named off-screen texture (no MSAA).
-    Texture { texture_id: String },
 }
 
 enum RenderDrawMode {
@@ -251,82 +242,24 @@ fn load_op_for_u32(
     })
 }
 
-// ---------------------------------------------------------------------------
-// Compile-time resolution helpers
-// [LAW:dataflow-not-control-flow] All spec → compiled conversions live here.
-// The execute path reads only the resolved values.
-// ---------------------------------------------------------------------------
-
-/// Resolve a color target texture_id into a typed CompiledColorTarget.
-fn resolve_compiled_color_target(texture_id: &str, engine_sample_count: u32) -> CompiledColorTarget {
-    if texture_id == "canvas" {
-        CompiledColorTarget::Canvas { use_msaa: engine_sample_count > 1 }
-    } else {
-        CompiledColorTarget::Texture { texture_id: texture_id.to_string() }
-    }
-}
-
-/// Resolve the MSAA sample count for a pipeline's MultisampleState.
-/// Canvas targets use the engine's negotiated sample count; textures use 1.
-fn sample_count_for_target(texture_id: &str, engine_sample_count: u32) -> u32 {
-    if texture_id == "canvas" { engine_sample_count } else { 1 }
-}
-
-/// Resolve the pixel dimensions of a render target for viewport/scissor defaults.
-/// Canvas → surface dimensions; named texture → texture dimensions from arena.
-fn target_dimensions(
-    texture_id: &str,
-    arena: &GpuMemoryArena,
-    surface_config: &wgpu::SurfaceConfiguration,
-) -> (u32, u32) {
-    if texture_id == "canvas" {
-        (surface_config.width, surface_config.height)
-    } else {
-        match arena.textures.get(texture_id) {
-            Some(tex) => {
-                let size = tex.texture.size();
-                (size.width, size.height)
-            }
-            // Fallback to surface dims — the missing texture error will be
-            // caught later during pipeline creation.
-            None => (surface_config.width, surface_config.height),
+/// Look up the color view and optional MSAA resolve target for a render pass.
+/// The canvas surface is acquired per-frame; named textures live in the arena.
+/// MSAA resolve is active when `msaa_view` is Some (engine negotiated 4x at init).
+fn lookup_color_view<'a>(
+    target_id: &str,
+    surface_view: &'a Option<wgpu::TextureView>,
+    msaa_view: &'a Option<wgpu::TextureView>,
+    arena: &'a GpuMemoryArena,
+) -> (&'a wgpu::TextureView, Option<&'a wgpu::TextureView>) {
+    if target_id == "canvas" {
+        let view = surface_view.as_ref().unwrap();
+        match msaa_view {
+            Some(msaa) => (msaa, Some(view)),
+            None => (view, None),
         }
-    }
-}
-
-/// Resolve an optional normalized viewport to concrete pixel coords.
-/// `target_width`/`target_height` are the pixel dimensions of the render target
-/// (surface for canvas, texture dimensions for render-to-texture).
-fn resolve_viewport(
-    spec: Option<&crate::contract::ViewportSpec>,
-    target_width: f32,
-    target_height: f32,
-) -> [f32; 6] {
-    match spec {
-        Some(vp) => [
-            vp.x * target_width, vp.y * target_height,
-            vp.width * target_width, vp.height * target_height,
-            vp.min_depth.unwrap_or(0.0), vp.max_depth.unwrap_or(1.0),
-        ],
-        None => [0.0, 0.0, target_width, target_height, 0.0, 1.0],
-    }
-}
-
-/// Resolve an optional normalized scissor rect to concrete pixel coords.
-/// `target_width`/`target_height` are the pixel dimensions of the render target.
-fn resolve_scissor(
-    spec: Option<&crate::contract::ScissorRectSpec>,
-    target_width: u32,
-    target_height: u32,
-) -> [u32; 4] {
-    let tw = target_width as f32;
-    let th = target_height as f32;
-    match spec {
-        Some(sc) => [
-            (sc.x * tw) as u32, (sc.y * th) as u32,
-            (sc.width * tw) as u32, (sc.height * th) as u32,
-        ],
-        None => [0, 0, target_width, target_height],
+    } else {
+        let tex = arena.textures.get(target_id).unwrap();
+        (&tex.view, None)
     }
 }
 
@@ -941,9 +874,6 @@ impl Engine {
                     let pass_id = &spec.pass_id;
                     let targets = &spec.targets;
                     let draw_calls = &spec.draw_calls;
-                    let viewport: Option<&crate::contract::ViewportSpec> = None;
-                    let scissor_rect: Option<&crate::contract::ScissorRectSpec> = None;
-                    let depth_stencil_spec: Option<&crate::contract::DepthStencilTarget> = None;
 
                     for draw_call in draw_calls {
                         let (shape_id, draw_mode) = match &draw_call.source {
@@ -1018,8 +948,7 @@ impl Engine {
                             },
                             depth_stencil: None,
                             multisample: wgpu::MultisampleState {
-                                // [LAW:dataflow-not-control-flow] Sample count resolved from target type.
-                                count: sample_count_for_target(&color_target.texture_id, self.sample_count),
+                                count: spec.sample_count,
                                 mask: !0, alpha_to_coverage_enabled: false,
                             },
                             multiview_mask: None, cache: None,
@@ -1076,18 +1005,14 @@ impl Engine {
                                 ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
                             }
                         };
-                        // [LAW:dataflow-not-control-flow] Resolve color target type at compile time.
-                        let compiled_color_target = resolve_compiled_color_target(
-                            &color_target.texture_id, self.sample_count,
-                        );
-                        // Resolve viewport/scissor using target dimensions (texture or surface).
-                        let (tw, th) = target_dimensions(&color_target.texture_id, &arena, &self.surface_config);
-                        let compiled_viewport = resolve_viewport(viewport, tw as f32, th as f32);
-                        let compiled_scissor = resolve_scissor(scissor_rect, tw, th);
+                        let vp = &spec.viewport;
+                        let sc = &spec.scissor_rect;
                         passes.push(CompiledPass::Render {
                             pipeline, bind_group, vertex_buffer_id: shape_id, draw_mode,
-                            color_load_op, color_target: compiled_color_target,
-                            depth_stencil: None, viewport: compiled_viewport, scissor_rect: compiled_scissor,
+                            color_load_op, color_target_id: color_target.texture_id.clone(),
+                            depth_stencil: None,
+                            viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
+                            scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
                     }
                 }
@@ -1275,8 +1200,7 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        // [LAW:dataflow-not-control-flow] Sample count resolved from target type.
-                                        count: sample_count_for_target(&color_target.texture_id, self.sample_count),
+                                        count: spec.sample_count,
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1375,27 +1299,18 @@ impl Engine {
                                     ),
                                 }
                             });
-                        // [LAW:dataflow-not-control-flow] Resolve color target type at compile time.
-                        let compiled_color_target = resolve_compiled_color_target(
-                            &color_target.texture_id, self.sample_count,
-                        );
-                        // Viewport and scissor — resolve using target dimensions (texture or surface).
-                        let (tw, th) = target_dimensions(&color_target.texture_id, &arena, &self.surface_config);
-                        let viewport = resolve_viewport(spec.viewport.as_ref(), tw as f32, th as f32);
-                        let scissor_rect = resolve_scissor(
-                            spec.scissor_rect.as_ref(), tw, th,
-                        );
-
+                        let vp = &spec.viewport;
+                        let sc = &spec.scissor_rect;
                         passes.push(CompiledPass::Render {
                             pipeline,
                             bind_group,
                             vertex_buffer_id: shape_id,
                             draw_mode,
                             color_load_op,
-                            color_target: compiled_color_target,
+                            color_target_id: color_target.texture_id.clone(),
                             depth_stencil,
-                            viewport,
-                            scissor_rect,
+                            viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
+                            scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
                     }
                 }
@@ -1419,7 +1334,7 @@ impl Engine {
         // canvas, so execute_roster acquires the surface unconditionally before the loop.
         let needs_surface = passes.iter().any(|p| matches!(
             p,
-            CompiledPass::Render { color_target: CompiledColorTarget::Canvas { .. }, .. }
+            CompiledPass::Render { color_target_id, .. } if color_target_id == "canvas"
         ));
 
         self.compiled_roster = Some(CompiledRoster {
@@ -1543,7 +1458,7 @@ impl Engine {
                     vertex_buffer_id,
                     draw_mode,
                     color_load_op,
-                    color_target,
+                    color_target_id,
                     depth_stencil,
                     viewport,
                     scissor_rect,
@@ -1572,22 +1487,10 @@ impl Engine {
                         })
                         .transpose()?;
 
-                    // Structural dispatch on pre-resolved color target type.
-                    let (color_view, resolve_target) = match color_target {
-                        CompiledColorTarget::Canvas { use_msaa } => {
-                            let view = surface_view.as_ref().unwrap();
-                            if *use_msaa {
-                                (self.msaa_view.as_ref().unwrap() as &wgpu::TextureView,
-                                 Some(view as &wgpu::TextureView))
-                            } else {
-                                (view as &wgpu::TextureView, None)
-                            }
-                        }
-                        CompiledColorTarget::Texture { texture_id } => {
-                            let tex = roster.arena.textures.get(texture_id.as_str()).unwrap();
-                            (&tex.view, None)
-                        }
-                    };
+                    // Look up color target view. Canvas uses the per-frame surface
+                    // (with MSAA resolve if active); named textures use the arena.
+                    let (color_view, resolve_target) =
+                        lookup_color_view(color_target_id, &surface_view, &self.msaa_view, &roster.arena);
                     let load = match color_load_op {
                         ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
                         ColorLoadOp::Load => wgpu::LoadOp::Load,

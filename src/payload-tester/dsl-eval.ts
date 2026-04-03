@@ -14,10 +14,10 @@
 import * as acorn from 'acorn';
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
-  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
-  domain, texDispatch, domainSource, fsQuadSource, clearTarget,
+  gpu as gpuBase, compute, render, composite, draw, drawPrep, ortho, perspective, exact, wg,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
-  loadTarget,
+  type GpuSpec, type GpuContext,
 } from '../render/gpu-ir/compile';
 import { quad, fullscreenQuad, tri } from '../render/gpu-ir/shapes';
 import { MATH_CONSTANTS } from '../render/gpu-ir/ir-node-rules';
@@ -51,9 +51,9 @@ for (const name of [
 /** All names that must be in scope when evaluating DSL source */
 const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
-  'gpu', 'compute', 'render', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
+  'gpu', 'compute', 'render', 'composite', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
-  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget', 'loadTarget',
+  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget', 'loadTarget', 'clearTexture',
   // Pipeline state presets (real)
   'OPAQUE', 'ALPHA_BLEND', 'DEPTH_TEST',
   // Shape helpers (real)
@@ -79,9 +79,9 @@ const CONTEXT_NAMES = [
 ] as const;
 
 const CONTEXT_VALUES = [
-  // Real implementations
-  gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
-  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget,
+  // Real implementations (gpu is slot 0, replaced per-call with context-injected wrapper)
+  gpuBase, compute, render, composite, draw, drawPrep, ortho, perspective, exact, wg,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
   // $-prefixed stubs
@@ -160,12 +160,17 @@ function wrapSource(source: string): string {
  * Supports single expressions (`gpu({...})`) and statement blocks
  * (`const scene = [...]; gpu({...})`). The last expression
  * statement becomes the return value. Comments are preserved.
+ *
+ * Canvas dimensions are injected into gpu() so fixtures don't need to know them.
  */
-export function evalDsl(source: string): DslResult {
+export function evalDsl(source: string, gpuCtx?: GpuContext): DslResult {
+  // Wrap gpu() to inject canvas context — fixtures call gpu(spec), we call gpuBase(spec, ctx)
+  const gpu = (spec: GpuSpec) => gpuBase(spec, gpuCtx);
+
   try {
     const body = wrapSource(source);
     const fn = new Function(...CONTEXT_NAMES, body);
-    const payload = fn(...CONTEXT_VALUES) as PipelineInstallPayload;
+    const payload = fn(gpu, ...CONTEXT_VALUES.slice(1)) as PipelineInstallPayload;
 
     // Basic validation
     if (!payload || typeof payload !== 'object') {
