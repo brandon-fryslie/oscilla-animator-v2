@@ -65,8 +65,10 @@ enum CompiledPass {
         bind_group: Option<wgpu::BindGroup>,
         vertex_buffer_id: String,
         draw_mode: RenderDrawMode,
-        clear_color: [f64; 4],
+        color_load_op: ColorLoadOp,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
+        viewport: Option<[f32; 6]>,
+        scissor_rect: Option<[u32; 4]>,
     },
 }
 
@@ -76,6 +78,12 @@ enum RenderDrawMode {
         vertex_count: u32,
         instance_count: u32,
     },
+}
+
+#[derive(Debug)]
+enum ColorLoadOp {
+    Clear(wgpu::Color),
+    Load,
 }
 
 struct CompiledDepthStencilAttachment {
@@ -304,6 +312,13 @@ impl Engine {
         // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
         // faults are classified and emitted through one runtime error boundary.
         device.on_uncaptured_error(Arc::new(move |error| {
+            let (kind, desc) = match &error {
+                wgpu::Error::Validation { description, .. } => ("WEBGPU_VALIDATION", description.as_str()),
+                wgpu::Error::OutOfMemory { .. } => ("WEBGPU_OOM", "GPU out of memory"),
+                wgpu::Error::Internal { description, .. } => ("WEBGPU_INTERNAL", description.as_str()),
+            };
+            // Always log to console so Safari errors are visible
+            console::error_1(&JsValue::from_str(&format!("[GPU ERROR] {kind}: {desc}")));
             let payload = match error {
                 wgpu::Error::Validation {
                     source: _,
@@ -975,7 +990,8 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        count: self.sample_count,
+                                        // loadOp:load bypasses MSAA (Safari compatibility)
+                                        count: if color_target.load_op == "load" { 1 } else { self.sample_count },
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1050,7 +1066,14 @@ impl Engine {
                             None
                         };
 
-                        let clear_color = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                        // Respect color loadOp from spec
+                        let color_load_op = match color_target.load_op.as_str() {
+                            "load" => ColorLoadOp::Load,
+                            _ => {
+                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
+                            }
+                        };
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
@@ -1067,14 +1090,27 @@ impl Engine {
                                     ),
                                 }
                             });
+                        // Viewport and scissor — resolve normalized (0–1) to pixel coords
+                        let sw = self.surface_config.width as f32;
+                        let sh = self.surface_config.height as f32;
+                        let viewport = spec.viewport.as_ref().map(|vp| {
+                            [vp.x * sw, vp.y * sh, vp.width * sw, vp.height * sh,
+                             vp.min_depth.unwrap_or(0.0), vp.max_depth.unwrap_or(1.0)]
+                        });
+                        let scissor_rect = spec.scissor_rect.as_ref().map(|sc| {
+                            [(sc.x * sw) as u32, (sc.y * sh) as u32,
+                             (sc.width * sw) as u32, (sc.height * sh) as u32]
+                        });
 
                         passes.push(CompiledPass::Render {
                             pipeline,
                             bind_group,
                             vertex_buffer_id: shape_id,
                             draw_mode,
-                            clear_color,
+                            color_load_op,
                             depth_stencil,
+                            viewport,
+                            scissor_rect,
                         });
                     }
                 }
@@ -1151,8 +1187,9 @@ impl Engine {
         // Track whether we need to present a surface texture
         let mut surface_output: Option<wgpu::SurfaceTexture> = None;
         let mut surface_view: Option<wgpu::TextureView> = None;
+        let log_frame = self.frame_count < 3; // Log first 3 frames for diagnostics
 
-        for pass in &roster.passes {
+        for (pass_idx, pass) in roster.passes.iter().enumerate() {
             match pass {
                 CompiledPass::Compute {
                     pipeline,
@@ -1190,8 +1227,10 @@ impl Engine {
                     bind_group,
                     vertex_buffer_id,
                     draw_mode,
-                    clear_color,
+                    color_load_op,
                     depth_stencil,
+                    viewport,
+                    scissor_rect,
                 } => {
                     // Acquire surface texture if we haven't already
                     if surface_output.is_none() {
@@ -1239,10 +1278,10 @@ impl Engine {
                         .transpose()?;
 
                     {
-                        // MSAA: render into multisampled target, resolve to surface.
-                        // When sample_count == 1, msaa_view is None — render direct to surface.
+                        // Every render pass loads the surface and sets scissor to its viewport.
+                        // Clear is viewport-scoped: a fill rect drawn by the engine, not GPU loadOp.
                         let (color_view, resolve_target) = match &self.msaa_view {
-                            Some(msaa) => (msaa, Some(view as &wgpu::TextureView)),
+                            Some(msaa) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
                             None => (view, None),
                         };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1252,12 +1291,7 @@ impl Engine {
                                 depth_slice: None,
                                 resolve_target,
                                 ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                                        r: clear_color[0],
-                                        g: clear_color[1],
-                                        b: clear_color[2],
-                                        a: clear_color[3],
-                                    }),
+                                    load: wgpu::LoadOp::Load,
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
@@ -1266,6 +1300,14 @@ impl Engine {
                             occlusion_query_set: None,
                             multiview_mask: None,
                         });
+
+                        // Viewport and scissor — every pass sets both
+                        let sw = self.surface_config.width as f32;
+                        let sh = self.surface_config.height as f32;
+                        let vp = viewport.unwrap_or([0.0, 0.0, sw, sh, 0.0, 1.0]);
+                        let sc = scissor_rect.unwrap_or([0, 0, self.surface_config.width, self.surface_config.height]);
+                        rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
+                        rpass.set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
 
                         rpass.set_pipeline(pipeline);
                         if let Some(bg) = bind_group {
@@ -1291,7 +1333,20 @@ impl Engine {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         if let Some(output) = surface_output {
+            if log_frame {
+                console::log_1(&JsValue::from_str(&format!(
+                    "[FRAME {}] submit + present (surface {}x{}, {} passes, sample_count={})",
+                    self.frame_count,
+                    self.surface_config.width, self.surface_config.height,
+                    roster.passes.len(), self.sample_count,
+                )));
+            }
             output.present();
+        } else if log_frame {
+            console::warn_1(&JsValue::from_str(&format!(
+                "[FRAME {}] no surface acquired — nothing to present",
+                self.frame_count,
+            )));
         }
 
         Ok(())

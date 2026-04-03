@@ -17,6 +17,7 @@ import {
   gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
   domain, texDispatch, domainSource, fsQuadSource, clearTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
+  loadTarget,
 } from '../render/gpu-ir/compile';
 import { quad, fullscreenQuad, tri } from '../render/gpu-ir/shapes';
 import { MATH_CONSTANTS } from '../render/gpu-ir/ir-node-rules';
@@ -52,7 +53,7 @@ const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
   'gpu', 'compute', 'render', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
-  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget',
+  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget', 'loadTarget',
   // Pipeline state presets (real)
   'OPAQUE', 'ALPHA_BLEND', 'DEPTH_TEST',
   // Shape helpers (real)
@@ -80,7 +81,7 @@ const CONTEXT_NAMES = [
 const CONTEXT_VALUES = [
   // Real implementations
   gpu, compute, render, draw, drawPrep, ortho, perspective, exact, wg,
-  domain, texDispatch, domainSource, fsQuadSource, clearTarget,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
   // $-prefixed stubs
