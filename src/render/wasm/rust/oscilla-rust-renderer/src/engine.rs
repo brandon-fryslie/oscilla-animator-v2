@@ -80,6 +80,7 @@ enum RenderDrawMode {
     },
 }
 
+#[derive(Debug)]
 enum ColorLoadOp {
     Clear(wgpu::Color),
     Load,
@@ -1183,8 +1184,9 @@ impl Engine {
         // Track whether we need to present a surface texture
         let mut surface_output: Option<wgpu::SurfaceTexture> = None;
         let mut surface_view: Option<wgpu::TextureView> = None;
+        let log_frame = self.frame_count < 3; // Log first 3 frames for diagnostics
 
-        for pass in &roster.passes {
+        for (pass_idx, pass) in roster.passes.iter().enumerate() {
             match pass {
                 CompiledPass::Compute {
                     pipeline,
@@ -1306,6 +1308,15 @@ impl Engine {
 
                         // Viewport and scissor — applied after begin_render_pass
                         if let Some(vp) = viewport {
+                            if log_frame {
+                                console::log_1(&JsValue::from_str(&format!(
+                                    "[FRAME {}] pass {}: set_viewport({}, {}, {}, {}, {}, {}) surface={}x{} msaa={} load={:?}",
+                                    self.frame_count, pass_idx,
+                                    vp[0], vp[1], vp[2], vp[3], vp[4], vp[5],
+                                    self.surface_config.width, self.surface_config.height,
+                                    use_msaa, color_load_op,
+                                )));
+                            }
                             rpass.set_viewport(vp[0], vp[1], vp[2], vp[3], vp[4], vp[5]);
                         }
                         if let Some(sc) = scissor_rect {
@@ -1336,7 +1347,20 @@ impl Engine {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         if let Some(output) = surface_output {
+            if log_frame {
+                console::log_1(&JsValue::from_str(&format!(
+                    "[FRAME {}] submit + present (surface {}x{}, {} passes, sample_count={})",
+                    self.frame_count,
+                    self.surface_config.width, self.surface_config.height,
+                    roster.passes.len(), self.sample_count,
+                )));
+            }
             output.present();
+        } else if log_frame {
+            console::warn_1(&JsValue::from_str(&format!(
+                "[FRAME {}] no surface acquired — nothing to present",
+                self.frame_count,
+            )));
         }
 
         Ok(())
