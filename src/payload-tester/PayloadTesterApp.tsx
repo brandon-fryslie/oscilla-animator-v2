@@ -9,6 +9,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { PAYLOAD_FIXTURES, type PayloadFixture } from '../render/rust/fixtures';
 import { FixtureSelector } from './FixtureSelector';
 import { DslPayloadSplitEditor, type CompileStatus } from './DslPayloadSplitEditor';
+import type { GpuContext } from '../render/gpu-ir/compile';
+import { evalDsl } from './dsl-eval';
 import { HEARTBEAT_BUFFER_BYTES } from '../render/rust/runtime-input-layout';
 import type {
   RustRendererWorkerOutboundMessage,
@@ -62,6 +64,7 @@ export const PayloadTesterApp: React.FC = () => {
   const workerRef = useRef<Worker | null>(null);
   const latestJsonRef = useRef('');
   const rendererReadyRef = useRef(false);
+  const [gpuCtx, setGpuCtx] = useState<GpuContext | undefined>(undefined);
   const pendingInstallRef = useRef<string | null>(
     JSON.stringify(initialFixture.payload, null, 2),
   );
@@ -131,21 +134,25 @@ export const PayloadTesterApp: React.FC = () => {
         if (!msg || typeof msg !== 'object' || !('type' in msg)) return;
 
         switch (msg.type) {
-          case 'BOOTSTRAP_SUCCESS':
+          case 'BOOTSTRAP_SUCCESS': {
             rendererReadyRef.current = true;
             setRendererStatus({ kind: 'ready', message: 'Renderer ready' });
-            if (pendingInstallRef.current) {
-              const payloadJson = pendingInstallRef.current;
+            // Recompile fixture DSL with actual canvas dimensions now that we know them.
+            // The pending payload was compiled eagerly at module load (without gpuCtx).
+            const ctx: GpuContext = { canvasWidth: cw, canvasHeight: ch, sampleCount: 4 };
+            const recompiled = evalDsl(dslSource, ctx);
+            if (recompiled.ok && worker) {
+              const payloadJson = JSON.stringify(recompiled.payload, null, 2);
+              latestJsonRef.current = payloadJson;
               pendingInstallRef.current = null;
-              if (worker) {
-                worker.postMessage({
-                  type: 'INSTALL_PIPELINE',
-                  payloadJson,
-                } satisfies RustRendererInstallPipelineMessage);
-                setRendererStatus({ kind: 'info', message: 'Installing queued pipeline...' });
-              }
+              worker.postMessage({
+                type: 'INSTALL_PIPELINE',
+                payloadJson,
+              } satisfies RustRendererInstallPipelineMessage);
+              setRendererStatus({ kind: 'info', message: 'Installing pipeline...' });
             }
             break;
+          }
           case 'INSTALL_PIPELINE_SUCCESS': {
             let passCount = 0;
             try {
@@ -209,14 +216,18 @@ export const PayloadTesterApp: React.FC = () => {
         );
       };
 
+      const cw = canvas?.clientWidth || 640;
+      const ch = canvas?.clientHeight || 480;
+      setGpuCtx({ canvasWidth: cw, canvasHeight: ch, sampleCount: 4 });
+
       const bootstrapMsg: RustRendererBootstrapMessage = {
         type: 'BOOTSTRAP',
         canvas: offscreen,
         rendererWasmBytes: wasmBytes,
         sharedHeartbeat,
         config: { debugReadbackHz: 0 },
-        initialWidth: canvas?.clientWidth || 640,
-        initialHeight: canvas?.clientHeight || 480,
+        initialWidth: cw,
+        initialHeight: ch,
       };
       worker.postMessage(bootstrapMsg, [offscreen, wasmBytes]);
     }
@@ -297,6 +308,7 @@ export const PayloadTesterApp: React.FC = () => {
             onSubmit={handleSubmit}
             onCompileStatus={handleCompileStatus}
             disabled={!rendererReady}
+            gpuCtx={gpuCtx}
           />
         </div>
 
