@@ -982,7 +982,8 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        count: self.sample_count,
+                                        // loadOp:load bypasses MSAA (Safari compatibility)
+                                        count: if color_target.load_op == "load" { 1 } else { self.sample_count },
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1266,10 +1267,14 @@ impl Engine {
 
                     {
                         // MSAA: render into multisampled target, resolve to surface.
-                        // When sample_count == 1, msaa_view is None — render direct to surface.
-                        let (color_view, resolve_target) = match &self.msaa_view {
-                            Some(msaa) => (msaa, Some(view as &wgpu::TextureView)),
-                            None => (view, None),
+                        // When sample_count == 1 or loadOp is Load, render direct to surface.
+                        // Safari's WebGPU does not preserve MSAA content between render passes
+                        // (StoreOp::Store on multisampled attachments after resolve is unreliable),
+                        // so loadOp:Load passes bypass MSAA and render directly to the surface.
+                        let use_msaa = matches!(color_load_op, ColorLoadOp::Clear(_));
+                        let (color_view, resolve_target) = match (&self.msaa_view, use_msaa) {
+                            (Some(msaa), true) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
+                            _ => (view, None),
                         };
                         let load = match color_load_op {
                             ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
