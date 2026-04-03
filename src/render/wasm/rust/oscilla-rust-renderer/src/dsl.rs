@@ -49,6 +49,11 @@ impl ModuleBuilder {
         self.module
     }
 
+    /// Mutable access to the underlying module — used for transplanting functions.
+    pub fn module_mut(&mut self) -> &mut naga::Module {
+        &mut self.module
+    }
+
     pub fn scalar_type(&mut self, kind: naga::ScalarKind) -> naga::Handle<naga::Type> {
         let width = match kind {
             naga::ScalarKind::Bool => 1,
@@ -812,6 +817,12 @@ impl FnBuilder {
     /// Store a value to a local variable pointer.
     pub fn store_local(&mut self, pointer: Expr, value: Expr) {
         self.with_root(|inner| inner.store_local(pointer, value));
+    }
+
+    /// Call a module-level function, returning the result expression.
+    /// Used for transplanted WGSL functions (stdlib, user-registered).
+    pub fn call_function(&mut self, func: naga::Handle<naga::Function>, args: &[Expr]) -> Expr {
+        self.with_root(|inner| inner.call_function(func, args))
     }
 
     pub fn finish(mut self) -> naga::Function {
@@ -1614,5 +1625,20 @@ impl<'a> FnBodyBuilder<'a> {
     /// Store a value to a local variable pointer.
     pub fn store_local(&mut self, pointer: Expr, value: Expr) {
         self.push_statement(naga::Statement::Store { pointer, value });
+    }
+
+    /// Call a module-level function, returning the result expression.
+    /// Used for transplanted WGSL functions (stdlib, user-registered).
+    pub fn call_function(&mut self, func: naga::Handle<naga::Function>, args: &[Expr]) -> Expr {
+        let result_expr = self.function.expressions.append(
+            naga::Expression::CallResult(func),
+            naga::Span::UNDEFINED,
+        );
+        self.push_statement(naga::Statement::Call {
+            function: func,
+            arguments: args.to_vec(),
+            result: Some(result_expr),
+        });
+        result_expr
     }
 }

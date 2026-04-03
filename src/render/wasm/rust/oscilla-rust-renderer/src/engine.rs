@@ -518,7 +518,7 @@ impl Engine {
                         spec.pass_id
                     )));
                     let compute_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        translator::translate_compute_pass(spec, &arena)
+                        translator::translate_compute_pass(spec, &arena, Some(&parsed_functions))
                     })) {
                         Ok(result) => result,
                         Err(payload) => {
@@ -720,7 +720,7 @@ impl Engine {
                     };
                     let compute_result =
                         match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_compute_pass(&synthetic, &arena)
+                            translator::translate_compute_pass(&synthetic, &arena, Some(&parsed_functions))
                         })) {
                             Ok(result) => result,
                             Err(payload) => {
