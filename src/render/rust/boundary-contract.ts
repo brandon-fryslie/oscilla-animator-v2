@@ -333,6 +333,24 @@ export const DrawCallSpecSchema = z.object({
 });
 export type DrawCallSpec = z.infer<typeof DrawCallSpecSchema>;
 
+export const ViewportSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  minDepth: z.number().optional(),
+  maxDepth: z.number().optional(),
+});
+export type Viewport = z.infer<typeof ViewportSchema>;
+
+export const ScissorRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+export type ScissorRect = z.infer<typeof ScissorRectSchema>;
+
 export const RenderPassSpecSchema = z.object({
   type: z.literal('Render'),
   passId: z.string(),
@@ -351,6 +369,8 @@ export const RenderPassSpecSchema = z.object({
       stencilClearValue: z.number().optional(),
     }).optional(),
   }),
+  viewport: ViewportSchema.optional(),
+  scissorRect: ScissorRectSchema.optional(),
   drawCalls: z.array(DrawCallSpecSchema).readonly(),
 });
 export type RenderPassSpec = z.infer<typeof RenderPassSpecSchema>;

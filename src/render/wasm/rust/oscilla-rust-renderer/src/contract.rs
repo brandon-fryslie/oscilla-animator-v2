@@ -178,7 +178,29 @@ pub struct RenderPassSpec {
     pub pass_id: String,
     pub source_block_ids: Vec<String>,
     pub targets: RenderTargets,
+    pub viewport: Option<ViewportSpec>,
+    pub scissor_rect: Option<ScissorRectSpec>,
     pub draw_calls: Vec<DrawCallSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewportSpec {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub min_depth: Option<f32>,
+    pub max_depth: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScissorRectSpec {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Deserialize)]
