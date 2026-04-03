@@ -1090,13 +1090,16 @@ impl Engine {
                                     ),
                                 }
                             });
-                        // Viewport and scissor from render pass spec
+                        // Viewport and scissor — resolve normalized (0–1) to pixel coords
+                        let sw = self.surface_config.width as f32;
+                        let sh = self.surface_config.height as f32;
                         let viewport = spec.viewport.as_ref().map(|vp| {
-                            [vp.x, vp.y, vp.width, vp.height,
+                            [vp.x * sw, vp.y * sh, vp.width * sw, vp.height * sh,
                              vp.min_depth.unwrap_or(0.0), vp.max_depth.unwrap_or(1.0)]
                         });
                         let scissor_rect = spec.scissor_rect.as_ref().map(|sc| {
-                            [sc.x, sc.y, sc.width, sc.height]
+                            [(sc.x * sw) as u32, (sc.y * sh) as u32,
+                             (sc.width * sw) as u32, (sc.height * sh) as u32]
                         });
 
                         passes.push(CompiledPass::Render {

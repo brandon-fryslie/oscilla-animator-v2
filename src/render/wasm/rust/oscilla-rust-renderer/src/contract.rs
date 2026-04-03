@@ -185,6 +185,7 @@ pub struct RenderPassSpec {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Viewport in normalized coordinates (0.0–1.0). Resolved to pixels at render time.
 pub struct ViewportSpec {
     pub x: f32,
     pub y: f32,
@@ -194,13 +195,14 @@ pub struct ViewportSpec {
     pub max_depth: Option<f32>,
 }
 
+/// Scissor rect in normalized coordinates (0.0–1.0). Resolved to pixels at render time.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScissorRectSpec {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 #[derive(Debug, Deserialize)]
