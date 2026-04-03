@@ -1305,11 +1305,15 @@ impl Engine {
                         .transpose()?;
 
                     {
-                        // Every render pass loads the surface and sets scissor to its viewport.
-                        // Clear is viewport-scoped: a fill rect drawn by the engine, not GPU loadOp.
+                        // MSAA: render into multisampled target, resolve to surface.
+                        // When sample_count == 1, msaa_view is None — render direct to surface.
                         let (color_view, resolve_target) = match &self.msaa_view {
                             Some(msaa) => (msaa as &wgpu::TextureView, Some(view as &wgpu::TextureView)),
                             None => (view, None),
+                        };
+                        let load = match color_load_op {
+                            ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
+                            ColorLoadOp::Load => wgpu::LoadOp::Load,
                         };
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
@@ -1318,7 +1322,7 @@ impl Engine {
                                 depth_slice: None,
                                 resolve_target,
                                 ops: wgpu::Operations {
-                                    load: wgpu::LoadOp::Load,
+                                    load,
                                     store: wgpu::StoreOp::Store,
                                 },
                             })],
