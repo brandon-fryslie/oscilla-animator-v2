@@ -311,6 +311,13 @@ impl Engine {
         // [LAW:single-enforcer] Asynchronous WebGPU validation/internal/OOM
         // faults are classified and emitted through one runtime error boundary.
         device.on_uncaptured_error(Arc::new(move |error| {
+            let (kind, desc) = match &error {
+                wgpu::Error::Validation { description, .. } => ("WEBGPU_VALIDATION", description.as_str()),
+                wgpu::Error::OutOfMemory { .. } => ("WEBGPU_OOM", "GPU out of memory"),
+                wgpu::Error::Internal { description, .. } => ("WEBGPU_INTERNAL", description.as_str()),
+            };
+            // Always log to console so Safari errors are visible
+            console::error_1(&JsValue::from_str(&format!("[GPU ERROR] {kind}: {desc}")));
             let payload = match error {
                 wgpu::Error::Validation {
                     source: _,
