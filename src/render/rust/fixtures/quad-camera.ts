@@ -57,7 +57,7 @@ gpu({
           return vertex(vec4(position.x, position.y, 0.0, 1.0), { color: vec4(cr, cg, cb, ca) });
         },
       }),
-    ], { viewport: { x: 0, y: 360, width: 360, height: 360 } }),
+    ], { viewport: { x: 0, y: 0.5, width: 0.5, height: 0.5 } }),
 
     // Top-right: zoomed in 2x
     render('tr', ortho({ zoom: 2 }), loadTarget(), [
@@ -72,7 +72,7 @@ gpu({
           return vertex(vec4(position.x, position.y, 0.0, 1.0), { color: vec4(cr, cg, cb, ca) });
         },
       }),
-    ], { viewport: { x: 360, y: 360, width: 360, height: 360 } }),
+    ], { viewport: { x: 0.5, y: 0.5, width: 0.5, height: 0.5 } }),
 
     // Bottom-left: offset center
     render('bl', ortho({ centerX: 0.3, centerY: 0.2 }), loadTarget(), [
@@ -87,7 +87,7 @@ gpu({
           return vertex(vec4(position.x, position.y, 0.0, 1.0), { color: vec4(cr, cg, cb, ca) });
         },
       }),
-    ], { viewport: { x: 0, y: 0, width: 360, height: 360 } }),
+    ], { viewport: { x: 0, y: 0, width: 0.5, height: 0.5 } }),
 
     // Bottom-right: zoomed out 0.5x
     render('br', ortho({ zoom: 0.5 }), loadTarget(), [
@@ -102,6 +102,6 @@ gpu({
           return vertex(vec4(position.x, position.y, 0.0, 1.0), { color: vec4(cr, cg, cb, ca) });
         },
       }),
-    ], { viewport: { x: 360, y: 0, width: 360, height: 360 } }),
+    ], { viewport: { x: 0.5, y: 0, width: 0.5, height: 0.5 } }),
   ],
 })

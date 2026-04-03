@@ -333,6 +333,7 @@ export const DrawCallSpecSchema = z.object({
 });
 export type DrawCallSpec = z.infer<typeof DrawCallSpecSchema>;
 
+/** Viewport in normalized coordinates (0.0–1.0). Resolved to pixels at render time. */
 export const ViewportSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -343,6 +344,7 @@ export const ViewportSchema = z.object({
 });
 export type Viewport = z.infer<typeof ViewportSchema>;
 
+/** Scissor rect in normalized coordinates (0.0–1.0). Resolved to pixels at render time. */
 export const ScissorRectSchema = z.object({
   x: z.number(),
   y: z.number(),
