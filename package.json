@@ -60,6 +60,7 @@
     "react-dom": "^19.2.3",
     "reactflow": "^11.11.4",
     "simplex-noise": "^4.0.3",
+    "wgsl_reflect": "^1.2.3",
     "zod": "^4.3.6"
   },
   "devDependencies": {
