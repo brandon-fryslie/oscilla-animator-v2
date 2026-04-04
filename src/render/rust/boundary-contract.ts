@@ -554,14 +554,32 @@ function validatePayloadSemantics(
 // ---------------------------------------------------------------------------
 
 export const WgslFunctionSchema = z.object({
-  /** Callable name in the DSL (must match a BuiltinMathFunc entry) */
+  /** Callable name in the DSL — must match the public function in the WGSL source */
   name: z.string(),
   /** Complete WGSL source — may contain helper functions */
   wgsl: z.string(),
-  /** Which function in the WGSL source is the callable entrypoint */
-  entrypoint: z.string(),
 });
 export type WgslFunction = z.infer<typeof WgslFunctionSchema>;
+
+// ---------------------------------------------------------------------------
+// WGSL function metadata — extracted from WGSL source via wgsl_reflect.
+// TS-side only (NOT sent to Rust). Used for validation and tooling.
+// ---------------------------------------------------------------------------
+
+/** A single parameter extracted from a WGSL function signature. */
+export interface WgslFunctionParam {
+  readonly name: string;
+  /** WGSL type name (e.g., 'f32', 'vec2f', 'u32') */
+  readonly type: string;
+}
+
+/** Metadata extracted from a registered WGSL function's source. */
+export interface WgslFunctionMeta {
+  readonly name: string;
+  readonly params: readonly WgslFunctionParam[];
+  /** WGSL return type name, or null for void functions. */
+  readonly returnType: string | null;
+}
 
 const PipelineInstallPayloadBaseSchema = z.object({
   manifest: MemoryManifestSchema,

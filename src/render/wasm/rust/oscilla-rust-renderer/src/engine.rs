@@ -518,7 +518,7 @@ impl Engine {
         } else {
             std::collections::HashMap::new()
         };
-        let _ = &parsed_functions; // TODO: pass to translator once transplant is implemented
+        // parsed_functions is passed to translate_compute_pass and translate_render_pass below
 
         // MMU: allocate GPU memory arena
         console::log_1(&JsValue::from_str("[install_pipeline] Allocating arena..."));
@@ -909,7 +909,7 @@ impl Engine {
                             }
                         };
                         let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_render_pass(draw_call, &arena)
+                            translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
                         })) {
                             Ok(result) => result,
                             Err(payload) => return install_error_json("ast_lowering", Some(pass_id.as_str()),
@@ -1073,7 +1073,7 @@ impl Engine {
                         };
 
                         let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_render_pass(draw_call, &arena)
+                            translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
                         })) {
                             Ok(result) => result,
                             Err(payload) => {

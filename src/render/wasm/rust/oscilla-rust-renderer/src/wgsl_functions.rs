@@ -51,11 +51,11 @@ pub fn parse_registered_functions(
         let found = module
             .functions
             .iter()
-            .any(|(_, f)| f.name.as_deref() == Some(&func.entrypoint));
+            .any(|(_, f)| f.name.as_deref() == Some(&func.name));
         if !found {
             return Err(format!(
-                "Function '{}': entrypoint '{}' not found in WGSL source",
-                func.name, func.entrypoint
+                "Function '{}': not found in WGSL source",
+                func.name,
             ));
         }
 
@@ -64,7 +64,7 @@ pub fn parse_registered_functions(
             ParsedFunction {
                 module,
                 info,
-                entrypoint: func.entrypoint.clone(),
+                entrypoint: func.name.clone(),
             },
         );
     }

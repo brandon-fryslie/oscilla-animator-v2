@@ -42,17 +42,17 @@ A general-purpose feature on PipelineInstallPayload — not stdlib-specific. Use
 
 ### Contract
 
-Two-field contract: `name` (callable name = WGSL entrypoint) + `wgsl` (source string, may include private helpers).
+Two-field contract: `name` (callable name = WGSL function name) + `wgsl` (source string, may include private helpers).
 
 ```typescript
 // boundary-contract.ts
-WgslFunction = { name: string, wgsl: string, entrypoint: string }
+WgslFunction = { name: string, wgsl: string }
 
 // PipelineInstallPayload includes:
 functions: WgslFunction[]
 ```
 
-**[LAW:one-source-of-truth]** The WGSL source string IS the interface declaration. No separate `args`/`returnType` fields. Metadata extraction (arg types, return type) uses `wgsl_reflect` on the TS side.
+**[LAW:one-source-of-truth]** The WGSL source string IS the interface declaration. No separate `args`/`returnType` fields in the contract. Metadata extraction (arg types, return type) uses `wgsl_reflect` on the TS side at registration time via `extractWgslMeta()`.
 
 ### Data Flow
 
@@ -60,7 +60,7 @@ functions: WgslFunction[]
 2. **TS**: `compile.ts` merges STDLIB + user functions into payload unconditionally (no tree-shaking — GPU driver handles dead code elimination)
 3. **Rust**: `wgsl_functions.rs` parses WGSL via `naga::front::wgsl::parse_str()` at install time
 4. **Rust**: `transplant_referenced_functions()` scans StatementIR for stdlib calls, transplants into target module
-5. **Rust**: `translator.rs` resolves `CallBuiltin` nodes against `ctx.stdlib_handles` for transplanted functions
+5. **Rust**: `translator.rs` resolves `CallBuiltin` nodes against `ctx.stdlib_handles` for transplanted functions (both compute and render passes)
 
 ### Naga Arena Transplant
 
@@ -80,12 +80,12 @@ Functions are copied between Naga modules via full handle remapping in `wgsl_fun
 - Functions require `diagnostic_filter_leaf` field
 - `CooperativeMatrix` variant must be covered in type match
 
-### Current Limitations
+### Metadata Extraction
 
-- Only compute passes support stdlib calls (`translate_compute_pass()` accepts `parsed_functions`)
-- Render pass translator doesn't yet accept `parsed_functions`
-- `entrypoint` field should be collapsed into `name` (they must match)
-- `wgsl_reflect` integration not yet complete (metadata extraction at registration time)
+`wgsl_reflect` (TS-side) extracts function signatures from WGSL source at module load:
+- `extractWgslMeta(func)` → `{ name, params: [{name, type}], returnType }`
+- `STDLIB_META` pre-computes metadata for all stdlib functions
+- Validates that `func.name` exists in the WGSL source (replaces the old `entrypoint` field)
 
 ## Design Decisions
 

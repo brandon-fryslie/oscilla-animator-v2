@@ -19,11 +19,9 @@ gpu({
       const rank = f32(gid) / N;
 
       // Pseudo-random per-star seed from hash
-      const h0 = gid * u32(747796405) + u32(2891336453);
-      const h1 = ((h0 >> u32(16)) ^ h0) * u32(2654435769);
-      const h2 = (h1 >> u32(16)) ^ h1;
-      const rand1 = f32(h2 & u32(65535)) / 65535.0;
-      const rand2 = f32((h2 >> u32(16)) & u32(65535)) / 65535.0;
+      const seed = hash_u32(gid);
+      const rand1 = f32(seed & u32(65535)) / 65535.0;
+      const rand2 = f32((seed >> u32(16)) & u32(65535)) / 65535.0;
 
       // Radial distribution: more stars near center
       const base_r = rand1 * rand1 * 0.9;

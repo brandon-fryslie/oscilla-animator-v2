@@ -24,12 +24,10 @@ pub struct PipelineInstallPayload {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct WgslFunction {
-    /// Callable name in the DSL (matches a BuiltinMathFunc entry)
+    /// Callable name in the DSL — must match the public function in the WGSL source
     pub name: String,
     /// Complete WGSL source — may contain helper functions
     pub wgsl: String,
-    /// Which function in the WGSL source is the callable entrypoint
-    pub entrypoint: String,
 }
 
 // ---------------------------------------------------------------------------

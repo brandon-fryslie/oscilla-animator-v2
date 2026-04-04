@@ -1,4 +1,4 @@
-// hash-color: 64 instances with PCG-hash-derived colors in 8x8 grid.
+// hash-color: 64 instances with hash_u32-derived colors in 8x8 grid.
 gpu({
   scalars: { 'sys:active': { u32: 64 } },
   domains: {
@@ -16,12 +16,10 @@ gpu({
       const row = gid / u32(8);
       $domains.dots.pos_x[gid] = (f32(col) - 3.5) * 0.2;
       $domains.dots.pos_y[gid] = (f32(row) - 3.5) * 0.2;
-      const h0 = gid * u32(747796405) + u32(2891336453);
-      const h1 = ((h0 >> u32(16)) ^ h0) * u32(2654435769);
-      const h2 = (h1 >> u32(16)) ^ h1;
-      $domains.dots.color_r[gid] = f32(h2 & u32(255)) / 255.0;
-      $domains.dots.color_g[gid] = f32((h2 >> u32(8)) & u32(255)) / 255.0;
-      $domains.dots.color_b[gid] = f32((h2 >> u32(16)) & u32(255)) / 255.0;
+      const seed = hash_u32(gid);
+      $domains.dots.color_r[gid] = f32(seed & u32(255)) / 255.0;
+      $domains.dots.color_g[gid] = f32((seed >> u32(8)) & u32(255)) / 255.0;
+      $domains.dots.color_b[gid] = f32((seed >> u32(16)) & u32(255)) / 255.0;
     }),
     drawPrep('prep', 'sys:active', 6),
     render('draw', ortho(), clearTarget([0.08, 0.08, 0.1, 1]), [

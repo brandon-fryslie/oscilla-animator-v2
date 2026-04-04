@@ -6,9 +6,11 @@
  *
  * [LAW:one-source-of-truth] Function implementations live here as WGSL source strings.
  * The Rust side only parses and transplants — it does not define any functions.
+ * Metadata (parameter types, return type) is extracted at module load via wgsl_reflect.
  */
 
-import type { WgslFunction } from '../rust/boundary-contract';
+import { WgslReflect } from 'wgsl_reflect';
+import type { WgslFunction, WgslFunctionMeta } from '../rust/boundary-contract';
 
 // ---------------------------------------------------------------------------
 // hash_u32 — PCG hash (single u32 → u32)
@@ -16,7 +18,6 @@ import type { WgslFunction } from '../rust/boundary-contract';
 
 export const HASH_U32: WgslFunction = {
   name: 'hash_u32',
-  entrypoint: 'hash_u32',
   wgsl: `
 fn hash_u32(v: u32) -> u32 {
   var state = v * 747796405u + 2891336453u;
@@ -33,7 +34,6 @@ fn hash_u32(v: u32) -> u32 {
 
 export const NOISE_SIMPLEX_2D: WgslFunction = {
   name: 'noise_simplex_2d',
-  entrypoint: 'noise_simplex_2d',
   wgsl: `
 fn _snoise2_mod289_v3(x: vec3<f32>) -> vec3<f32> {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -112,7 +112,6 @@ fn noise_simplex_2d(v: vec2<f32>) -> f32 {
 
 export const NOISE_SIMPLEX_3D: WgslFunction = {
   name: 'noise_simplex_3d',
-  entrypoint: 'noise_simplex_3d',
   wgsl: `
 fn _snoise3_mod289_v3(x: vec3<f32>) -> vec3<f32> {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -209,3 +208,35 @@ fn noise_simplex_3d(v: vec3<f32>) -> f32 {
 // ---------------------------------------------------------------------------
 
 export const STDLIB: WgslFunction[] = [HASH_U32, NOISE_SIMPLEX_2D, NOISE_SIMPLEX_3D];
+
+// ---------------------------------------------------------------------------
+// Metadata extraction — wgsl_reflect parses WGSL source at module load
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract function signature metadata from a WgslFunction's WGSL source.
+ * Validates that `func.name` exists as a function in the source.
+ */
+export function extractWgslMeta(func: WgslFunction): WgslFunctionMeta {
+  const reflect = new WgslReflect(func.wgsl);
+  const info = reflect.getFunctionInfo(func.name);
+  if (!info) {
+    throw new Error(
+      `WGSL function '${func.name}' not found in source. ` +
+      `Available: ${reflect.functions.map(f => f.name).join(', ')}`,
+    );
+  }
+  return {
+    name: func.name,
+    params: info.arguments.map(a => ({
+      name: a.name,
+      type: a.type.getTypeName(),
+    })),
+    returnType: info.returnType?.getTypeName() ?? null,
+  };
+}
+
+/** Pre-computed metadata for all stdlib functions. */
+export const STDLIB_META: ReadonlyMap<string, WgslFunctionMeta> = new Map(
+  STDLIB.map(fn => [fn.name, extractWgslMeta(fn)]),
+);
