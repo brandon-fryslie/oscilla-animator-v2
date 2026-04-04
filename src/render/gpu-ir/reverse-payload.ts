@@ -13,6 +13,7 @@ import type {
   MemoryManifest,
   ComputePassSpec,
   RenderPassSpec,
+  CompositePassSpec,
   SystemPassSpec,
   SystemCameraUpdateSpec,
   DrawCallSpec,
@@ -67,6 +68,8 @@ export function payloadToSource(payload: PipelineInstallPayload): string {
     if (entry.type === 'System_CameraUpdate') continue;
     if (entry.type === 'Render') {
       lines.push(emitRender(entry, payload.manifest, cameraPasses));
+    } else if (entry.type === 'Composite') {
+      lines.push(emitComposite(entry, payload.manifest));
     } else {
       lines.push(emitRosterEntry(entry, payload.manifest));
     }
@@ -180,6 +183,15 @@ function emitRender(
   return `    render(${quote(pass.passId)}, ${camera}, ${targets}, [\n${draws}\n    ]),`;
 }
 
+function emitComposite(
+  pass: CompositePassSpec,
+  manifest: MemoryManifest,
+): string {
+  const targets = emitTargets(pass.targets);
+  const draws = pass.drawCalls.map(dc => emitDrawCall(dc, manifest, '')).join('\n');
+  return `    composite(${quote(pass.passId)}, ${targets}, [\n${draws}\n    ]),`;
+}
+
 function emitDrawCall(dc: DrawCallSpec, manifest: MemoryManifest, _vpSymbol: string): string {
   const source = emitDrawSource(dc.source);
   const state = emitPipelineState(dc.pipelineState);
@@ -233,17 +245,16 @@ function emitDrawSource(source: DrawCallSpec['source']): string {
   }
 }
 
-function emitTargets(targets: RenderPassSpec['targets']): string {
-  // Use clearTarget helper for the common single-canvas-clear pattern
-  if (
-    targets.colors.length === 1 &&
-    targets.colors[0].textureId === 'canvas' &&
-    targets.colors[0].loadOp === 'clear' &&
-    targets.colors[0].clearColor &&
-    !targets.depthStencil
-  ) {
-    const cc = targets.colors[0].clearColor!;
-    return `clearTarget([${cc.join(', ')}])`;
+function emitTargets(targets: RenderPassSpec['targets'] | CompositePassSpec['targets']): string {
+  // Recognize DSL helpers for single-color-target patterns
+  if (targets.colors.length === 1 && !('depthStencil' in targets && targets.depthStencil)) {
+    const ct = targets.colors[0];
+    if (ct.loadOp === 'clear' && ct.clearColor) {
+      const cc = ct.clearColor;
+      if (ct.textureId === 'canvas') return `clearTarget([${cc.join(', ')}])`;
+      return `clearTexture(${quote(ct.textureId)}, [${cc.join(', ')}])`;
+    }
+    if (ct.loadOp === 'load' && ct.textureId === 'canvas') return `loadTarget()`;
   }
   return emitJson(targets);
 }
