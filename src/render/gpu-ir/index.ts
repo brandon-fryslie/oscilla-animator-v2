@@ -3,7 +3,7 @@
  */
 
 // Compilation orchestrator
-export { gpu, compute, render, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, OPAQUE, ALPHA_BLEND, DEPTH_TEST, MATH_CONSTANTS, PI, TAU, HALF_PI, E, SQRT2, PHI } from './compile';
+export { gpu, compute, render, composite, draw, drawPrep, exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture, OPAQUE, ALPHA_BLEND, DEPTH_TEST, MATH_CONSTANTS, PI, TAU, HALF_PI, E, SQRT2, PHI } from './compile';
 export type { Transform2DSpec, RenderPassOpts } from './compile';
 
 // Shape helpers
