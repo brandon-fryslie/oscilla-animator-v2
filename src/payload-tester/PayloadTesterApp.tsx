@@ -254,11 +254,16 @@ export const PayloadTesterApp: React.FC = () => {
     const source = fixture.dslSource ?? JSON.stringify(fixture.payload, null, 2);
     setDslSource(source);
 
-    // Also immediately install the fixture payload (don't wait for DSL compile)
-    const fixtureJson = JSON.stringify(fixture.payload, null, 2);
-    latestJsonRef.current = fixtureJson;
-    installPipeline(fixtureJson);
-  }, [installPipeline]);
+    // [LAW:one-source-of-truth] Recompile the DSL with the current canvas dimensions.
+    // fixture.payload was compiled at module load without gpuCtx (defaults to 800x600).
+    // The actual canvas may differ, so we recompile — same path as BOOTSTRAP_SUCCESS.
+    const recompiled = gpuCtx ? evalDsl(source, gpuCtx) : null;
+    const payloadJson = recompiled?.ok
+      ? JSON.stringify(recompiled.payload, null, 2)
+      : JSON.stringify(fixture.payload, null, 2);
+    latestJsonRef.current = payloadJson;
+    installPipeline(payloadJson);
+  }, [installPipeline, gpuCtx]);
 
   const handleJsonChange = useCallback((json: string) => {
     latestJsonRef.current = json;
