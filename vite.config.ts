@@ -115,6 +115,7 @@ export default defineConfig({
         main: path.resolve(__dirname, 'public', 'index.html'),
         'payload-tester': path.resolve(__dirname, 'public', 'payload-tester.html'),
         'compiler-tester': path.resolve(__dirname, 'public', 'compiler-tester.html'),
+        'design-mockup': path.resolve(__dirname, 'public', 'design-mockup.html'),
       },
       onwarn(warning, warn) {
         // Ignore third-party "use client" directive noise from bundled dependencies.
