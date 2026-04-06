@@ -8,7 +8,10 @@
 
 use std::collections::HashMap;
 
-use crate::contract::{ComputePassSpec, DrawCallSpec, ExprIR, StatementIR, SystemPassSpec};
+use crate::contract::{
+    AtomicOp, BinaryOp, ComputePassSpec, DrawCallSpec, ExprIR, IntrinsicName, MemoryDataType,
+    StatementIR, SystemPassSpec, UnaryOp, WgslType,
+};
 use crate::dsl::{Expr, FnBodyBuilder, FnBuilder, ModuleBuilder};
 use crate::mmu::{BufferKind, GpuMemoryArena, PhysicalSymbol};
 
@@ -40,8 +43,9 @@ struct PassContext {
     sampler_exprs: HashMap<String, Expr>,
     /// Symbol ID → physical symbol from MMU
     symbol_map: HashMap<String, PhysicalSymbol>,
-    /// WgslType string → naga type handle (pre-created by caller)
-    type_handles: HashMap<String, naga::Handle<naga::Type>>,
+    /// WgslType → naga type handle (pre-created by caller). Keyed by enum so
+    /// no string lookups appear at the use site.
+    type_handles: HashMap<WgslType, naga::Handle<naga::Type>>,
     /// Transplanted WGSL function handles (name → Handle<Function>)
     stdlib_handles: HashMap<String, naga::Handle<naga::Function>>,
 }
@@ -87,6 +91,67 @@ impl TranslationScope {
             None
         }
     }
+
+    /// [LAW:single-enforcer] All scope lookups that are supposed to have been
+    /// resolved by earlier passes funnel through this. Missing names are
+    /// translator-invariant violations, not recoverable errors.
+    fn must_resolve(&self, name: &str, context: &str) -> (Expr, bool) {
+        self.resolve(name)
+            .unwrap_or_else(|| panic!("{context}: variable '{name}' not in scope"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lookup helpers — [LAW:single-enforcer]
+//
+// Every symbol/resource lookup in the translator funnels through one of these
+// helpers. Missing keys are upstream-validator bugs (Zod semantic validation
+// checks every symbol ref before the payload reaches Rust), so the translator
+// treats them as invariant violations and panics with a consistent message
+// shape instead of carrying a per-callsite `_ => panic!("...")` ladder.
+
+fn lookup_symbol<'a>(
+    ctx: &'a PassContext,
+    symbol_id: &str,
+    site: &str,
+) -> &'a PhysicalSymbol {
+    ctx.symbol_map
+        .get(symbol_id)
+        .unwrap_or_else(|| panic!("{site}: symbol '{symbol_id}' not in symbol_map"))
+}
+
+fn lookup_domain_buf(ctx: &PassContext, domain_id: &str, site: &str) -> Expr {
+    *ctx.domain_exprs
+        .get(domain_id)
+        .unwrap_or_else(|| panic!("{site}: domain '{domain_id}' not bound in pass"))
+}
+
+fn lookup_atomic_domain_buf(ctx: &PassContext, domain_id: &str, site: &str) -> Expr {
+    *ctx.domain_atomic_exprs
+        .get(domain_id)
+        .unwrap_or_else(|| panic!("{site}: domain '{domain_id}' has no atomic buffer"))
+}
+
+fn lookup_texture(ctx: &PassContext, texture_id: &str, site: &str) -> Expr {
+    *ctx.texture_exprs
+        .get(texture_id)
+        .unwrap_or_else(|| panic!("{site}: texture '{texture_id}' not in context"))
+}
+
+fn lookup_sampler(ctx: &PassContext, sampler_id: &str, site: &str) -> Expr {
+    *ctx.sampler_exprs
+        .get(sampler_id)
+        .unwrap_or_else(|| panic!("{site}: sampler '{sampler_id}' not in context"))
+}
+
+fn lookup_type_handle(
+    ctx: &PassContext,
+    ty: WgslType,
+    site: &str,
+) -> naga::Handle<naga::Type> {
+    *ctx.type_handles
+        .get(&ty)
+        .unwrap_or_else(|| panic!("{site}: no type handle for '{ty:?}'"))
 }
 
 // ---------------------------------------------------------------------------
@@ -110,31 +175,28 @@ pub struct ComputePassTranslation {
 fn build_type_handles(
     m: &mut ModuleBuilder,
     vec3_u32_ty: Option<naga::Handle<naga::Type>>,
-) -> HashMap<String, naga::Handle<naga::Type>> {
+) -> HashMap<WgslType, naga::Handle<naga::Type>> {
+    use naga::{ScalarKind::*, VectorSize::*};
+    use WgslType::*;
     let mut th = HashMap::new();
-    // Scalars
-    th.insert("f32".into(), m.f32_type());
-    th.insert("u32".into(), m.u32_type());
-    th.insert("i32".into(), m.i32_type());
-    th.insert("bool".into(), m.scalar_type(naga::ScalarKind::Bool));
-    // Vec2
-    th.insert("vec2<f32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Float));
-    th.insert("vec2<i32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Sint));
-    th.insert("vec2<u32>".into(), m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Uint));
-    // Vec3
-    th.insert("vec3<f32>".into(), m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Float));
-    th.insert("vec3<i32>".into(), m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Sint));
+    th.insert(F32, m.f32_type());
+    th.insert(U32, m.u32_type());
+    th.insert(I32, m.i32_type());
+    th.insert(WgslType::Bool, m.scalar_type(naga::ScalarKind::Bool));
+    th.insert(Vec2F32, m.vector_type(Bi, Float));
+    th.insert(Vec2I32, m.vector_type(Bi, Sint));
+    th.insert(Vec2U32, m.vector_type(Bi, Uint));
+    th.insert(Vec3F32, m.vector_type(Tri, Float));
+    th.insert(Vec3I32, m.vector_type(Tri, Sint));
     th.insert(
-        "vec3<u32>".into(),
-        vec3_u32_ty.unwrap_or_else(|| m.vector_type(naga::VectorSize::Tri, naga::ScalarKind::Uint)),
+        Vec3U32,
+        vec3_u32_ty.unwrap_or_else(|| m.vector_type(Tri, Uint)),
     );
-    // Vec4
-    th.insert("vec4<f32>".into(), m.vec4_f32_type());
-    th.insert("vec4<i32>".into(), m.vector_type(naga::VectorSize::Quad, naga::ScalarKind::Sint));
-    th.insert("vec4<u32>".into(), m.vector_type(naga::VectorSize::Quad, naga::ScalarKind::Uint));
-    // Matrices
-    th.insert("mat3x3<f32>".into(), m.matrix_type(naga::VectorSize::Tri, naga::VectorSize::Tri, naga::ScalarKind::Float));
-    th.insert("mat4x4<f32>".into(), m.matrix_type(naga::VectorSize::Quad, naga::VectorSize::Quad, naga::ScalarKind::Float));
+    th.insert(Vec4F32, m.vec4_f32_type());
+    th.insert(Vec4I32, m.vector_type(Quad, Sint));
+    th.insert(Vec4U32, m.vector_type(Quad, Uint));
+    th.insert(Mat3x3F32, m.matrix_type(Tri, Tri, Float));
+    th.insert(Mat4x4F32, m.matrix_type(Quad, Quad, Float));
     th
 }
 
@@ -1484,16 +1546,10 @@ fn translate_statement_body(
             data_type,
             value,
         } => {
-            let ty = data_type
-                .as_ref()
-                .map(|dt| {
-                    *ctx.type_handles.get(dt.as_str()).unwrap_or_else(|| {
-                        panic!("Var '{}': no type handle for dataType '{}'", name, dt)
-                    })
-                })
-                .unwrap_or_else(|| {
-                    panic!("Var '{}': dataType is required but was null", name)
-                });
+            let dt = data_type.unwrap_or_else(|| {
+                panic!("Var '{}': dataType is required but was null", name)
+            });
+            let ty = lookup_type_handle(ctx, dt, "Var");
             let init = value
                 .as_ref()
                 .map(|v| translate_expr_body(bb, ctx, v, scope));
@@ -1508,17 +1564,12 @@ fn translate_statement_body(
                     std::mem::discriminant(target)
                 );
             };
-            let (ptr, _) = scope
-                .resolve(name)
-                .unwrap_or_else(|| panic!("Assign: variable '{}' not found in scope", name));
+            let (ptr, _) = scope.must_resolve(name, "Assign");
             let val = translate_expr_body(bb, ctx, value, scope);
             bb.store_local(ptr, val);
         }
         StatementIR::StoreGlobal { symbol_id, value } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreGlobal: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreGlobal");
             let globals = ctx
                 .globals_expr
                 .expect("StoreGlobal requires globals buffer");
@@ -1526,10 +1577,7 @@ fn translate_statement_body(
             store_typed(bb, ctx, globals, sym, val);
         }
         StatementIR::StoreScalar { symbol_id, value } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreScalar: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreScalar");
             let scalars = ctx
                 .scalars_expr
                 .expect("StoreScalar requires scalars buffer");
@@ -1541,38 +1589,27 @@ fn translate_statement_body(
             index,
             value,
         } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreField: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let domain_buf = ctx.domain_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!(
-                    "StoreField: domain '{}' not in pass domain_exprs",
-                    domain_id
-                )
-            });
+            let domain_buf = lookup_domain_buf(ctx, domain_id, "StoreField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let val = translate_expr_body(bb, ctx, value, scope);
             let store_val =
-                if sym.wgsl_type == "u32" || sym.wgsl_type == "i32" || is_u32_expr(value) {
+                if matches!(sym.data_type, MemoryDataType::U32 | MemoryDataType::I32) || is_u32_expr(value) {
                     val
                 } else {
                     bb.bitcast_u32(val)
                 };
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            bb.store_buffer(*domain_buf, addr, store_val);
+            bb.store_buffer(domain_buf, addr, store_val);
         }
         StatementIR::TextureStore {
             texture_id,
             coords,
             value,
         } => {
-            let tex = *ctx
-                .texture_exprs
-                .get(texture_id)
-                .unwrap_or_else(|| panic!("TextureStore: texture '{}' not in context", texture_id));
+            let tex = lookup_texture(ctx, texture_id, "TextureStore");
             let coords_expr = translate_expr_body(bb, ctx, coords, scope);
             let val = translate_expr_body(bb, ctx, value, scope);
             bb.texture_store(tex, coords_expr, val);
@@ -1634,30 +1671,16 @@ fn translate_statement_body(
             value,
             assign_result_to,
         } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicOpField: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicOpField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("AtomicOpField: domain '{}' has no atomic buffer", domain_id)
-            });
+            let atomic_buf = lookup_atomic_domain_buf(ctx, domain_id, "AtomicOpField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let pointer = bb.access(*atomic_buf, addr);
+            let pointer = bb.access(atomic_buf, addr);
             let val = translate_expr_body(bb, ctx, value, scope);
-            let u32_ty = *ctx.type_handles.get("u32").unwrap();
-            let fun = match op.as_str() {
-                "Add" => naga::AtomicFunction::Add,
-                "Sub" => naga::AtomicFunction::Subtract,
-                "Max" => naga::AtomicFunction::Max,
-                "Min" => naga::AtomicFunction::Min,
-                "And" => naga::AtomicFunction::And,
-                "Or" => naga::AtomicFunction::InclusiveOr,
-                "Xor" => naga::AtomicFunction::ExclusiveOr,
-                "Exchange" => naga::AtomicFunction::Exchange { compare: None },
-                _ => panic!("AtomicOpField: unknown op '{}'", op),
-            };
+            let u32_ty = lookup_type_handle(ctx, WgslType::U32, "AtomicOpField");
+            let fun = atomic_function_for(*op);
             let result = bb.atomic_op(fun, pointer, val, u32_ty);
             if let Some(name) = assign_result_to {
                 scope.insert_let(name.clone(), result);
@@ -1669,25 +1692,13 @@ fn translate_statement_body(
             value,
             assign_result_to,
         } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicOpScalar: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicOpScalar");
             let scalars = ctx.scalars_expr.expect("AtomicOpScalar requires scalars buffer");
             let offset = bb.lit_u32(sym.word_offset);
             let pointer = bb.access(scalars, offset);
             let val = translate_expr_body(bb, ctx, value, scope);
-            let u32_ty = *ctx.type_handles.get("u32").unwrap();
-            let fun = match op.as_str() {
-                "Add" => naga::AtomicFunction::Add,
-                "Sub" => naga::AtomicFunction::Subtract,
-                "Max" => naga::AtomicFunction::Max,
-                "Min" => naga::AtomicFunction::Min,
-                "And" => naga::AtomicFunction::And,
-                "Or" => naga::AtomicFunction::InclusiveOr,
-                "Xor" => naga::AtomicFunction::ExclusiveOr,
-                "Exchange" => naga::AtomicFunction::Exchange { compare: None },
-                _ => panic!("AtomicOpScalar: unknown op '{}'", op),
-            };
+            let u32_ty = lookup_type_handle(ctx, WgslType::U32, "AtomicOpScalar");
+            let fun = atomic_function_for(*op);
             let result = bb.atomic_op(fun, pointer, val, u32_ty);
             if let Some(name) = assign_result_to {
                 scope.insert_let(name.clone(), result);
@@ -1699,6 +1710,19 @@ fn translate_statement_body(
                 std::mem::discriminant(stmt)
             );
         }
+    }
+}
+
+fn atomic_function_for(op: AtomicOp) -> naga::AtomicFunction {
+    match op {
+        AtomicOp::Add => naga::AtomicFunction::Add,
+        AtomicOp::Sub => naga::AtomicFunction::Subtract,
+        AtomicOp::Max => naga::AtomicFunction::Max,
+        AtomicOp::Min => naga::AtomicFunction::Min,
+        AtomicOp::And => naga::AtomicFunction::And,
+        AtomicOp::Or => naga::AtomicFunction::InclusiveOr,
+        AtomicOp::Xor => naga::AtomicFunction::ExclusiveOr,
+        AtomicOp::Exchange => naga::AtomicFunction::Exchange { compare: None },
     }
 }
 
@@ -1806,36 +1830,41 @@ fn load_typed(
         let raw = bb.load_buffer(buffer, off);
         if needs_bitcast { bb.bitcast_f32(raw) } else { raw }
     };
-    match sym.wgsl_type.as_str() {
-        "f32" => load_f32_word(bb, base),
-        "u32" | "i32" => {
+    // [LAW:dataflow-not-control-flow] Total match — adding a MemoryDataType
+    // variant is a compile error until handled here. No defensive default arm.
+    match sym.data_type {
+        MemoryDataType::F32 => load_f32_word(bb, base),
+        MemoryDataType::U32
+        | MemoryDataType::I32
+        | MemoryDataType::AtomicU32
+        | MemoryDataType::AtomicI32 => {
             let off = bb.lit_u32(base);
-            bb.load_buffer(buffer, off) // u32/i32: no bitcast
+            bb.load_buffer(buffer, off) // integer: no bitcast
         }
-        "vec2" => {
-            let ty = ctx.type_handles["vec2<f32>"];
+        MemoryDataType::Vec2 => {
+            let ty = ctx.type_handles[&WgslType::Vec2F32];
             let c0 = load_f32_word(bb, base);
             let c1 = load_f32_word(bb, base + 1);
             bb.compose(ty, vec![c0, c1])
         }
-        "vec3" => {
-            let ty = ctx.type_handles["vec3<f32>"];
+        MemoryDataType::Vec3 => {
+            let ty = ctx.type_handles[&WgslType::Vec3F32];
             let c0 = load_f32_word(bb, base);
             let c1 = load_f32_word(bb, base + 1);
             let c2 = load_f32_word(bb, base + 2);
             bb.compose(ty, vec![c0, c1, c2])
         }
-        "vec4" => {
-            let ty = ctx.type_handles["vec4<f32>"];
+        MemoryDataType::Vec4 => {
+            let ty = ctx.type_handles[&WgslType::Vec4F32];
             let c0 = load_f32_word(bb, base);
             let c1 = load_f32_word(bb, base + 1);
             let c2 = load_f32_word(bb, base + 2);
             let c3 = load_f32_word(bb, base + 3);
             bb.compose(ty, vec![c0, c1, c2, c3])
         }
-        "mat4x4" => {
-            let vec4_ty = ctx.type_handles["vec4<f32>"];
-            let mat4_ty = ctx.type_handles["mat4x4<f32>"];
+        MemoryDataType::Mat4x4 => {
+            let vec4_ty = ctx.type_handles[&WgslType::Vec4F32];
+            let mat4_ty = ctx.type_handles[&WgslType::Mat4x4F32];
             let mut cols = Vec::with_capacity(4);
             for col in 0..4u32 {
                 let col_base = base + col * 4;
@@ -1847,7 +1876,6 @@ fn load_typed(
             }
             bb.compose(mat4_ty, cols)
         }
-        _ => load_f32_word(bb, base),
     }
 }
 
@@ -1866,44 +1894,41 @@ fn store_typed(
         let off = bb.lit_u32(word);
         bb.store_buffer(buffer, off, v);
     };
-    match sym.wgsl_type.as_str() {
-        "f32" => {
+    // [LAW:dataflow-not-control-flow] Total match — every memory data type is
+    // explicit. Vec/mat decomposition lives in one place per width.
+    let store_vec_n = |bb: &mut FnBodyBuilder<'_>, n: u32, vec_ty: naga::Handle<naga::Type>| {
+        let vec_ptr = bb.declare_var("_store_vec", vec_ty, Some(val));
+        for i in 0..n {
+            let comp_ptr = bb.access_index(vec_ptr, i);
+            let comp_val = bb.load_local(comp_ptr);
+            let sv = bb.bitcast_u32(comp_val);
+            let off = bb.lit_u32(base + i);
+            bb.store_buffer(buffer, off, sv);
+        }
+    };
+    match sym.data_type {
+        MemoryDataType::F32 => {
             let sv = bb.bitcast_u32(val);
             store_word(bb, base, sv);
         }
-        "u32" | "i32" => {
+        MemoryDataType::U32
+        | MemoryDataType::I32
+        | MemoryDataType::AtomicU32
+        | MemoryDataType::AtomicI32 => {
             store_word(bb, base, val);
         }
-        "vec2" | "vec3" | "vec4" => {
-            let n: u32 = match sym.wgsl_type.as_str() {
-                "vec2" => 2,
-                "vec3" => 3,
-                _ => 4,
-            };
-            let vec_ty = ctx.type_handles[match sym.wgsl_type.as_str() {
-                "vec2" => "vec2<f32>",
-                "vec3" => "vec3<f32>",
-                _ => "vec4<f32>",
-            }];
-            // Store to local var first — Naga requires AccessIndex on pointers
-            let vec_ptr = bb.declare_var("_store_vec", vec_ty, Some(val));
-            for i in 0..n {
-                let comp_ptr = bb.access_index(vec_ptr, i);
-                let comp_val = bb.load_local(comp_ptr);
-                let sv = bb.bitcast_u32(comp_val);
-                store_word(bb, base + i, sv);
-            }
-        }
-        "mat4x4" => {
+        MemoryDataType::Vec2 => store_vec_n(bb, 2, ctx.type_handles[&WgslType::Vec2F32]),
+        MemoryDataType::Vec3 => store_vec_n(bb, 3, ctx.type_handles[&WgslType::Vec3F32]),
+        MemoryDataType::Vec4 => store_vec_n(bb, 4, ctx.type_handles[&WgslType::Vec4F32]),
+        MemoryDataType::Mat4x4 => {
             // Store mat4x4 to a local var first — Naga requires AccessIndex on pointers,
             // not on value expressions (Compose results).
-            let mat4_ty = ctx.type_handles["mat4x4<f32>"];
-            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            let mat4_ty = ctx.type_handles[&WgslType::Mat4x4F32];
+            let vec4_ty = ctx.type_handles[&WgslType::Vec4F32];
             let mat_ptr = bb.declare_var("_store_mat", mat4_ty, Some(val));
             for col in 0..4u32 {
                 let col_ptr = bb.access_index(mat_ptr, col);
                 let col_val = bb.load_local(col_ptr);
-                // Store vec4 column to a local var for component access
                 let col_var = bb.declare_var(&format!("_store_col{}", col), vec4_ty, Some(col_val));
                 for row in 0..4u32 {
                     let comp_ptr = bb.access_index(col_var, row);
@@ -1912,10 +1937,6 @@ fn store_typed(
                     store_word(bb, base + col * 4 + row, sv);
                 }
             }
-        }
-        _ => {
-            let sv = bb.bitcast_u32(val);
-            store_word(bb, base, sv);
         }
     }
 }
@@ -1937,9 +1958,7 @@ fn translate_expr_body(
         ExprIR::LiteralBool { value } => bb.lit_bool(*value),
 
         ExprIR::VarRef { name } => {
-            let (expr, needs_load) = scope
-                .resolve(name)
-                .unwrap_or_else(|| panic!("VarRef: variable '{}' not found in scope", name));
+            let (expr, needs_load) = scope.must_resolve(name, "VarRef");
             if needs_load {
                 bb.load_local(expr)
             } else {
@@ -1948,10 +1967,7 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadGlobal { symbol_id } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadGlobal: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadGlobal");
             let globals = ctx
                 .globals_expr
                 .expect("LoadGlobal requires globals buffer");
@@ -1959,10 +1975,7 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadScalar { symbol_id } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadScalar: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadScalar");
             let scalars = ctx
                 .scalars_expr
                 .expect("LoadScalar requires scalars buffer");
@@ -1971,19 +1984,14 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadField { symbol_id, index } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadField: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let domain_buf = ctx.domain_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("LoadField: domain '{}' not in pass domain_exprs", domain_id)
-            });
+            let domain_buf = lookup_domain_buf(ctx, domain_id, "LoadField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let raw = bb.load_buffer(*domain_buf, addr);
-            if sym.wgsl_type == "f32" {
+            let raw = bb.load_buffer(domain_buf, addr);
+            if sym.data_type.is_f32() {
                 bb.bitcast_f32(raw)
             } else {
                 raw
@@ -1993,36 +2001,34 @@ fn translate_expr_body(
         ExprIR::BinaryOp { op, left, right } => {
             let l = translate_expr_body(bb, ctx, left, scope);
             let r = translate_expr_body(bb, ctx, right, scope);
-            match op.as_str() {
-                "+" => bb.add(l, r),
-                "-" => bb.sub(l, r),
-                "*" => bb.mul(l, r),
-                "/" => bb.div(l, r),
-                "%" => bb.modulo(l, r),
-                "==" => bb.eq(l, r),
-                "!=" => bb.ne(l, r),
-                "<" => bb.lt(l, r),
-                ">" => bb.gt(l, r),
-                "<=" => bb.le(l, r),
-                ">=" => bb.ge(l, r),
-                "&&" => bb.and(l, r),
-                "||" => bb.or(l, r),
-                "&" => bb.bit_and(l, r),
-                "|" => bb.bit_or(l, r),
-                "^" => bb.bit_xor(l, r),
-                "<<" => bb.shl(l, r),
-                ">>" => bb.shr(l, r),
-                _ => panic!("BinaryOp: not yet implemented: '{}'", op),
+            match op {
+                BinaryOp::Add => bb.add(l, r),
+                BinaryOp::Sub => bb.sub(l, r),
+                BinaryOp::Mul => bb.mul(l, r),
+                BinaryOp::Div => bb.div(l, r),
+                BinaryOp::Mod => bb.modulo(l, r),
+                BinaryOp::Eq => bb.eq(l, r),
+                BinaryOp::Ne => bb.ne(l, r),
+                BinaryOp::Lt => bb.lt(l, r),
+                BinaryOp::Gt => bb.gt(l, r),
+                BinaryOp::Le => bb.le(l, r),
+                BinaryOp::Ge => bb.ge(l, r),
+                BinaryOp::And => bb.and(l, r),
+                BinaryOp::Or => bb.or(l, r),
+                BinaryOp::BitAnd => bb.bit_and(l, r),
+                BinaryOp::BitOr => bb.bit_or(l, r),
+                BinaryOp::BitXor => bb.bit_xor(l, r),
+                BinaryOp::Shl => bb.shl(l, r),
+                BinaryOp::Shr => bb.shr(l, r),
             }
         }
 
         ExprIR::UnaryOp { op, expr: inner } => {
             let e = translate_expr_body(bb, ctx, inner, scope);
-            match op.as_str() {
-                "-" => bb.neg(e),
-                "!" => bb.not(e),
-                "~" => bb.bit_not(e),
-                _ => panic!("UnaryOp: not yet implemented: '{}'", op),
+            match op {
+                UnaryOp::Neg => bb.neg(e),
+                UnaryOp::Not => bb.not(e),
+                UnaryOp::BitNot => bb.bit_not(e),
             }
         }
 
@@ -2090,13 +2096,11 @@ fn translate_expr_body(
                 .iter()
                 .map(|a| translate_expr_body(bb, ctx, a, scope))
                 .collect();
-            let ty = ctx.type_handles.get(data_type.as_str()).unwrap_or_else(|| {
-                panic!("Construct: no type handle for '{}' in context", data_type)
-            });
+            let ty = lookup_type_handle(ctx, *data_type, "Construct");
             // Naga Compose for mat4x4 expects 4 vec4 columns, not 16 scalars.
             // When DSL provides 16 scalar args, group into 4 columns.
-            if data_type == "mat4x4<f32>" && translated.len() == 16 {
-                let vec4_ty = ctx.type_handles["vec4<f32>"];
+            if matches!(data_type, WgslType::Mat4x4F32) && translated.len() == 16 {
+                let vec4_ty = lookup_type_handle(ctx, WgslType::Vec4F32, "Construct");
                 let cols: Vec<Expr> = (0..4)
                     .map(|col| {
                         let base = col * 4;
@@ -2106,9 +2110,9 @@ fn translate_expr_body(
                         ])
                     })
                     .collect();
-                bb.compose(*ty, cols)
+                bb.compose(ty, cols)
             } else {
-                bb.compose(*ty, translated)
+                bb.compose(ty, translated)
             }
         }
 
@@ -2156,22 +2160,15 @@ fn translate_expr_body(
             sampler_id,
             uv,
         } => {
-            let tex = *ctx.texture_exprs.get(texture_id).unwrap_or_else(|| {
-                panic!("TextureSample: texture '{}' not in context", texture_id)
-            });
-            let samp = *ctx.sampler_exprs.get(sampler_id).unwrap_or_else(|| {
-                panic!("TextureSample: sampler '{}' not in context", sampler_id)
-            });
+            let tex = lookup_texture(ctx, texture_id, "TextureSample");
+            let samp = lookup_sampler(ctx, sampler_id, "TextureSample");
             let uv_expr = translate_expr_body(bb, ctx, uv, scope);
             let zero = bb.lit_f32(0.0);
             bb.texture_sample_level(tex, samp, uv_expr, zero)
         }
 
         ExprIR::TextureLoad { texture_id, coords } => {
-            let tex = *ctx
-                .texture_exprs
-                .get(texture_id)
-                .unwrap_or_else(|| panic!("TextureLoad: texture '{}' not in context", texture_id));
+            let tex = lookup_texture(ctx, texture_id, "TextureLoad");
             let coords_expr = translate_expr_body(bb, ctx, coords, scope);
             let level = if ctx
                 .texture_is_sampled
@@ -2187,53 +2184,45 @@ fn translate_expr_body(
         }
 
         ExprIR::AtomicLoadField { symbol_id, index } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicLoadField: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicLoadField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("AtomicLoadField: domain '{}' has no atomic buffer", domain_id)
-            });
+            let atomic_buf = lookup_atomic_domain_buf(ctx, domain_id, "AtomicLoadField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let pointer = bb.access(*atomic_buf, addr);
+            let pointer = bb.access(atomic_buf, addr);
             bb.load_local(pointer) // atomicLoad is just Expression::Load on the atomic pointer
         }
 
         ExprIR::AtomicLoadScalar { symbol_id } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicLoadScalar: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicLoadScalar");
             let scalars = ctx.scalars_expr.expect("AtomicLoadScalar requires scalars buffer");
             let offset = bb.lit_u32(sym.word_offset);
             let pointer = bb.access(scalars, offset);
             bb.load_local(pointer)
         }
 
-        ExprIR::Intrinsic { name } => match name.as_str() {
-            "global_invocation_id.x" | "global_invocation_id.y" | "global_invocation_id.z" => {
-                let (gid, _) = scope
-                    .resolve("__gid")
-                    .unwrap_or_else(|| panic!("Intrinsic '{}' requires compute context", name));
-                let component = match name.as_str() {
-                    "global_invocation_id.x" => 0,
-                    "global_invocation_id.y" => 1,
-                    _ => 2,
+        ExprIR::Intrinsic { name } => match name {
+            IntrinsicName::GlobalInvocationIdX
+            | IntrinsicName::GlobalInvocationIdY
+            | IntrinsicName::GlobalInvocationIdZ => {
+                let (gid, _) = scope.must_resolve("__gid", "Intrinsic (compute context)");
+                let component = match name {
+                    IntrinsicName::GlobalInvocationIdX => 0,
+                    IntrinsicName::GlobalInvocationIdY => 1,
+                    IntrinsicName::GlobalInvocationIdZ => 2,
+                    _ => unreachable!(),
                 };
                 bb.access_index(gid, component)
             }
-            "vertex_index" | "instance_index" => {
-                let key = format!("__{}", name.replace('.', "_"));
-                let (expr, _) = scope.resolve(&key).unwrap_or_else(|| {
-                    panic!(
-                        "Intrinsic '{}' not in scope (missing vertex/render context)",
-                        name
-                    )
-                });
+            IntrinsicName::VertexIndex => {
+                let (expr, _) = scope.must_resolve("__vertex_index", "Intrinsic (vertex context)");
                 expr
             }
-            _ => panic!("Intrinsic '{}' not yet implemented", name),
+            IntrinsicName::InstanceIndex => {
+                let (expr, _) = scope.must_resolve("__instance_index", "Intrinsic (vertex context)");
+                expr
+            }
         },
 
         ExprIR::Cast {
@@ -2241,20 +2230,17 @@ fn translate_expr_body(
             expr: inner,
         } => {
             let e = translate_expr_body(bb, ctx, inner, scope);
-            match target_type.as_str() {
-                "f32" => bb.f32(e),
-                "u32" => bb.u32(e),
-                "i32" => bb.i32(e),
-                _ => panic!("Cast to '{}' not yet implemented", target_type),
+            match target_type {
+                WgslType::F32 => bb.f32(e),
+                WgslType::U32 => bb.u32(e),
+                WgslType::I32 => bb.i32(e),
+                other => panic!("Cast to '{:?}' not yet implemented", other),
             }
         }
 
         ExprIR::ApplyVP { vp_symbol, position } => {
             // Expand to: load_scalar(vp_symbol) * position
-            let sym = ctx
-                .symbol_map
-                .get(vp_symbol)
-                .unwrap_or_else(|| panic!("ApplyVP: symbol '{}' not in symbol_map", vp_symbol));
+            let sym = lookup_symbol(ctx, vp_symbol, "ApplyVP");
             let scalars = ctx
                 .scalars_expr
                 .expect("ApplyVP requires scalars buffer");
@@ -2304,7 +2290,7 @@ fn translate_expr_body(
             let out_y = bb.add(lx_s, ly_c);
             let out_y = bb.add(out_y, ty_val);
 
-            let vec4_ty = ctx.type_handles["vec4<f32>"];
+            let vec4_ty = ctx.type_handles[&WgslType::Vec4F32];
             bb.compose(vec4_ty, vec![out_x, out_y, pz, pw])
         }
 

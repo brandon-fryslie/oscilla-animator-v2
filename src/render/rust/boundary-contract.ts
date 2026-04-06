@@ -366,10 +366,16 @@ export const RenderPassSpecSchema = z.object({
     })).readonly(),
     depthStencil: z.object({
       textureId: TextureIdSchema,
-      depthLoadOp: z.enum(['load', 'clear']).optional(),
-      depthClearValue: z.number().optional(),
-      stencilLoadOp: z.enum(['load', 'clear']).optional(),
-      stencilClearValue: z.number().optional(),
+      // [LAW:dataflow-not-control-flow] Op + value live in one variant so the
+      // load/clear distinction can't drift apart at consumer sites.
+      depth: z.discriminatedUnion('op', [
+        z.object({ op: z.literal('load') }),
+        z.object({ op: z.literal('clear'), value: z.number() }),
+      ]).optional(),
+      stencil: z.discriminatedUnion('op', [
+        z.object({ op: z.literal('load') }),
+        z.object({ op: z.literal('clear'), value: z.number() }),
+      ]).optional(),
     }).optional(),
   }),
   viewport: ViewportSchema,
@@ -378,28 +384,14 @@ export const RenderPassSpecSchema = z.object({
 });
 export type RenderPassSpec = z.infer<typeof RenderPassSpecSchema>;
 
-export const CompositePassSpecSchema = z.object({
-  type: z.literal('Composite'),
-  passId: z.string(),
-  sourceBlockIds: z.array(z.string()).readonly(),
-  sampleCount: z.number(),
-  targets: z.object({
-    colors: z.array(z.object({
-      textureId: z.union([TextureIdSchema, z.literal('canvas')]),
-      loadOp: z.enum(['load', 'clear']),
-      clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
-    })).readonly(),
-  }),
-  viewport: ViewportSchema,
-  scissorRect: ScissorRectSchema,
-  drawCalls: z.array(DrawCallSpecSchema).readonly(),
-});
-export type CompositePassSpec = z.infer<typeof CompositePassSpecSchema>;
+// [LAW:one-type-per-behavior] Composite passes are render passes with no
+// depth/stencil and no camera. They're represented on the wire as `type: 'Render'`
+// — the DSL `composite()` helper constructs a RenderPassSpec that simply leaves
+// depthStencil undefined and cameraRef empty. No separate wire schema.
 
 export const RosterEntrySchema = z.discriminatedUnion('type', [
   ComputePassSpecSchema,
   RenderPassSpecSchema,
-  CompositePassSpecSchema,
   SystemPassSpecSchema,
   SystemCameraUpdateSpecSchema,
 ]);

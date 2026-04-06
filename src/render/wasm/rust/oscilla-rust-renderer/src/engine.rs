@@ -9,7 +9,9 @@ use wgpu::util::DeviceExt;
 
 use crate::allocator::StrictAllocator;
 use crate::contract::{
-    CompilationDiagnostic, DrawCallSource, InstallReceipt, PipelineInstallPayload, RosterEntry,
+    BlendMode, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp, DrawCallSource,
+    InstallReceipt, LoadOp, PipelineInstallPayload, RosterEntry, StencilCompare, StencilLoadOp,
+    StencilOp,
 };
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::mmu::{self, AllocatedShape, GpuMemoryArena};
@@ -143,103 +145,198 @@ fn built_in_fullscreen_shape(device: &wgpu::Device) -> AllocatedShape {
     }
 }
 
-fn blend_state_for(mode: &str) -> Option<wgpu::BlendState> {
-    match mode {
-        "opaque" => Some(wgpu::BlendState::REPLACE),
-        "alpha" => Some(wgpu::BlendState::ALPHA_BLENDING),
-        "additive" => Some(wgpu::BlendState {
+// [LAW:dataflow-not-control-flow] Variance lives in the contract enums; the
+// translations below are total `match` statements with no defensive defaults.
+// Adding a variant is a compile error until handled here.
+
+fn blend_state_for(mode: BlendMode) -> Option<wgpu::BlendState> {
+    Some(match mode {
+        BlendMode::Opaque => wgpu::BlendState::REPLACE,
+        BlendMode::Alpha => wgpu::BlendState::ALPHA_BLENDING,
+        BlendMode::Additive => wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::One,
                 dst_factor: wgpu::BlendFactor::One,
                 operation: wgpu::BlendOperation::Add,
             },
             alpha: wgpu::BlendComponent::OVER,
-        }),
-        "multiply" => Some(wgpu::BlendState {
+        },
+        BlendMode::Multiply => wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::Dst,
                 dst_factor: wgpu::BlendFactor::Zero,
                 operation: wgpu::BlendOperation::Add,
             },
             alpha: wgpu::BlendComponent::OVER,
-        }),
-        _ => Some(wgpu::BlendState::REPLACE),
+        },
+    })
+}
+
+fn cull_face_for(mode: CullMode) -> Option<wgpu::Face> {
+    match mode {
+        CullMode::None => None,
+        CullMode::Front => Some(wgpu::Face::Front),
+        CullMode::Back => Some(wgpu::Face::Back),
     }
 }
 
-fn cull_mode_for(mode: &str) -> Option<wgpu::Face> {
+fn depth_compare_for(mode: DepthCompare) -> wgpu::CompareFunction {
     match mode {
-        "front" => Some(wgpu::Face::Front),
-        "back" => Some(wgpu::Face::Back),
-        _ => None,
+        DepthCompare::Less => wgpu::CompareFunction::Less,
+        DepthCompare::Always => wgpu::CompareFunction::Always,
+        DepthCompare::Equal => wgpu::CompareFunction::Equal,
+        DepthCompare::Greater => wgpu::CompareFunction::Greater,
     }
 }
 
-fn compare_for(mode: &str) -> wgpu::CompareFunction {
+fn stencil_compare_for(mode: StencilCompare) -> wgpu::CompareFunction {
     match mode {
-        "less" => wgpu::CompareFunction::Less,
-        "equal" => wgpu::CompareFunction::Equal,
-        "greater" => wgpu::CompareFunction::Greater,
-        _ => wgpu::CompareFunction::Always,
+        StencilCompare::Always => wgpu::CompareFunction::Always,
+        StencilCompare::Never => wgpu::CompareFunction::Never,
+        StencilCompare::Equal => wgpu::CompareFunction::Equal,
+        StencilCompare::NotEqual => wgpu::CompareFunction::NotEqual,
+        StencilCompare::Less => wgpu::CompareFunction::Less,
+        StencilCompare::LessEqual => wgpu::CompareFunction::LessEqual,
+        StencilCompare::Greater => wgpu::CompareFunction::Greater,
+        StencilCompare::GreaterEqual => wgpu::CompareFunction::GreaterEqual,
     }
 }
 
-fn stencil_op_for(mode: &str) -> wgpu::StencilOperation {
-    match mode {
-        "zero" => wgpu::StencilOperation::Zero,
-        "replace" => wgpu::StencilOperation::Replace,
-        "invert" => wgpu::StencilOperation::Invert,
-        "increment-clamp" => wgpu::StencilOperation::IncrementClamp,
-        "decrement-clamp" => wgpu::StencilOperation::DecrementClamp,
-        "increment-wrap" => wgpu::StencilOperation::IncrementWrap,
-        "decrement-wrap" => wgpu::StencilOperation::DecrementWrap,
-        _ => wgpu::StencilOperation::Keep,
+fn stencil_op_for(op: StencilOp) -> wgpu::StencilOperation {
+    match op {
+        StencilOp::Keep => wgpu::StencilOperation::Keep,
+        StencilOp::Zero => wgpu::StencilOperation::Zero,
+        StencilOp::Replace => wgpu::StencilOperation::Replace,
+        StencilOp::Invert => wgpu::StencilOperation::Invert,
+        StencilOp::IncrementClamp => wgpu::StencilOperation::IncrementClamp,
+        StencilOp::DecrementClamp => wgpu::StencilOperation::DecrementClamp,
+        StencilOp::IncrementWrap => wgpu::StencilOperation::IncrementWrap,
+        StencilOp::DecrementWrap => wgpu::StencilOperation::DecrementWrap,
     }
 }
 
 fn stencil_face_state_for(
     face: Option<&crate::contract::StencilFaceState>,
 ) -> wgpu::StencilFaceState {
-    if let Some(face) = face {
-        wgpu::StencilFaceState {
-            compare: compare_for(&face.compare),
-            fail_op: stencil_op_for(&face.fail_op),
-            depth_fail_op: stencil_op_for(&face.depth_fail_op),
-            pass_op: stencil_op_for(&face.pass_op),
-        }
-    } else {
-        wgpu::StencilFaceState::IGNORE
+    match face {
+        Some(face) => wgpu::StencilFaceState {
+            compare: stencil_compare_for(face.compare),
+            fail_op: stencil_op_for(face.fail_op),
+            depth_fail_op: stencil_op_for(face.depth_fail_op),
+            pass_op: stencil_op_for(face.pass_op),
+        },
+        None => wgpu::StencilFaceState::IGNORE,
     }
 }
 
-fn load_op_for_f32(
-    mode: Option<&str>,
-    clear: Option<f64>,
-    default_clear: f64,
-) -> Option<wgpu::Operations<f32>> {
-    mode.map(|m| wgpu::Operations {
-        load: if m == "load" {
-            wgpu::LoadOp::Load
-        } else {
-            wgpu::LoadOp::Clear(clear.unwrap_or(default_clear) as f32)
+/// [LAW:dataflow-not-control-flow] Convert the depth load-op enum directly to
+/// the wgpu Operations struct. The Clear value lives inside the enum variant —
+/// no Option<value> coupling, no unwrap_or(default).
+fn depth_ops_for(op: Option<DepthLoadOp>) -> Option<wgpu::Operations<f32>> {
+    op.map(|op| wgpu::Operations {
+        load: match op {
+            DepthLoadOp::Load => wgpu::LoadOp::Load,
+            DepthLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
         },
         store: wgpu::StoreOp::Store,
     })
 }
 
-fn load_op_for_u32(
-    mode: Option<&str>,
-    clear: Option<u32>,
-    default_clear: u32,
-) -> Option<wgpu::Operations<u32>> {
-    mode.map(|m| wgpu::Operations {
-        load: if m == "load" {
-            wgpu::LoadOp::Load
-        } else {
-            wgpu::LoadOp::Clear(clear.unwrap_or(default_clear))
+fn stencil_ops_for(op: Option<StencilLoadOp>) -> Option<wgpu::Operations<u32>> {
+    op.map(|op| wgpu::Operations {
+        load: match op {
+            StencilLoadOp::Load => wgpu::LoadOp::Load,
+            StencilLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
         },
         store: wgpu::StoreOp::Store,
     })
+}
+
+fn color_load_op_for(op: LoadOp, clear_color: Option<[f64; 4]>) -> ColorLoadOp {
+    match op {
+        LoadOp::Load => ColorLoadOp::Load,
+        LoadOp::Clear => {
+            let cc = clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+            ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
+        }
+    }
+}
+
+/// Selection of which arena buffers to bind to a single bind group, in
+/// canonical order: globals → scalars → domains → atomic_domains → textures
+/// → samplers. The binding index is the position of each included resource
+/// in this sequence — so compute group0 (globals+scalars), compute group1
+/// (the rest), and the merged render group all read out of the same
+/// assembly routine. [LAW:single-enforcer]
+#[derive(Default)]
+struct BindGroupSelection<'a> {
+    include_globals: bool,
+    include_scalars: bool,
+    domain_keys: &'a [String],
+    atomic_domain_keys: &'a [String],
+    texture_keys: &'a [String],
+    sampler_keys: &'a [String],
+}
+
+/// Build a bind group from the selection, or return `None` if the selection
+/// is empty. The caller owns the layout source (typically
+/// `pipeline.get_bind_group_layout(group_index)`).
+///
+/// [LAW:dataflow-not-control-flow] The binding sequence is data: callers
+/// declare what to include, and this function lays them out unconditionally
+/// in the canonical order. No per-callsite `for domain in ... push` loops.
+fn build_bind_group(
+    device: &wgpu::Device,
+    arena: &GpuMemoryArena,
+    layout: &wgpu::BindGroupLayout,
+    label: &str,
+    sel: BindGroupSelection,
+) -> Option<wgpu::BindGroup> {
+    let mut entries: Vec<wgpu::BindGroupEntry> = Vec::new();
+    if sel.include_globals {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.globals_buffer.as_entire_binding(),
+        });
+    }
+    if sel.include_scalars {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.scalars_buffer.as_entire_binding(),
+        });
+    }
+    for k in sel.domain_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.domain_buffers[k].as_entire_binding(),
+        });
+    }
+    for k in sel.atomic_domain_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.domain_atomic_buffers[k].as_entire_binding(),
+        });
+    }
+    for k in sel.texture_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: wgpu::BindingResource::TextureView(&arena.textures[k].view),
+        });
+    }
+    for k in sel.sampler_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: wgpu::BindingResource::Sampler(&arena.samplers[k]),
+        });
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &entries,
+    }))
 }
 
 /// Look up the color view and optional MSAA resolve target for a render pass.
@@ -602,85 +699,33 @@ impl Engine {
                         compute_result.bound_sampler_keys.len(),
                     )));
 
-                    // Group 0: only bind buffers the shader uses (matching translator)
-                    let has_group0 = compute_result.uses_globals || compute_result.uses_scalars;
-                    let auto_group0 = if has_group0 {
-                        let mut entries = Vec::new();
-                        let mut binding = 0u32;
-                        if compute_result.uses_globals {
-                            entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.globals_buffer.as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        if compute_result.uses_scalars {
-                            entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.scalars_buffer.as_entire_binding(),
-                            });
-                        }
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("compute_group0"),
-                            layout: &pipeline.get_bind_group_layout(0),
-                            entries: &entries,
-                        }))
-                    } else {
-                        None
-                    };
-
-                    let has_group1 = !compute_result.bound_domain_keys.is_empty()
-                        || !compute_result.bound_atomic_domain_keys.is_empty()
-                        || !compute_result.bound_texture_keys.is_empty()
-                        || !compute_result.bound_sampler_keys.is_empty();
-                    let auto_group1 = if has_group1 {
-                        let mut bg_entries = Vec::new();
-                        let mut binding = 0u32;
-                        // Domains first
-                        for domain_id in &compute_result.bound_domain_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.domain_buffers[domain_id].as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        // Atomic domain buffers next
-                        for domain_id in &compute_result.bound_atomic_domain_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.domain_atomic_buffers[domain_id]
-                                    .as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        // Textures next
-                        for tex_id in &compute_result.bound_texture_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &arena.textures[tex_id].view,
-                                ),
-                            });
-                            binding += 1;
-                        }
-                        // Samplers last
-                        for sampler_id in &compute_result.bound_sampler_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: wgpu::BindingResource::Sampler(
-                                    &arena.samplers[sampler_id],
-                                ),
-                            });
-                            binding += 1;
-                        }
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("compute_group1"),
-                            layout: &pipeline.get_bind_group_layout(1),
-                            entries: &bg_entries,
-                        }))
-                    } else {
-                        None
-                    };
+                    // Group 0: uniforms (globals + scalars). Group 1: resources
+                    // (domains + atomic domains + textures + samplers). The translator
+                    // decides which group each binding sits in; we just mirror its layout.
+                    let auto_group0 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(0),
+                        "compute_group0",
+                        BindGroupSelection {
+                            include_globals: compute_result.uses_globals,
+                            include_scalars: compute_result.uses_scalars,
+                            ..Default::default()
+                        },
+                    );
+                    let auto_group1 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(1),
+                        "compute_group1",
+                        BindGroupSelection {
+                            domain_keys: &compute_result.bound_domain_keys,
+                            atomic_domain_keys: &compute_result.bound_atomic_domain_keys,
+                            texture_keys: &compute_result.bound_texture_keys,
+                            sampler_keys: &compute_result.bound_sampler_keys,
+                            ..Default::default()
+                        },
+                    );
 
                     let dispatch = match &spec.dispatch {
                         crate::contract::DispatchMode::Exact { x, y, z } => [*x, *y, *z],
@@ -780,31 +825,17 @@ impl Engine {
                                 cache: None,
                             });
                     // Bind globals + scalars (camera reads globals, writes scalars)
-                    let mut entries = Vec::new();
-                    let mut binding = 0u32;
-                    if compute_result.uses_globals {
-                        entries.push(wgpu::BindGroupEntry {
-                            binding,
-                            resource: arena.globals_buffer.as_entire_binding(),
-                        });
-                        binding += 1;
-                    }
-                    if compute_result.uses_scalars {
-                        entries.push(wgpu::BindGroupEntry {
-                            binding,
-                            resource: arena.scalars_buffer.as_entire_binding(),
-                        });
-                        let _ = binding;
-                    }
-                    let group0 = if !entries.is_empty() {
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("camera_group0"),
-                            layout: &pipeline.get_bind_group_layout(0),
-                            entries: &entries,
-                        }))
-                    } else {
-                        None
-                    };
+                    let group0 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(0),
+                        "camera_group0",
+                        BindGroupSelection {
+                            include_globals: compute_result.uses_globals,
+                            include_scalars: compute_result.uses_scalars,
+                            ..Default::default()
+                        },
+                    );
                     passes.push(CompiledPass::Compute {
                         pipeline,
                         group0,
@@ -867,154 +898,6 @@ impl Engine {
                         pipeline,
                         bind_group,
                     });
-                }
-
-                RosterEntry::Composite(spec) => {
-                    // Composite passes compile identically to Render at the engine level
-                    let pass_id = &spec.pass_id;
-                    let targets = &spec.targets;
-                    let draw_calls = &spec.draw_calls;
-
-                    for draw_call in draw_calls {
-                        let (shape_id, draw_mode) = match &draw_call.source {
-                            DrawCallSource::Domain { shape_id, .. } => {
-                                (shape_id.clone(), RenderDrawMode::Indirect)
-                            }
-                            DrawCallSource::FullScreenQuad => {
-                                let builtin_shape_id = "__builtin:fullscreen-triangle".to_string();
-                                if !arena.shape_bank.contains_key(&builtin_shape_id) {
-                                    arena.shape_bank.insert(
-                                        builtin_shape_id.clone(),
-                                        built_in_fullscreen_shape(&self.device),
-                                    );
-                                }
-                                (builtin_shape_id, RenderDrawMode::Direct { vertex_count: 3, instance_count: 1 })
-                            }
-                        };
-                        let Some(shape) = arena.shape_bank.get(&shape_id) else {
-                            return install_error_json("manifest_allocation", Some(pass_id.as_str()),
-                                format!("Shape '{}' not found", shape_id));
-                        };
-                        let Some(color_target) = targets.colors.first() else {
-                            return install_error_json("manifest_allocation", Some(pass_id.as_str()),
-                                "Composite pass must declare at least one color target");
-                        };
-                        let color_format = if color_target.texture_id == "canvas" {
-                            self.surface_config.format
-                        } else {
-                            match arena.textures.get(&color_target.texture_id) {
-                                Some(tex) => tex.format,
-                                None => return install_error_json("pipeline_creation", Some(pass_id.as_str()),
-                                    format!("Color target texture '{}' not found", color_target.texture_id)),
-                            }
-                        };
-                        let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
-                            translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
-                        })) {
-                            Ok(result) => result,
-                            Err(payload) => return install_error_json("ast_lowering", Some(pass_id.as_str()),
-                                format!("Composite translation panic: {}", panic_to_message(payload))),
-                        };
-                        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: Some(&format!("composite_{}", pass_id)),
-                            source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(render_result.module)),
-                        });
-                        let vertex_buffer_layout = wgpu::VertexBufferLayout {
-                            array_stride: shape.vertex_stride as u64,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 0, shader_location: 0 }],
-                        };
-                        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                            label: Some(&format!("composite_{}", pass_id)),
-                            layout: None,
-                            vertex: wgpu::VertexState {
-                                module: &shader, entry_point: Some("vs_main"),
-                                compilation_options: Default::default(), buffers: &[vertex_buffer_layout],
-                            },
-                            fragment: Some(wgpu::FragmentState {
-                                module: &shader, entry_point: Some("fs_main"),
-                                compilation_options: Default::default(),
-                                targets: &[Some(wgpu::ColorTargetState {
-                                    format: color_format,
-                                    blend: blend_state_for(&draw_call.pipeline_state.blend_mode),
-                                    write_mask: wgpu::ColorWrites::ALL,
-                                })],
-                            }),
-                            primitive: wgpu::PrimitiveState {
-                                topology: shape.topology, strip_index_format: None,
-                                front_face: wgpu::FrontFace::Ccw,
-                                cull_mode: cull_mode_for(&draw_call.pipeline_state.cull_mode),
-                                polygon_mode: wgpu::PolygonMode::Fill, unclipped_depth: false, conservative: false,
-                            },
-                            depth_stencil: None,
-                            multisample: wgpu::MultisampleState {
-                                count: spec.sample_count,
-                                mask: !0, alpha_to_coverage_enabled: false,
-                            },
-                            multiview_mask: None, cache: None,
-                        });
-                        // Bind group
-                        let has_bindings = render_result.uses_globals || render_result.uses_scalars
-                            || !render_result.bound_domain_keys.is_empty()
-                            || !render_result.bound_atomic_domain_keys.is_empty()
-                            || !render_result.bound_texture_keys.is_empty()
-                            || !render_result.bound_sampler_keys.is_empty();
-                        let bind_group = if has_bindings {
-                            let mut bg_entries = Vec::new();
-                            let mut binding = 0u32;
-                            if render_result.uses_globals {
-                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: arena.globals_buffer.as_entire_binding() });
-                                binding += 1;
-                            }
-                            if render_result.uses_scalars {
-                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: arena.scalars_buffer.as_entire_binding() });
-                                binding += 1;
-                            }
-                            for domain_key in &render_result.bound_domain_keys {
-                                let buf = arena.domain_buffers.get(domain_key).unwrap();
-                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: buf.as_entire_binding() });
-                                binding += 1;
-                            }
-                            for domain_key in &render_result.bound_atomic_domain_keys {
-                                let buf = arena.domain_buffers.get(domain_key).unwrap();
-                                bg_entries.push(wgpu::BindGroupEntry { binding, resource: buf.as_entire_binding() });
-                                binding += 1;
-                            }
-                            for tex_id in &render_result.bound_texture_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::TextureView(&arena.textures[tex_id].view),
-                                });
-                                binding += 1;
-                            }
-                            for sampler_id in &render_result.bound_sampler_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::Sampler(&arena.samplers[sampler_id]),
-                                });
-                                binding += 1;
-                            }
-                            Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: Some("composite_group0"), layout: &pipeline.get_bind_group_layout(0), entries: &bg_entries,
-                            }))
-                        } else { None };
-                        let color_load_op = match color_target.load_op.as_str() {
-                            "load" => ColorLoadOp::Load,
-                            _ => {
-                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
-                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
-                            }
-                        };
-                        let vp = &spec.viewport;
-                        let sc = &spec.scissor_rect;
-                        passes.push(CompiledPass::Render {
-                            pipeline, bind_group, vertex_buffer_id: shape_id, draw_mode,
-                            color_load_op, color_target_id: color_target.texture_id.clone(),
-                            depth_stencil: None,
-                            viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
-                            scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
-                        });
-                    }
                 }
 
                 RosterEntry::Render(spec) => {
@@ -1130,8 +1013,8 @@ impl Engine {
                                 Ok(wgpu::DepthStencilState {
                                     format: tex.format,
                                     depth_write_enabled: Some(draw_call.pipeline_state.depth_write),
-                                    depth_compare: Some(compare_for(
-                                        &draw_call.pipeline_state.depth_compare,
+                                    depth_compare: Some(depth_compare_for(
+                                        draw_call.pipeline_state.depth_compare,
                                     )),
                                     stencil: wgpu::StencilState {
                                         front: stencil_face_state_for(
@@ -1182,7 +1065,7 @@ impl Engine {
                                         targets: &[Some(wgpu::ColorTargetState {
                                             format: color_format,
                                             blend: blend_state_for(
-                                                &draw_call.pipeline_state.blend_mode,
+                                                draw_call.pipeline_state.blend_mode,
                                             ),
                                             write_mask: wgpu::ColorWrites::ALL,
                                         })],
@@ -1191,8 +1074,8 @@ impl Engine {
                                         topology: shape.topology,
                                         strip_index_format: None,
                                         front_face: wgpu::FrontFace::Ccw,
-                                        cull_mode: cull_mode_for(
-                                            &draw_call.pipeline_state.cull_mode,
+                                        cull_mode: cull_face_for(
+                                            draw_call.pipeline_state.cull_mode,
                                         ),
                                         polygon_mode: wgpu::PolygonMode::Fill,
                                         unclipped_depth: false,
@@ -1208,95 +1091,30 @@ impl Engine {
                                     cache: None,
                                 });
 
-                        // Bind group: domains + textures (matching translator's group 0 layout)
-                        let has_bindings = render_result.uses_globals
-                            || render_result.uses_scalars
-                            || !render_result.bound_domain_keys.is_empty()
-                            || !render_result.bound_atomic_domain_keys.is_empty()
-                            || !render_result.bound_texture_keys.is_empty()
-                            || !render_result.bound_sampler_keys.is_empty();
-                        let bind_group = if has_bindings {
-                            let mut bg_entries = Vec::new();
-                            let mut binding = 0u32;
-                            if render_result.uses_globals {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.globals_buffer.as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            if render_result.uses_scalars {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.scalars_buffer.as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            for domain_id in &render_result.bound_domain_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.domain_buffers[domain_id].as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            // Atomic domain buffers
-                            for domain_id in &render_result.bound_atomic_domain_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.domain_atomic_buffers[domain_id]
-                                        .as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            for tex_id in &render_result.bound_texture_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &arena.textures[tex_id].view,
-                                    ),
-                                });
-                                binding += 1;
-                            }
-                            for sampler_id in &render_result.bound_sampler_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::Sampler(
-                                        &arena.samplers[sampler_id],
-                                    ),
-                                });
-                                binding += 1;
-                            }
-                            Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: Some("render_group0"),
-                                layout: &pipeline.get_bind_group_layout(0),
-                                entries: &bg_entries,
-                            }))
-                        } else {
-                            None
-                        };
+                        // Bind group: render passes use a single group with the
+                        // full six-slot layout (matching translator's group 0).
+                        let bind_group = build_bind_group(
+                            &self.device,
+                            &arena,
+                            &pipeline.get_bind_group_layout(0),
+                            "render_group0",
+                            BindGroupSelection {
+                                include_globals: render_result.uses_globals,
+                                include_scalars: render_result.uses_scalars,
+                                domain_keys: &render_result.bound_domain_keys,
+                                atomic_domain_keys: &render_result.bound_atomic_domain_keys,
+                                texture_keys: &render_result.bound_texture_keys,
+                                sampler_keys: &render_result.bound_sampler_keys,
+                            },
+                        );
 
-                        // Respect color loadOp from spec
-                        let color_load_op = match color_target.load_op.as_str() {
-                            "load" => ColorLoadOp::Load,
-                            _ => {
-                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
-                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
-                            }
-                        };
+                        let color_load_op = color_load_op_for(color_target.load_op, color_target.clear_color);
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: load_op_for_f32(
-                                        depth_target.depth_load_op.as_deref(),
-                                        depth_target.depth_clear_value,
-                                        1.0,
-                                    ),
-                                    stencil_ops: load_op_for_u32(
-                                        depth_target.stencil_load_op.as_deref(),
-                                        depth_target.stencil_clear_value,
-                                        0,
-                                    ),
+                                    depth_ops: depth_ops_for(depth_target.depth),
+                                    stencil_ops: stencil_ops_for(depth_target.stencil),
                                 }
                             });
                         let vp = &spec.viewport;
