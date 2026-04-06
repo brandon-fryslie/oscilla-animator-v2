@@ -1,23 +1,32 @@
 /**
- * CompilerTesterApp — Root component for the standalone C1 compiler tester.
+ * CompilerTesterApp — Root component for the standalone compiler tester.
  *
- * Boots the Rust WASM renderer in a dedicated worker, compiles NormalizedPatch
- * fixtures through compileC1FromNormalized(), sends the resulting
- * PipelineInstallPayload JSON to the worker via INSTALL_PIPELINE, and displays
- * the canvas output.
+ * Boots the Rust WASM renderer in a dedicated worker, compiles pillar
+ * fixtures through compilePillarPatch(), sends the resulting
+ * PipelineInstallPayload JSON to the worker via INSTALL_PIPELINE, and
+ * displays the canvas output.
  *
- * Bypasses the frontend entirely — fixtures build NormalizedPatch directly.
+ * Bypasses the frontend entirely — fixtures construct PillarPatch objects
+ * directly.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { COMPILER_TESTER_FIXTURES, type CompilerFixture } from './fixtures';
 import { HEARTBEAT_BUFFER_BYTES } from '../render/rust/runtime-input-layout';
 import type {
   RustRendererWorkerOutboundMessage,
   RustRendererBootstrapMessage,
   RustRendererInstallPipelineMessage,
 } from '../render/rust/worker-protocol';
-import { compileC1FromNormalized } from '../compiler/backend-v2';
+// Side-effect import: registers ParticlePool, ExpressionModifier, DrawBundle
+// with the pillar block registry. Must happen before any compile call.
+import '../pillars/blocks';
+import { compilePillarPatch } from '../pillars/compile';
+import { PILLAR_FIXTURES, type PillarFixture } from '../pillars/fixtures';
+
+// The compiler-tester app's fixture interface. The pillar fixture metadata
+// is already shaped correctly, so this alias exists for readability.
+type CompilerFixture = PillarFixture;
+const COMPILER_TESTER_FIXTURES: readonly CompilerFixture[] = PILLAR_FIXTURES;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +53,7 @@ function getQueryParams(): { fixture?: string; canvasOnly: boolean } {
   };
 }
 
-function getInitialFixture(): CompilerFixture {
+function getInitialFixture(): CompilerFixture | null {
   const qp = getQueryParams();
   if (qp.fixture) {
     const found = COMPILER_TESTER_FIXTURES.find(f => f.id === qp.fixture);
@@ -57,13 +66,15 @@ function getInitialFixture(): CompilerFixture {
       if (found) return found;
     }
   } catch { /* sessionStorage unavailable */ }
-  return COMPILER_TESTER_FIXTURES[0];
+  return COMPILER_TESTER_FIXTURES[0] ?? null;
 }
 
-// [LAW:single-enforcer] One compilation path for all fixture selections
+// [LAW:single-enforcer] One compilation path for all fixture selections.
+// The pillar compiler produces a PipelineInstallPayload that conforms to the
+// boundary contract — exactly what the Rust renderer expects.
 function compileFixture(fixture: CompilerFixture): { json: string; error?: string } {
-  const patch = fixture.makeNormalizedPatch();
-  const result = compileC1FromNormalized(patch);
+  const patch = fixture.make();
+  const result = compilePillarPatch(patch);
   if (result.kind === 'error') {
     return { json: '', error: result.errors.join('; ') };
   }
@@ -75,7 +86,7 @@ function compileFixture(fixture: CompilerFixture): { json: string; error?: strin
 export const CompilerTesterApp: React.FC = () => {
   const [rendererStatus, setRendererStatus] = useState<RendererStatus>({ kind: 'idle' });
   const [compileStatus, setCompileStatus] = useState<CompileStatus>({ ok: true });
-  const [selectedId, setSelectedId] = useState(() => getInitialFixture().id);
+  const [selectedId, setSelectedId] = useState(() => getInitialFixture()?.id ?? '');
   const { canvasOnly } = getQueryParams();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -87,12 +98,17 @@ export const CompilerTesterApp: React.FC = () => {
   // Compile initial fixture eagerly and queue for install
   const initialCompiled = useRef<string | null>(null);
   if (initialCompiled.current === null) {
-    const result = compileFixture(getInitialFixture());
-    if (!result.error) {
-      initialCompiled.current = result.json;
-      pendingInstallRef.current = result.json;
+    const initial = getInitialFixture();
+    if (initial) {
+      const result = compileFixture(initial);
+      if (!result.error) {
+        initialCompiled.current = result.json;
+        pendingInstallRef.current = result.json;
+      } else {
+        initialCompiled.current = ''; // Mark as attempted
+      }
     } else {
-      initialCompiled.current = ''; // Mark as attempted
+      initialCompiled.current = ''; // No fixtures registered yet
     }
   }
 
