@@ -15,6 +15,7 @@
  */
 
 import type { PillarPatch } from '../types';
+import { clearCanvas } from '../block-dsl/presentation/canvas-attachment';
 
 /**
  * Text DSL program for the ExpressionModifier.
@@ -61,6 +62,7 @@ export function makeOrbitRingPatch(): PillarPatch {
           domainId: 'dots',
           shapeId: 'dots_quad',
           quadScale: 0.03,
+          attachment: clearCanvas([0.05, 0.05, 0.07, 1]),
         },
       },
     ],

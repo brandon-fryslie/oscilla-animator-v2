@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { parse } from '../parse';
 import { applyExpression, compileProgram } from '../compile';
-import { litF32, binop } from '../../../render/gpu-ir/ir-builders';
+import { litF32, binop } from '../../../../render/gpu-ir/ir-builders';
 import type { SourceBundle } from '../../types';
 
 function makeBundle(): SourceBundle {
@@ -154,5 +154,83 @@ describe('expression DSL compiler', () => {
     expect(expr.type).toBe('CallBuiltin');
     expect(expr.func).toBe('sin');
     expect(expr.args).toHaveLength(1);
+  });
+
+  // ---------------------------------------------------------------------
+  // Namespace-qualified references (slice 3)
+  // ---------------------------------------------------------------------
+
+  it('resolves qualified FieldRef against a secondary bundle', () => {
+    const primary = makeBundle();
+    const clockBundle: SourceBundle = { time: litF32(1.5) };
+    const result = applyExpression(
+      'pos_x = clock.time',
+      primary,
+      { clock: clockBundle },
+    );
+    // pos_x should now reference the clock bundle's `time` expression
+    // (same reference — FieldRef just looks up the upstream tree).
+    expect(result.pos_x).toBe(clockBundle.time);
+  });
+
+  it('resolves explicit primary.field the same as bare field', () => {
+    const primary = makeBundle();
+    const result = applyExpression('pos_x = primary.pos_y', primary);
+    // primary.pos_y resolves to the same ExprIR as pos_y
+    expect(result.pos_x).toBe(primary.pos_y);
+  });
+
+  it('compiles mixed primary + clock expression', () => {
+    const primary = makeBundle();
+    const clockBundle: SourceBundle = { time: litF32(0) };
+    const result = applyExpression(
+      'pos_x = primary.pos_x + sin(clock.time * 2.0) * 0.1',
+      primary,
+      { clock: clockBundle },
+    );
+    // Top level: + with primary.pos_x on the left
+    const posX = result.pos_x as {
+      type: string;
+      op: string;
+      left: unknown;
+      right: { type: string; op: string; left: { type: string; func: string } };
+    };
+    expect(posX.type).toBe('BinaryOp');
+    expect(posX.op).toBe('+');
+    expect(posX.left).toBe(primary.pos_x);
+    // Right: sin(...) * 0.1
+    expect(posX.right.type).toBe('BinaryOp');
+    expect(posX.right.op).toBe('*');
+    expect(posX.right.left.type).toBe('CallBuiltin');
+    expect(posX.right.left.func).toBe('sin');
+  });
+
+  it('errors on unknown bundle namespace', () => {
+    const { program } = parse('pos_x = unknown.foo');
+    const { errors } = compileProgram(program, makeBundle());
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain("unknown bundle 'unknown'");
+    // Available bundles message lists 'primary'
+    expect(errors[0].message).toContain('primary');
+  });
+
+  it('errors on unknown field within a known bundle', () => {
+    const { program } = parse('pos_x = clock.missing');
+    const clockBundle: SourceBundle = { time: litF32(0) };
+    const { errors } = compileProgram(program, makeBundle(), { clock: clockBundle });
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain("unknown field 'clock.missing'");
+    // Error message names the bundle that was searched
+    expect(errors[0].message).toContain("bundle 'clock'");
+    // And lists the available fields in that bundle
+    expect(errors[0].message).toContain('time');
+  });
+
+  it('primary bundle is always visible under its own name', () => {
+    // Even when the caller passes inputBundles without an explicit `primary`
+    // entry, `primary.field` still resolves.
+    const primary = makeBundle();
+    const result = applyExpression('pos_x = primary.pos_y', primary, {});
+    expect(result.pos_x).toBe(primary.pos_y);
   });
 });

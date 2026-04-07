@@ -228,7 +228,42 @@ class Parser {
         };
         return node;
       }
-      // Otherwise it's a field reference
+      // Otherwise it's a field reference — possibly namespace-qualified.
+      //
+      // Grammar: `ident` or `ident '.' ident`. Only single-level namespaces
+      // are supported; `a.b.c` is a parse error caught on the second dot.
+      if (this.peek().kind === 'dot') {
+        this.pos++; // consume '.'
+        const fieldTok = this.peek();
+        if (fieldTok.kind !== 'identifier') {
+          this.error(
+            fieldTok,
+            `expected field name after '${t.text}.', got '${fieldTok.text || fieldTok.kind}'`,
+          );
+          return null;
+        }
+        this.pos++;
+        // Reject deeper namespaces like `a.b.c` explicitly so the error
+        // message points at the offending second dot rather than silently
+        // accepting `a.b` and leaving `.c` as a stray token.
+        if (this.peek().kind === 'dot') {
+          const extraDot = this.peek();
+          this.error(
+            extraDot,
+            `nested field access is not supported: '${t.text}.${fieldTok.text}' cannot be followed by another '.'`,
+          );
+          return null;
+        }
+        const qualifiedNode: FieldRef = {
+          kind: 'FieldRef',
+          bundle: t.text,
+          name: fieldTok.text,
+          line: t.line,
+          column: t.column,
+        };
+        return qualifiedNode;
+      }
+
       const node: FieldRef = {
         kind: 'FieldRef',
         name: t.text,

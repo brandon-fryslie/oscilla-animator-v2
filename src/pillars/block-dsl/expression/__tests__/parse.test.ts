@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { parse } from '../parse';
-import type { BinaryExpr, CallExpr, NumberLiteral, UnaryExpr } from '../ast';
+import type { BinaryExpr, CallExpr, FieldRef, NumberLiteral, UnaryExpr } from '../ast';
 
 describe('expression DSL parser', () => {
   it('parses a single assignment', () => {
@@ -172,5 +172,74 @@ describe('expression DSL parser', () => {
     const { program, errors } = parse('x = 0.75');
     expect(errors).toEqual([]);
     expect((program.assignments[0].value as NumberLiteral).value).toBe(0.75);
+  });
+
+  // ---------------------------------------------------------------------
+  // Namespace-qualified field references (slice 3)
+  // ---------------------------------------------------------------------
+
+  it('parses a qualified field reference: clock.time', () => {
+    const { program, errors } = parse('pos_x = clock.time');
+    expect(errors).toEqual([]);
+    const ref = program.assignments[0].value as FieldRef;
+    expect(ref.kind).toBe('FieldRef');
+    expect(ref.bundle).toBe('clock');
+    expect(ref.name).toBe('time');
+  });
+
+  it('parses an explicit primary qualifier: primary.pos_x', () => {
+    const { program, errors } = parse('pos_x = primary.pos_x');
+    expect(errors).toEqual([]);
+    const ref = program.assignments[0].value as FieldRef;
+    expect(ref.kind).toBe('FieldRef');
+    expect(ref.bundle).toBe('primary');
+    expect(ref.name).toBe('pos_x');
+  });
+
+  it('unqualified identifier has no bundle set', () => {
+    const { program, errors } = parse('pos_x = pos_y');
+    expect(errors).toEqual([]);
+    const ref = program.assignments[0].value as FieldRef;
+    expect(ref.kind).toBe('FieldRef');
+    expect(ref.bundle).toBeUndefined();
+    expect(ref.name).toBe('pos_y');
+  });
+
+  it('namespace refs compose with binary operators', () => {
+    const { program, errors } = parse('pos_x = primary.pos_x + sin(clock.time * 2.0) * 0.1');
+    expect(errors).toEqual([]);
+    // Top level: + with primary.pos_x on the left
+    const top = program.assignments[0].value as BinaryExpr;
+    expect(top.kind).toBe('BinaryExpr');
+    expect(top.op).toBe('+');
+    const left = top.left as FieldRef;
+    expect(left.kind).toBe('FieldRef');
+    expect(left.bundle).toBe('primary');
+    expect(left.name).toBe('pos_x');
+    // Right side: sin(clock.time * 2.0) * 0.1 — top is a *
+    const right = top.right as BinaryExpr;
+    expect(right.kind).toBe('BinaryExpr');
+    expect(right.op).toBe('*');
+    const sinCall = right.left as CallExpr;
+    expect(sinCall.kind).toBe('CallExpr');
+    expect(sinCall.func).toBe('sin');
+    // Inside sin(...): clock.time * 2.0
+    const sinArg = sinCall.args[0] as BinaryExpr;
+    expect(sinArg.kind).toBe('BinaryExpr');
+    const sinLeft = sinArg.left as FieldRef;
+    expect(sinLeft.bundle).toBe('clock');
+    expect(sinLeft.name).toBe('time');
+  });
+
+  it('reports error on missing field after dot: clock.', () => {
+    const { errors } = parse('pos_x = clock.');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain("expected field name after 'clock.'");
+  });
+
+  it('reports error on nested namespace: a.b.c', () => {
+    const { errors } = parse('pos_x = a.b.c');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].message).toContain('nested field access is not supported');
   });
 });

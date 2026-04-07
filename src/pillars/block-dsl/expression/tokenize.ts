@@ -13,12 +13,19 @@
  *   - lparen:     (
  *   - rparen:     )
  *   - comma:      ,
+ *   - dot:        .  (used for namespace-qualified field refs, e.g. `clock.time`)
  *   - newline:    \n (significant — separates assignments)
  *   - eof:        end of input
  *
  * Whitespace (spaces, tabs, carriage returns) is skipped. Line comments
  * start with `#` or `//` and run to the next newline; the newline itself
  * is preserved as a token.
+ *
+ * NOTE on number vs dot disambiguation: a leading digit always starts a
+ * number literal, so `.5` is NOT parsed as a number (the current grammar
+ * requires a leading digit, e.g. `0.5`). A dot after a digit is consumed
+ * as part of the number literal. This keeps the dot/number distinction
+ * unambiguous for the lexer.
  */
 
 export type TokenKind =
@@ -29,6 +36,7 @@ export type TokenKind =
   | 'lparen'
   | 'rparen'
   | 'comma'
+  | 'dot'
   | 'newline'
   | 'eof';
 
@@ -153,6 +161,12 @@ export function tokenize(input: string): TokenizeResult {
     }
     if (ch === ',') {
       push('comma', ',', line, col);
+      i++;
+      col++;
+      continue;
+    }
+    if (ch === '.') {
+      push('dot', '.', line, col);
       i++;
       col++;
       continue;

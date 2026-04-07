@@ -19,8 +19,13 @@
  *
  * Every node carries source position (line, column) for error messages.
  *
- * Cross-bundle namespaces (`clock.time`, `other.pos_x`) are NOT supported
- * in slice 2 — those come in slice 3 alongside secondary bundle inputs.
+ * Namespace-qualified field references (`clock.time`, `primary.pos_x`) are
+ * supported. Unqualified identifiers resolve against the `primary` bundle
+ * by default — both `pos_x` and `primary.pos_x` are equivalent.
+ *
+ * Assignment LHS is always unqualified: a write always targets the primary
+ * bundle. There is no way to write to a secondary bundle from within the
+ * DSL (secondary bundles are read-only by construction).
  */
 
 export interface Program {
@@ -53,7 +58,14 @@ export interface NumberLiteral {
 
 export interface FieldRef {
   readonly kind: 'FieldRef';
-  /** Resolves against the primary input bundle at compile time. */
+  /**
+   * Optional bundle namespace. When omitted, resolution defaults to the
+   * primary input bundle (i.e. `pos_x` and `primary.pos_x` are equivalent).
+   * When present, the compiler looks up the field in
+   * `inputBundles[bundle]` — typically a secondary bundle slot name like
+   * `'clock'` that matches an incoming edge's `inputSlot`.
+   */
+  readonly bundle?: string;
   readonly name: string;
   readonly line: number;
   readonly column: number;
