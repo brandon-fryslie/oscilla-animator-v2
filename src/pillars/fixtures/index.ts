@@ -10,6 +10,8 @@ import type { PillarPatch } from '../types';
 import { makeOrbitRingPatch } from './orbit-ring';
 import { makeClockDrivenWobblePatch } from './clock-driven-wobble';
 import { makeCrossDomainFollowPatch } from './cross-domain-follow';
+import { makeMaterializeUvPatch } from './materialize-uv';
+import { makeOrbitGridOklchPatch } from './orbit-grid-oklch';
 
 export interface PillarFixture {
   readonly id: string;
@@ -50,5 +52,25 @@ export const PILLAR_FIXTURES: readonly PillarFixture[] = [
       'A\'s field values from VRAM (written by A\'s compute pass) instead ' +
       'of inlining A\'s expression trees.',
     make: makeCrossDomainFollowPatch,
+  },
+  {
+    id: 'materialize-uv',
+    label: 'Materialize UV',
+    description:
+      'First Materialize fixture: TextureGrid → ExpressionModifier → ' +
+      'Materialize. Writes a tinted uv gradient into a 256x256 storage ' +
+      'texture. The compiler-tester canvas is blank because Materialize ' +
+      'has no render pass — verification is structural.',
+    make: makeMaterializeUvPatch,
+  },
+  {
+    id: 'orbit-grid-oklch',
+    label: 'Orbit Grid OKLCH',
+    description:
+      'Validates ScatterUVModifier and OklchColorModifier together: ' +
+      'ParticlePool emits 64 particles, ScatterUV overrides their ' +
+      'positions to an 8x8 grid, OklchColorModifier overrides their ' +
+      'colors with a uniform teal, DrawBundle renders.',
+    make: makeOrbitGridOklchPatch,
   },
 ];
