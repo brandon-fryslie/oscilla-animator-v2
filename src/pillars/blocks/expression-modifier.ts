@@ -1,70 +1,67 @@
 /**
  * src/pillars/blocks/expression-modifier.ts
  *
- * ExpressionModifier — a Modifier (Pillar 2) that takes a primary SourceBundle
- * and applies a text-based expression DSL program to produce a new
- * SourceBundle with some fields replaced.
- *
- * Config:
- *   expression: string — a multi-line expression DSL program. Each non-empty
- *     non-comment line is an assignment of the form `field = expression`
- *     where the RHS is a math expression over the input bundle's fields,
- *     numeric literals, operators (+ - * / %), unary minus, parentheses,
- *     and built-in math function calls (sin, cos, sqrt, clamp, ...).
- *
- * Grammar and compilation rules are documented in src/pillars/expression/ast.ts
- * and src/pillars/expression/compile.ts respectively.
- *
- * The block's behavior is pure: parse + compile happen at graph compile time
- * (inside lower()), producing a new SourceBundle record. Fields not mentioned
- * by any assignment pass through unchanged from the upstream bundle.
- *
- * Design reference: design-docs/B2-source-bundle/01-engineering-design.md §5.1.
+ * ExpressionModifier — Modifier (Pillar 2). Applies a text expression DSL
+ * program to a primary SourceBundle, returning a new bundle with some
+ * fields replaced.
  */
 
-import { registerPillarBlock } from '../registry';
-import { applyExpression } from '../expression/compile';
-import type { PillarBlockDef, PillarLoweringContext } from '../types';
+import { applyExpression } from '../block-dsl/expression/compile';
+import type {
+  BlockDefinition,
+  Diagnostic,
+  LoweredBlock,
+  LoweringContext,
+  ManifestContribution,
+} from '../block-api';
 
-function readExpression(ctx: PillarLoweringContext): string {
-  const raw = ctx.config.expression;
-  if (typeof raw !== 'string') {
-    throw new Error(
-      `[ExpressionModifier] Block '${ctx.blockId}': config.expression must be a string`,
-    );
-  }
-  return raw;
+interface ExpressionModifierConfig {
+  readonly expression: string;
 }
 
-const def: PillarBlockDef = {
-  kind: 'modifier',
+type ExpressionModifierLowerArgs = ExpressionModifierConfig;
 
-  // No manifest contributions — the domain and its field set are declared
-  // by the upstream Generator. A Modifier only operates on fields that the
-  // Generator already declared.
+function readConfig(
+  raw: Readonly<Record<string, unknown>>,
+  diagnostics: Diagnostic[],
+): ExpressionModifierConfig | null {
+  const expression = raw.expression;
+  if (typeof expression !== 'string') {
+    diagnostics.push({
+      severity: 'error',
+      message: '[ExpressionModifier] config.expression must be a string',
+    });
+    return null;
+  }
+  return { expression };
+}
 
-  lower: (ctx) => {
-    const primary = ctx.inputBundles.primary;
-    if (!primary) {
-      throw new Error(
-        `[ExpressionModifier] Block '${ctx.blockId}' requires a primary input bundle`,
-      );
-    }
+function buildManifestContribution(): ManifestContribution {
+  return {};
+}
 
-    const expressionText = readExpression(ctx);
-    // applyExpression throws on parse or compile errors with a fully
-    // formatted message (file-like path info would be added here if the
-    // block tracked source locations).
-    let output;
-    try {
-      output = applyExpression(expressionText, primary);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`[ExpressionModifier] Block '${ctx.blockId}':\n${message}`);
-    }
+function lower(args: ExpressionModifierLowerArgs, ctx: LoweringContext): LoweredBlock {
+  const primary = ctx.inputBundles.primary;
+  if (!primary) {
+    throw new Error('[ExpressionModifier] requires a primary input bundle');
+  }
+  let output;
+  try {
+    output = applyExpression(args.expression, primary, ctx.inputBundles);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`[ExpressionModifier]:\n${message}`);
+  }
+  return { kind: 'bundle', output };
+}
 
-    return { kind: 'bundle', output };
-  },
+export const ExpressionModifierBlock: BlockDefinition<
+  ExpressionModifierConfig,
+  ExpressionModifierLowerArgs
+> = {
+  type: 'ExpressionModifier',
+  readConfig,
+  buildManifestContribution,
+  buildLowerArgs: (config) => config,
+  lower,
 };
-
-registerPillarBlock('ExpressionModifier', def);

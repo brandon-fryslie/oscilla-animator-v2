@@ -1,11 +1,19 @@
 /**
  * src/pillars/blocks/index.ts
  *
- * Side-effect imports that register all pillar block types at module load.
- * Consumers should import this module once (e.g. from the compiler-tester
- * app or the test setup) to populate the registry before compiling patches.
+ * Explicit array of every block definition. No side-effect registration —
+ * the registry is built from this array as a value passed into normalization.
  */
 
-import './particle-pool';
-import './expression-modifier';
-import './draw-bundle';
+import type { BlockDefinition } from '../block-api';
+import { ParticlePoolBlock } from './particle-pool';
+import { ClockBlock } from './clock';
+import { ExpressionModifierBlock } from './expression-modifier';
+import { DrawBundleBlock } from './draw-bundle';
+
+export const ALL_BLOCKS: readonly BlockDefinition<unknown, unknown>[] = [
+  ParticlePoolBlock as BlockDefinition<unknown, unknown>,
+  ClockBlock as BlockDefinition<unknown, unknown>,
+  ExpressionModifierBlock as BlockDefinition<unknown, unknown>,
+  DrawBundleBlock as BlockDefinition<unknown, unknown>,
+];
