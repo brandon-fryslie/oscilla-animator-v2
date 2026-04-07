@@ -12,8 +12,6 @@ import { ExpressionModifierBlock } from './expression-modifier';
 import { DrawBundleBlock } from './draw-bundle';
 import { TextureGridBlock } from './texture-grid';
 import { MaterializeBlock } from './materialize';
-import { ScatterUVModifierBlock } from './scatter-uv-modifier';
-import { OklchColorModifierBlock } from './oklch-color-modifier';
 
 export const ALL_BLOCKS: readonly BlockDefinition<unknown, unknown>[] = [
   ParticlePoolBlock as BlockDefinition<unknown, unknown>,
@@ -22,6 +20,4 @@ export const ALL_BLOCKS: readonly BlockDefinition<unknown, unknown>[] = [
   DrawBundleBlock as BlockDefinition<unknown, unknown>,
   TextureGridBlock as BlockDefinition<unknown, unknown>,
   MaterializeBlock as BlockDefinition<unknown, unknown>,
-  ScatterUVModifierBlock as BlockDefinition<unknown, unknown>,
-  OklchColorModifierBlock as BlockDefinition<unknown, unknown>,
 ];

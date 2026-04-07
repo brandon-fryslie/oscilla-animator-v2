@@ -24,8 +24,6 @@ import { makeCrossDomainFollowPatch } from '../fixtures/cross-domain-follow';
 import type { PillarPatch } from '../types';
 import { clearCanvas, loadCanvas } from '../block-dsl/presentation/canvas-attachment';
 import { makeMaterializeUvPatch } from '../fixtures/materialize-uv';
-import { makeOrbitGridOklchPatch } from '../fixtures/orbit-grid-oklch';
-import { oklchToLinearRgb } from '../blocks/oklch-color-modifier';
 
 /**
  * Walk any ExprIR/StatementIR tree and return true if it contains a node
@@ -750,72 +748,3 @@ describe('pillar compiler: materialize-uv fixture', () => {
   });
 });
 
-// =========================================================================
-// New slice: orbit-grid-oklch fixture (Scatter + Oklch modifiers)
-// =========================================================================
-
-describe('pillar compiler: orbit-grid-oklch fixture', () => {
-  it('compile succeeds', () => {
-    const result = compilePillarPatch(makeOrbitGridOklchPatch());
-    if (result.kind !== 'ok') throw new Error(`Compile failed: ${result.errors.join('; ')}`);
-    expect(result.kind).toBe('ok');
-  });
-
-  it('payload passes Zod + semantic validation', () => {
-    const result = compilePillarPatch(makeOrbitGridOklchPatch());
-    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
-    const parsed = PipelineInstallPayloadSchema.safeParse(result.payload);
-    if (!parsed.success) {
-      throw new Error(`Zod validation failed:\n${JSON.stringify(parsed.error.issues, null, 2)}`);
-    }
-    expect(parsed.success).toBe(true);
-  });
-
-  it('pos_x StoreField reaches a LiteralF32 of the spacing value (0.18)', () => {
-    // ScatterUVModifier multiplies (col - halfCols) by spacing. The
-    // spacing literal must show up somewhere in the StoreField's value tree.
-    const result = compilePillarPatch(makeOrbitGridOklchPatch());
-    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
-    const compute = result.payload.roster[0];
-    if (compute.type !== 'Compute') throw new Error('Expected Compute');
-
-    const posXStore = compute.ast.find(
-      (s) => s.type === 'StoreField' && (s as { symbolId: string }).symbolId === 'dots:pos_x',
-    );
-    expect(posXStore).toBeDefined();
-    const found = treeContains(posXStore, (n) => {
-      if (typeof n !== 'object' || n === null) return false;
-      const node = n as { type?: string; value?: number };
-      return node.type === 'LiteralF32' && node.value === 0.18;
-    });
-    expect(found).toBe(true);
-  });
-
-  it('color_r StoreField is a LiteralF32 matching the OKLCH conversion', () => {
-    // OklchColorModifier precomputes the color in TypeScript, so the
-    // value node is a literal — not a BinaryOp. Verify within epsilon.
-    const expected = oklchToLinearRgb(0.7, 0.15, 210);
-    const result = compilePillarPatch(makeOrbitGridOklchPatch());
-    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
-    const compute = result.payload.roster[0];
-    if (compute.type !== 'Compute') throw new Error('Expected Compute');
-
-    const colorRStore = compute.ast.find(
-      (s) => s.type === 'StoreField' && (s as { symbolId: string }).symbolId === 'dots:color_r',
-    );
-    expect(colorRStore).toBeDefined();
-    const value = (colorRStore as { value: { type: string; value?: number } }).value;
-    expect(value.type).toBe('LiteralF32');
-    expect(value.value!).toBeCloseTo(expected.r, 6);
-  });
-
-  it('roster still has the expected 3 passes (Compute + DrawPrep + Render)', () => {
-    const result = compilePillarPatch(makeOrbitGridOklchPatch());
-    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
-    const { roster } = result.payload;
-    expect(roster).toHaveLength(3);
-    expect(roster[0].type).toBe('Compute');
-    expect(roster[1].type).toBe('System_DrawPrep');
-    expect(roster[2].type).toBe('Render');
-  });
-});
