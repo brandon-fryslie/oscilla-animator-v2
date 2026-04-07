@@ -23,6 +23,9 @@ import { makeClockDrivenWobblePatch } from '../fixtures/clock-driven-wobble';
 import { makeCrossDomainFollowPatch } from '../fixtures/cross-domain-follow';
 import type { PillarPatch } from '../types';
 import { clearCanvas, loadCanvas } from '../block-dsl/presentation/canvas-attachment';
+import { makeMaterializeUvPatch } from '../fixtures/materialize-uv';
+import { makeOrbitGridOklchPatch } from '../fixtures/orbit-grid-oklch';
+import { oklchToLinearRgb } from '../blocks/oklch-color-modifier';
 
 /**
  * Walk any ExprIR/StatementIR tree and return true if it contains a node
@@ -660,5 +663,159 @@ describe('pillar compiler: cross-domain-follow fixture', () => {
     };
     compute.ast.forEach(walk);
     expect(foundLoadField).toBe(false);
+  });
+});
+
+// =========================================================================
+// New slice: materialize-uv fixture (texture-target Intent)
+// =========================================================================
+
+describe('pillar compiler: materialize-uv fixture', () => {
+  it('compile succeeds', () => {
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(`Compile failed: ${result.errors.join('; ')}`);
+    expect(result.kind).toBe('ok');
+  });
+
+  it('payload passes Zod + semantic validation', () => {
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const parsed = PipelineInstallPayloadSchema.safeParse(result.payload);
+    if (!parsed.success) {
+      throw new Error(`Zod validation failed:\n${JSON.stringify(parsed.error.issues, null, 2)}`);
+    }
+    expect(parsed.success).toBe(true);
+  });
+
+  it('manifest declares the storage texture with usage:storage', () => {
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const tex = result.payload.manifest.textures['uv_gradient'];
+    expect(tex).toBeDefined();
+    expect(tex.dimension).toBe('2d');
+    expect(tex.width).toBe(256);
+    expect(tex.height).toBe(256);
+    expect(tex.format).toBe('rgba8unorm');
+    expect(tex.usage).toContain('storage');
+  });
+
+  it('roster has exactly 1 Compute pass with dispatch.mode=Texture', () => {
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const { roster } = result.payload;
+    expect(roster).toHaveLength(1);
+    const pass = roster[0];
+    expect(pass.type).toBe('Compute');
+    if (pass.type !== 'Compute') return;
+    expect(pass.dispatch.mode).toBe('Texture');
+    if (pass.dispatch.mode !== 'Texture') return;
+    expect(pass.dispatch.textureId).toBe('uv_gradient');
+    expect(pass.dependencies.textures['uv_gradient']).toBe('write');
+  });
+
+  it('compute pass emits a TextureStore of vec4<f32> targeting the texture', () => {
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const pass = result.payload.roster[0];
+    if (pass.type !== 'Compute') throw new Error('Expected Compute');
+
+    const stores = pass.ast.filter((s) => s.type === 'TextureStore');
+    expect(stores).toHaveLength(1);
+    const store = stores[0] as { textureId: string; value: { type: string; dataType?: string; args?: unknown[] } };
+    expect(store.textureId).toBe('uv_gradient');
+    expect(store.value.type).toBe('Construct');
+    expect(store.value.dataType).toBe('vec4<f32>');
+    expect(store.value.args).toHaveLength(4);
+  });
+
+  it("modifier's tint is visible: color_r let-binding contains LiteralF32(0.8)", () => {
+    // The Expression program writes color_r = u * 0.8; the materialize
+    // pass let-binds color_r from the bundle, so we should see the
+    // 0.8 literal somewhere in that let's value tree.
+    const result = compilePillarPatch(makeMaterializeUvPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const pass = result.payload.roster[0];
+    if (pass.type !== 'Compute') throw new Error('Expected Compute');
+
+    const colorRLet = pass.ast.find(
+      (s) => s.type === 'Let' && (s as { name: string }).name === 'color_r',
+    );
+    expect(colorRLet).toBeDefined();
+    const found = treeContains(colorRLet, (n) => {
+      if (typeof n !== 'object' || n === null) return false;
+      const node = n as { type?: string; value?: number };
+      return node.type === 'LiteralF32' && node.value === 0.8;
+    });
+    expect(found).toBe(true);
+  });
+});
+
+// =========================================================================
+// New slice: orbit-grid-oklch fixture (Scatter + Oklch modifiers)
+// =========================================================================
+
+describe('pillar compiler: orbit-grid-oklch fixture', () => {
+  it('compile succeeds', () => {
+    const result = compilePillarPatch(makeOrbitGridOklchPatch());
+    if (result.kind !== 'ok') throw new Error(`Compile failed: ${result.errors.join('; ')}`);
+    expect(result.kind).toBe('ok');
+  });
+
+  it('payload passes Zod + semantic validation', () => {
+    const result = compilePillarPatch(makeOrbitGridOklchPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const parsed = PipelineInstallPayloadSchema.safeParse(result.payload);
+    if (!parsed.success) {
+      throw new Error(`Zod validation failed:\n${JSON.stringify(parsed.error.issues, null, 2)}`);
+    }
+    expect(parsed.success).toBe(true);
+  });
+
+  it('pos_x StoreField reaches a LiteralF32 of the spacing value (0.18)', () => {
+    // ScatterUVModifier multiplies (col - halfCols) by spacing. The
+    // spacing literal must show up somewhere in the StoreField's value tree.
+    const result = compilePillarPatch(makeOrbitGridOklchPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const compute = result.payload.roster[0];
+    if (compute.type !== 'Compute') throw new Error('Expected Compute');
+
+    const posXStore = compute.ast.find(
+      (s) => s.type === 'StoreField' && (s as { symbolId: string }).symbolId === 'dots:pos_x',
+    );
+    expect(posXStore).toBeDefined();
+    const found = treeContains(posXStore, (n) => {
+      if (typeof n !== 'object' || n === null) return false;
+      const node = n as { type?: string; value?: number };
+      return node.type === 'LiteralF32' && node.value === 0.18;
+    });
+    expect(found).toBe(true);
+  });
+
+  it('color_r StoreField is a LiteralF32 matching the OKLCH conversion', () => {
+    // OklchColorModifier precomputes the color in TypeScript, so the
+    // value node is a literal — not a BinaryOp. Verify within epsilon.
+    const expected = oklchToLinearRgb(0.7, 0.15, 210);
+    const result = compilePillarPatch(makeOrbitGridOklchPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const compute = result.payload.roster[0];
+    if (compute.type !== 'Compute') throw new Error('Expected Compute');
+
+    const colorRStore = compute.ast.find(
+      (s) => s.type === 'StoreField' && (s as { symbolId: string }).symbolId === 'dots:color_r',
+    );
+    expect(colorRStore).toBeDefined();
+    const value = (colorRStore as { value: { type: string; value?: number } }).value;
+    expect(value.type).toBe('LiteralF32');
+    expect(value.value!).toBeCloseTo(expected.r, 6);
+  });
+
+  it('roster still has the expected 3 passes (Compute + DrawPrep + Render)', () => {
+    const result = compilePillarPatch(makeOrbitGridOklchPatch());
+    if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
+    const { roster } = result.payload;
+    expect(roster).toHaveLength(3);
+    expect(roster[0].type).toBe('Compute');
+    expect(roster[1].type).toBe('System_DrawPrep');
+    expect(roster[2].type).toBe('Render');
   });
 });
