@@ -17,9 +17,6 @@ import type {
   RustRendererBootstrapMessage,
   RustRendererInstallPipelineMessage,
 } from '../render/rust/worker-protocol';
-// Side-effect import: registers ParticlePool, ExpressionModifier, DrawBundle
-// with the pillar block registry. Must happen before any compile call.
-import '../pillars/blocks';
 import { compilePillarPatch } from '../pillars/compile';
 import { PILLAR_FIXTURES, type PillarFixture } from '../pillars/fixtures';
 
