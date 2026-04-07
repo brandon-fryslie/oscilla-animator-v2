@@ -8,7 +8,7 @@
  * static ring (timeFactor=0) whose ExpressionModifier reads pool A's
  * positions as a SECONDARY bundle and adds them to its own positions —
  * gluing each B-dot to the corresponding A-dot. sinkB then renders the
- * modified pool B on top of pool A's render with `clearOnLoad: false`.
+ * modified pool B on top of pool A's render with `attachment: false`.
  *
  * Graph shape:
  *
@@ -17,7 +17,7 @@
  *                 │ primary
  *                 ▼
  *             DrawBundle sinkA                       ← writes pool_a:* to VRAM
- *                 (clearOnLoad=true)                    + renders pool_a
+ *                 (attachment=true)                    + renders pool_a
  *
  *   ParticlePool A also feeds modB as a SECONDARY bundle (slot='a').
  *   Because A's domainId ('pool_a') differs from modB's primary domainId
@@ -39,7 +39,7 @@
  *                 │ primary
  *                 ▼
  *             DrawBundle sinkB                       ← reads pool_a:* via
- *                 (clearOnLoad=false)                   LoadField, writes
+ *                 (attachment=false)                   LoadField, writes
  *                                                        pool_b:* to VRAM
  *                                                        + composites onto
  *                                                        sinkA's render

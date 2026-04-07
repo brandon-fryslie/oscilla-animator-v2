@@ -33,7 +33,7 @@
 import type { BuiltinMathFunc, ExprIR } from '../../../render/rust/boundary-contract';
 import { binop, callBuiltin, litF32, unaryOp } from '../../../render/gpu-ir/ir-builders';
 import type { Expr, Program } from './ast';
-import type { SourceBundle } from '../types';
+import type { SourceBundle } from '../../block-api';
 import { parse } from './parse';
 
 /**

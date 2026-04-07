@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { parse } from '../parse';
 import { applyExpression, compileProgram } from '../compile';
 import { litF32, binop } from '../../../../render/gpu-ir/ir-builders';
-import type { SourceBundle } from '../../types';
+import type { SourceBundle } from '../../../block-api';
 
 function makeBundle(): SourceBundle {
   return {
