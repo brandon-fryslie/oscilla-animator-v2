@@ -348,8 +348,7 @@ describe('render target coverage', () => {
       colors: [{ textureId: 'canvas', loadOp: 'clear', clearColor: [0, 0, 0, 1] }],
       depthStencil: {
         textureId: 'depth_tex',
-        depthLoadOp: 'clear',
-        depthClearValue: 1.0,
+        depth: { op: 'clear', value: 1.0 },
       },
     };
     const payload = gpu({
@@ -373,8 +372,7 @@ describe('render target coverage', () => {
     const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.targets.depthStencil).toStrictEqual({
       textureId: 'depth_tex',
-      depthLoadOp: 'clear',
-      depthClearValue: 1.0,
+      depth: { op: 'clear', value: 1.0 },
     });
   });
 });

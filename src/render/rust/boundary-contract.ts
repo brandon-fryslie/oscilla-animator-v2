@@ -366,10 +366,16 @@ export const RenderPassSpecSchema = z.object({
     })).readonly(),
     depthStencil: z.object({
       textureId: TextureIdSchema,
-      depthLoadOp: z.enum(['load', 'clear']).optional(),
-      depthClearValue: z.number().optional(),
-      stencilLoadOp: z.enum(['load', 'clear']).optional(),
-      stencilClearValue: z.number().optional(),
+      // [LAW:dataflow-not-control-flow] Op + value live in one variant so the
+      // load/clear distinction can't drift apart at consumer sites.
+      depth: z.discriminatedUnion('op', [
+        z.object({ op: z.literal('load') }),
+        z.object({ op: z.literal('clear'), value: z.number() }),
+      ]).optional(),
+      stencil: z.discriminatedUnion('op', [
+        z.object({ op: z.literal('load') }),
+        z.object({ op: z.literal('clear'), value: z.number() }),
+      ]).optional(),
     }).optional(),
   }),
   viewport: ViewportSchema,

@@ -2,10 +2,248 @@
 //!
 //! [LAW:one-source-of-truth] These types are deserialized from JSON sent by JS.
 //! The TS types in `boundary-contract.ts` are the authority; these must match exactly.
+//!
+//! [LAW:dataflow-not-control-flow] Stringly-typed contract fields force every
+//! consumer to carry its own `match s.as_str() { _ => default }`. We absorb that
+//! variance at the boundary by deserializing directly into Rust enums — exhaustive
+//! `match` at the use site, no defensive defaults, no drift between consumers.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Contract enums — one variant per JSON tag, exhaustive
+// ---------------------------------------------------------------------------
+
+/// Color attachment load operation. `clearColor` lives next to it on `ColorTarget`.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LoadOp {
+    Load,
+    Clear,
+}
+
+/// Depth attachment load op with the clear value embedded in the Clear variant.
+/// [LAW:one-type-per-behavior] `op + value?` collapsed into one discriminated type.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum DepthLoadOp {
+    Load,
+    Clear { value: f32 },
+}
+
+/// Stencil attachment load op with the clear value embedded in the Clear variant.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum StencilLoadOp {
+    Load,
+    Clear { value: u32 },
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BlendMode {
+    Opaque,
+    Alpha,
+    Additive,
+    Multiply,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CullMode {
+    None,
+    Front,
+    Back,
+}
+
+/// Depth compare — restricted subset (less / always / equal / greater).
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DepthCompare {
+    Less,
+    Always,
+    Equal,
+    Greater,
+}
+
+/// Stencil compare — full WebGPU set.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum StencilCompare {
+    Always,
+    Never,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum StencilOp {
+    Keep,
+    Zero,
+    Replace,
+    Invert,
+    IncrementClamp,
+    DecrementClamp,
+    IncrementWrap,
+    DecrementWrap,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum TextureDimension {
+    #[serde(rename = "1d")]
+    D1,
+    #[serde(rename = "2d")]
+    D2,
+    #[serde(rename = "3d")]
+    D3,
+    #[serde(rename = "cube")]
+    Cube,
+}
+
+/// Hardware intrinsic name for `ExprIR::Intrinsic`.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum IntrinsicName {
+    #[serde(rename = "global_invocation_id.x")]
+    GlobalInvocationIdX,
+    #[serde(rename = "global_invocation_id.y")]
+    GlobalInvocationIdY,
+    #[serde(rename = "global_invocation_id.z")]
+    GlobalInvocationIdZ,
+    #[serde(rename = "vertex_index")]
+    VertexIndex,
+    #[serde(rename = "instance_index")]
+    InstanceIndex,
+}
+
+/// Math IR data type set — used for `Cast.targetType`, `Construct.dataType`,
+/// and the optional `Var.dataType`. Mirrors `WgslTypeSchema` in TS.
+#[derive(Debug, Clone, Copy, Deserialize, Hash, PartialEq, Eq)]
+pub enum WgslType {
+    #[serde(rename = "f32")]
+    F32,
+    #[serde(rename = "i32")]
+    I32,
+    #[serde(rename = "u32")]
+    U32,
+    #[serde(rename = "bool")]
+    Bool,
+    #[serde(rename = "vec2<f32>")]
+    Vec2F32,
+    #[serde(rename = "vec2<i32>")]
+    Vec2I32,
+    #[serde(rename = "vec2<u32>")]
+    Vec2U32,
+    #[serde(rename = "vec3<f32>")]
+    Vec3F32,
+    #[serde(rename = "vec3<i32>")]
+    Vec3I32,
+    #[serde(rename = "vec3<u32>")]
+    Vec3U32,
+    #[serde(rename = "vec4<f32>")]
+    Vec4F32,
+    #[serde(rename = "vec4<i32>")]
+    Vec4I32,
+    #[serde(rename = "vec4<u32>")]
+    Vec4U32,
+    #[serde(rename = "mat3x3<f32>")]
+    Mat3x3F32,
+    #[serde(rename = "mat4x4<f32>")]
+    Mat4x4F32,
+}
+
+/// Memory data type — declared on globals, arena scalars, and domain fields.
+/// Unioned across the three TS schemas; TS enforces per-location subsets.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum MemoryDataType {
+    #[serde(rename = "f32")]
+    F32,
+    #[serde(rename = "u32")]
+    U32,
+    #[serde(rename = "i32")]
+    I32,
+    #[serde(rename = "vec2")]
+    Vec2,
+    #[serde(rename = "vec3")]
+    Vec3,
+    #[serde(rename = "vec4")]
+    Vec4,
+    #[serde(rename = "mat4x4")]
+    Mat4x4,
+    #[serde(rename = "atomic<u32>")]
+    AtomicU32,
+    #[serde(rename = "atomic<i32>")]
+    AtomicI32,
+}
+
+impl MemoryDataType {
+    /// Word count (4-byte units) occupied by this type in a flat buffer.
+    pub fn word_count(self) -> u32 {
+        use MemoryDataType::*;
+        match self {
+            F32 | U32 | I32 | AtomicU32 | AtomicI32 => 1,
+            Vec2 => 2,
+            Vec3 => 3,
+            Vec4 => 4,
+            Mat4x4 => 16,
+        }
+    }
+
+    pub fn is_atomic(self) -> bool {
+        matches!(self, MemoryDataType::AtomicU32 | MemoryDataType::AtomicI32)
+    }
+
+    pub fn is_f32(self) -> bool {
+        matches!(self, MemoryDataType::F32)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum BinaryOp {
+    #[serde(rename = "+")] Add,
+    #[serde(rename = "-")] Sub,
+    #[serde(rename = "*")] Mul,
+    #[serde(rename = "/")] Div,
+    #[serde(rename = "%")] Mod,
+    #[serde(rename = "==")] Eq,
+    #[serde(rename = "!=")] Ne,
+    #[serde(rename = "<")] Lt,
+    #[serde(rename = ">")] Gt,
+    #[serde(rename = "<=")] Le,
+    #[serde(rename = ">=")] Ge,
+    #[serde(rename = "&&")] And,
+    #[serde(rename = "||")] Or,
+    #[serde(rename = "&")] BitAnd,
+    #[serde(rename = "|")] BitOr,
+    #[serde(rename = "^")] BitXor,
+    #[serde(rename = "<<")] Shl,
+    #[serde(rename = ">>")] Shr,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum UnaryOp {
+    #[serde(rename = "!")] Not,
+    #[serde(rename = "-")] Neg,
+    #[serde(rename = "~")] BitNot,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum AtomicOp {
+    Add,
+    Sub,
+    Max,
+    Min,
+    And,
+    Or,
+    Xor,
+    Exchange,
+}
 
 // ---------------------------------------------------------------------------
 // Phase 1: Pipeline Install Payload
@@ -51,7 +289,7 @@ pub struct MemoryManifest {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSpec {
     #[serde(rename = "type")]
-    pub wgsl_type: String,
+    pub data_type: MemoryDataType,
     pub is_dynamic: bool,
     pub default_value: serde_json::Value,
 }
@@ -60,7 +298,7 @@ pub struct GlobalSpec {
 #[serde(rename_all = "camelCase")]
 pub struct ArenaScalarSpec {
     #[serde(rename = "type")]
-    pub wgsl_type: String,
+    pub data_type: MemoryDataType,
     pub clear_value: serde_json::Value,
 }
 
@@ -76,14 +314,14 @@ pub struct InstanceDomainSpec {
 #[serde(rename_all = "camelCase")]
 pub struct FieldSpec {
     #[serde(rename = "type")]
-    pub wgsl_type: String,
+    pub data_type: MemoryDataType,
     pub clear_value: f64,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextureSpec {
-    pub dimension: String,
+    pub dimension: TextureDimension,
     pub width: serde_json::Value,
     pub height: Option<serde_json::Value>,
     pub depth_or_array_layers: Option<u32>,
@@ -119,7 +357,7 @@ pub struct VertexAttribute {
 #[serde(rename_all = "camelCase")]
 pub struct DataStreamSpec {
     #[serde(rename = "type")]
-    pub wgsl_type: String,
+    pub data_type: String,
     pub length: u32,
 }
 
@@ -242,7 +480,7 @@ pub struct RenderTargets {
 #[serde(rename_all = "camelCase")]
 pub struct ColorTarget {
     pub texture_id: String,
-    pub load_op: String,
+    pub load_op: LoadOp,
     pub clear_color: Option<[f64; 4]>,
 }
 
@@ -250,10 +488,8 @@ pub struct ColorTarget {
 #[serde(rename_all = "camelCase")]
 pub struct DepthStencilTarget {
     pub texture_id: String,
-    pub depth_load_op: Option<String>,
-    pub depth_clear_value: Option<f64>,
-    pub stencil_load_op: Option<String>,
-    pub stencil_clear_value: Option<u32>,
+    pub depth: Option<DepthLoadOp>,
+    pub stencil: Option<StencilLoadOp>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -284,10 +520,10 @@ pub enum DrawCallSource {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineStateSpec {
-    pub blend_mode: String,
-    pub cull_mode: String,
+    pub blend_mode: BlendMode,
+    pub cull_mode: CullMode,
     pub depth_write: bool,
-    pub depth_compare: String,
+    pub depth_compare: DepthCompare,
     pub stencil_read_mask: Option<u32>,
     pub stencil_write_mask: Option<u32>,
     pub stencil_front: Option<StencilFaceState>,
@@ -297,10 +533,10 @@ pub struct PipelineStateSpec {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StencilFaceState {
-    pub compare: String,
-    pub fail_op: String,
-    pub depth_fail_op: String,
-    pub pass_op: String,
+    pub compare: StencilCompare,
+    pub fail_op: StencilOp,
+    pub depth_fail_op: StencilOp,
+    pub pass_op: StencilOp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -352,12 +588,12 @@ pub enum ExprIR {
     // Composite constructors & casts
     Construct {
         #[serde(rename = "dataType")]
-        data_type: String,
+        data_type: WgslType,
         args: Vec<ExprIR>,
     },
     Cast {
         #[serde(rename = "targetType")]
-        target_type: String,
+        target_type: WgslType,
         expr: Box<ExprIR>,
     },
     Swizzle {
@@ -370,7 +606,7 @@ pub enum ExprIR {
     },
     // Hardware intrinsics
     Intrinsic {
-        name: String,
+        name: IntrinsicName,
     },
     // Symbolic memory reads
     LoadGlobal {
@@ -411,12 +647,12 @@ pub enum ExprIR {
     },
     // Operators
     BinaryOp {
-        op: String,
+        op: BinaryOp,
         left: Box<ExprIR>,
         right: Box<ExprIR>,
     },
     UnaryOp {
-        op: String,
+        op: UnaryOp,
         expr: Box<ExprIR>,
     },
     // Built-in math
@@ -461,7 +697,7 @@ pub enum StatementIR {
     Var {
         name: String,
         #[serde(rename = "dataType")]
-        data_type: Option<String>,
+        data_type: Option<WgslType>,
         value: Option<ExprIR>,
     },
     Assign {
@@ -507,7 +743,7 @@ pub enum StatementIR {
     Continue,
     // Atomic mutations
     AtomicOpField {
-        op: String,
+        op: AtomicOp,
         #[serde(rename = "symbolId")]
         symbol_id: String,
         index: ExprIR,
@@ -516,7 +752,7 @@ pub enum StatementIR {
         assign_result_to: Option<String>,
     },
     AtomicOpScalar {
-        op: String,
+        op: AtomicOp,
         #[serde(rename = "symbolId")]
         symbol_id: String,
         value: ExprIR,

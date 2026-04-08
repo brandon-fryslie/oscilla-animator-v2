@@ -9,7 +9,9 @@ use wgpu::util::DeviceExt;
 
 use crate::allocator::StrictAllocator;
 use crate::contract::{
-    CompilationDiagnostic, DrawCallSource, InstallReceipt, PipelineInstallPayload, RosterEntry,
+    BlendMode, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp, DrawCallSource,
+    InstallReceipt, LoadOp, PipelineInstallPayload, RosterEntry, StencilCompare, StencilLoadOp,
+    StencilOp,
 };
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::mmu::{self, AllocatedShape, GpuMemoryArena};
@@ -143,103 +145,121 @@ fn built_in_fullscreen_shape(device: &wgpu::Device) -> AllocatedShape {
     }
 }
 
-fn blend_state_for(mode: &str) -> Option<wgpu::BlendState> {
-    match mode {
-        "opaque" => Some(wgpu::BlendState::REPLACE),
-        "alpha" => Some(wgpu::BlendState::ALPHA_BLENDING),
-        "additive" => Some(wgpu::BlendState {
+// [LAW:dataflow-not-control-flow] Variance lives in the contract enums; the
+// translations below are total `match` statements with no defensive defaults.
+// Adding a variant is a compile error until handled here.
+
+fn blend_state_for(mode: BlendMode) -> Option<wgpu::BlendState> {
+    Some(match mode {
+        BlendMode::Opaque => wgpu::BlendState::REPLACE,
+        BlendMode::Alpha => wgpu::BlendState::ALPHA_BLENDING,
+        BlendMode::Additive => wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::One,
                 dst_factor: wgpu::BlendFactor::One,
                 operation: wgpu::BlendOperation::Add,
             },
             alpha: wgpu::BlendComponent::OVER,
-        }),
-        "multiply" => Some(wgpu::BlendState {
+        },
+        BlendMode::Multiply => wgpu::BlendState {
             color: wgpu::BlendComponent {
                 src_factor: wgpu::BlendFactor::Dst,
                 dst_factor: wgpu::BlendFactor::Zero,
                 operation: wgpu::BlendOperation::Add,
             },
             alpha: wgpu::BlendComponent::OVER,
-        }),
-        _ => Some(wgpu::BlendState::REPLACE),
+        },
+    })
+}
+
+fn cull_face_for(mode: CullMode) -> Option<wgpu::Face> {
+    match mode {
+        CullMode::None => None,
+        CullMode::Front => Some(wgpu::Face::Front),
+        CullMode::Back => Some(wgpu::Face::Back),
     }
 }
 
-fn cull_mode_for(mode: &str) -> Option<wgpu::Face> {
+fn depth_compare_for(mode: DepthCompare) -> wgpu::CompareFunction {
     match mode {
-        "front" => Some(wgpu::Face::Front),
-        "back" => Some(wgpu::Face::Back),
-        _ => None,
+        DepthCompare::Less => wgpu::CompareFunction::Less,
+        DepthCompare::Always => wgpu::CompareFunction::Always,
+        DepthCompare::Equal => wgpu::CompareFunction::Equal,
+        DepthCompare::Greater => wgpu::CompareFunction::Greater,
     }
 }
 
-fn compare_for(mode: &str) -> wgpu::CompareFunction {
+fn stencil_compare_for(mode: StencilCompare) -> wgpu::CompareFunction {
     match mode {
-        "less" => wgpu::CompareFunction::Less,
-        "equal" => wgpu::CompareFunction::Equal,
-        "greater" => wgpu::CompareFunction::Greater,
-        _ => wgpu::CompareFunction::Always,
+        StencilCompare::Always => wgpu::CompareFunction::Always,
+        StencilCompare::Never => wgpu::CompareFunction::Never,
+        StencilCompare::Equal => wgpu::CompareFunction::Equal,
+        StencilCompare::NotEqual => wgpu::CompareFunction::NotEqual,
+        StencilCompare::Less => wgpu::CompareFunction::Less,
+        StencilCompare::LessEqual => wgpu::CompareFunction::LessEqual,
+        StencilCompare::Greater => wgpu::CompareFunction::Greater,
+        StencilCompare::GreaterEqual => wgpu::CompareFunction::GreaterEqual,
     }
 }
 
-fn stencil_op_for(mode: &str) -> wgpu::StencilOperation {
-    match mode {
-        "zero" => wgpu::StencilOperation::Zero,
-        "replace" => wgpu::StencilOperation::Replace,
-        "invert" => wgpu::StencilOperation::Invert,
-        "increment-clamp" => wgpu::StencilOperation::IncrementClamp,
-        "decrement-clamp" => wgpu::StencilOperation::DecrementClamp,
-        "increment-wrap" => wgpu::StencilOperation::IncrementWrap,
-        "decrement-wrap" => wgpu::StencilOperation::DecrementWrap,
-        _ => wgpu::StencilOperation::Keep,
+fn stencil_op_for(op: StencilOp) -> wgpu::StencilOperation {
+    match op {
+        StencilOp::Keep => wgpu::StencilOperation::Keep,
+        StencilOp::Zero => wgpu::StencilOperation::Zero,
+        StencilOp::Replace => wgpu::StencilOperation::Replace,
+        StencilOp::Invert => wgpu::StencilOperation::Invert,
+        StencilOp::IncrementClamp => wgpu::StencilOperation::IncrementClamp,
+        StencilOp::DecrementClamp => wgpu::StencilOperation::DecrementClamp,
+        StencilOp::IncrementWrap => wgpu::StencilOperation::IncrementWrap,
+        StencilOp::DecrementWrap => wgpu::StencilOperation::DecrementWrap,
     }
 }
 
 fn stencil_face_state_for(
     face: Option<&crate::contract::StencilFaceState>,
 ) -> wgpu::StencilFaceState {
-    if let Some(face) = face {
-        wgpu::StencilFaceState {
-            compare: compare_for(&face.compare),
-            fail_op: stencil_op_for(&face.fail_op),
-            depth_fail_op: stencil_op_for(&face.depth_fail_op),
-            pass_op: stencil_op_for(&face.pass_op),
-        }
-    } else {
-        wgpu::StencilFaceState::IGNORE
+    match face {
+        Some(face) => wgpu::StencilFaceState {
+            compare: stencil_compare_for(face.compare),
+            fail_op: stencil_op_for(face.fail_op),
+            depth_fail_op: stencil_op_for(face.depth_fail_op),
+            pass_op: stencil_op_for(face.pass_op),
+        },
+        None => wgpu::StencilFaceState::IGNORE,
     }
 }
 
-fn load_op_for_f32(
-    mode: Option<&str>,
-    clear: Option<f64>,
-    default_clear: f64,
-) -> Option<wgpu::Operations<f32>> {
-    mode.map(|m| wgpu::Operations {
-        load: if m == "load" {
-            wgpu::LoadOp::Load
-        } else {
-            wgpu::LoadOp::Clear(clear.unwrap_or(default_clear) as f32)
+/// [LAW:dataflow-not-control-flow] Convert the depth load-op enum directly to
+/// the wgpu Operations struct. The Clear value lives inside the enum variant —
+/// no Option<value> coupling, no unwrap_or(default).
+fn depth_ops_for(op: Option<DepthLoadOp>) -> Option<wgpu::Operations<f32>> {
+    op.map(|op| wgpu::Operations {
+        load: match op {
+            DepthLoadOp::Load => wgpu::LoadOp::Load,
+            DepthLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
         },
         store: wgpu::StoreOp::Store,
     })
 }
 
-fn load_op_for_u32(
-    mode: Option<&str>,
-    clear: Option<u32>,
-    default_clear: u32,
-) -> Option<wgpu::Operations<u32>> {
-    mode.map(|m| wgpu::Operations {
-        load: if m == "load" {
-            wgpu::LoadOp::Load
-        } else {
-            wgpu::LoadOp::Clear(clear.unwrap_or(default_clear))
+fn stencil_ops_for(op: Option<StencilLoadOp>) -> Option<wgpu::Operations<u32>> {
+    op.map(|op| wgpu::Operations {
+        load: match op {
+            StencilLoadOp::Load => wgpu::LoadOp::Load,
+            StencilLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
         },
         store: wgpu::StoreOp::Store,
     })
+}
+
+fn color_load_op_for(op: LoadOp, clear_color: Option<[f64; 4]>) -> ColorLoadOp {
+    match op {
+        LoadOp::Load => ColorLoadOp::Load,
+        LoadOp::Clear => {
+            let cc = clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+            ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
+        }
+    }
 }
 
 /// Look up the color view and optional MSAA resolve target for a render pass.
@@ -936,14 +956,14 @@ impl Engine {
                                 compilation_options: Default::default(),
                                 targets: &[Some(wgpu::ColorTargetState {
                                     format: color_format,
-                                    blend: blend_state_for(&draw_call.pipeline_state.blend_mode),
+                                    blend: blend_state_for(draw_call.pipeline_state.blend_mode),
                                     write_mask: wgpu::ColorWrites::ALL,
                                 })],
                             }),
                             primitive: wgpu::PrimitiveState {
                                 topology: shape.topology, strip_index_format: None,
                                 front_face: wgpu::FrontFace::Ccw,
-                                cull_mode: cull_mode_for(&draw_call.pipeline_state.cull_mode),
+                                cull_mode: cull_face_for(draw_call.pipeline_state.cull_mode),
                                 polygon_mode: wgpu::PolygonMode::Fill, unclipped_depth: false, conservative: false,
                             },
                             depth_stencil: None,
@@ -998,13 +1018,7 @@ impl Engine {
                                 label: Some("composite_group0"), layout: &pipeline.get_bind_group_layout(0), entries: &bg_entries,
                             }))
                         } else { None };
-                        let color_load_op = match color_target.load_op.as_str() {
-                            "load" => ColorLoadOp::Load,
-                            _ => {
-                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
-                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
-                            }
-                        };
+                        let color_load_op = color_load_op_for(color_target.load_op, color_target.clear_color);
                         let vp = &spec.viewport;
                         let sc = &spec.scissor_rect;
                         passes.push(CompiledPass::Render {
@@ -1130,8 +1144,8 @@ impl Engine {
                                 Ok(wgpu::DepthStencilState {
                                     format: tex.format,
                                     depth_write_enabled: Some(draw_call.pipeline_state.depth_write),
-                                    depth_compare: Some(compare_for(
-                                        &draw_call.pipeline_state.depth_compare,
+                                    depth_compare: Some(depth_compare_for(
+                                        draw_call.pipeline_state.depth_compare,
                                     )),
                                     stencil: wgpu::StencilState {
                                         front: stencil_face_state_for(
@@ -1182,7 +1196,7 @@ impl Engine {
                                         targets: &[Some(wgpu::ColorTargetState {
                                             format: color_format,
                                             blend: blend_state_for(
-                                                &draw_call.pipeline_state.blend_mode,
+                                                draw_call.pipeline_state.blend_mode,
                                             ),
                                             write_mask: wgpu::ColorWrites::ALL,
                                         })],
@@ -1191,8 +1205,8 @@ impl Engine {
                                         topology: shape.topology,
                                         strip_index_format: None,
                                         front_face: wgpu::FrontFace::Ccw,
-                                        cull_mode: cull_mode_for(
-                                            &draw_call.pipeline_state.cull_mode,
+                                        cull_mode: cull_face_for(
+                                            draw_call.pipeline_state.cull_mode,
                                         ),
                                         polygon_mode: wgpu::PolygonMode::Fill,
                                         unclipped_depth: false,
@@ -1275,28 +1289,13 @@ impl Engine {
                             None
                         };
 
-                        // Respect color loadOp from spec
-                        let color_load_op = match color_target.load_op.as_str() {
-                            "load" => ColorLoadOp::Load,
-                            _ => {
-                                let cc = color_target.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
-                                ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
-                            }
-                        };
+                        let color_load_op = color_load_op_for(color_target.load_op, color_target.clear_color);
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: load_op_for_f32(
-                                        depth_target.depth_load_op.as_deref(),
-                                        depth_target.depth_clear_value,
-                                        1.0,
-                                    ),
-                                    stencil_ops: load_op_for_u32(
-                                        depth_target.stencil_load_op.as_deref(),
-                                        depth_target.stencil_clear_value,
-                                        0,
-                                    ),
+                                    depth_ops: depth_ops_for(depth_target.depth),
+                                    stencil_ops: stencil_ops_for(depth_target.stencil),
                                 }
                             });
                         let vp = &spec.viewport;
