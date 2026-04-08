@@ -262,6 +262,83 @@ fn color_load_op_for(op: LoadOp, clear_color: Option<[f64; 4]>) -> ColorLoadOp {
     }
 }
 
+/// Selection of which arena buffers to bind to a single bind group, in
+/// canonical order: globals → scalars → domains → atomic_domains → textures
+/// → samplers. The binding index is the position of each included resource
+/// in this sequence — so compute group0 (globals+scalars), compute group1
+/// (the rest), and the merged render group all read out of the same
+/// assembly routine. [LAW:single-enforcer]
+#[derive(Default)]
+struct BindGroupSelection<'a> {
+    include_globals: bool,
+    include_scalars: bool,
+    domain_keys: &'a [String],
+    atomic_domain_keys: &'a [String],
+    texture_keys: &'a [String],
+    sampler_keys: &'a [String],
+}
+
+/// Build a bind group from the selection, or return `None` if the selection
+/// is empty. The caller owns the layout source (typically
+/// `pipeline.get_bind_group_layout(group_index)`).
+///
+/// [LAW:dataflow-not-control-flow] The binding sequence is data: callers
+/// declare what to include, and this function lays them out unconditionally
+/// in the canonical order. No per-callsite `for domain in ... push` loops.
+fn build_bind_group(
+    device: &wgpu::Device,
+    arena: &GpuMemoryArena,
+    layout: &wgpu::BindGroupLayout,
+    label: &str,
+    sel: BindGroupSelection,
+) -> Option<wgpu::BindGroup> {
+    let mut entries: Vec<wgpu::BindGroupEntry> = Vec::new();
+    if sel.include_globals {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.globals_buffer.as_entire_binding(),
+        });
+    }
+    if sel.include_scalars {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.scalars_buffer.as_entire_binding(),
+        });
+    }
+    for k in sel.domain_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.domain_buffers[k].as_entire_binding(),
+        });
+    }
+    for k in sel.atomic_domain_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: arena.domain_atomic_buffers[k].as_entire_binding(),
+        });
+    }
+    for k in sel.texture_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: wgpu::BindingResource::TextureView(&arena.textures[k].view),
+        });
+    }
+    for k in sel.sampler_keys {
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: wgpu::BindingResource::Sampler(&arena.samplers[k]),
+        });
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &entries,
+    }))
+}
+
 /// Look up the color view and optional MSAA resolve target for a render pass.
 /// The canvas surface is acquired per-frame; named textures live in the arena.
 /// MSAA resolve is active when `msaa_view` is Some (engine negotiated 4x at init).
@@ -622,85 +699,33 @@ impl Engine {
                         compute_result.bound_sampler_keys.len(),
                     )));
 
-                    // Group 0: only bind buffers the shader uses (matching translator)
-                    let has_group0 = compute_result.uses_globals || compute_result.uses_scalars;
-                    let auto_group0 = if has_group0 {
-                        let mut entries = Vec::new();
-                        let mut binding = 0u32;
-                        if compute_result.uses_globals {
-                            entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.globals_buffer.as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        if compute_result.uses_scalars {
-                            entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.scalars_buffer.as_entire_binding(),
-                            });
-                        }
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("compute_group0"),
-                            layout: &pipeline.get_bind_group_layout(0),
-                            entries: &entries,
-                        }))
-                    } else {
-                        None
-                    };
-
-                    let has_group1 = !compute_result.bound_domain_keys.is_empty()
-                        || !compute_result.bound_atomic_domain_keys.is_empty()
-                        || !compute_result.bound_texture_keys.is_empty()
-                        || !compute_result.bound_sampler_keys.is_empty();
-                    let auto_group1 = if has_group1 {
-                        let mut bg_entries = Vec::new();
-                        let mut binding = 0u32;
-                        // Domains first
-                        for domain_id in &compute_result.bound_domain_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.domain_buffers[domain_id].as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        // Atomic domain buffers next
-                        for domain_id in &compute_result.bound_atomic_domain_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: arena.domain_atomic_buffers[domain_id]
-                                    .as_entire_binding(),
-                            });
-                            binding += 1;
-                        }
-                        // Textures next
-                        for tex_id in &compute_result.bound_texture_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &arena.textures[tex_id].view,
-                                ),
-                            });
-                            binding += 1;
-                        }
-                        // Samplers last
-                        for sampler_id in &compute_result.bound_sampler_keys {
-                            bg_entries.push(wgpu::BindGroupEntry {
-                                binding,
-                                resource: wgpu::BindingResource::Sampler(
-                                    &arena.samplers[sampler_id],
-                                ),
-                            });
-                            binding += 1;
-                        }
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("compute_group1"),
-                            layout: &pipeline.get_bind_group_layout(1),
-                            entries: &bg_entries,
-                        }))
-                    } else {
-                        None
-                    };
+                    // Group 0: uniforms (globals + scalars). Group 1: resources
+                    // (domains + atomic domains + textures + samplers). The translator
+                    // decides which group each binding sits in; we just mirror its layout.
+                    let auto_group0 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(0),
+                        "compute_group0",
+                        BindGroupSelection {
+                            include_globals: compute_result.uses_globals,
+                            include_scalars: compute_result.uses_scalars,
+                            ..Default::default()
+                        },
+                    );
+                    let auto_group1 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(1),
+                        "compute_group1",
+                        BindGroupSelection {
+                            domain_keys: &compute_result.bound_domain_keys,
+                            atomic_domain_keys: &compute_result.bound_atomic_domain_keys,
+                            texture_keys: &compute_result.bound_texture_keys,
+                            sampler_keys: &compute_result.bound_sampler_keys,
+                            ..Default::default()
+                        },
+                    );
 
                     let dispatch = match &spec.dispatch {
                         crate::contract::DispatchMode::Exact { x, y, z } => [*x, *y, *z],
@@ -800,31 +825,17 @@ impl Engine {
                                 cache: None,
                             });
                     // Bind globals + scalars (camera reads globals, writes scalars)
-                    let mut entries = Vec::new();
-                    let mut binding = 0u32;
-                    if compute_result.uses_globals {
-                        entries.push(wgpu::BindGroupEntry {
-                            binding,
-                            resource: arena.globals_buffer.as_entire_binding(),
-                        });
-                        binding += 1;
-                    }
-                    if compute_result.uses_scalars {
-                        entries.push(wgpu::BindGroupEntry {
-                            binding,
-                            resource: arena.scalars_buffer.as_entire_binding(),
-                        });
-                        let _ = binding;
-                    }
-                    let group0 = if !entries.is_empty() {
-                        Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("camera_group0"),
-                            layout: &pipeline.get_bind_group_layout(0),
-                            entries: &entries,
-                        }))
-                    } else {
-                        None
-                    };
+                    let group0 = build_bind_group(
+                        &self.device,
+                        &arena,
+                        &pipeline.get_bind_group_layout(0),
+                        "camera_group0",
+                        BindGroupSelection {
+                            include_globals: compute_result.uses_globals,
+                            include_scalars: compute_result.uses_scalars,
+                            ..Default::default()
+                        },
+                    );
                     passes.push(CompiledPass::Compute {
                         pipeline,
                         group0,
@@ -1080,72 +1091,22 @@ impl Engine {
                                     cache: None,
                                 });
 
-                        // Bind group: domains + textures (matching translator's group 0 layout)
-                        let has_bindings = render_result.uses_globals
-                            || render_result.uses_scalars
-                            || !render_result.bound_domain_keys.is_empty()
-                            || !render_result.bound_atomic_domain_keys.is_empty()
-                            || !render_result.bound_texture_keys.is_empty()
-                            || !render_result.bound_sampler_keys.is_empty();
-                        let bind_group = if has_bindings {
-                            let mut bg_entries = Vec::new();
-                            let mut binding = 0u32;
-                            if render_result.uses_globals {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.globals_buffer.as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            if render_result.uses_scalars {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.scalars_buffer.as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            for domain_id in &render_result.bound_domain_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.domain_buffers[domain_id].as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            // Atomic domain buffers
-                            for domain_id in &render_result.bound_atomic_domain_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: arena.domain_atomic_buffers[domain_id]
-                                        .as_entire_binding(),
-                                });
-                                binding += 1;
-                            }
-                            for tex_id in &render_result.bound_texture_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &arena.textures[tex_id].view,
-                                    ),
-                                });
-                                binding += 1;
-                            }
-                            for sampler_id in &render_result.bound_sampler_keys {
-                                bg_entries.push(wgpu::BindGroupEntry {
-                                    binding,
-                                    resource: wgpu::BindingResource::Sampler(
-                                        &arena.samplers[sampler_id],
-                                    ),
-                                });
-                                binding += 1;
-                            }
-                            Some(self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                                label: Some("render_group0"),
-                                layout: &pipeline.get_bind_group_layout(0),
-                                entries: &bg_entries,
-                            }))
-                        } else {
-                            None
-                        };
+                        // Bind group: render passes use a single group with the
+                        // full six-slot layout (matching translator's group 0).
+                        let bind_group = build_bind_group(
+                            &self.device,
+                            &arena,
+                            &pipeline.get_bind_group_layout(0),
+                            "render_group0",
+                            BindGroupSelection {
+                                include_globals: render_result.uses_globals,
+                                include_scalars: render_result.uses_scalars,
+                                domain_keys: &render_result.bound_domain_keys,
+                                atomic_domain_keys: &render_result.bound_atomic_domain_keys,
+                                texture_keys: &render_result.bound_texture_keys,
+                                sampler_keys: &render_result.bound_sampler_keys,
+                            },
+                        );
 
                         let color_load_op = color_load_op_for(color_target.load_op, color_target.clear_color);
                         let depth_stencil =

@@ -91,6 +91,67 @@ impl TranslationScope {
             None
         }
     }
+
+    /// [LAW:single-enforcer] All scope lookups that are supposed to have been
+    /// resolved by earlier passes funnel through this. Missing names are
+    /// translator-invariant violations, not recoverable errors.
+    fn must_resolve(&self, name: &str, context: &str) -> (Expr, bool) {
+        self.resolve(name)
+            .unwrap_or_else(|| panic!("{context}: variable '{name}' not in scope"))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lookup helpers — [LAW:single-enforcer]
+//
+// Every symbol/resource lookup in the translator funnels through one of these
+// helpers. Missing keys are upstream-validator bugs (Zod semantic validation
+// checks every symbol ref before the payload reaches Rust), so the translator
+// treats them as invariant violations and panics with a consistent message
+// shape instead of carrying a per-callsite `_ => panic!("...")` ladder.
+
+fn lookup_symbol<'a>(
+    ctx: &'a PassContext,
+    symbol_id: &str,
+    site: &str,
+) -> &'a PhysicalSymbol {
+    ctx.symbol_map
+        .get(symbol_id)
+        .unwrap_or_else(|| panic!("{site}: symbol '{symbol_id}' not in symbol_map"))
+}
+
+fn lookup_domain_buf(ctx: &PassContext, domain_id: &str, site: &str) -> Expr {
+    *ctx.domain_exprs
+        .get(domain_id)
+        .unwrap_or_else(|| panic!("{site}: domain '{domain_id}' not bound in pass"))
+}
+
+fn lookup_atomic_domain_buf(ctx: &PassContext, domain_id: &str, site: &str) -> Expr {
+    *ctx.domain_atomic_exprs
+        .get(domain_id)
+        .unwrap_or_else(|| panic!("{site}: domain '{domain_id}' has no atomic buffer"))
+}
+
+fn lookup_texture(ctx: &PassContext, texture_id: &str, site: &str) -> Expr {
+    *ctx.texture_exprs
+        .get(texture_id)
+        .unwrap_or_else(|| panic!("{site}: texture '{texture_id}' not in context"))
+}
+
+fn lookup_sampler(ctx: &PassContext, sampler_id: &str, site: &str) -> Expr {
+    *ctx.sampler_exprs
+        .get(sampler_id)
+        .unwrap_or_else(|| panic!("{site}: sampler '{sampler_id}' not in context"))
+}
+
+fn lookup_type_handle(
+    ctx: &PassContext,
+    ty: WgslType,
+    site: &str,
+) -> naga::Handle<naga::Type> {
+    *ctx.type_handles
+        .get(&ty)
+        .unwrap_or_else(|| panic!("{site}: no type handle for '{ty:?}'"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1488,9 +1549,7 @@ fn translate_statement_body(
             let dt = data_type.unwrap_or_else(|| {
                 panic!("Var '{}': dataType is required but was null", name)
             });
-            let ty = *ctx.type_handles.get(&dt).unwrap_or_else(|| {
-                panic!("Var '{}': no type handle for dataType '{:?}'", name, dt)
-            });
+            let ty = lookup_type_handle(ctx, dt, "Var");
             let init = value
                 .as_ref()
                 .map(|v| translate_expr_body(bb, ctx, v, scope));
@@ -1505,17 +1564,12 @@ fn translate_statement_body(
                     std::mem::discriminant(target)
                 );
             };
-            let (ptr, _) = scope
-                .resolve(name)
-                .unwrap_or_else(|| panic!("Assign: variable '{}' not found in scope", name));
+            let (ptr, _) = scope.must_resolve(name, "Assign");
             let val = translate_expr_body(bb, ctx, value, scope);
             bb.store_local(ptr, val);
         }
         StatementIR::StoreGlobal { symbol_id, value } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreGlobal: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreGlobal");
             let globals = ctx
                 .globals_expr
                 .expect("StoreGlobal requires globals buffer");
@@ -1523,10 +1577,7 @@ fn translate_statement_body(
             store_typed(bb, ctx, globals, sym, val);
         }
         StatementIR::StoreScalar { symbol_id, value } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreScalar: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreScalar");
             let scalars = ctx
                 .scalars_expr
                 .expect("StoreScalar requires scalars buffer");
@@ -1538,17 +1589,9 @@ fn translate_statement_body(
             index,
             value,
         } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("StoreField: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "StoreField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let domain_buf = ctx.domain_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!(
-                    "StoreField: domain '{}' not in pass domain_exprs",
-                    domain_id
-                )
-            });
+            let domain_buf = lookup_domain_buf(ctx, domain_id, "StoreField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let val = translate_expr_body(bb, ctx, value, scope);
             let store_val =
@@ -1559,17 +1602,14 @@ fn translate_statement_body(
                 };
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            bb.store_buffer(*domain_buf, addr, store_val);
+            bb.store_buffer(domain_buf, addr, store_val);
         }
         StatementIR::TextureStore {
             texture_id,
             coords,
             value,
         } => {
-            let tex = *ctx
-                .texture_exprs
-                .get(texture_id)
-                .unwrap_or_else(|| panic!("TextureStore: texture '{}' not in context", texture_id));
+            let tex = lookup_texture(ctx, texture_id, "TextureStore");
             let coords_expr = translate_expr_body(bb, ctx, coords, scope);
             let val = translate_expr_body(bb, ctx, value, scope);
             bb.texture_store(tex, coords_expr, val);
@@ -1631,19 +1671,15 @@ fn translate_statement_body(
             value,
             assign_result_to,
         } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicOpField: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicOpField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("AtomicOpField: domain '{}' has no atomic buffer", domain_id)
-            });
+            let atomic_buf = lookup_atomic_domain_buf(ctx, domain_id, "AtomicOpField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let pointer = bb.access(*atomic_buf, addr);
+            let pointer = bb.access(atomic_buf, addr);
             let val = translate_expr_body(bb, ctx, value, scope);
-            let u32_ty = *ctx.type_handles.get(&WgslType::U32).unwrap();
+            let u32_ty = lookup_type_handle(ctx, WgslType::U32, "AtomicOpField");
             let fun = atomic_function_for(*op);
             let result = bb.atomic_op(fun, pointer, val, u32_ty);
             if let Some(name) = assign_result_to {
@@ -1656,14 +1692,12 @@ fn translate_statement_body(
             value,
             assign_result_to,
         } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicOpScalar: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicOpScalar");
             let scalars = ctx.scalars_expr.expect("AtomicOpScalar requires scalars buffer");
             let offset = bb.lit_u32(sym.word_offset);
             let pointer = bb.access(scalars, offset);
             let val = translate_expr_body(bb, ctx, value, scope);
-            let u32_ty = *ctx.type_handles.get(&WgslType::U32).unwrap();
+            let u32_ty = lookup_type_handle(ctx, WgslType::U32, "AtomicOpScalar");
             let fun = atomic_function_for(*op);
             let result = bb.atomic_op(fun, pointer, val, u32_ty);
             if let Some(name) = assign_result_to {
@@ -1924,9 +1958,7 @@ fn translate_expr_body(
         ExprIR::LiteralBool { value } => bb.lit_bool(*value),
 
         ExprIR::VarRef { name } => {
-            let (expr, needs_load) = scope
-                .resolve(name)
-                .unwrap_or_else(|| panic!("VarRef: variable '{}' not found in scope", name));
+            let (expr, needs_load) = scope.must_resolve(name, "VarRef");
             if needs_load {
                 bb.load_local(expr)
             } else {
@@ -1935,10 +1967,7 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadGlobal { symbol_id } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadGlobal: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadGlobal");
             let globals = ctx
                 .globals_expr
                 .expect("LoadGlobal requires globals buffer");
@@ -1946,10 +1975,7 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadScalar { symbol_id } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadScalar: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadScalar");
             let scalars = ctx
                 .scalars_expr
                 .expect("LoadScalar requires scalars buffer");
@@ -1958,18 +1984,13 @@ fn translate_expr_body(
         }
 
         ExprIR::LoadField { symbol_id, index } => {
-            let sym = ctx
-                .symbol_map
-                .get(symbol_id)
-                .unwrap_or_else(|| panic!("LoadField: symbol '{}' not in symbol_map", symbol_id));
+            let sym = lookup_symbol(ctx, symbol_id, "LoadField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let domain_buf = ctx.domain_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("LoadField: domain '{}' not in pass domain_exprs", domain_id)
-            });
+            let domain_buf = lookup_domain_buf(ctx, domain_id, "LoadField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let raw = bb.load_buffer(*domain_buf, addr);
+            let raw = bb.load_buffer(domain_buf, addr);
             if sym.data_type.is_f32() {
                 bb.bitcast_f32(raw)
             } else {
@@ -2075,13 +2096,11 @@ fn translate_expr_body(
                 .iter()
                 .map(|a| translate_expr_body(bb, ctx, a, scope))
                 .collect();
-            let ty = ctx.type_handles.get(data_type).unwrap_or_else(|| {
-                panic!("Construct: no type handle for '{:?}' in context", data_type)
-            });
+            let ty = lookup_type_handle(ctx, *data_type, "Construct");
             // Naga Compose for mat4x4 expects 4 vec4 columns, not 16 scalars.
             // When DSL provides 16 scalar args, group into 4 columns.
             if matches!(data_type, WgslType::Mat4x4F32) && translated.len() == 16 {
-                let vec4_ty = ctx.type_handles[&WgslType::Vec4F32];
+                let vec4_ty = lookup_type_handle(ctx, WgslType::Vec4F32, "Construct");
                 let cols: Vec<Expr> = (0..4)
                     .map(|col| {
                         let base = col * 4;
@@ -2091,9 +2110,9 @@ fn translate_expr_body(
                         ])
                     })
                     .collect();
-                bb.compose(*ty, cols)
+                bb.compose(ty, cols)
             } else {
-                bb.compose(*ty, translated)
+                bb.compose(ty, translated)
             }
         }
 
@@ -2141,22 +2160,15 @@ fn translate_expr_body(
             sampler_id,
             uv,
         } => {
-            let tex = *ctx.texture_exprs.get(texture_id).unwrap_or_else(|| {
-                panic!("TextureSample: texture '{}' not in context", texture_id)
-            });
-            let samp = *ctx.sampler_exprs.get(sampler_id).unwrap_or_else(|| {
-                panic!("TextureSample: sampler '{}' not in context", sampler_id)
-            });
+            let tex = lookup_texture(ctx, texture_id, "TextureSample");
+            let samp = lookup_sampler(ctx, sampler_id, "TextureSample");
             let uv_expr = translate_expr_body(bb, ctx, uv, scope);
             let zero = bb.lit_f32(0.0);
             bb.texture_sample_level(tex, samp, uv_expr, zero)
         }
 
         ExprIR::TextureLoad { texture_id, coords } => {
-            let tex = *ctx
-                .texture_exprs
-                .get(texture_id)
-                .unwrap_or_else(|| panic!("TextureLoad: texture '{}' not in context", texture_id));
+            let tex = lookup_texture(ctx, texture_id, "TextureLoad");
             let coords_expr = translate_expr_body(bb, ctx, coords, scope);
             let level = if ctx
                 .texture_is_sampled
@@ -2172,24 +2184,18 @@ fn translate_expr_body(
         }
 
         ExprIR::AtomicLoadField { symbol_id, index } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicLoadField: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicLoadField");
             let domain_id = sym.domain_id.as_ref().unwrap();
-            let atomic_buf = ctx.domain_atomic_exprs.get(domain_id).unwrap_or_else(|| {
-                panic!("AtomicLoadField: domain '{}' has no atomic buffer", domain_id)
-            });
+            let atomic_buf = lookup_atomic_domain_buf(ctx, domain_id, "AtomicLoadField");
             let idx = translate_expr_body(bb, ctx, index, scope);
             let offset_lit = bb.lit_u32(sym.word_offset);
             let addr = bb.add(offset_lit, idx);
-            let pointer = bb.access(*atomic_buf, addr);
+            let pointer = bb.access(atomic_buf, addr);
             bb.load_local(pointer) // atomicLoad is just Expression::Load on the atomic pointer
         }
 
         ExprIR::AtomicLoadScalar { symbol_id } => {
-            let sym = ctx.symbol_map.get(symbol_id).unwrap_or_else(|| {
-                panic!("AtomicLoadScalar: symbol '{}' not in symbol_map", symbol_id)
-            });
+            let sym = lookup_symbol(ctx, symbol_id, "AtomicLoadScalar");
             let scalars = ctx.scalars_expr.expect("AtomicLoadScalar requires scalars buffer");
             let offset = bb.lit_u32(sym.word_offset);
             let pointer = bb.access(scalars, offset);
@@ -2200,9 +2206,7 @@ fn translate_expr_body(
             IntrinsicName::GlobalInvocationIdX
             | IntrinsicName::GlobalInvocationIdY
             | IntrinsicName::GlobalInvocationIdZ => {
-                let (gid, _) = scope
-                    .resolve("__gid")
-                    .unwrap_or_else(|| panic!("Intrinsic '{:?}' requires compute context", name));
+                let (gid, _) = scope.must_resolve("__gid", "Intrinsic (compute context)");
                 let component = match name {
                     IntrinsicName::GlobalInvocationIdX => 0,
                     IntrinsicName::GlobalInvocationIdY => 1,
@@ -2212,15 +2216,11 @@ fn translate_expr_body(
                 bb.access_index(gid, component)
             }
             IntrinsicName::VertexIndex => {
-                let (expr, _) = scope.resolve("__vertex_index").unwrap_or_else(|| {
-                    panic!("Intrinsic vertex_index not in scope (missing vertex/render context)")
-                });
+                let (expr, _) = scope.must_resolve("__vertex_index", "Intrinsic (vertex context)");
                 expr
             }
             IntrinsicName::InstanceIndex => {
-                let (expr, _) = scope.resolve("__instance_index").unwrap_or_else(|| {
-                    panic!("Intrinsic instance_index not in scope (missing vertex/render context)")
-                });
+                let (expr, _) = scope.must_resolve("__instance_index", "Intrinsic (vertex context)");
                 expr
             }
         },
@@ -2240,10 +2240,7 @@ fn translate_expr_body(
 
         ExprIR::ApplyVP { vp_symbol, position } => {
             // Expand to: load_scalar(vp_symbol) * position
-            let sym = ctx
-                .symbol_map
-                .get(vp_symbol)
-                .unwrap_or_else(|| panic!("ApplyVP: symbol '{}' not in symbol_map", vp_symbol));
+            let sym = lookup_symbol(ctx, vp_symbol, "ApplyVP");
             let scalars = ctx
                 .scalars_expr
                 .expect("ApplyVP requires scalars buffer");
