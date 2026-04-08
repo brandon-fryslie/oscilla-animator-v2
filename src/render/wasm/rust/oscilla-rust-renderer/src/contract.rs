@@ -374,12 +374,14 @@ pub struct SamplerSpec {
 // Execution Roster
 // ---------------------------------------------------------------------------
 
+// [LAW:one-type-per-behavior] Composite passes are Render passes with no
+// depth/stencil attachment and no camera — they arrive on the wire as
+// `type: 'Render'` and flow through the single Render install arm.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum RosterEntry {
     Compute(ComputePassSpec),
     Render(RenderPassSpec),
-    Composite(CompositePassSpec),
     #[serde(rename = "System_DrawPrep")]
     SystemDrawPrep(SystemPassSpec),
     #[serde(rename = "System_CameraUpdate")]
@@ -426,18 +428,6 @@ pub struct ComputeDependencies {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderPassSpec {
-    pub pass_id: String,
-    pub source_block_ids: Vec<String>,
-    pub sample_count: u32,
-    pub targets: RenderTargets,
-    pub viewport: ViewportSpec,
-    pub scissor_rect: ScissorRectSpec,
-    pub draw_calls: Vec<DrawCallSpec>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompositePassSpec {
     pub pass_id: String,
     pub source_block_ids: Vec<String>,
     pub sample_count: u32,

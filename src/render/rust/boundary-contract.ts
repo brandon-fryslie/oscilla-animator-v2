@@ -384,28 +384,14 @@ export const RenderPassSpecSchema = z.object({
 });
 export type RenderPassSpec = z.infer<typeof RenderPassSpecSchema>;
 
-export const CompositePassSpecSchema = z.object({
-  type: z.literal('Composite'),
-  passId: z.string(),
-  sourceBlockIds: z.array(z.string()).readonly(),
-  sampleCount: z.number(),
-  targets: z.object({
-    colors: z.array(z.object({
-      textureId: z.union([TextureIdSchema, z.literal('canvas')]),
-      loadOp: z.enum(['load', 'clear']),
-      clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
-    })).readonly(),
-  }),
-  viewport: ViewportSchema,
-  scissorRect: ScissorRectSchema,
-  drawCalls: z.array(DrawCallSpecSchema).readonly(),
-});
-export type CompositePassSpec = z.infer<typeof CompositePassSpecSchema>;
+// [LAW:one-type-per-behavior] Composite passes are render passes with no
+// depth/stencil and no camera. They're represented on the wire as `type: 'Render'`
+// — the DSL `composite()` helper constructs a RenderPassSpec that simply leaves
+// depthStencil undefined and cameraRef empty. No separate wire schema.
 
 export const RosterEntrySchema = z.discriminatedUnion('type', [
   ComputePassSpecSchema,
   RenderPassSpecSchema,
-  CompositePassSpecSchema,
   SystemPassSpecSchema,
   SystemCameraUpdateSpecSchema,
 ]);
