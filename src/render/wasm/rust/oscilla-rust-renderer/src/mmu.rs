@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use wgpu::util::DeviceExt;
 
-use crate::contract::{CompilationDiagnostic, MemoryManifest};
+use crate::contract::{CompilationDiagnostic, MemoryDataType, MemoryManifest, TextureDimension};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -22,7 +22,7 @@ pub struct PhysicalSymbol {
     pub domain_id: Option<String>,
     /// Offset in 4-byte words (u32/f32 index), not bytes.
     pub word_offset: u32,
-    pub wgsl_type: String,
+    pub data_type: MemoryDataType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +92,7 @@ pub fn allocate_arena(
     global_keys.sort(); // deterministic ordering
     for key in &global_keys {
         let spec = &manifest.globals[*key];
-        let words = global_type_word_count(&spec.wgsl_type);
+        let words = spec.data_type.word_count();
 
         // std140: vec4/mat4x4 must be 16-byte aligned (4 words)
         if words >= 4 && globals_word_count % 4 != 0 {
@@ -105,7 +105,7 @@ pub fn allocate_arena(
                 buffer_kind: BufferKind::GlobalUniform,
                 domain_id: None,
                 word_offset: globals_word_count,
-                wgsl_type: spec.wgsl_type.clone(),
+                data_type: spec.data_type,
             },
         );
         global_offset_map.insert((*key).clone(), globals_word_count);
@@ -153,7 +153,7 @@ pub fn allocate_arena(
     scalar_keys.sort();
     for key in &scalar_keys {
         let spec = &manifest.arena_scalars[*key];
-        let words = scalar_type_word_count(&spec.wgsl_type);
+        let words = spec.data_type.word_count();
         // Align multi-word types to 4-word boundary (std430)
         if words >= 4 && scalars_word_count % 4 != 0 {
             scalars_word_count = align_up(scalars_word_count, 4);
@@ -164,7 +164,7 @@ pub fn allocate_arena(
                 buffer_kind: BufferKind::ArenaScalar,
                 domain_id: None,
                 word_offset: scalars_word_count,
-                wgsl_type: spec.wgsl_type.clone(),
+                data_type: spec.data_type,
             },
         );
         scalars_word_count += words;
@@ -196,7 +196,7 @@ pub fn allocate_arena(
         field_keys.sort();
         for field_key in &field_keys {
             let field = &spec.fields[*field_key];
-            let is_atomic = field.wgsl_type.starts_with("atomic<");
+            let is_atomic = field.data_type.is_atomic();
             let symbol_id = format!("{}:{}", domain_id, field_key);
 
             let (buffer_kind, word_offset) = if is_atomic {
@@ -217,7 +217,7 @@ pub fn allocate_arena(
                     buffer_kind,
                     domain_id: Some((*domain_id).clone()),
                     word_offset,
-                    wgsl_type: field.wgsl_type.clone(),
+                    data_type: field.data_type,
                 },
             );
         }
@@ -343,10 +343,13 @@ pub fn allocate_arena(
             usage |= wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING;
         }
 
-        let dim = match spec.dimension.as_str() {
-            "1d" => wgpu::TextureDimension::D1,
-            "3d" => wgpu::TextureDimension::D3,
-            _ => wgpu::TextureDimension::D2,
+        let dim = match spec.dimension {
+            TextureDimension::D1 => wgpu::TextureDimension::D1,
+            TextureDimension::D2 => wgpu::TextureDimension::D2,
+            TextureDimension::D3 => wgpu::TextureDimension::D3,
+            // Cube textures present as D2 with 6 layers at the wgpu Texture level;
+            // the view dimension below carries the cube semantics.
+            TextureDimension::Cube => wgpu::TextureDimension::D2,
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -364,11 +367,11 @@ pub fn allocate_arena(
             view_formats: &[],
         });
 
-        let view_dim = match spec.dimension.as_str() {
-            "1d" => wgpu::TextureViewDimension::D1,
-            "3d" => wgpu::TextureViewDimension::D3,
-            "cube" => wgpu::TextureViewDimension::Cube,
-            _ => wgpu::TextureViewDimension::D2,
+        let view_dim = match spec.dimension {
+            TextureDimension::D1 => wgpu::TextureViewDimension::D1,
+            TextureDimension::D2 => wgpu::TextureViewDimension::D2,
+            TextureDimension::D3 => wgpu::TextureViewDimension::D3,
+            TextureDimension::Cube => wgpu::TextureViewDimension::Cube,
         };
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
@@ -418,7 +421,7 @@ pub fn allocate_arena(
             match &spec.clear_value {
                 serde_json::Value::Number(n) => {
                     let v = n.as_f64().unwrap_or(0.0);
-                    clear_data[offset] = if spec.wgsl_type == "f32" {
+                    clear_data[offset] = if spec.data_type.is_f32() {
                         (v as f32).to_bits()
                     } else {
                         v as u32
@@ -445,14 +448,13 @@ pub fn allocate_arena(
             let field = &spec.fields[*field_key];
             let symbol_id = format!("{}:{}", domain_id, field_key);
             let sym = &symbol_map[&symbol_id];
-            let is_atomic = field.wgsl_type.starts_with("atomic<");
-            let buffer = if is_atomic {
+            let buffer = if field.data_type.is_atomic() {
                 &domain_atomic_buffers[*domain_id]
             } else {
                 &domain_buffers[*domain_id]
             };
             let offset_bytes = (sym.word_offset * 4) as u64;
-            let clear_word = if field.wgsl_type == "f32" {
+            let clear_word = if field.data_type.is_f32() {
                 (field.clear_value as f32).to_bits()
             } else {
                 field.clear_value as u32
@@ -490,28 +492,6 @@ fn align_up(value: u32, alignment: u32) -> u32 {
         value
     } else {
         value + alignment - remainder
-    }
-}
-
-fn scalar_type_word_count(wgsl_type: &str) -> u32 {
-    match wgsl_type {
-        "f32" | "u32" | "i32" | "atomic<u32>" | "atomic<i32>" => 1,
-        "vec2" => 2,
-        "vec3" => 3,
-        "vec4" => 4,
-        "mat4x4" => 16,
-        _ => 1,
-    }
-}
-
-fn global_type_word_count(wgsl_type: &str) -> u32 {
-    match wgsl_type {
-        "f32" | "u32" | "i32" => 1,
-        "vec2" => 2,
-        "vec3" => 3,
-        "vec4" => 4,
-        "mat4x4" => 16,
-        _ => 1,
     }
 }
 
