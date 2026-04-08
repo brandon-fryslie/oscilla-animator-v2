@@ -13,7 +13,6 @@ import type {
   MemoryManifest,
   ComputePassSpec,
   RenderPassSpec,
-  CompositePassSpec,
   SystemPassSpec,
   SystemCameraUpdateSpec,
   DrawCallSpec,
@@ -68,8 +67,6 @@ export function payloadToSource(payload: PipelineInstallPayload): string {
     if (entry.type === 'System_CameraUpdate') continue;
     if (entry.type === 'Render') {
       lines.push(emitRender(entry, payload.manifest, cameraPasses));
-    } else if (entry.type === 'Composite') {
-      lines.push(emitComposite(entry, payload.manifest));
     } else {
       lines.push(emitRosterEntry(entry, payload.manifest));
     }
@@ -177,19 +174,18 @@ function emitRender(
   cameraPasses: Map<string, SystemCameraUpdateSpec>,
 ): string {
   const targets = emitTargets(pass.targets);
+  // [LAW:one-type-per-behavior] Composite is a Render pass with no camera.
+  // We distinguish at the DSL emit layer by checking whether a matching
+  // camera pass exists for this passId — no separate wire type needed.
   const vpSymbol = `cam:${pass.passId}:vp`;
+  const hasCamera = cameraPasses.has(vpSymbol);
+  if (!hasCamera) {
+    const draws = pass.drawCalls.map(dc => emitDrawCall(dc, manifest, '')).join('\n');
+    return `    composite(${quote(pass.passId)}, ${targets}, [\n${draws}\n    ]),`;
+  }
   const camera = reconstructCamera(pass.passId, manifest, cameraPasses);
   const draws = pass.drawCalls.map(dc => emitDrawCall(dc, manifest, vpSymbol)).join('\n');
   return `    render(${quote(pass.passId)}, ${camera}, ${targets}, [\n${draws}\n    ]),`;
-}
-
-function emitComposite(
-  pass: CompositePassSpec,
-  manifest: MemoryManifest,
-): string {
-  const targets = emitTargets(pass.targets);
-  const draws = pass.drawCalls.map(dc => emitDrawCall(dc, manifest, '')).join('\n');
-  return `    composite(${quote(pass.passId)}, ${targets}, [\n${draws}\n    ]),`;
 }
 
 function emitDrawCall(dc: DrawCallSpec, manifest: MemoryManifest, _vpSymbol: string): string {
@@ -245,7 +241,7 @@ function emitDrawSource(source: DrawCallSpec['source']): string {
   }
 }
 
-function emitTargets(targets: RenderPassSpec['targets'] | CompositePassSpec['targets']): string {
+function emitTargets(targets: RenderPassSpec['targets']): string {
   // Recognize DSL helpers for single-color-target patterns
   if (targets.colors.length === 1 && !('depthStencil' in targets && targets.depthStencil)) {
     const ct = targets.colors[0];

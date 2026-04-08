@@ -17,7 +17,6 @@ import type {
   ExprIR,
   MemoryManifest,
   PipelineStateSpec,
-  CompositePassSpec,
   WgslFunction,
 } from '../rust/boundary-contract';
 import { expandManifest, type CompactManifest, type CompactGlobalSpec, type CompactScalarSpec } from './manifest';
@@ -637,13 +636,17 @@ function compileRenderEntry(
   return [cameraPass, renderPass];
 }
 
+// [LAW:one-type-per-behavior] Composite passes emit `type: 'Render'` on the
+// wire — they're just a RenderPass with no depth/stencil and no camera.
+// The only compile-time difference is that draw-call vertex AST is *not*
+// wrapped with ApplyVP / ApplyTransform2D, and dependencies.cameraRef stays
+// empty so the renderer's Render arm treats it as a pass-through.
 function compileCompositeEntry(
   entry: DeferredCompositePass,
   manifest: MemoryManifest,
   spec: GpuSpec,
   ctx: GpuContext | undefined,
-): CompositePassSpec {
-  // Composite passes compile draw calls without VP or transform injection
+): RenderPassSpec {
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
 
@@ -668,7 +671,7 @@ function compileCompositeEntry(
   const targetDims = resolveTargetDims(colorTarget?.textureId ?? 'canvas', spec, ctx);
 
   return {
-    type: 'Composite',
+    type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
     sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
