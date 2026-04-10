@@ -69,6 +69,18 @@ export const clearTexture = (
 ): RenderPassSpec['targets'] =>
   ({ colors: [{ textureId, loadOp: 'clear', clearColor }] });
 
+/** Depth-only target — zero color attachments, depth clear to `value` (default 1.0). */
+export const depthOnlyTarget = (
+  textureId: string,
+  opts?: { clearValue?: number },
+): RenderPassSpec['targets'] => ({
+  colors: [],
+  depthStencil: {
+    textureId,
+    depth: { op: 'clear', value: opts?.clearValue ?? 1.0 },
+  },
+});
+
 /** Pipeline state presets — named constants, not default-filling logic */
 export const OPAQUE: PipelineStateSpec =
   { blendMode: 'opaque', cullMode: 'none', depthWrite: false, depthCompare: 'always' };
@@ -571,13 +583,17 @@ function compileRenderEntry(
   );
 
   // Compile draw calls with VP auto-injection
+  const hasColorTargets = entry.targets.colors.length > 0;
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
 
-    // Default passthrough fragment: if omitted, forward all varyings as-is
-    const fragmentAst = dc.fragmentFn
-      ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
-      : generatePassthroughFragment(vertexAst);
+    // Depth-only passes (zero color targets) have no fragment shader.
+    // Otherwise: default passthrough fragment forwards all varyings as-is.
+    const fragmentAst = !hasColorTargets
+      ? []
+      : dc.fragmentFn
+        ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+        : generatePassthroughFragment(vertexAst);
 
     // [LAW:single-enforcer] Auto-inject transforms: local → model (TRS) → clip (VP)
     for (let i = 0; i < vertexAst.length; i++) {
@@ -647,12 +663,15 @@ function compileCompositeEntry(
   spec: GpuSpec,
   ctx: GpuContext | undefined,
 ): RenderPassSpec {
+  const hasColorTargets = entry.targets.colors.length > 0;
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
     const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
 
-    const fragmentAst = dc.fragmentFn
-      ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
-      : generatePassthroughFragment(vertexAst);
+    const fragmentAst = !hasColorTargets
+      ? []
+      : dc.fragmentFn
+        ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+        : generatePassthroughFragment(vertexAst);
 
     // No ApplyVP, no ApplyTransform2D — clip-space positions pass through directly
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, '');

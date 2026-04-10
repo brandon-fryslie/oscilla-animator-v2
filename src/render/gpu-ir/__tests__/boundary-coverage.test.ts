@@ -13,7 +13,8 @@ import type {
 import {
   gpu, compute, render, draw, drawPrep, ortho,
   exact, wg, domain, texDispatch, domainSource, fsQuadSource, clearTarget,
-  OPAQUE,
+  depthOnlyTarget,
+  OPAQUE, DEPTH_TEST,
 } from '../compile';
 import { expandManifest } from '../manifest';
 import { quad } from '../shapes';
@@ -374,5 +375,32 @@ describe('render target coverage', () => {
       textureId: 'depth_tex',
       depth: { op: 'clear', value: 1.0 },
     });
+  });
+
+  test('depth-only pass (zero color attachments)', () => {
+    const payload = gpu({
+      textures: {
+        depth_tex: { dimension: '2d', width: 512, height: 512, format: 'depth24plus', usage: ['render_attachment'] },
+      },
+      roster: [
+        render('depth_prepass', ortho(), depthOnlyTarget('depth_tex'), [
+          draw('fill', fsQuadSource(), DEPTH_TEST, {
+            vertex: (position: any) => {
+              return vertex(vec4(position.x, position.y, 0.5, 1.0), {});
+            },
+            // No fragment — depth-only pass writes only depth
+          }),
+        ]),
+      ],
+    });
+    const renderPass = payload.roster.find(
+      e => e.type === 'Render' && e.passId === 'depth_prepass',
+    ) as RenderPassSpec;
+    expect(renderPass).toBeDefined();
+    expect(renderPass.targets.colors).toHaveLength(0);
+    expect(renderPass.targets.depthStencil).toBeDefined();
+    expect(renderPass.targets.depthStencil!.depth).toStrictEqual({ op: 'clear', value: 1.0 });
+    // Fragment AST should be empty — no fragment shader for depth-only
+    expect(renderPass.drawCalls[0].fragmentAst).toHaveLength(0);
   });
 });
