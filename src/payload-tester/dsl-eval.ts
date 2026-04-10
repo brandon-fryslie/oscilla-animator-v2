@@ -15,7 +15,7 @@ import * as acorn from 'acorn';
 import type { PipelineInstallPayload } from '../render/rust/boundary-contract';
 import {
   gpu as gpuBase, compute, render, composite, draw, drawPrep, ortho, perspective, exact, wg,
-  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture, depthOnlyTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   type GpuSpec, type GpuContext,
 } from '../render/gpu-ir/compile';
@@ -53,7 +53,7 @@ const CONTEXT_NAMES = [
   // Structural DSL functions (real implementations)
   'gpu', 'compute', 'render', 'composite', 'draw', 'drawPrep', 'ortho', 'perspective', 'exact', 'wg',
   // Dispatch/source/target helpers (real)
-  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget', 'loadTarget', 'clearTexture',
+  'domain', 'texDispatch', 'domainSource', 'fsQuadSource', 'clearTarget', 'loadTarget', 'clearTexture', 'depthOnlyTarget',
   // Pipeline state presets (real)
   'OPAQUE', 'ALPHA_BLEND', 'DEPTH_TEST',
   // Shape helpers (real)
@@ -81,7 +81,7 @@ const CONTEXT_NAMES = [
 const CONTEXT_VALUES = [
   // Real implementations (gpu is slot 0, replaced per-call with context-injected wrapper)
   gpuBase, compute, render, composite, draw, drawPrep, ortho, perspective, exact, wg,
-  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture,
+  domain, texDispatch, domainSource, fsQuadSource, clearTarget, loadTarget, clearTexture, depthOnlyTarget,
   OPAQUE, ALPHA_BLEND, DEPTH_TEST,
   quad, fullscreenQuad, tri,
   // $-prefixed stubs

@@ -62,4 +62,6 @@ export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
   fixture('atomic-histogram', 'Atomic Histogram', 'AtomicLoadField, assignResultTo on AtomicOpField. Phase 3 walker gate.'),
   fixture('quad-camera', 'Quad Camera', '4 cameras → 4 textures → composite. Tests render-to-texture, composite pass, texture sampling.'),
   fixture('simplex-noise', 'Simplex Noise', '10000 dots displaced and colored by noise_simplex_2d. Tests WGSL function transplant.'),
+  fixture('depth-prepass', 'Depth Prepass', 'Depth-only pass (zero color attachments) followed by color pass reading the depth buffer.'),
+  fixture('mrt-split', 'MRT Split', 'Single render pass writing 2 color textures (MRT). Composite samples both.'),
 ];

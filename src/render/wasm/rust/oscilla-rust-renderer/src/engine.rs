@@ -74,6 +74,10 @@ enum CompiledPass {
         /// Color targets — one entry per attachment. May be empty for depth-only passes.
         color_attachments: Vec<CompiledColorAttachment>,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
+        /// Per-pass MSAA sample count. Only passes with sample_count > 1 use the
+        /// engine's MSAA intermediate texture. Passes targeting non-MSAA depth
+        /// textures use sample_count=1 even when targeting canvas.
+        sample_count: u32,
         /// Pixel-resolved viewport from TS compiler — used directly, no per-frame math.
         viewport: [f32; 6],
         /// Pixel-resolved scissor rect from TS compiler — used directly, no per-frame math.
@@ -905,7 +909,7 @@ impl Engine {
                 }
 
                 RosterEntry::Render(spec) => {
-                    for draw_call in &spec.draw_calls {
+                    for (draw_idx, draw_call) in spec.draw_calls.iter().enumerate() {
                         let (shape_id, draw_mode) = match &draw_call.source {
                             DrawCallSource::Domain { shape_id, .. } => {
                                 (shape_id.clone(), RenderDrawMode::Indirect)
@@ -1061,6 +1065,21 @@ impl Engine {
                             }
                         };
 
+                        // Resolve the effective sample count. All attachments in a
+                        // render pass must share the same sample count. Named textures
+                        // are always allocated at sample_count=1 (mmu.rs), so when a
+                        // pass mixes canvas (MSAA) with a named depth texture, we clamp
+                        // to 1. [LAW:single-enforcer] This is the one place that
+                        // reconciles MSAA across attachments.
+                        let effective_sample_count = if let Some(ref ds) = spec.targets.depth_stencil {
+                            let ds_samples = arena.textures.get(&ds.texture_id)
+                                .map(|t| t.texture.sample_count())
+                                .unwrap_or(1);
+                            spec.sample_count.min(ds_samples)
+                        } else {
+                            spec.sample_count
+                        };
+
                         // Depth-only passes have no fragment shader and no color targets.
                         // wgpu explicitly supports fragment: None for depth-only pipelines.
                         let has_fragment = !color_target_states.is_empty();
@@ -1099,7 +1118,7 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        count: spec.sample_count,
+                                        count: effective_sample_count,
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1124,21 +1143,45 @@ impl Engine {
                             },
                         );
 
+                        // Only the first draw call in a multi-draw render pass
+                        // uses the spec's loadOp (typically clear). Subsequent
+                        // draw calls must load to preserve earlier draws' output,
+                        // since each draw call starts its own begin_render_pass.
+                        let is_first_draw = draw_idx == 0;
                         let color_attachments: Vec<CompiledColorAttachment> = spec
                             .targets
                             .colors
                             .iter()
                             .map(|ct| CompiledColorAttachment {
                                 target_id: ct.texture_id.clone(),
-                                load_op: color_load_op_for(ct.load_op, ct.clear_color),
+                                load_op: if is_first_draw {
+                                    color_load_op_for(ct.load_op, ct.clear_color)
+                                } else {
+                                    ColorLoadOp::Load
+                                },
                             })
                             .collect();
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: depth_ops_for(depth_target.depth),
-                                    stencil_ops: stencil_ops_for(depth_target.stencil),
+                                    depth_ops: if is_first_draw {
+                                        depth_ops_for(depth_target.depth)
+                                    } else {
+                                        // Load depth from previous draw call
+                                        Some(wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: wgpu::StoreOp::Store,
+                                        })
+                                    },
+                                    stencil_ops: if is_first_draw {
+                                        stencil_ops_for(depth_target.stencil)
+                                    } else {
+                                        Some(wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: wgpu::StoreOp::Store,
+                                        })
+                                    },
                                 }
                             });
                         let vp = &spec.viewport;
@@ -1150,6 +1193,7 @@ impl Engine {
                             draw_mode,
                             color_attachments,
                             depth_stencil,
+                            sample_count: effective_sample_count,
                             viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
                             scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
@@ -1301,6 +1345,7 @@ impl Engine {
                     draw_mode,
                     color_attachments,
                     depth_stencil,
+                    sample_count,
                     viewport,
                     scissor_rect,
                 } => {
@@ -1328,8 +1373,11 @@ impl Engine {
                         })
                         .transpose()?;
 
-                    // Build per-attachment color views. Each attachment resolves
-                    // its texture from the arena (canvas uses the per-frame surface).
+                    // Build per-attachment color views. MSAA resolve is only
+                    // active when the pass's sample_count matches the engine's
+                    // MSAA capability. Passes with sample_count=1 (e.g. using a
+                    // non-MSAA depth texture) skip the MSAA intermediate.
+                    let effective_msaa = if *sample_count > 1 { &self.msaa_view } else { &None };
                     let resolved_colors: Vec<Option<wgpu::RenderPassColorAttachment>> =
                         color_attachments
                             .iter()
@@ -1337,7 +1385,7 @@ impl Engine {
                                 let (view, resolve_target) = lookup_color_view(
                                     &a.target_id,
                                     &surface_view,
-                                    &self.msaa_view,
+                                    effective_msaa,
                                     &roster.arena,
                                 );
                                 let load = match &a.load_op {

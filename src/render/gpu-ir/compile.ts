@@ -634,15 +634,19 @@ function compileRenderEntry(
     };
   });
 
-  // Resolve target dimensions, viewport, scissor, and MSAA from declared spec
+  // Resolve target dimensions, viewport, scissor, and MSAA from declared spec.
+  // Depth-only passes (no color targets) derive dimensions from depth texture and use sampleCount 1.
   const colorTarget = entry.targets.colors[0];
-  const targetDims = resolveTargetDims(colorTarget?.textureId ?? 'canvas', spec, ctx);
+  const primaryTargetId = colorTarget?.textureId
+    ?? entry.targets.depthStencil?.textureId
+    ?? 'canvas';
+  const targetDims = resolveTargetDims(primaryTargetId, spec, ctx);
 
   const renderPass: RenderPassSpec = {
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
-    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
+    sampleCount: colorTarget ? resolveSampleCount(colorTarget.textureId, ctx) : 1,
     targets: entry.targets,
     viewport: resolveViewport(entry.viewport, targetDims),
     scissorRect: resolveScissorRect(entry.scissorRect, targetDims),
@@ -687,13 +691,16 @@ function compileCompositeEntry(
   });
 
   const colorTarget = entry.targets.colors[0];
-  const targetDims = resolveTargetDims(colorTarget?.textureId ?? 'canvas', spec, ctx);
+  const primaryTargetId = colorTarget?.textureId
+    ?? entry.targets.depthStencil?.textureId
+    ?? 'canvas';
+  const targetDims = resolveTargetDims(primaryTargetId, spec, ctx);
 
   return {
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
-    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
+    sampleCount: colorTarget ? resolveSampleCount(colorTarget.textureId, ctx) : 1,
     targets: entry.targets,
     viewport: resolveViewport(undefined, targetDims),
     scissorRect: resolveScissorRect(undefined, targetDims),
