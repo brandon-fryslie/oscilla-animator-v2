@@ -403,4 +403,46 @@ describe('render target coverage', () => {
     // Fragment AST should be empty — no fragment shader for depth-only
     expect(renderPass.drawCalls[0].fragmentAst).toHaveLength(0);
   });
+
+  test('MRT: multiple color attachments', () => {
+    const targets: RenderPassSpec['targets'] = {
+      colors: [
+        { textureId: 'color_tex', loadOp: 'clear', clearColor: [0, 0, 0, 1] },
+        { textureId: 'normal_tex', loadOp: 'clear', clearColor: [0.5, 0.5, 1, 1] },
+      ],
+    };
+    const payload = gpu({
+      textures: {
+        color_tex: { dimension: '2d', width: 512, height: 512, format: 'rgba8unorm', usage: ['render_attachment', 'sampled'] },
+        normal_tex: { dimension: '2d', width: 512, height: 512, format: 'rgba8unorm', usage: ['render_attachment', 'sampled'] },
+      },
+      roster: [
+        render('gbuffer', ortho(), targets, [
+          draw('fill', fsQuadSource(), OPAQUE, {
+            vertex: (position: any) => {
+              return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
+            },
+            fragment: () => {
+              // Two outputs — one per color attachment
+              return fragment({
+                color: vec4(1.0, 0.0, 0.0, 1.0),
+                normal: vec4(0.0, 0.0, 1.0, 1.0),
+              });
+            },
+          }),
+        ]),
+      ],
+    });
+    const renderPass = payload.roster.find(
+      e => e.type === 'Render' && e.passId === 'gbuffer',
+    ) as RenderPassSpec;
+    expect(renderPass).toBeDefined();
+    expect(renderPass.targets.colors).toHaveLength(2);
+    // Fragment AST should have a ReturnFragment with both output keys
+    const returnFrag = renderPass.drawCalls[0].fragmentAst.find(
+      (s: any) => s.type === 'ReturnFragment',
+    ) as any;
+    expect(returnFrag).toBeDefined();
+    expect(Object.keys(returnFrag.outputs).sort()).toStrictEqual(['color', 'normal']);
+  });
 });
