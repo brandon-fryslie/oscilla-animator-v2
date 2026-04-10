@@ -71,16 +71,24 @@ enum CompiledPass {
         bind_group: Option<wgpu::BindGroup>,
         vertex_buffer_id: String,
         draw_mode: RenderDrawMode,
-        color_load_op: ColorLoadOp,
-        /// Color target texture ID — "canvas" or a named texture. All targets are
-        /// looked up uniformly in the arena (canvas is registered at frame start).
-        color_target_id: String,
+        /// Color targets — one entry per attachment. May be empty for depth-only passes.
+        color_attachments: Vec<CompiledColorAttachment>,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
+        /// Per-pass MSAA sample count. Only passes with sample_count > 1 use the
+        /// engine's MSAA intermediate texture. Passes targeting non-MSAA depth
+        /// textures use sample_count=1 even when targeting canvas.
+        sample_count: u32,
         /// Pixel-resolved viewport from TS compiler — used directly, no per-frame math.
         viewport: [f32; 6],
         /// Pixel-resolved scissor rect from TS compiler — used directly, no per-frame math.
         scissor_rect: [u32; 4],
     },
+}
+
+/// Pre-resolved color attachment — one per `targets.colors[i]`.
+struct CompiledColorAttachment {
+    target_id: String,
+    load_op: ColorLoadOp,
 }
 
 enum RenderDrawMode {
@@ -901,7 +909,7 @@ impl Engine {
                 }
 
                 RosterEntry::Render(spec) => {
-                    for draw_call in &spec.draw_calls {
+                    for (draw_idx, draw_call) in spec.draw_calls.iter().enumerate() {
                         let (shape_id, draw_mode) = match &draw_call.source {
                             DrawCallSource::Domain { shape_id, .. } => {
                                 (shape_id.clone(), RenderDrawMode::Indirect)
@@ -932,28 +940,38 @@ impl Engine {
                             );
                         };
 
-                        let Some(color_target) = spec.targets.colors.first() else {
+                        // Validate: must have at least one color target OR a depth/stencil target.
+                        if spec.targets.colors.is_empty() && spec.targets.depth_stencil.is_none() {
                             return install_error_json(
                                 "manifest_allocation",
                                 Some(spec.pass_id.as_str()),
-                                "Render pass must declare at least one color target",
+                                "Render pass must have at least one color target or a depth/stencil target",
                             );
-                        };
-                        // Resolve color target format
-                        let color_format = if color_target.texture_id == "canvas" {
-                            self.surface_config.format
-                        } else {
-                            match arena.textures.get(&color_target.texture_id) {
-                                Some(tex) => tex.format,
-                                None => {
-                                    return install_error_json(
-                                        "pipeline_creation",
-                                        Some(spec.pass_id.as_str()),
-                                        format!("Color target texture '{}' not found in manifest", color_target.texture_id),
-                                    );
+                        }
+
+                        // Resolve per-target color formats for the pipeline descriptor.
+                        let mut color_target_states: Vec<Option<wgpu::ColorTargetState>> = Vec::new();
+                        for ct in &spec.targets.colors {
+                            let fmt = if ct.texture_id == "canvas" {
+                                self.surface_config.format
+                            } else {
+                                match arena.textures.get(&ct.texture_id) {
+                                    Some(tex) => tex.format,
+                                    None => {
+                                        return install_error_json(
+                                            "pipeline_creation",
+                                            Some(spec.pass_id.as_str()),
+                                            format!("Color target texture '{}' not found in manifest", ct.texture_id),
+                                        );
+                                    }
                                 }
-                            }
-                        };
+                            };
+                            color_target_states.push(Some(wgpu::ColorTargetState {
+                                format: fmt,
+                                blend: blend_state_for(draw_call.pipeline_state.blend_mode),
+                                write_mask: wgpu::ColorWrites::ALL,
+                            }));
+                        }
 
                         let render_result = match std::panic::catch_unwind(AssertUnwindSafe(|| {
                             translator::translate_render_pass(draw_call, &arena, Some(&parsed_functions))
@@ -1047,6 +1065,34 @@ impl Engine {
                             }
                         };
 
+                        // Resolve the effective sample count. All attachments in a
+                        // render pass must share the same sample count. Named textures
+                        // are always allocated at sample_count=1 (mmu.rs), so when a
+                        // pass mixes canvas (MSAA) with a named depth texture, we clamp
+                        // to 1. [LAW:single-enforcer] This is the one place that
+                        // reconciles MSAA across attachments.
+                        let effective_sample_count = if let Some(ref ds) = spec.targets.depth_stencil {
+                            let ds_samples = arena.textures.get(&ds.texture_id)
+                                .map(|t| t.texture.sample_count())
+                                .unwrap_or(1);
+                            spec.sample_count.min(ds_samples)
+                        } else {
+                            spec.sample_count
+                        };
+
+                        // Depth-only passes have no fragment shader and no color targets.
+                        // wgpu explicitly supports fragment: None for depth-only pipelines.
+                        let has_fragment = !color_target_states.is_empty();
+                        let fragment_state = if has_fragment {
+                            Some(wgpu::FragmentState {
+                                module: &shader,
+                                entry_point: Some("fs_main"),
+                                compilation_options: Default::default(),
+                                targets: &color_target_states,
+                            })
+                        } else {
+                            None
+                        };
                         let pipeline =
                             self.device
                                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -1058,18 +1104,7 @@ impl Engine {
                                         compilation_options: Default::default(),
                                         buffers: &[vertex_buffer_layout],
                                     },
-                                    fragment: Some(wgpu::FragmentState {
-                                        module: &shader,
-                                        entry_point: Some("fs_main"),
-                                        compilation_options: Default::default(),
-                                        targets: &[Some(wgpu::ColorTargetState {
-                                            format: color_format,
-                                            blend: blend_state_for(
-                                                draw_call.pipeline_state.blend_mode,
-                                            ),
-                                            write_mask: wgpu::ColorWrites::ALL,
-                                        })],
-                                    }),
+                                    fragment: fragment_state,
                                     primitive: wgpu::PrimitiveState {
                                         topology: shape.topology,
                                         strip_index_format: None,
@@ -1083,7 +1118,7 @@ impl Engine {
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        count: spec.sample_count,
+                                        count: effective_sample_count,
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1108,13 +1143,45 @@ impl Engine {
                             },
                         );
 
-                        let color_load_op = color_load_op_for(color_target.load_op, color_target.clear_color);
+                        // Only the first draw call in a multi-draw render pass
+                        // uses the spec's loadOp (typically clear). Subsequent
+                        // draw calls must load to preserve earlier draws' output,
+                        // since each draw call starts its own begin_render_pass.
+                        let is_first_draw = draw_idx == 0;
+                        let color_attachments: Vec<CompiledColorAttachment> = spec
+                            .targets
+                            .colors
+                            .iter()
+                            .map(|ct| CompiledColorAttachment {
+                                target_id: ct.texture_id.clone(),
+                                load_op: if is_first_draw {
+                                    color_load_op_for(ct.load_op, ct.clear_color)
+                                } else {
+                                    ColorLoadOp::Load
+                                },
+                            })
+                            .collect();
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: depth_ops_for(depth_target.depth),
-                                    stencil_ops: stencil_ops_for(depth_target.stencil),
+                                    depth_ops: if is_first_draw {
+                                        depth_ops_for(depth_target.depth)
+                                    } else {
+                                        // Load depth from previous draw call
+                                        Some(wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: wgpu::StoreOp::Store,
+                                        })
+                                    },
+                                    stencil_ops: if is_first_draw {
+                                        stencil_ops_for(depth_target.stencil)
+                                    } else {
+                                        Some(wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: wgpu::StoreOp::Store,
+                                        })
+                                    },
                                 }
                             });
                         let vp = &spec.viewport;
@@ -1124,9 +1191,9 @@ impl Engine {
                             bind_group,
                             vertex_buffer_id: shape_id,
                             draw_mode,
-                            color_load_op,
-                            color_target_id: color_target.texture_id.clone(),
+                            color_attachments,
                             depth_stencil,
+                            sample_count: effective_sample_count,
                             viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
                             scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
@@ -1150,10 +1217,11 @@ impl Engine {
 
         // [LAW:dataflow-not-control-flow] Pre-resolve whether any pass targets the
         // canvas, so execute_roster acquires the surface unconditionally before the loop.
-        let needs_surface = passes.iter().any(|p| matches!(
-            p,
-            CompiledPass::Render { color_target_id, .. } if color_target_id == "canvas"
-        ));
+        let needs_surface = passes.iter().any(|p| match p {
+            CompiledPass::Render { color_attachments, .. } =>
+                color_attachments.iter().any(|a| a.target_id == "canvas"),
+            _ => false,
+        });
 
         self.compiled_roster = Some(CompiledRoster {
             arena,
@@ -1275,9 +1343,9 @@ impl Engine {
                     bind_group,
                     vertex_buffer_id,
                     draw_mode,
-                    color_load_op,
-                    color_target_id,
+                    color_attachments,
                     depth_stencil,
+                    sample_count,
                     viewport,
                     scissor_rect,
                 } => {
@@ -1305,27 +1373,42 @@ impl Engine {
                         })
                         .transpose()?;
 
-                    // Look up color target view. Canvas uses the per-frame surface
-                    // (with MSAA resolve if active); named textures use the arena.
-                    let (color_view, resolve_target) =
-                        lookup_color_view(color_target_id, &surface_view, &self.msaa_view, &roster.arena);
-                    let load = match color_load_op {
-                        ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
-                        ColorLoadOp::Load => wgpu::LoadOp::Load,
-                    };
+                    // Build per-attachment color views. MSAA resolve is only
+                    // active when the pass's sample_count matches the engine's
+                    // MSAA capability. Passes with sample_count=1 (e.g. using a
+                    // non-MSAA depth texture) skip the MSAA intermediate.
+                    let effective_msaa = if *sample_count > 1 { &self.msaa_view } else { &None };
+                    let resolved_colors: Vec<Option<wgpu::RenderPassColorAttachment>> =
+                        color_attachments
+                            .iter()
+                            .map(|a| {
+                                let (view, resolve_target) = lookup_color_view(
+                                    &a.target_id,
+                                    &surface_view,
+                                    effective_msaa,
+                                    &roster.arena,
+                                );
+                                let load = match &a.load_op {
+                                    ColorLoadOp::Clear(color) => wgpu::LoadOp::Clear(*color),
+                                    ColorLoadOp::Load => wgpu::LoadOp::Load,
+                                };
+                                Some(wgpu::RenderPassColorAttachment {
+                                    view,
+                                    depth_slice: None,
+                                    resolve_target,
+                                    ops: wgpu::Operations {
+                                        load,
+                                        store: wgpu::StoreOp::Store,
+                                    },
+                                })
+                            })
+                            .collect();
+
                     {
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: Some("render"),
-                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                view: color_view,
-                                depth_slice: None,
-                                resolve_target,
-                                ops: wgpu::Operations {
-                                    load,
-                                    store: wgpu::StoreOp::Store,
-                                },
-                            })],
-                            depth_stencil_attachment: depth_stencil_attachment,
+                            color_attachments: &resolved_colors,
+                            depth_stencil_attachment,
                             timestamp_writes: None,
                             occlusion_query_set: None,
                             multiview_mask: None,

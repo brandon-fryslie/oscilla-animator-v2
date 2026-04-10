@@ -1422,64 +1422,101 @@ pub fn translate_render_pass(
     m.add_vertex_entry("vs_main", vs);
 
     // --- Fragment shader ---
-    let mut fs = FnBuilder::new("fs_main");
-    fs.set_result(
-        vec4_f32_ty,
-        Some(naga::Binding::Location {
-            location: 0,
-            blend_src: None,
-            per_primitive: false,
-            interpolation: None,
-            sampling: None,
-        }),
-    );
+    // Depth-only passes have no fragment AST and no color targets. The engine
+    // sets `fragment: None` on the RenderPipelineDescriptor, so we skip adding
+    // fs_main to the naga module entirely. [LAW:dataflow-not-control-flow]
+    // The presence/absence of the fragment entry is a data consequence of the
+    // empty fragment_ast, not a special code path.
+    let has_fragment = !draw_call.fragment_ast.is_empty();
+    if has_fragment {
+        let output_keys = extract_fragment_output_keys(&draw_call.fragment_ast);
+        let is_mrt = output_keys.len() > 1;
 
-    let mut fs_scope = TranslationScope::new();
-    if has_varyings {
-        // Fragment receives its own struct (no @builtin(position) — different from VS output)
-        let struct_ty = fs_input_ty.unwrap();
-        let fs_input = fs.add_argument("fs_in", struct_ty, None);
-        for (i, key) in varying_keys.iter().enumerate() {
-            let field_val = fs.access_index(fs_input, i as u32); // no position offset — FS struct only has varyings
-            fs_scope.insert_let(key.clone(), field_val);
+        let mut fs = FnBuilder::new("fs_main");
+
+        // MRT: build an FsOutput struct with one @location(i) vec4<f32> per key.
+        // Single output: direct @location(0) return — no struct needed.
+        let fs_output_ty = if is_mrt {
+            let members: Vec<naga::StructMember> = output_keys
+                .iter()
+                .enumerate()
+                .map(|(i, key)| naga::StructMember {
+                    name: Some(key.clone()),
+                    ty: vec4_f32_ty,
+                    binding: Some(naga::Binding::Location {
+                        location: i as u32,
+                        blend_src: None,
+                        per_primitive: false,
+                        interpolation: None,
+                        sampling: None,
+                    }),
+                    offset: (i * 16) as u32,
+                })
+                .collect();
+            let struct_ty = m.struct_type("FsOutput", members);
+            fs.set_result(struct_ty, None); // struct carries its own bindings
+            Some(struct_ty)
+        } else {
+            fs.set_result(
+                vec4_f32_ty,
+                Some(naga::Binding::Location {
+                    location: 0,
+                    blend_src: None,
+                    per_primitive: false,
+                    interpolation: None,
+                    sampling: None,
+                }),
+            );
+            None
+        };
+
+        let mut fs_scope = TranslationScope::new();
+        if has_varyings {
+            // Fragment receives its own struct (no @builtin(position) — different from VS output)
+            let struct_ty = fs_input_ty.unwrap();
+            let fs_input = fs.add_argument("fs_in", struct_ty, None);
+            for (i, key) in varying_keys.iter().enumerate() {
+                let field_val = fs.access_index(fs_input, i as u32); // no position offset — FS struct only has varyings
+                fs_scope.insert_let(key.clone(), field_val);
+            }
         }
-    }
 
-    let mut fs_domain_exprs = HashMap::new();
-    for (domain_id, gv) in &domain_gvs {
-        fs_domain_exprs.insert(domain_id.clone(), fs.global(*gv));
-    }
-    let mut fs_texture_exprs = HashMap::new();
-    for (tex_id, gv) in &render_texture_gvs {
-        fs_texture_exprs.insert(tex_id.clone(), fs.global(*gv));
-    }
-    let mut fs_sampler_exprs = HashMap::new();
-    for (sampler_id, gv) in &render_sampler_gvs {
-        fs_sampler_exprs.insert(sampler_id.clone(), fs.global(*gv));
-    }
-    let fs_ctx = PassContext {
-        stage: TranslationStage::Fragment,
-        globals_expr: globals_gv.map(|gv| fs.global(gv)),
-        scalars_expr: render_scalars_gv.map(|gv| fs.global(gv)),
-        domain_exprs: fs_domain_exprs,
-        domain_atomic_exprs: HashMap::new(),
-        symbol_map: arena.symbol_map.clone(),
-        type_handles,
-        texture_exprs: fs_texture_exprs,
-        texture_is_sampled,
-        sampler_exprs: fs_sampler_exprs,
-        stdlib_handles,
-    };
+        let mut fs_domain_exprs = HashMap::new();
+        for (domain_id, gv) in &domain_gvs {
+            fs_domain_exprs.insert(domain_id.clone(), fs.global(*gv));
+        }
+        let mut fs_texture_exprs = HashMap::new();
+        for (tex_id, gv) in &render_texture_gvs {
+            fs_texture_exprs.insert(tex_id.clone(), fs.global(*gv));
+        }
+        let mut fs_sampler_exprs = HashMap::new();
+        for (sampler_id, gv) in &render_sampler_gvs {
+            fs_sampler_exprs.insert(sampler_id.clone(), fs.global(*gv));
+        }
+        let fs_ctx = PassContext {
+            stage: TranslationStage::Fragment,
+            globals_expr: globals_gv.map(|gv| fs.global(gv)),
+            scalars_expr: render_scalars_gv.map(|gv| fs.global(gv)),
+            domain_exprs: fs_domain_exprs,
+            domain_atomic_exprs: HashMap::new(),
+            symbol_map: arena.symbol_map.clone(),
+            type_handles,
+            texture_exprs: fs_texture_exprs,
+            texture_is_sampled,
+            sampler_exprs: fs_sampler_exprs,
+            stdlib_handles,
+        };
 
-    translate_statements_fragment(
-        &mut fs,
-        &fs_ctx,
-        &draw_call.fragment_ast,
-        &mut fs_scope,
-        vec4_f32_ty,
-        f32_ty,
-    );
-    m.add_fragment_entry("fs_main", fs);
+        translate_statements_fragment(
+            &mut fs,
+            &fs_ctx,
+            &draw_call.fragment_ast,
+            &mut fs_scope,
+            &output_keys,
+            fs_output_ty,
+        );
+        m.add_fragment_entry("fs_main", fs);
+    }
 
     let bound_domain_keys: Vec<String> = domain_keys.into_iter().cloned().collect();
     let bound_texture_keys: Vec<String> = render_tex_keys.into_iter().cloned().collect();
@@ -1779,26 +1816,60 @@ fn translate_loop_body_with_continue_update(
     }
 }
 
+/// Extract the sorted output keys from the first ReturnFragment in the AST.
+/// [LAW:one-source-of-truth] The output key set determines the fragment return
+/// shape (single @location(0) vs. multi-output struct). Alphabetical order is
+/// the canonical mapping from key name to @location index — same convention
+/// used for varyings.
+fn extract_fragment_output_keys(stmts: &[StatementIR]) -> Vec<String> {
+    for stmt in stmts {
+        if let StatementIR::ReturnFragment { outputs } = stmt {
+            let mut keys: Vec<String> = outputs.keys().cloned().collect();
+            keys.sort();
+            return keys;
+        }
+    }
+    vec![]
+}
+
 /// Translate fragment shader statements. Handles ReturnFragment specially.
+///
+/// - Single output (output_keys.len() == 1): direct `@location(0) vec4<f32>` return.
+/// - Multiple outputs (MRT): compose outputs into the `FsOutput` struct in
+///   key-alphabetical order, each field at `@location(i)`.
 fn translate_statements_fragment(
     fb: &mut FnBuilder,
     ctx: &PassContext,
     stmts: &[StatementIR],
     scope: &mut TranslationScope,
-    _vec4_f32_ty: naga::Handle<naga::Type>,
-    _f32_ty: naga::Handle<naga::Type>,
+    output_keys: &[String],
+    fs_output_ty: Option<naga::Handle<naga::Type>>,
 ) {
     fb.with_root(|bb| {
         for stmt in stmts {
             match stmt {
                 StatementIR::ReturnFragment { outputs } => {
-                    let key = outputs
-                        .get("color")
-                        .map(|_| "color")
-                        .or_else(|| outputs.keys().next().map(|k| k.as_str()))
-                        .expect("ReturnFragment needs at least one output");
-                    let color = translate_expr_body(bb, ctx, &outputs[key], scope);
-                    bb.emit_return_value(color);
+                    if let Some(struct_ty) = fs_output_ty {
+                        // MRT: compose all outputs into the struct in sorted key order
+                        let components: Vec<Expr> = output_keys
+                            .iter()
+                            .map(|key| {
+                                let expr = outputs.get(key).unwrap_or_else(|| {
+                                    panic!("ReturnFragment missing output '{key}' (expected keys: {output_keys:?})")
+                                });
+                                translate_expr_body(bb, ctx, expr, scope)
+                            })
+                            .collect();
+                        let composed = bb.compose(struct_ty, components);
+                        bb.emit_return_value(composed);
+                    } else {
+                        // Single output: return the one value directly
+                        let expr = outputs.get(&output_keys[0]).unwrap_or_else(|| {
+                            panic!("ReturnFragment missing output '{}'", output_keys[0])
+                        });
+                        let color = translate_expr_body(bb, ctx, expr, scope);
+                        bb.emit_return_value(color);
+                    }
                 }
                 _ => {
                     translate_statement_body(bb, ctx, stmt, scope);
