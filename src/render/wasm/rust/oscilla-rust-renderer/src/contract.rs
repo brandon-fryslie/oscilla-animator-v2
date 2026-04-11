@@ -72,6 +72,15 @@ pub enum BlendMode {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorWriteChannel {
+    R,
+    G,
+    B,
+    A,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CullMode {
     None,
@@ -166,6 +175,14 @@ pub enum SamplerAddressMode {
 #[serde(rename_all = "snake_case")]
 pub enum SamplerFilterMode {
     Nearest,
+    Linear,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VaryingInterpolation {
+    Flat,
+    Perspective,
     Linear,
 }
 
@@ -543,6 +560,8 @@ pub struct ColorTarget {
     pub load_op: LoadOp,
     pub store_op: Option<StoreOp>,
     pub clear_color: Option<[f64; 4]>,
+    pub blend_mode: Option<BlendMode>,
+    pub write_mask: Option<Vec<ColorWriteChannel>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -560,8 +579,17 @@ pub struct DrawCallSpec {
     pub source: DrawCallSource,
     pub pipeline_state: PipelineStateSpec,
     pub dependencies: DrawCallDependencies,
+    pub varyings: Option<HashMap<String, VaryingSpec>>,
     pub vertex_ast: Vec<StatementIR>,
     pub fragment_ast: Vec<StatementIR>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaryingSpec {
+    #[serde(rename = "type")]
+    pub data_type: WgslType,
+    pub interpolation: Option<VaryingInterpolation>,
 }
 
 #[derive(Debug, Deserialize)]

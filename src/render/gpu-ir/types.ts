@@ -110,7 +110,10 @@ declare function vec4u(x: u32, y: u32, z: u32, w: u32): u32 & { readonly __brand
 // Ambient Function Declarations — Shader Terminals
 // ---------------------------------------------------------------------------
 
-declare function vertex(position: vec4f, varyings: Record<string, f32 | vec2f | vec3f | vec4f>): never;
+declare function vertex(
+  position: vec4f,
+  varyings: Record<string, f32 | i32 | u32 | vec2f | vec2i | vec2u | vec3f | vec3i | vec3u | vec4f>,
+): never;
 declare function fragment(outputs: Record<string, vec4f>): never;
 
 // ---------------------------------------------------------------------------
@@ -118,7 +121,7 @@ declare function fragment(outputs: Record<string, vec4f>): never;
 // ---------------------------------------------------------------------------
 
 declare function textureStore(textureId: string, coords: vec2i | vec2u, value: vec4f): void;
-declare function textureLoad(textureId: string, coords: vec2i | vec2u): vec4f;
+declare function textureLoad(textureId: string, coords: vec2i | vec2u, mipLevel?: i32): vec4f;
 declare function textureSample(textureId: string, samplerId: string, uv: vec2f): vec4f;
 
 // ---------------------------------------------------------------------------
