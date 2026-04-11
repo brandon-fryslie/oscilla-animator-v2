@@ -24,7 +24,38 @@ import type { RootStore } from '../../../stores';
 import type { LogEntry } from '../../../stores/DiagnosticsStore';
 import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
 import type { RustRendererSchedulerState } from '../../../render/rust/worker-protocol';
-import type { RustRendererRuntimeTelemetry } from '../../../render/webgpu/RustWasmWebGPURenderer';
+// Local replacement for deleted RustWasmWebGPURenderer type — only fields actually read by this component.
+interface RustRendererRuntimeTelemetry {
+  readonly frameCount: number;
+  readonly sampleCount: number;
+  readonly meanMs: number;
+  readonly stdDevMs: number;
+  readonly stageTimings: {
+    readonly totalFrameMs: number;
+    readonly inputMarshalMs: number;
+    readonly simulationDispatchMs: number;
+    readonly drawPrepMs: number;
+    readonly renderMs: number;
+    readonly swapMs: number;
+  };
+  readonly dispatchCounters: {
+    readonly computeDispatchCount: number;
+    readonly computeWorkgroupCount: number;
+  };
+  readonly resourceStats: {
+    readonly totalInstanceCount: number;
+    readonly sinkTableWordCount: number;
+    readonly pingPongIndex: number;
+    readonly canvasWidth: number;
+    readonly canvasHeight: number;
+  };
+  readonly lastEvent: {
+    readonly code: string;
+    readonly stage: string;
+    readonly message: string;
+    readonly severity: string;
+  } | null;
+}
 
 interface RuntimeTelemetryDetail {
   readonly kind: 'runtimeTelemetry';

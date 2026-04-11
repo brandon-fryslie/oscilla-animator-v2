@@ -1,152 +1,78 @@
 /**
- * Payload Tester Fixtures
+ * Payload Tester Fixtures — Registry
  *
- * Two fixture families exercise different boundary layers:
- *
- * 1. **WGSL-pass fixtures** (Tier 0*): RustRendererGpuPass[] with hand-authored
- *    WGSL, submitted via rebuildGpuPipelines. Tests shader compilation + dispatch.
- * 2. **Boundary-contract fixtures**: Full INSTALL_PIPELINE_V1 +
- *    PUBLISH_FRAME_INPUT_V1 payloads with sink tables, shape banks, and frame
- *    inputs. Tests the complete install→frame rendering lifecycle.
- *    (No instances yet — WGSL must come from the Rust side, not JS.)
- *
- * ═══════════════════════════════════════════════════════════════════════════
- * ARCHITECTURAL DEBT — TIER 0 WGSL BOUNDARY IS WRONG
- * ═══════════════════════════════════════════════════════════════════════════
- *
- * The Tier 0 fixtures still hand-author WGSL on the JS side. This violates
- * [LAW:one-way-deps]: WGSL is a Rust-internal concern. The correct boundary
- * is OscillaIR → Rust → NagaIR → WGSL. Until then, COMPUTE_PREAMBLE must
- * mirror memory.rs::FrameHeader.
- *
- * ═══════════════════════════════════════════════════════════════════════════
+ * [LAW:one-source-of-truth] Each fixture file is pure DSL text (a gpu({...}) expression).
+ * Loaded as raw strings via import.meta.glob, evaluated via evalDsl() to produce payloads.
+ * The same text is displayed in the DSL editor.
  */
 
-import type { RustRendererGpuPass } from '../worker-protocol';
-import type {
-  InstallPipelineBoundaryPayloadV1,
-  PublishFrameInputBoundaryPayloadV1,
-} from '../boundary-contract';
+import type { PipelineInstallPayload } from '../boundary-contract';
+import { evalDsl } from '../../../payload-tester/dsl-eval';
 
-// ─── PayloadFixture: discriminated union ─────────────────────────────────────
+// Load all fixture files as raw text at build time
+const rawSources = import.meta.glob('./*.ts', { query: '?raw', eager: true, import: 'default' }) as Record<string, string>;
 
-export interface WgslPassFixture {
-  readonly kind: 'wgsl-pass';
+function loadFixture(filename: string): { payload: PipelineInstallPayload; dslSource: string } {
+  const key = `./${filename}.ts`;
+  const dslSource = rawSources[key];
+  if (!dslSource) throw new Error(`Fixture file not found: ${key}`);
+  const result = evalDsl(dslSource);
+  if (!result.ok) throw new Error(`Fixture '${filename}' failed to compile: ${result.error}`);
+  return { payload: result.payload, dslSource };
+}
+
+export interface PayloadFixture {
   readonly id: string;
   readonly name: string;
   readonly description: string;
-  readonly passes: readonly RustRendererGpuPass[];
+  readonly payload: PipelineInstallPayload;
+  readonly dslSource: string;
 }
 
-export interface BoundaryContractFixture {
-  readonly kind: 'boundary-contract';
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly install: InstallPipelineBoundaryPayloadV1;
-  readonly frame: PublishFrameInputBoundaryPayloadV1;
+function fixture(id: string, name: string, description: string): PayloadFixture {
+  const { payload, dslSource } = loadFixture(id);
+  return { id, name, description, payload, dslSource };
 }
-
-export type PayloadFixture = WgslPassFixture | BoundaryContractFixture;
-
-export function isWgslPassFixture(f: PayloadFixture): f is WgslPassFixture {
-  return f.kind === 'wgsl-pass';
-}
-
-export function isBoundaryContractFixture(f: PayloadFixture): f is BoundaryContractFixture {
-  return f.kind === 'boundary-contract';
-}
-
-// ─── WGSL-pass fixture definitions ───────────────────────────────────────────
-
-// [LAW:one-source-of-truth] This WGSL preamble must mirror the Rust
-// FrameHeader struct in memory.rs (view_proj, resolution, time, delta_time)
-// and the bind group layout in compute.rs. Any drift is a bug.
-const COMPUTE_PREAMBLE = `
-struct FrameHeader {
-  view_proj: mat4x4<f32>,
-  resolution: vec2<f32>,
-  time_seconds: f32,
-  delta_time_seconds: f32,
-}
-
-@group(0) @binding(0) var<storage, read> arena_in: array<f32>;
-@group(0) @binding(1) var<storage, read_write> arena_out: array<f32>;
-@group(0) @binding(2) var<storage, read> state_in: array<f32>;
-@group(0) @binding(3) var<storage, read_write> state_out: array<f32>;
-@group(0) @binding(4) var<uniform> uniforms: FrameHeader;
-`;
-
-const TIER_0_IDENTITY_WGSL = `${COMPUTE_PREAMBLE}
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let lane = global_id.x;
-  if (lane >= arrayLength(&arena_in)) {
-    return;
-  }
-  arena_out[lane] = arena_in[lane];
-}
-`;
-
-const TIER_0B_SINE_WGSL = `${COMPUTE_PREAMBLE}
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let lane = global_id.x;
-  if (lane >= arrayLength(&arena_in)) {
-    return;
-  }
-  arena_out[lane] = sin(uniforms.time_seconds + f32(lane) * 0.1);
-}
-`;
-
-const TIER_0C_PASS_A_WGSL = `${COMPUTE_PREAMBLE}
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let lane = global_id.x;
-  if (lane >= arrayLength(&arena_in)) { return; }
-  arena_out[lane] = sin(uniforms.time_seconds + f32(lane) * 0.1);
-}
-`;
-
-const TIER_0C_PASS_B_WGSL = `${COMPUTE_PREAMBLE}
-@compute @workgroup_size(64, 1, 1)
-fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let lane = global_id.x;
-  if (lane >= arrayLength(&arena_in)) { return; }
-  arena_out[lane] = arena_in[lane] * 2.0;
-}
-`;
-
-// ─── Exported fixture list ───────────────────────────────────────────────────
 
 export const PAYLOAD_FIXTURES: readonly PayloadFixture[] = [
-  // WGSL-pass fixtures (exercise shader compilation + dispatch)
-  {
-    kind: 'wgsl-pass',
-    id: 'tier-0-identity',
-    name: 'Tier 0: Identity Copy',
-    description: 'Copies arena_in to arena_out. Simplest valid compute pass.',
-    passes: [
-      { passId: 'identity', stage: 'compute', entryPoint: 'compute_main', wgsl: TIER_0_IDENTITY_WGSL.trim() },
-    ],
-  },
-  {
-    kind: 'wgsl-pass',
-    id: 'tier-0b-sine',
-    name: 'Tier 0b: Time-Driven Sine',
-    description: 'Writes sin(time + lane * 0.1) to arena. Validates uniform transport.',
-    passes: [
-      { passId: 'sine_wave', stage: 'compute', entryPoint: 'compute_main', wgsl: TIER_0B_SINE_WGSL.trim() },
-    ],
-  },
-  {
-    kind: 'wgsl-pass',
-    id: 'tier-0c-two-pass',
-    name: 'Tier 0c: Two-Pass Chain',
-    description: 'Pass A writes sine, Pass B doubles it. Validates multi-pass ping-pong.',
-    passes: [
-      { passId: 'sine_generate', stage: 'compute', entryPoint: 'compute_main', wgsl: TIER_0C_PASS_A_WGSL.trim() },
-      { passId: 'double_values', stage: 'compute', entryPoint: 'compute_main', wgsl: TIER_0C_PASS_B_WGSL.trim() },
-    ],
-  },
+  fixture('instanced-write', 'Instanced Ring', '64 instances in a ring via domain dispatch. Tests Cast, Intrinsic, instanced draw.'),
+  fixture('for-loop-gradient', 'Loop Gradient', '32 bars with brightness from a For loop accumulator. Tests Var, Assign, For.'),
+  fixture('hash-color', 'Hash Colors', '64 instances with PCG-hash-derived colors. Tests bitwise XOR, shift, AND.'),
+  fixture('varying-gradient', 'Gradient Triangle', 'Per-vertex color as varying, GPU-interpolated. Tests vertex_index, varyings.'),
+  fixture('texture-readwrite', 'Texture Pattern', 'Compute writes to storage texture, render reads via TextureLoad.'),
+  fixture('sdf-circle', 'SDF Circle', 'Anti-aliased SDF circle. Tests dpdx, dpdy, fwidth, smoothstep.'),
+  fixture('atomic-boids', 'Atomic Boids', '10,000 boids with atomic<u32> grid_cell. Tests AtomicOpField(Exchange).'),
+  fixture('spirograph-trace', 'Spirograph Trace', '1000 points tracing a hypotrochoid. Rainbow color, alpha blending.'),
+  fixture('conditional-ring', 'Conditional Ring', 'If, Var, Assign, LiteralBool, BinaryOp(==, !=, &&, ||, %), UnaryOp(!).'),
+  fixture('depth-bias-compare', 'Depth Bias Compare', 'Visual validation for less-equal depth compare and non-default depth bias.'),
+  fixture('mrt-split', 'MRT Split', 'Two MRT attachments with per-attachment blend and writeMask, then composited side by side.'),
+  fixture('depth-prepass', 'Depth Prepass', 'Depth-only prepass followed by a depth-equal color pass.'),
+  fixture('front-face-cw', 'Front Face CW', 'Clockwise triangle with back-face culling. Validates frontFace primitive state.'),
+  fixture('search-break', 'Search Break', 'For+If+Break (nested early exit), Continue, BinaryOp(<=, >).'),
+  fixture('bitfield-palette', 'Bitfield Palette', 'BinaryOp(|, <<, >=), UnaryOp(~). Bitfield manipulation for color.'),
+  fixture('bgra-offscreen', 'BGRA Offscreen', 'Offscreen bgra8unorm target composited back to canvas. Validates texture format parsing.'),
+  fixture('offscreen-msaa', 'Offscreen MSAA', 'Multisampled named render target resolved and composited back to canvas.'),
+  fixture('scalar-accumulator', 'Scalar Accumulator', 'LoadScalar + AtomicOpScalar(Add). Phase from scalar read, atomic counter.'),
+  fixture('math-zoo', 'Math Zoo', 'Comprehensive builtins: tan, exp, log, sqrt, sign, fract, ceil, floor, round, pow, atan2, min, step, mix, asin, acos, atan.'),
+  fixture('vector-field', 'Vector Field', 'Vector builtins: normalize, length, distance, dot, cross, reflect.'),
+  fixture('multi-domain', 'Multi-Domain', 'Two domains, cross-domain reads, multiple draw calls in one render pass.'),
+  fixture('mipmapped-texture', 'Mipmapped Texture', 'Named texture with mipLevelCount > 1 rendered and sampled through the payload tester.'),
+  fixture('sampler-extended', 'Sampler Extended', 'Extended sampler descriptor fields on a sampled texture path.'),
+  fixture('texture-array-alloc', 'Texture Array Alloc', 'Allocation proof for 2d-array and cube-array texture dimensions.'),
+  fixture('vertex-float32x3', 'Vertex Float32x3', 'Shape position attribute uses float32x3 at shaderLocation 0.'),
+  fixture('palette-lookup', 'Palette Lookup', 'IndexAccess on vec4, nested Construct, computed index.'),
+  fixture('constant-spiral', 'Constant Spiral', 'Constants map, LiteralI32, Cast(i32), deeply nested expressions.'),
+  fixture('texture-blur', 'Texture Blur', 'Texture dispatch mode, 5-tap cross blur, multiple TextureLoad/TextureStore.'),
+  fixture('texture-load-mip', 'Texture Load Mip', 'Explicit mipLevel on TextureLoad for a sampled render target.'),
+  fixture('flat-varying-u32', 'Flat Varying U32', 'Flat-interpolated u32 varying produces triangle IDs without perspective interpolation.'),
+  fixture('sampled-texture', 'Sampled Texture', 'TextureSample with linear sampler. First sampler fixture.'),
+  fixture('aurora-field', 'Aurora Field', '8192 rotating petals with curl dynamics. Inspired by aurora-petal-showcase.'),
+  fixture('galaxy-swirl', 'Galaxy Swirl', '16384 stars in a rotating galaxy with spiral arms, Keplerian orbits, and core glow.'),
+  fixture('jellyfish-bloom', 'Jellyfish Bloom', '6144 bioluminescent tendrils on 3 pulsing jellyfish with wave dynamics.'),
+  fixture('fire-rain', 'Fire Rain', '12288 falling embers with heat color gradient, wind turbulence, and tumble rotation.'),
+  fixture('strange-attractor', 'Strange Attractor', '4000-point Clifford attractor with velocity-driven color. From DEMO-PATCHES.md.'),
+  fixture('atomic-histogram', 'Atomic Histogram', 'AtomicLoadField, assignResultTo on AtomicOpField. Phase 3 walker gate.'),
+  fixture('quad-camera', 'Quad Camera', '4 cameras → 4 textures → composite. Tests render-to-texture, composite pass, texture sampling.'),
+  fixture('simplex-noise', 'Simplex Noise', '10000 dots displaced and colored by noise_simplex_2d. Tests WGSL function transplant.'),
+  fixture('store-op-store', 'Store Op Store', 'Explicit storeOp on an offscreen render target, then composite it back to canvas.'),
 ];
