@@ -39,7 +39,13 @@ export interface CompactDomainSpec {
   readonly fields: Record<string, string | CompactFieldSpec>;
 }
 
-export type CompactFieldSpec = { readonly f32?: number; readonly u32?: number; readonly i32?: number };
+export type CompactFieldSpec = {
+  readonly f32?: number;
+  readonly u32?: number;
+  readonly i32?: number;
+  readonly 'atomic<u32>'?: number;
+  readonly 'atomic<i32>'?: number;
+};
 
 // ---------------------------------------------------------------------------
 // Expansion

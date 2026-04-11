@@ -11,6 +11,8 @@ import { FixtureSelector } from './FixtureSelector';
 import { DslPayloadSplitEditor, type CompileStatus } from './DslPayloadSplitEditor';
 import type { GpuContext } from '../render/gpu-ir/compile';
 import { evalDsl } from './dsl-eval';
+// [LAW:one-source-of-truth] Typed fixtures recompile via fixture.recompile(ctx).
+// evalDsl is still needed for live-editing the DSL source in the editor.
 import { HEARTBEAT_BUFFER_BYTES } from '../render/rust/runtime-input-layout';
 import type {
   RustRendererWorkerOutboundMessage,
@@ -68,6 +70,7 @@ export const PayloadTesterApp: React.FC = () => {
   const pendingInstallRef = useRef<string | null>(
     JSON.stringify(initialFixture.payload, null, 2),
   );
+  const activeFixtureRef = useRef<PayloadFixture>(initialFixture);
   const rendererReady = rendererStatus.kind === 'ready' || rendererStatus.kind === 'info';
 
   useEffect(() => {
@@ -137,14 +140,14 @@ export const PayloadTesterApp: React.FC = () => {
           case 'BOOTSTRAP_SUCCESS': {
             rendererReadyRef.current = true;
             setRendererStatus({ kind: 'ready', message: 'Renderer ready' });
-            // Recompile fixture DSL with actual canvas dimensions now that we know them.
+            // Recompile fixture with actual canvas dimensions now that we know them.
             // The pending payload was compiled eagerly at module load (without gpuCtx).
             const ctx: GpuContext = { canvasWidth: cw, canvasHeight: ch, sampleCount: 4 };
-            const recompiled = evalDsl(dslSource, ctx);
-            if (recompiled.ok && worker) {
-              const payloadJson = JSON.stringify(recompiled.payload, null, 2);
-              latestJsonRef.current = payloadJson;
-              pendingInstallRef.current = null;
+            const recompiled = activeFixtureRef.current.recompile(ctx);
+            const payloadJson = JSON.stringify(recompiled, null, 2);
+            latestJsonRef.current = payloadJson;
+            pendingInstallRef.current = null;
+            if (worker) {
               worker.postMessage({
                 type: 'INSTALL_PIPELINE',
                 payloadJson,
@@ -251,16 +254,14 @@ export const PayloadTesterApp: React.FC = () => {
 
   const handleFixtureSelect = useCallback((fixture: PayloadFixture) => {
     try { sessionStorage.setItem(STORAGE_KEY, fixture.id); } catch { /* ignore */ }
+    activeFixtureRef.current = fixture;
     const source = fixture.dslSource ?? JSON.stringify(fixture.payload, null, 2);
     setDslSource(source);
 
-    // [LAW:one-source-of-truth] Recompile the DSL with the current canvas dimensions.
+    // [LAW:one-source-of-truth] Recompile with current canvas dimensions.
     // fixture.payload was compiled at module load without gpuCtx (defaults to 800x600).
-    // The actual canvas may differ, so we recompile — same path as BOOTSTRAP_SUCCESS.
-    const recompiled = gpuCtx ? evalDsl(source, gpuCtx) : null;
-    const payloadJson = recompiled?.ok
-      ? JSON.stringify(recompiled.payload, null, 2)
-      : JSON.stringify(fixture.payload, null, 2);
+    const payload = gpuCtx ? fixture.recompile(gpuCtx) : fixture.payload;
+    const payloadJson = JSON.stringify(payload, null, 2);
     latestJsonRef.current = payloadJson;
     installPipeline(payloadJson);
   }, [installPipeline, gpuCtx]);

@@ -24,6 +24,7 @@ import { inferComputeDeps, inferDrawCallDeps } from './deps';
 import { compileShaderBody, type ShaderContext, type WalkerResult } from './walker';
 import * as B from './ir-builders';
 import { STDLIB } from './stdlib';
+import { createScope, type TypedComputeBody, type TypedVertexBody, type TypedFragmentBody, E as ExprE } from './typed-dsl';
 
 // ---------------------------------------------------------------------------
 // Helpers — syntactic sugar returning boundary-contract types directly.
@@ -152,7 +153,8 @@ interface DeferredComputePass {
   readonly passId: string;
   readonly workgroupSize: readonly [number, number, number];
   readonly dispatch: ComputePassSpec['dispatch'];
-  readonly bodyFn: Function;
+  readonly bodyFn?: Function;
+  readonly typedAst?: readonly StatementIR[];
   readonly constants?: Record<string, number>;
   readonly dispatchDomain?: string;
 }
@@ -162,8 +164,10 @@ interface DeferredDrawCall {
   readonly source: DrawCallSpec['source'];
   readonly pipelineState: DrawCallSpec['pipelineState'];
   readonly transform?: Transform2DSpec;
-  readonly vertexFn: Function;
+  readonly vertexFn?: Function;
   readonly fragmentFn?: Function;
+  readonly typedVertexAst?: readonly StatementIR[];
+  readonly typedFragmentAst?: readonly StatementIR[];
   readonly constants?: Record<string, number>;
   readonly domainId: string;
 }
@@ -344,19 +348,23 @@ export function compute(
   passId: string,
   dispatch: ComputePassSpec['dispatch'],
   workgroupSize: ComputePassSpec['workgroupSize'],
-  constantsOrBody: Record<string, number> | Function,
-  maybeBody?: Function,
+  constantsOrBody: Record<string, number> | Function | TypedComputeBody,
+  maybeBody?: Function | TypedComputeBody,
 ): DeferredComputePass {
   const hasConstants = typeof constantsOrBody !== 'function';
-  const constants = hasConstants ? constantsOrBody : undefined;
-  const bodyFn = hasConstants ? maybeBody! : constantsOrBody;
+  const constants = hasConstants ? constantsOrBody as Record<string, number> : undefined;
+  const body = hasConstants ? maybeBody! : constantsOrBody;
+
+  // Typed body: call immediately with scope → StatementIR[]
+  const typedAst = tryCallTypedBody(body as TypedComputeBody);
 
   return {
     type: 'Compute',
     passId,
     workgroupSize,
     dispatch,
-    bodyFn,
+    bodyFn: typedAst ? undefined : body as Function,
+    typedAst,
     constants,
     dispatchDomain: dispatch.mode === 'Domain' ? dispatch.domainId : undefined,
   };
@@ -390,8 +398,8 @@ export interface Transform2DSpec {
 
 export interface ShaderFns {
   readonly transform?: Transform2DSpec;
-  readonly vertex: Function;
-  readonly fragment?: Function;
+  readonly vertex: Function | TypedVertexBody;
+  readonly fragment?: Function | TypedFragmentBody;
   readonly constants?: Record<string, number>;
 }
 
@@ -419,13 +427,22 @@ export function draw(
   pipelineState: PipelineStateSpec,
   shaders: ShaderFns,
 ): DeferredDrawCall {
+  // Typed vertex: call with scope + position VarRef
+  const typedVertexAst = tryCallTypedVertexBody(shaders.vertex as TypedVertexBody);
+  // Typed fragment: call with scope + varying VarRefs (caller uses $('color') etc.)
+  const typedFragmentAst = shaders.fragment
+    ? tryCallTypedBody(shaders.fragment as TypedFragmentBody)
+    : undefined;
+
   return {
     intentId,
     source,
     pipelineState,
     transform: shaders.transform,
-    vertexFn: shaders.vertex,
-    fragmentFn: shaders.fragment ?? undefined,
+    vertexFn: typedVertexAst ? undefined : shaders.vertex as Function,
+    fragmentFn: typedFragmentAst ? undefined : (shaders.fragment as Function | undefined),
+    typedVertexAst,
+    typedFragmentAst,
     constants: shaders.constants,
     domainId: source.type === 'Domain' ? source.domainId : '',
   };
@@ -485,6 +502,52 @@ function resolveSampleCount(textureId: string, ctx: GpuContext | undefined): num
 }
 
 // ---------------------------------------------------------------------------
+// Typed body detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Try to call a function as a typed body ($ => StatementIR[]).
+ * Returns the statements if it's a typed body, undefined if it's a v1 walker body.
+ *
+ * Detection: typed bodies accept a Scope parameter and return StatementIR[].
+ * V1 bodies accept zero parameters (arrow with no args or proxy-captured args).
+ * We distinguish by calling with a scope — typed bodies return an array of
+ * objects with `type` fields; v1 bodies return undefined or a proxy.
+ */
+function tryCallTypedBody(fn: Function): readonly StatementIR[] | undefined {
+  if (fn.length === 0) return undefined; // v1: () => { ... } has 0 params
+  try {
+    const scope = createScope();
+    const result = fn(scope);
+    if (Array.isArray(result) && (result.length === 0 || (result[0] && typeof result[0] === 'object' && 'type' in result[0]))) {
+      return result as StatementIR[];
+    }
+  } catch { /* not a typed body */ }
+  return undefined;
+}
+
+/** Try calling a typed vertex body: ($, position) => StatementIR[] */
+function tryCallTypedVertexBody(fn: Function): readonly StatementIR[] | undefined {
+  if (fn.length <= 1) {
+    // Could be v1: (position) => { ... } with 1 param, or typed: ($) => [...]
+    // Try typed first (1 param = scope only, position via $('position'))
+    const asTyped = tryCallTypedBody(fn);
+    if (asTyped) return asTyped;
+    return undefined;
+  }
+  // 2 params: ($, position) => [...]
+  try {
+    const scope = createScope();
+    const position = new ExprE(B.ref('position'));
+    const result = fn(scope, position);
+    if (Array.isArray(result) && (result.length === 0 || (result[0] && typeof result[0] === 'object' && 'type' in result[0]))) {
+      return result as StatementIR[];
+    }
+  } catch { /* not a typed body */ }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Internal compilation
 // ---------------------------------------------------------------------------
 
@@ -534,8 +597,9 @@ function compileCameraEntry(entry: DeferredCameraPass, manifest: MemoryManifest)
 }
 
 function compileComputeEntry(entry: DeferredComputePass, manifest: MemoryManifest): ComputePassSpec {
-  const ctx: ShaderContext = { stage: 'compute', manifest, constants: entry.constants };
-  const ast = unwrapWalkerResult(compileShaderBody(entry.bodyFn, ctx));
+  const ast = entry.typedAst
+    ? [...entry.typedAst]
+    : unwrapWalkerResult(compileShaderBody(entry.bodyFn!, { stage: 'compute', manifest, constants: entry.constants }));
 
   // Auto-append active count for domain-dispatched compute
   if (entry.dispatchDomain) {
@@ -585,15 +649,19 @@ function compileRenderEntry(
   // Compile draw calls with VP auto-injection
   const hasColorTargets = entry.targets.colors.length > 0;
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
-    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
+    const vertexAst = dc.typedVertexAst
+      ? [...dc.typedVertexAst]
+      : unwrapWalkerResult(compileShaderBody(dc.vertexFn!, { stage: 'vertex', manifest, constants: dc.constants }));
 
     // Depth-only passes (zero color targets) have no fragment shader.
     // Otherwise: default passthrough fragment forwards all varyings as-is.
     const fragmentAst = !hasColorTargets
       ? []
-      : dc.fragmentFn
-        ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
-        : generatePassthroughFragment(vertexAst);
+      : dc.typedFragmentAst
+        ? [...dc.typedFragmentAst]
+        : dc.fragmentFn
+          ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+          : generatePassthroughFragment(vertexAst);
 
     // [LAW:single-enforcer] Auto-inject transforms: local → model (TRS) → clip (VP)
     for (let i = 0; i < vertexAst.length; i++) {
@@ -669,13 +737,17 @@ function compileCompositeEntry(
 ): RenderPassSpec {
   const hasColorTargets = entry.targets.colors.length > 0;
   const drawCalls: DrawCallSpec[] = entry.drawCalls.map(dc => {
-    const vertexAst = unwrapWalkerResult(compileShaderBody(dc.vertexFn, { stage: 'vertex', manifest, constants: dc.constants }));
+    const vertexAst = dc.typedVertexAst
+      ? [...dc.typedVertexAst]
+      : unwrapWalkerResult(compileShaderBody(dc.vertexFn!, { stage: 'vertex', manifest, constants: dc.constants }));
 
     const fragmentAst = !hasColorTargets
       ? []
-      : dc.fragmentFn
-        ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
-        : generatePassthroughFragment(vertexAst);
+      : dc.typedFragmentAst
+        ? [...dc.typedFragmentAst]
+        : dc.fragmentFn
+          ? unwrapWalkerResult(compileShaderBody(dc.fragmentFn, { stage: 'fragment', manifest, constants: dc.constants }))
+          : generatePassthroughFragment(vertexAst);
 
     // No ApplyVP, no ApplyTransform2D — clip-space positions pass through directly
     const deps = inferDrawCallDeps(vertexAst, fragmentAst, manifest, '');

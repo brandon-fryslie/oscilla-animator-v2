@@ -58,8 +58,8 @@ describe('manifest coverage', () => {
     });
     expect(manifest.textures.tex_color).toStrictEqual({
       dimension: '2d',
-      width: { relativeTo: 'canvas', scale: 1 },
-      height: { relativeTo: 'canvas', scale: 1 },
+      width: 800,
+      height: 600,
       format: 'rgba8unorm',
       usage: ['storage', 'sampled'],
     });

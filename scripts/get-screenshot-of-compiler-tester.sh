@@ -4,9 +4,9 @@ set -euo pipefail
 # ─── get-screenshot-of-compiler-tester.sh ─────────────────────────────────────
 #
 # Captures a screenshot of the compiler tester after submitting a fixture.
-# Adapted from get-screenshot-of-demo-patch.sh for the standalone tester app.
+# Starts its own dev server, takes the screenshot, and shuts everything down.
 #
-# Requires: Chrome/Chromium, Node.js, dev server running
+# Requires: Chrome/Chromium, Node.js
 # ─────────────────────────────────────────────────────────────────────────────
 
 APP_PORT="${APP_PORT:-}"
@@ -74,29 +74,44 @@ if [[ -z "$FIXTURE_NAME" ]]; then
   exit 1
 fi
 
-# ─── Dev server detection ───────────────────────────────────────────────────
+# ─── Dev server ─────────────────────────────────────────────────────────────
 
-declare -a APP_PORT_CANDIDATES=()
-if [[ -n "$APP_PORT" ]]; then
-  APP_PORT_CANDIDATES=("$APP_PORT")
-else
-  APP_PORT_CANDIDATES=(5784 5785 5786)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ -z "$APP_PORT" ]]; then
+  APP_PORT=5784
 fi
 
-SELECTED_APP_PORT=""
-for candidate in "${APP_PORT_CANDIDATES[@]}"; do
-  if curl -fsS --max-time 3 "http://127.0.0.1:${candidate}/compiler-tester.html" >/dev/null 2>&1; then
-    SELECTED_APP_PORT="$candidate"
-    break
-  fi
-done
+DEV_SERVER_PID=""
+start_dev_server() {
+  cd "$PROJECT_ROOT"
+  npm run dev -- --port "$APP_PORT" >/dev/null 2>&1 &
+  DEV_SERVER_PID=$!
+  cd - >/dev/null
 
-if [[ -z "$SELECTED_APP_PORT" ]]; then
-  echo "${RED}Error:${RESET} No dev server found serving compiler-tester.html." >&2
-  echo "Start with: ${BOLD}npm run dev${RESET}" >&2
+  for i in $(seq 1 100); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${APP_PORT}/compiler-tester.html" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$DEV_SERVER_PID" 2>/dev/null; then
+      echo "${RED}Error:${RESET} Dev server exited unexpectedly." >&2
+      exit 1
+    fi
+    sleep 0.2
+  done
+  echo "${RED}Error:${RESET} Dev server did not become ready within 20 seconds." >&2
   exit 1
-fi
-APP_PORT="$SELECTED_APP_PORT"
+}
+
+stop_dev_server() {
+  if [[ -n "$DEV_SERVER_PID" ]]; then
+    kill "$DEV_SERVER_PID" 2>/dev/null || true
+    wait "$DEV_SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+start_dev_server
 
 # ─── Chrome ────────────────────────────────────────────────────────────────
 
@@ -180,6 +195,7 @@ CHROME_PID=$!
 cleanup() {
   kill "$CHROME_PID" 2>/dev/null || true
   wait "$CHROME_PID" 2>/dev/null || true
+  stop_dev_server
   rm -rf "$PROFILE_DIR"
 }
 trap cleanup EXIT
@@ -193,7 +209,6 @@ done
 
 # ─── CDP capture ─────────────────────────────────────────────────────────────
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_URL="http://localhost:${APP_PORT}/compiler-tester.html?fixture=${FIXTURE_NAME}&canvas-only"
 
 node "${SCRIPT_DIR}/_payload-tester-cdp.mjs" \
