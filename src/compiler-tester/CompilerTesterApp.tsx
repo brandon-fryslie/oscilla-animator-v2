@@ -92,23 +92,6 @@ export const CompilerTesterApp: React.FC = () => {
   const pendingInstallRef = useRef<string | null>(null);
   const rendererReady = rendererStatus.kind === 'ready' || rendererStatus.kind === 'info';
 
-  // Compile initial fixture eagerly and queue for install
-  const initialCompiled = useRef<string | null>(null);
-  if (initialCompiled.current === null) {
-    const initial = getInitialFixture();
-    if (initial) {
-      const result = compileFixture(initial);
-      if (!result.error) {
-        initialCompiled.current = result.json;
-        pendingInstallRef.current = result.json;
-      } else {
-        initialCompiled.current = ''; // Mark as attempted
-      }
-    } else {
-      initialCompiled.current = ''; // No fixtures registered yet
-    }
-  }
-
   useEffect(() => {
     rendererReadyRef.current = rendererReady;
     // Expose status for CDP screenshot script
@@ -143,6 +126,15 @@ export const CompilerTesterApp: React.FC = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // Compile the initial fixture before booting so it's ready when BOOTSTRAP_SUCCESS arrives.
+    const initial = getInitialFixture();
+    if (initial) {
+      const result = compileFixture(initial);
+      if (!result.error) {
+        pendingInstallRef.current = result.json;
+      }
+    }
 
     let worker: Worker | null = null;
     let aborted = false;
