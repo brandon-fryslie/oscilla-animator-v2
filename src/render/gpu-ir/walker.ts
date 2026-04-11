@@ -507,7 +507,10 @@ function walkCallExpr(node: ESTree.CallExpression, ctx: WalkContext): ExprIR {
   if (name === 'textureLoad') {
     const textureId = extractStringArg(node.arguments[0] as ESTree.Expression, ctx, 'textureLoad');
     const coords = walkExpr(node.arguments[1] as ESTree.Expression, ctx);
-    return B.textureLoad(textureId, coords);
+    const mipLevel = node.arguments[2]
+      ? walkExpr(node.arguments[2] as ESTree.Expression, ctx)
+      : undefined;
+    return B.textureLoad(textureId, coords, mipLevel);
   }
   if (name === 'textureSample') {
     const textureId = extractStringArg(node.arguments[0] as ESTree.Expression, ctx, 'textureSample');

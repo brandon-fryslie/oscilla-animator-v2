@@ -213,7 +213,7 @@ export interface GpuSpec extends CompactManifest {
 export interface GpuContext {
   readonly canvasWidth: number;
   readonly canvasHeight: number;
-  /** MSAA sample count for canvas targets (default 4). Named textures always use 1. */
+  /** MSAA sample count for canvas targets (default 4). Offscreen targets use manifest.textures. */
   readonly sampleCount?: number;
 }
 
@@ -478,10 +478,16 @@ function resolveScissorRect(
   return { x: 0, y: 0, width: targetDims.width, height: targetDims.height };
 }
 
-/** Resolve MSAA sample count. Canvas uses ctx.sampleCount; textures always 1. */
-function resolveSampleCount(textureId: string, ctx: GpuContext | undefined): number {
+/** Resolve MSAA sample count from the canonical target declaration. */
+function resolveSampleCount(
+  textureId: string,
+  spec: GpuSpec,
+  ctx: GpuContext | undefined,
+): number {
   if (textureId === 'canvas') return ctx?.sampleCount ?? 4;
-  return 1;
+  // [LAW:one-source-of-truth] Offscreen sample counts come from the manifest
+  // texture spec; render passes derive from that instead of shadowing it.
+  return spec.textures?.[textureId]?.sampleCount ?? 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +648,7 @@ function compileRenderEntry(
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
-    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
+    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', spec, ctx),
     targets: entry.targets,
     viewport: resolveViewport(entry.viewport, targetDims),
     scissorRect: resolveScissorRect(entry.scissorRect, targetDims),
@@ -693,7 +699,7 @@ function compileCompositeEntry(
     type: 'Render',
     passId: entry.passId,
     sourceBlockIds: [],
-    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', ctx),
+    sampleCount: resolveSampleCount(colorTarget?.textureId ?? 'canvas', spec, ctx),
     targets: entry.targets,
     viewport: resolveViewport(undefined, targetDims),
     scissorRect: resolveScissorRect(undefined, targetDims),

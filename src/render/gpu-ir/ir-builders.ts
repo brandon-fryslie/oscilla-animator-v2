@@ -63,8 +63,8 @@ export const loadField = (symbolId: SymbolId, index: ExprIR): ExprIR =>
 export const textureSample = (textureId: TextureId, samplerId: SamplerId, uv: ExprIR): ExprIR =>
   ({ type: 'TextureSample', textureId, samplerId, uv }) as const;
 
-export const textureLoad = (textureId: TextureId, coords: ExprIR): ExprIR =>
-  ({ type: 'TextureLoad', textureId, coords }) as const;
+export const textureLoad = (textureId: TextureId, coords: ExprIR, mipLevel?: ExprIR): ExprIR =>
+  ({ type: 'TextureLoad', textureId, coords, mipLevel }) as const;
 
 export const atomicLoadField = (symbolId: SymbolId, index: ExprIR): ExprIR =>
   ({ type: 'AtomicLoadField', symbolId, index }) as const;

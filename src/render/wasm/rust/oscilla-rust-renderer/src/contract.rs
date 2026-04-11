@@ -24,21 +24,42 @@ pub enum LoadOp {
     Clear,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StoreOp {
+    Store,
+    Discard,
+}
+
 /// Depth attachment load op with the clear value embedded in the Clear variant.
 /// [LAW:one-type-per-behavior] `op + value?` collapsed into one discriminated type.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum DepthLoadOp {
-    Load,
-    Clear { value: f32 },
+    Load {
+        #[serde(rename = "storeOp")]
+        store_op: Option<StoreOp>,
+    },
+    Clear {
+        value: f32,
+        #[serde(rename = "storeOp")]
+        store_op: Option<StoreOp>,
+    },
 }
 
 /// Stencil attachment load op with the clear value embedded in the Clear variant.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum StencilLoadOp {
-    Load,
-    Clear { value: u32 },
+    Load {
+        #[serde(rename = "storeOp")]
+        store_op: Option<StoreOp>,
+    },
+    Clear {
+        value: u32,
+        #[serde(rename = "storeOp")]
+        store_op: Option<StoreOp>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -58,14 +79,36 @@ pub enum CullMode {
     Back,
 }
 
-/// Depth compare — restricted subset (less / always / equal / greater).
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontFace {
+    Ccw,
+    Cw,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolygonMode {
+    Fill,
+    Line,
+    Point,
+}
+
+/// Depth compare — full WebGPU set.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DepthCompare {
+    Never,
     Less,
-    Always,
     Equal,
+    #[serde(rename = "less-equal")]
+    LessEqual,
     Greater,
+    #[serde(rename = "not-equal")]
+    NotEqual,
+    #[serde(rename = "greater-equal")]
+    GreaterEqual,
+    Always,
 }
 
 /// Stencil compare — full WebGPU set.
@@ -101,10 +144,29 @@ pub enum TextureDimension {
     D1,
     #[serde(rename = "2d")]
     D2,
+    #[serde(rename = "2d-array")]
+    D2Array,
     #[serde(rename = "3d")]
     D3,
     #[serde(rename = "cube")]
     Cube,
+    #[serde(rename = "cube-array")]
+    CubeArray,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SamplerAddressMode {
+    ClampToEdge,
+    Repeat,
+    MirrorRepeat,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplerFilterMode {
+    Nearest,
+    Linear,
 }
 
 /// Hardware intrinsic name for `ExprIR::Intrinsic`.
@@ -325,6 +387,8 @@ pub struct TextureSpec {
     pub width: serde_json::Value,
     pub height: Option<serde_json::Value>,
     pub depth_or_array_layers: Option<u32>,
+    pub mip_level_count: Option<u32>,
+    pub sample_count: Option<u32>,
     pub format: String,
     pub usage: Vec<String>,
     pub external_source: Option<String>,
@@ -364,10 +428,16 @@ pub struct DataStreamSpec {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SamplerSpec {
-    pub mag_filter: String,
-    pub min_filter: String,
-    pub address_mode_u: String,
-    pub address_mode_v: String,
+    pub mag_filter: SamplerFilterMode,
+    pub min_filter: SamplerFilterMode,
+    pub mipmap_filter: Option<SamplerFilterMode>,
+    pub address_mode_u: SamplerAddressMode,
+    pub address_mode_v: SamplerAddressMode,
+    pub address_mode_w: Option<SamplerAddressMode>,
+    pub lod_min_clamp: Option<f32>,
+    pub lod_max_clamp: Option<f32>,
+    pub compare: Option<DepthCompare>,
+    pub max_anisotropy: Option<u16>,
 }
 
 // ---------------------------------------------------------------------------
@@ -471,6 +541,7 @@ pub struct RenderTargets {
 pub struct ColorTarget {
     pub texture_id: String,
     pub load_op: LoadOp,
+    pub store_op: Option<StoreOp>,
     pub clear_color: Option<[f64; 4]>,
 }
 
@@ -512,8 +583,14 @@ pub enum DrawCallSource {
 pub struct PipelineStateSpec {
     pub blend_mode: BlendMode,
     pub cull_mode: CullMode,
+    pub front_face: Option<FrontFace>,
+    pub polygon_mode: Option<PolygonMode>,
+    pub unclipped_depth: Option<bool>,
     pub depth_write: bool,
     pub depth_compare: DepthCompare,
+    pub depth_bias: Option<i32>,
+    pub depth_bias_slope_scale: Option<f32>,
+    pub depth_bias_clamp: Option<f32>,
     pub stencil_read_mask: Option<u32>,
     pub stencil_write_mask: Option<u32>,
     pub stencil_front: Option<StencilFaceState>,
@@ -624,6 +701,8 @@ pub enum ExprIR {
         #[serde(rename = "textureId")]
         texture_id: String,
         coords: Box<ExprIR>,
+        #[serde(rename = "mipLevel")]
+        mip_level: Option<Box<ExprIR>>,
     },
     // Atomic reads
     AtomicLoadField {
