@@ -83,6 +83,15 @@ export const StencilOpSchema = z.enum([
 ]);
 export type StencilOp = z.infer<typeof StencilOpSchema>;
 
+export const StoreOpSchema = z.enum(['store', 'discard']);
+export type StoreOp = z.infer<typeof StoreOpSchema>;
+
+export const SamplerFilterModeSchema = z.enum(['nearest', 'linear']);
+export type SamplerFilterMode = z.infer<typeof SamplerFilterModeSchema>;
+
+export const SamplerAddressModeSchema = z.enum(['clamp-to-edge', 'repeat', 'mirror-repeat']);
+export type SamplerAddressMode = z.infer<typeof SamplerAddressModeSchema>;
+
 // ---------------------------------------------------------------------------
 // Layer 2: Simple specs (depend on Layer 1)
 // ---------------------------------------------------------------------------
@@ -120,10 +129,16 @@ export const DataStreamSpecSchema = z.object({
 export type DataStreamSpec = z.infer<typeof DataStreamSpecSchema>;
 
 export const SamplerSpecSchema = z.object({
-  magFilter: z.enum(['nearest', 'linear']),
-  minFilter: z.enum(['nearest', 'linear']),
-  addressModeU: z.enum(['clamp-to-edge', 'repeat', 'mirror-repeat']),
-  addressModeV: z.enum(['clamp-to-edge', 'repeat', 'mirror-repeat']),
+  magFilter: SamplerFilterModeSchema,
+  minFilter: SamplerFilterModeSchema,
+  mipmapFilter: SamplerFilterModeSchema.optional(),
+  addressModeU: SamplerAddressModeSchema,
+  addressModeV: SamplerAddressModeSchema,
+  addressModeW: SamplerAddressModeSchema.optional(),
+  lodMinClamp: z.number().optional(),
+  lodMaxClamp: z.number().optional(),
+  compare: z.enum(['never', 'less', 'equal', 'less-equal', 'greater', 'not-equal', 'greater-equal', 'always']).optional(),
+  maxAnisotropy: z.number().int().min(1).optional(),
 });
 export type SamplerSpec = z.infer<typeof SamplerSpecSchema>;
 
@@ -142,10 +157,12 @@ export const StaticGeometrySpecSchema = z.object({
 export type StaticGeometrySpec = z.infer<typeof StaticGeometrySpecSchema>;
 
 export const TextureSpecSchema = z.object({
-  dimension: z.enum(['1d', '2d', '3d', 'cube']),
+  dimension: z.enum(['1d', '2d', '2d-array', '3d', 'cube', 'cube-array']),
   width: z.union([z.number(), z.object({ relativeTo: z.literal('canvas'), scale: z.number() })]),
   height: z.union([z.number(), z.object({ relativeTo: z.literal('canvas'), scale: z.number() })]).optional(),
   depthOrArrayLayers: z.number().optional(),
+  mipLevelCount: z.number().optional(),
+  sampleCount: z.number().optional(),
   format: z.string(),
   usage: z.array(z.enum(['storage', 'sampled', 'render_attachment'])).readonly(),
   externalSource: z.enum(['video', 'canvas', 'image_bitmap']).optional(),
@@ -163,8 +180,23 @@ export type StencilFaceState = z.infer<typeof StencilFaceStateSchema>;
 export const PipelineStateSpecSchema = z.object({
   blendMode: z.enum(['opaque', 'alpha', 'additive', 'multiply']),
   cullMode: z.enum(['none', 'front', 'back']),
+  frontFace: z.enum(['ccw', 'cw']).optional(),
+  polygonMode: z.enum(['fill', 'line', 'point']).optional(),
+  unclippedDepth: z.boolean().optional(),
   depthWrite: z.boolean(),
-  depthCompare: z.enum(['less', 'always', 'equal', 'greater']),
+  depthCompare: z.enum([
+    'never',
+    'less',
+    'equal',
+    'less-equal',
+    'greater',
+    'not-equal',
+    'greater-equal',
+    'always',
+  ]),
+  depthBias: z.number().int().optional(),
+  depthBiasSlopeScale: z.number().optional(),
+  depthBiasClamp: z.number().optional(),
   stencilReadMask: z.number().optional(),
   stencilWriteMask: z.number().optional(),
   stencilFront: StencilFaceStateSchema.optional(),
@@ -193,7 +225,7 @@ export type ExprIR =
   | { readonly type: 'LoadScalar'; readonly symbolId: SymbolId }
   | { readonly type: 'LoadField'; readonly symbolId: SymbolId; readonly index: ExprIR }
   | { readonly type: 'TextureSample'; readonly textureId: TextureId; readonly samplerId: SamplerId; readonly uv: ExprIR }
-  | { readonly type: 'TextureLoad'; readonly textureId: TextureId; readonly coords: ExprIR }
+  | { readonly type: 'TextureLoad'; readonly textureId: TextureId; readonly coords: ExprIR; readonly mipLevel?: ExprIR }
   | { readonly type: 'AtomicLoadField'; readonly symbolId: SymbolId; readonly index: ExprIR }
   | { readonly type: 'AtomicLoadScalar'; readonly symbolId: SymbolId }
   | { readonly type: 'BinaryOp'; readonly op: BinaryOp; readonly left: ExprIR; readonly right: ExprIR }
@@ -221,7 +253,7 @@ export const ExprIRSchema: z.ZodType<ExprIR> = z.lazy(() =>
     z.object({ type: z.literal('LoadScalar'), symbolId: SymbolIdSchema }),
     z.object({ type: z.literal('LoadField'), symbolId: SymbolIdSchema, index: ExprIRSchema }),
     z.object({ type: z.literal('TextureSample'), textureId: TextureIdSchema, samplerId: SamplerIdSchema, uv: ExprIRSchema }),
-    z.object({ type: z.literal('TextureLoad'), textureId: TextureIdSchema, coords: ExprIRSchema }),
+    z.object({ type: z.literal('TextureLoad'), textureId: TextureIdSchema, coords: ExprIRSchema, mipLevel: ExprIRSchema.optional() }),
     z.object({ type: z.literal('AtomicLoadField'), symbolId: SymbolIdSchema, index: ExprIRSchema }),
     z.object({ type: z.literal('AtomicLoadScalar'), symbolId: SymbolIdSchema }),
     z.object({ type: z.literal('BinaryOp'), op: BinaryOpSchema, left: ExprIRSchema, right: ExprIRSchema }),
@@ -362,6 +394,7 @@ export const RenderPassSpecSchema = z.object({
     colors: z.array(z.object({
       textureId: z.union([TextureIdSchema, z.literal('canvas')]),
       loadOp: z.enum(['load', 'clear']),
+      storeOp: StoreOpSchema.optional(),
       clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
     })).readonly(),
     depthStencil: z.object({
@@ -369,12 +402,12 @@ export const RenderPassSpecSchema = z.object({
       // [LAW:dataflow-not-control-flow] Op + value live in one variant so the
       // load/clear distinction can't drift apart at consumer sites.
       depth: z.discriminatedUnion('op', [
-        z.object({ op: z.literal('load') }),
-        z.object({ op: z.literal('clear'), value: z.number() }),
+        z.object({ op: z.literal('load'), storeOp: StoreOpSchema.optional() }),
+        z.object({ op: z.literal('clear'), value: z.number(), storeOp: StoreOpSchema.optional() }),
       ]).optional(),
       stencil: z.discriminatedUnion('op', [
-        z.object({ op: z.literal('load') }),
-        z.object({ op: z.literal('clear'), value: z.number() }),
+        z.object({ op: z.literal('load'), storeOp: StoreOpSchema.optional() }),
+        z.object({ op: z.literal('clear'), value: z.number(), storeOp: StoreOpSchema.optional() }),
       ]).optional(),
     }).optional(),
   }),

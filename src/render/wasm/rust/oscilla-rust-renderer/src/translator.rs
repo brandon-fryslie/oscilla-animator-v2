@@ -826,7 +826,16 @@ fn collect_domains_from_expr(
             collect_domains_from_expr(index, arena, out);
         }
         ExprIR::TextureSample { uv, .. } => collect_domains_from_expr(uv, arena, out),
-        ExprIR::TextureLoad { coords, .. } => collect_domains_from_expr(coords, arena, out),
+        ExprIR::TextureLoad {
+            coords,
+            mip_level,
+            ..
+        } => {
+            collect_domains_from_expr(coords, arena, out);
+            if let Some(mip_level) = mip_level.as_ref() {
+                collect_domains_from_expr(mip_level, arena, out);
+            }
+        }
         ExprIR::AtomicLoadField { symbol_id, index } => {
             if let Some(sym) = arena.symbol_map.get(symbol_id) {
                 if let Some(ref d) = sym.domain_id {
@@ -938,9 +947,16 @@ fn collect_textures_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
             out.insert(texture_id.clone());
             collect_textures_from_expr(uv, out);
         }
-        ExprIR::TextureLoad { texture_id, coords } => {
+        ExprIR::TextureLoad {
+            texture_id,
+            coords,
+            mip_level,
+        } => {
             out.insert(texture_id.clone());
             collect_textures_from_expr(coords, out);
+            if let Some(mip_level) = mip_level.as_ref() {
+                collect_textures_from_expr(mip_level, out);
+            }
         }
         ExprIR::BinaryOp { left, right, .. } => {
             collect_textures_from_expr(left, out);
@@ -1060,7 +1076,16 @@ fn collect_samplers_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
             out.insert(sampler_id.clone());
             collect_samplers_from_expr(uv, out);
         }
-        ExprIR::TextureLoad { coords, .. } => collect_samplers_from_expr(coords, out),
+        ExprIR::TextureLoad {
+            coords,
+            mip_level,
+            ..
+        } => {
+            collect_samplers_from_expr(coords, out);
+            if let Some(mip_level) = mip_level.as_ref() {
+                collect_samplers_from_expr(mip_level, out);
+            }
+        }
         ExprIR::BinaryOp { left, right, .. } => {
             collect_samplers_from_expr(left, out);
             collect_samplers_from_expr(right, out);
@@ -1131,8 +1156,11 @@ pub fn translate_render_pass(
     let mut m = ModuleBuilder::new();
     let f32_ty = m.f32_type();
     let u32_ty = m.u32_type();
-    let vec2_f32_ty = m.vector_type(naga::VectorSize::Bi, naga::ScalarKind::Float);
     let vec4_f32_ty = m.vec4_f32_type();
+    let shape_id = match &draw_call.source {
+        crate::contract::DrawCallSource::Domain { shape_id, .. } => shape_id.as_str(),
+        crate::contract::DrawCallSource::FullScreenQuad => "__builtin:fullscreen-triangle",
+    };
 
     // Scan vertexAst for ReturnVertex to extract varying keys (sorted alpha)
     let varying_keys = extract_varying_keys(&draw_call.vertex_ast);
@@ -1306,6 +1334,11 @@ pub fn translate_render_pass(
     }
 
     let type_handles = build_type_handles(&mut m, None);
+    let shape = arena
+        .shape_bank
+        .get(shape_id)
+        .unwrap_or_else(|| panic!("shape '{}' not in arena.shape_bank", shape_id));
+    let position_arg_ty = type_handles[&shape.position_type];
 
     // Transplant any referenced stdlib/registered functions into the module.
     // Scan both vertex and fragment ASTs — the module is shared between stages.
@@ -1348,7 +1381,7 @@ pub fn translate_render_pass(
 
     let position_arg = vs.add_argument(
         "position",
-        vec2_f32_ty,
+        position_arg_ty,
         Some(naga::Binding::Location {
             location: 0,
             blend_src: None,
@@ -2238,7 +2271,11 @@ fn translate_expr_body(
             bb.texture_sample_level(tex, samp, uv_expr, zero)
         }
 
-        ExprIR::TextureLoad { texture_id, coords } => {
+        ExprIR::TextureLoad {
+            texture_id,
+            coords,
+            mip_level,
+        } => {
             let tex = lookup_texture(ctx, texture_id, "TextureLoad");
             let coords_expr = translate_expr_body(bb, ctx, coords, scope);
             let level = if ctx
@@ -2247,7 +2284,10 @@ fn translate_expr_body(
                 .copied()
                 .unwrap_or_else(|| panic!("TextureLoad: texture '{}' not in texture_is_sampled map", texture_id))
             {
-                Some(bb.lit_i32(0))
+                Some(match mip_level.as_ref() {
+                    Some(level_expr) => translate_expr_body(bb, ctx, level_expr, scope),
+                    None => bb.lit_i32(0),
+                })
             } else {
                 None
             };

@@ -10,8 +10,8 @@ use wgpu::util::DeviceExt;
 use crate::allocator::StrictAllocator;
 use crate::contract::{
     BlendMode, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp, DrawCallSource,
-    InstallReceipt, LoadOp, PipelineInstallPayload, RosterEntry, StencilCompare, StencilLoadOp,
-    StencilOp,
+    FrontFace, InstallReceipt, LoadOp, PipelineInstallPayload, PipelineStateSpec, PolygonMode,
+    RosterEntry, StencilCompare, StencilLoadOp, StencilOp, StoreOp,
 };
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::mmu::{self, AllocatedShape, GpuMemoryArena};
@@ -74,6 +74,8 @@ enum CompiledPass {
         /// Color targets — one entry per attachment. May be empty for depth-only passes.
         color_attachments: Vec<CompiledColorAttachment>,
         depth_stencil: Option<CompiledDepthStencilAttachment>,
+        /// Per-pass MSAA sample count after reconciling all attachments.
+        sample_count: u32,
         /// Pixel-resolved viewport from TS compiler — used directly, no per-frame math.
         viewport: [f32; 6],
         /// Pixel-resolved scissor rect from TS compiler — used directly, no per-frame math.
@@ -85,10 +87,11 @@ enum CompiledPass {
 struct CompiledColorAttachment {
     target_id: String,
     load_op: ColorLoadOp,
+    store_op: wgpu::StoreOp,
 }
 
 enum RenderDrawMode {
-    Indirect,
+    Indirect { offset: u64 },
     Direct {
         vertex_count: u32,
         instance_count: u32,
@@ -99,6 +102,13 @@ enum RenderDrawMode {
 enum ColorLoadOp {
     Clear(wgpu::Color),
     Load,
+}
+
+fn store_op_for(mode: Option<StoreOp>) -> wgpu::StoreOp {
+    match mode.unwrap_or(StoreOp::Store) {
+        StoreOp::Store => wgpu::StoreOp::Store,
+        StoreOp::Discard => wgpu::StoreOp::Discard,
+    }
 }
 
 struct CompiledDepthStencilAttachment {
@@ -146,6 +156,12 @@ fn built_in_fullscreen_shape(device: &wgpu::Device) -> AllocatedShape {
         index_count: 0,
         topology: wgpu::PrimitiveTopology::TriangleList,
         vertex_stride: 8,
+        vertex_attributes: vec![wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x2,
+            offset: 0,
+            shader_location: 0,
+        }],
+        position_type: crate::contract::WgslType::Vec2F32,
     }
 }
 
@@ -184,12 +200,43 @@ fn cull_face_for(mode: CullMode) -> Option<wgpu::Face> {
     }
 }
 
-fn depth_compare_for(mode: DepthCompare) -> wgpu::CompareFunction {
+fn front_face_for(mode: FrontFace) -> wgpu::FrontFace {
     match mode {
+        FrontFace::Ccw => wgpu::FrontFace::Ccw,
+        FrontFace::Cw => wgpu::FrontFace::Cw,
+    }
+}
+
+fn polygon_mode_for(mode: PolygonMode) -> wgpu::PolygonMode {
+    match mode {
+        PolygonMode::Fill => wgpu::PolygonMode::Fill,
+        PolygonMode::Line => wgpu::PolygonMode::Line,
+        PolygonMode::Point => wgpu::PolygonMode::Point,
+    }
+}
+
+fn depth_compare_for(mode: DepthCompare) -> wgpu::CompareFunction {
+    // [LAW:dataflow-not-control-flow] The boundary enum carries all valid
+    // variance, so the mapper stays total and compile-checked with no default.
+    match mode {
+        DepthCompare::Never => wgpu::CompareFunction::Never,
         DepthCompare::Less => wgpu::CompareFunction::Less,
-        DepthCompare::Always => wgpu::CompareFunction::Always,
         DepthCompare::Equal => wgpu::CompareFunction::Equal,
+        DepthCompare::LessEqual => wgpu::CompareFunction::LessEqual,
         DepthCompare::Greater => wgpu::CompareFunction::Greater,
+        DepthCompare::NotEqual => wgpu::CompareFunction::NotEqual,
+        DepthCompare::GreaterEqual => wgpu::CompareFunction::GreaterEqual,
+        DepthCompare::Always => wgpu::CompareFunction::Always,
+    }
+}
+
+fn depth_bias_state_for(pipeline_state: &PipelineStateSpec) -> wgpu::DepthBiasState {
+    // [LAW:single-enforcer] Depth-bias defaults are normalized once at the
+    // engine boundary so every render pipeline consumes the same contract mapping.
+    wgpu::DepthBiasState {
+        constant: pipeline_state.depth_bias.unwrap_or_default(),
+        slope_scale: pipeline_state.depth_bias_slope_scale.unwrap_or_default(),
+        clamp: pipeline_state.depth_bias_clamp.unwrap_or_default(),
     }
 }
 
@@ -236,23 +283,31 @@ fn stencil_face_state_for(
 /// [LAW:dataflow-not-control-flow] Convert the depth load-op enum directly to
 /// the wgpu Operations struct. The Clear value lives inside the enum variant —
 /// no Option<value> coupling, no unwrap_or(default).
-fn depth_ops_for(op: Option<DepthLoadOp>) -> Option<wgpu::Operations<f32>> {
+fn depth_ops_for(op: Option<DepthLoadOp>, preserve_for_followup: bool) -> Option<wgpu::Operations<f32>> {
     op.map(|op| wgpu::Operations {
         load: match op {
-            DepthLoadOp::Load => wgpu::LoadOp::Load,
-            DepthLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
+            DepthLoadOp::Load { .. } => wgpu::LoadOp::Load,
+            DepthLoadOp::Clear { value, .. } => wgpu::LoadOp::Clear(value),
         },
-        store: wgpu::StoreOp::Store,
+        store: match (op, preserve_for_followup) {
+            (_, true) => wgpu::StoreOp::Store,
+            (DepthLoadOp::Load { store_op }, false) => store_op_for(store_op),
+            (DepthLoadOp::Clear { store_op, .. }, false) => store_op_for(store_op),
+        },
     })
 }
 
-fn stencil_ops_for(op: Option<StencilLoadOp>) -> Option<wgpu::Operations<u32>> {
+fn stencil_ops_for(op: Option<StencilLoadOp>, preserve_for_followup: bool) -> Option<wgpu::Operations<u32>> {
     op.map(|op| wgpu::Operations {
         load: match op {
-            StencilLoadOp::Load => wgpu::LoadOp::Load,
-            StencilLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
+            StencilLoadOp::Load { .. } => wgpu::LoadOp::Load,
+            StencilLoadOp::Clear { value, .. } => wgpu::LoadOp::Clear(value),
         },
-        store: wgpu::StoreOp::Store,
+        store: match (op, preserve_for_followup) {
+            (_, true) => wgpu::StoreOp::Store,
+            (StencilLoadOp::Load { store_op }, false) => store_op_for(store_op),
+            (StencilLoadOp::Clear { store_op, .. }, false) => store_op_for(store_op),
+        },
     })
 }
 
@@ -264,6 +319,24 @@ fn color_load_op_for(op: LoadOp, clear_color: Option<[f64; 4]>) -> ColorLoadOp {
             ColorLoadOp::Clear(wgpu::Color { r: cc[0], g: cc[1], b: cc[2], a: cc[3] })
         }
     }
+}
+
+fn domain_id_for_active_lanes<'a>(
+    manifest: &'a crate::contract::MemoryManifest,
+    active_lanes_symbol: &str,
+) -> Result<&'a str, String> {
+    let mut matches = manifest.domains.iter().filter_map(|(domain_id, spec)| {
+        (spec.active_lanes_symbol == active_lanes_symbol).then_some(domain_id.as_str())
+    });
+    let first = matches
+        .next()
+        .ok_or_else(|| format!("No domain found for activeLanesSymbol '{active_lanes_symbol}'"))?;
+    if matches.next().is_some() {
+        return Err(format!(
+            "Multiple domains share activeLanesSymbol '{active_lanes_symbol}'"
+        ));
+    }
+    Ok(first)
 }
 
 /// Selection of which arena buffers to bind to a single bind group, in
@@ -322,9 +395,11 @@ fn build_bind_group(
         });
     }
     for k in sel.texture_keys {
+        let texture = &arena.textures[k];
+        let binding_view = texture.resolve_view.as_ref().unwrap_or(&texture.view);
         entries.push(wgpu::BindGroupEntry {
             binding: entries.len() as u32,
-            resource: wgpu::BindingResource::TextureView(&arena.textures[k].view),
+            resource: wgpu::BindingResource::TextureView(binding_view),
         });
     }
     for k in sel.sampler_keys {
@@ -345,7 +420,8 @@ fn build_bind_group(
 
 /// Look up the color view and optional MSAA resolve target for a render pass.
 /// The canvas surface is acquired per-frame; named textures live in the arena.
-/// MSAA resolve is active when `msaa_view` is Some (engine negotiated 4x at init).
+/// Canvas MSAA uses the engine-wide intermediate; named textures resolve
+/// through MMU-derived single-sample views when present.
 fn lookup_color_view<'a>(
     target_id: &str,
     surface_view: &'a Option<wgpu::TextureView>,
@@ -360,20 +436,8 @@ fn lookup_color_view<'a>(
         }
     } else {
         let tex = arena.textures.get(target_id).unwrap();
-        (&tex.view, None)
+        (&tex.view, tex.resolve_view.as_ref())
     }
-}
-
-fn is_depth_or_stencil_format(format: wgpu::TextureFormat) -> bool {
-    matches!(
-        format,
-        wgpu::TextureFormat::Depth16Unorm
-            | wgpu::TextureFormat::Depth24Plus
-            | wgpu::TextureFormat::Depth24PlusStencil8
-            | wgpu::TextureFormat::Depth32Float
-            | wgpu::TextureFormat::Depth32FloatStencil8
-            | wgpu::TextureFormat::Stencil8
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -849,6 +913,32 @@ impl Engine {
                 }
 
                 RosterEntry::SystemDrawPrep(spec) => {
+                    let draw_prep_domain_id = match domain_id_for_active_lanes(
+                        &payload.manifest,
+                        &spec.active_lanes_symbol,
+                    ) {
+                        Ok(domain_id) => domain_id,
+                        Err(message) => {
+                            return install_error_json(
+                                "pipeline_creation",
+                                Some(spec.pass_id.as_str()),
+                                message,
+                            );
+                        }
+                    };
+                    let indirect_offset = match arena.indirect_offsets.get(draw_prep_domain_id) {
+                        Some(offset) => *offset,
+                        None => {
+                            return install_error_json(
+                                "pipeline_creation",
+                                Some(spec.pass_id.as_str()),
+                                format!(
+                                    "Indirect buffer offset missing for domain '{}'",
+                                    draw_prep_domain_id
+                                ),
+                            );
+                        }
+                    };
                     let (module, _info) = match std::panic::catch_unwind(AssertUnwindSafe(|| {
                         translator::translate_draw_prep(spec, &arena)
                     })) {
@@ -893,7 +983,14 @@ impl Engine {
                             },
                             wgpu::BindGroupEntry {
                                 binding: 1,
-                                resource: arena.indirect_buffer.as_entire_binding(),
+                                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                    buffer: &arena.indirect_buffer,
+                                    offset: indirect_offset,
+                                    size: Some(
+                                        wgpu::BufferSize::new(16)
+                                            .expect("indirect draw packet size is non-zero"),
+                                    ),
+                                }),
                             },
                         ],
                     });
@@ -905,10 +1002,32 @@ impl Engine {
                 }
 
                 RosterEntry::Render(spec) => {
-                    for draw_call in &spec.draw_calls {
+                    for (draw_idx, draw_call) in spec.draw_calls.iter().enumerate() {
                         let (shape_id, draw_mode) = match &draw_call.source {
-                            DrawCallSource::Domain { shape_id, .. } => {
-                                (shape_id.clone(), RenderDrawMode::Indirect)
+                            DrawCallSource::Domain {
+                                domain_id,
+                                shape_id,
+                                ..
+                            } => {
+                                let indirect_offset = match arena.indirect_offsets.get(domain_id) {
+                                    Some(offset) => *offset,
+                                    None => {
+                                        return install_error_json(
+                                            "pipeline_creation",
+                                            Some(spec.pass_id.as_str()),
+                                            format!(
+                                                "Indirect buffer offset missing for domain '{}'",
+                                                domain_id
+                                            ),
+                                        );
+                                    }
+                                };
+                                (
+                                    shape_id.clone(),
+                                    RenderDrawMode::Indirect {
+                                        offset: indirect_offset,
+                                    },
+                                )
                             }
                             DrawCallSource::FullScreenQuad => {
                                 let builtin_shape_id = "__builtin:fullscreen-triangle".to_string();
@@ -998,11 +1117,7 @@ impl Engine {
                         let vertex_buffer_layout = wgpu::VertexBufferLayout {
                             array_stride: shape.vertex_stride as u64,
                             step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes: &[wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x2,
-                                offset: 0,
-                                shader_location: 0,
-                            }],
+                            attributes: shape.vertex_attributes.as_slice(),
                         };
 
                         let depth_stencil_state = spec
@@ -1018,7 +1133,7 @@ impl Engine {
                                 )
                                     },
                                 )?;
-                                if !is_depth_or_stencil_format(tex.format) {
+                                if !mmu::is_depth_or_stencil_format(tex.format) {
                                     return Err(format!(
                                         "Texture '{}' is not a depth/stencil format (got {:?})",
                                         depth_target.texture_id, tex.format
@@ -1046,7 +1161,7 @@ impl Engine {
                                             .stencil_write_mask
                                             .unwrap_or(u32::MAX),
                                     },
-                                    bias: wgpu::DepthBiasState::default(),
+                                    bias: depth_bias_state_for(&draw_call.pipeline_state),
                                 })
                             })
                             .transpose();
@@ -1059,6 +1174,19 @@ impl Engine {
                                     message,
                                 );
                             }
+                        };
+
+                        // [LAW:single-enforcer] Attachment sample-count reconciliation
+                        // happens once at install so execute_roster reads a single value.
+                        let effective_sample_count = if let Some(ref ds) = spec.targets.depth_stencil {
+                            let ds_samples = arena
+                                .textures
+                                .get(&ds.texture_id)
+                                .map(|t| t.texture.sample_count())
+                                .unwrap_or(1);
+                            spec.sample_count.min(ds_samples)
+                        } else {
+                            spec.sample_count
                         };
 
                         // Depth-only passes have no fragment shader and no color targets.
@@ -1089,17 +1217,30 @@ impl Engine {
                                     primitive: wgpu::PrimitiveState {
                                         topology: shape.topology,
                                         strip_index_format: None,
-                                        front_face: wgpu::FrontFace::Ccw,
+                                        front_face: front_face_for(
+                                            draw_call
+                                                .pipeline_state
+                                                .front_face
+                                                .unwrap_or(FrontFace::Ccw),
+                                        ),
                                         cull_mode: cull_face_for(
                                             draw_call.pipeline_state.cull_mode,
                                         ),
-                                        polygon_mode: wgpu::PolygonMode::Fill,
-                                        unclipped_depth: false,
+                                        polygon_mode: polygon_mode_for(
+                                            draw_call
+                                                .pipeline_state
+                                                .polygon_mode
+                                                .unwrap_or(PolygonMode::Fill),
+                                        ),
+                                        unclipped_depth: draw_call
+                                            .pipeline_state
+                                            .unclipped_depth
+                                            .unwrap_or(false),
                                         conservative: false,
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
                                     multisample: wgpu::MultisampleState {
-                                        count: spec.sample_count,
+                                        count: effective_sample_count,
                                         mask: !0,
                                         alpha_to_coverage_enabled: false,
                                     },
@@ -1124,21 +1265,63 @@ impl Engine {
                             },
                         );
 
+                        let is_first_draw = draw_idx == 0;
+                        let is_last_draw = draw_idx + 1 == spec.draw_calls.len();
+                        let preserve_for_followup = !is_last_draw;
                         let color_attachments: Vec<CompiledColorAttachment> = spec
                             .targets
                             .colors
                             .iter()
                             .map(|ct| CompiledColorAttachment {
                                 target_id: ct.texture_id.clone(),
-                                load_op: color_load_op_for(ct.load_op, ct.clear_color),
+                                load_op: if is_first_draw {
+                                    color_load_op_for(ct.load_op, ct.clear_color)
+                                } else {
+                                    ColorLoadOp::Load
+                                },
+                                store_op: if preserve_for_followup {
+                                    wgpu::StoreOp::Store
+                                } else {
+                                    store_op_for(ct.store_op)
+                                },
                             })
                             .collect();
                         let depth_stencil =
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: depth_ops_for(depth_target.depth),
-                                    stencil_ops: stencil_ops_for(depth_target.stencil),
+                                    depth_ops: if is_first_draw {
+                                        depth_ops_for(depth_target.depth, preserve_for_followup)
+                                    } else {
+                                        depth_target.depth.map(|_| wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: if preserve_for_followup {
+                                                wgpu::StoreOp::Store
+                                            } else {
+                                                match depth_target.depth {
+                                                    Some(DepthLoadOp::Load { store_op }) => store_op_for(store_op),
+                                                    Some(DepthLoadOp::Clear { store_op, .. }) => store_op_for(store_op),
+                                                    None => wgpu::StoreOp::Store,
+                                                }
+                                            },
+                                        })
+                                    },
+                                    stencil_ops: if is_first_draw {
+                                        stencil_ops_for(depth_target.stencil, preserve_for_followup)
+                                    } else {
+                                        depth_target.stencil.map(|_| wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: if preserve_for_followup {
+                                                wgpu::StoreOp::Store
+                                            } else {
+                                                match depth_target.stencil {
+                                                    Some(StencilLoadOp::Load { store_op }) => store_op_for(store_op),
+                                                    Some(StencilLoadOp::Clear { store_op, .. }) => store_op_for(store_op),
+                                                    None => wgpu::StoreOp::Store,
+                                                }
+                                            },
+                                        })
+                                    },
                                 }
                             });
                         let vp = &spec.viewport;
@@ -1150,6 +1333,7 @@ impl Engine {
                             draw_mode,
                             color_attachments,
                             depth_stencil,
+                            sample_count: effective_sample_count,
                             viewport: [vp.x, vp.y, vp.width, vp.height, vp.min_depth, vp.max_depth],
                             scissor_rect: [sc.x as u32, sc.y as u32, sc.width as u32, sc.height as u32],
                         });
@@ -1301,6 +1485,7 @@ impl Engine {
                     draw_mode,
                     color_attachments,
                     depth_stencil,
+                    sample_count,
                     viewport,
                     scissor_rect,
                 } => {
@@ -1328,8 +1513,9 @@ impl Engine {
                         })
                         .transpose()?;
 
-                    // Build per-attachment color views. Each attachment resolves
-                    // its texture from the arena (canvas uses the per-frame surface).
+                    // [LAW:single-enforcer] Only passes whose reconciled sample count
+                    // is multisampled use the engine MSAA intermediate.
+                    let effective_msaa = if *sample_count > 1 { &self.msaa_view } else { &None };
                     let resolved_colors: Vec<Option<wgpu::RenderPassColorAttachment>> =
                         color_attachments
                             .iter()
@@ -1337,7 +1523,7 @@ impl Engine {
                                 let (view, resolve_target) = lookup_color_view(
                                     &a.target_id,
                                     &surface_view,
-                                    &self.msaa_view,
+                                    effective_msaa,
                                     &roster.arena,
                                 );
                                 let load = match &a.load_op {
@@ -1350,7 +1536,7 @@ impl Engine {
                                     resolve_target,
                                     ops: wgpu::Operations {
                                         load,
-                                        store: wgpu::StoreOp::Store,
+                                        store: a.store_op,
                                     },
                                 })
                             })
@@ -1375,8 +1561,8 @@ impl Engine {
                         }
                         rpass.set_vertex_buffer(0, shape.vertex_buffer.slice(..));
                         match draw_mode {
-                            RenderDrawMode::Indirect => {
-                                rpass.draw_indirect(&roster.arena.indirect_buffer, 0);
+                            RenderDrawMode::Indirect { offset } => {
+                                rpass.draw_indirect(&roster.arena.indirect_buffer, *offset);
                             }
                             RenderDrawMode::Direct {
                                 vertex_count,

@@ -9,7 +9,10 @@ use std::collections::HashMap;
 
 use wgpu::util::DeviceExt;
 
-use crate::contract::{CompilationDiagnostic, MemoryDataType, MemoryManifest, TextureDimension};
+use crate::contract::{
+    CompilationDiagnostic, DepthCompare, MemoryDataType, MemoryManifest, SamplerAddressMode,
+    SamplerFilterMode, TextureDimension, WgslType,
+};
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -41,12 +44,16 @@ pub struct AllocatedShape {
     pub index_count: u32,
     pub topology: wgpu::PrimitiveTopology,
     pub vertex_stride: u32,
+    pub vertex_attributes: Vec<wgpu::VertexAttribute>,
+    pub position_type: WgslType,
 }
 
 /// Allocated texture with its view.
 pub struct AllocatedTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
+    pub _resolve_texture: Option<wgpu::Texture>,
+    pub resolve_view: Option<wgpu::TextureView>,
     pub format: wgpu::TextureFormat,
     pub dimension: wgpu::TextureViewDimension,
 }
@@ -61,6 +68,7 @@ pub struct GpuMemoryArena {
     pub domain_atomic_buffers: HashMap<String, wgpu::Buffer>,
     pub shape_bank: HashMap<String, AllocatedShape>,
     pub indirect_buffer: wgpu::Buffer,
+    pub indirect_offsets: HashMap<String, u64>,
     pub textures: HashMap<String, AllocatedTexture>,
     pub samplers: HashMap<String, wgpu::Sampler>,
     pub symbol_map: HashMap<String, PhysicalSymbol>,
@@ -77,6 +85,8 @@ const DOMAIN_ALIGNMENT_WORDS: u32 = 64;
 
 /// Minimum buffer size in bytes (WebGPU requires non-zero binding sizes).
 const MIN_BUFFER_BYTES: u64 = 16;
+const INDIRECT_PACKET_BYTES: u64 = 16;
+const INDIRECT_BIND_ALIGNMENT_BYTES: u64 = 256;
 
 pub fn allocate_arena(
     device: &wgpu::Device,
@@ -290,6 +300,61 @@ pub fn allocate_arena(
             "triangle-strip" => wgpu::PrimitiveTopology::TriangleStrip,
             _ => wgpu::PrimitiveTopology::TriangleList,
         };
+        let mut attribute_specs: Vec<_> = spec.vertex_layout.attributes.values().collect();
+        attribute_specs.sort_by_key(|attr| attr.shader_location);
+        let mut next_offset = 0u64;
+        let mut position_type = None;
+        let vertex_attributes: Vec<wgpu::VertexAttribute> = attribute_specs
+            .into_iter()
+            .map(|attr| {
+                let (format, data_type, byte_width) = parse_vertex_format(&attr.format).map_err(|message| {
+                    vec![CompilationDiagnostic {
+                        severity: "fatal".into(),
+                        phase: "mmu_allocation".into(),
+                        block_id: None,
+                        symbol_id: Some((*shape_id).clone()),
+                        message,
+                    }]
+                })?;
+                let resolved = wgpu::VertexAttribute {
+                    format,
+                    offset: next_offset,
+                    shader_location: attr.shader_location,
+                };
+                next_offset += byte_width;
+                if attr.shader_location == 0 {
+                    position_type = Some(data_type);
+                }
+                Ok(resolved)
+            })
+            .collect::<Result<Vec<_>, Vec<CompilationDiagnostic>>>()?;
+        if next_offset > spec.vertex_layout.stride as u64 {
+            return Err(vec![CompilationDiagnostic {
+                severity: "fatal".into(),
+                phase: "mmu_allocation".into(),
+                block_id: None,
+                symbol_id: Some((*shape_id).clone()),
+                message: format!(
+                    "Shape '{}' vertexLayout.stride={} is smaller than packed attribute bytes={}",
+                    shape_id, spec.vertex_layout.stride, next_offset
+                ),
+            }]);
+        }
+        let position_type = match position_type {
+            Some(position_type) => position_type,
+            None => {
+                return Err(vec![CompilationDiagnostic {
+                    severity: "fatal".into(),
+                    phase: "mmu_allocation".into(),
+                    block_id: None,
+                    symbol_id: Some((*shape_id).clone()),
+                    message: format!(
+                        "Shape '{}' is missing a shaderLocation=0 position attribute",
+                        shape_id
+                    ),
+                }]);
+            }
+        };
 
         shape_bank.insert(
             (*shape_id).clone(),
@@ -300,14 +365,32 @@ pub fn allocate_arena(
                 index_count,
                 topology,
                 vertex_stride: spec.vertex_layout.stride,
+                vertex_attributes,
+                position_type,
             },
         );
     }
 
-    // Indirect buffer: 4 × u32 = 16 bytes (vertexCount, instanceCount, firstVertex, firstInstance)
+    // [LAW:one-source-of-truth] Domain ordering here owns the indirect packet
+    // layout for the whole renderer. Install and execute consume this map.
+    let indirect_offsets: HashMap<String, u64> = domain_keys
+        .iter()
+        .enumerate()
+        .map(|(idx, domain_id)| {
+            (
+                (*domain_id).clone(),
+                (idx as u64) * INDIRECT_BIND_ALIGNMENT_BYTES,
+            )
+        })
+        .collect();
+
+    // Indirect buffer: 4 × u32 = 16 bytes per domain packet, padded to WebGPU's
+    // 256-byte storage-binding alignment between domains.
     let indirect_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("indirect"),
-        size: 16,
+        size: ((domain_keys.len().max(1) as u64) * INDIRECT_BIND_ALIGNMENT_BYTES)
+            .max(INDIRECT_PACKET_BYTES)
+            .max(MIN_BUFFER_BYTES),
         usage: wgpu::BufferUsages::INDIRECT
             | wgpu::BufferUsages::STORAGE
             | wgpu::BufferUsages::COPY_DST,
@@ -327,8 +410,18 @@ pub fn allocate_arena(
             .map(|h| resolve_dimension(h, 600))
             .unwrap_or(1);
         let depth = spec.depth_or_array_layers.unwrap_or(1);
+        let mip_level_count = spec.mip_level_count.unwrap_or(1);
+        let sample_count = spec.sample_count.unwrap_or(1);
 
-        let format = parse_texture_format(&spec.format);
+        let format = parse_texture_format(&spec.format).map_err(|message| {
+            vec![CompilationDiagnostic {
+                severity: "fatal".into(),
+                phase: "mmu_allocation".into(),
+                block_id: None,
+                symbol_id: Some((*texture_id).clone()),
+                message,
+            }]
+        })?;
         let mut usage = wgpu::TextureUsages::empty();
         for u in &spec.usage {
             match u.as_str() {
@@ -342,14 +435,17 @@ pub fn allocate_arena(
         if spec.external_source.is_some() {
             usage |= wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING;
         }
+        let needs_color_resolve = sample_count > 1
+            && usage.contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+            && !is_depth_or_stencil_format(format);
 
         let dim = match spec.dimension {
             TextureDimension::D1 => wgpu::TextureDimension::D1,
-            TextureDimension::D2 => wgpu::TextureDimension::D2,
+            TextureDimension::D2 | TextureDimension::D2Array => wgpu::TextureDimension::D2,
             TextureDimension::D3 => wgpu::TextureDimension::D3,
             // Cube textures present as D2 with 6 layers at the wgpu Texture level;
             // the view dimension below carries the cube semantics.
-            TextureDimension::Cube => wgpu::TextureDimension::D2,
+            TextureDimension::Cube | TextureDimension::CubeArray => wgpu::TextureDimension::D2,
         };
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -359,19 +455,25 @@ pub fn allocate_arena(
                 height,
                 depth_or_array_layers: depth,
             },
-            mip_level_count: 1,
-            sample_count: 1,
+            mip_level_count,
+            sample_count,
             dimension: dim,
             format,
-            usage,
+            usage: if needs_color_resolve {
+                wgpu::TextureUsages::RENDER_ATTACHMENT
+            } else {
+                usage
+            },
             view_formats: &[],
         });
 
         let view_dim = match spec.dimension {
             TextureDimension::D1 => wgpu::TextureViewDimension::D1,
             TextureDimension::D2 => wgpu::TextureViewDimension::D2,
+            TextureDimension::D2Array => wgpu::TextureViewDimension::D2Array,
             TextureDimension::D3 => wgpu::TextureViewDimension::D3,
             TextureDimension::Cube => wgpu::TextureViewDimension::Cube,
+            TextureDimension::CubeArray => wgpu::TextureViewDimension::CubeArray,
         };
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
@@ -380,11 +482,41 @@ pub fn allocate_arena(
             ..Default::default()
         });
 
+        // [LAW:one-source-of-truth] The manifest texture spec owns the sample
+        // count. The MMU derives a single-sample resolve target only so bind
+        // groups keep one canonical sampled view for offscreen MSAA textures.
+        let (_resolve_texture, resolve_view) = if needs_color_resolve {
+            let resolve_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(&format!("{}_resolve", texture_id)),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: depth,
+                },
+                mip_level_count,
+                sample_count: 1,
+                dimension: dim,
+                format,
+                usage: usage | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some(&format!("{}_resolve_view", texture_id)),
+                dimension: Some(view_dim),
+                ..Default::default()
+            });
+            (Some(resolve_texture), Some(resolve_view))
+        } else {
+            (None, None)
+        };
+
         textures.insert(
             (*texture_id).clone(),
             AllocatedTexture {
                 texture,
                 view,
+                _resolve_texture,
+                resolve_view,
                 format,
                 dimension: view_dim,
             },
@@ -397,14 +529,25 @@ pub fn allocate_arena(
     sampler_keys.sort();
     for sampler_id in &sampler_keys {
         let spec = &manifest.samplers[*sampler_id];
+        // [LAW:single-enforcer] Sampler defaults are normalized once at MMU
+        // allocation so every caller gets the same WebGPU descriptor.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some(sampler_id),
-            address_mode_u: parse_address_mode(&spec.address_mode_u),
-            address_mode_v: parse_address_mode(&spec.address_mode_v),
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: parse_filter_mode(&spec.mag_filter),
-            min_filter: parse_filter_mode(&spec.min_filter),
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            address_mode_u: parse_address_mode(spec.address_mode_u),
+            address_mode_v: parse_address_mode(spec.address_mode_v),
+            address_mode_w: spec
+                .address_mode_w
+                .map(parse_address_mode)
+                .unwrap_or(wgpu::AddressMode::ClampToEdge),
+            mag_filter: parse_filter_mode(spec.mag_filter),
+            min_filter: parse_filter_mode(spec.min_filter),
+            mipmap_filter: parse_mipmap_filter_mode(
+                spec.mipmap_filter.unwrap_or(SamplerFilterMode::Nearest),
+            ),
+            lod_min_clamp: spec.lod_min_clamp.unwrap_or(0.0),
+            lod_max_clamp: spec.lod_max_clamp.unwrap_or(32.0),
+            compare: spec.compare.map(compare_function_for),
+            anisotropy_clamp: spec.max_anisotropy.unwrap_or(1),
             ..Default::default()
         });
         samplers.insert((*sampler_id).clone(), sampler);
@@ -471,6 +614,7 @@ pub fn allocate_arena(
         domain_atomic_buffers,
         shape_bank,
         indirect_buffer,
+        indirect_offsets,
         textures,
         samplers,
         symbol_map,
@@ -509,31 +653,118 @@ fn resolve_dimension(value: &serde_json::Value, canvas_pixels: u32) -> u32 {
     }
 }
 
-fn parse_texture_format(format: &str) -> wgpu::TextureFormat {
+pub fn is_depth_or_stencil_format(format: wgpu::TextureFormat) -> bool {
+    matches!(
+        format,
+        wgpu::TextureFormat::Depth16Unorm
+            | wgpu::TextureFormat::Depth24Plus
+            | wgpu::TextureFormat::Depth24PlusStencil8
+            | wgpu::TextureFormat::Depth32Float
+            | wgpu::TextureFormat::Depth32FloatStencil8
+            | wgpu::TextureFormat::Stencil8
+    )
+}
+
+fn parse_texture_format(format: &str) -> Result<wgpu::TextureFormat, String> {
+    // [LAW:dataflow-not-control-flow] Texture format variance is resolved once
+    // at the MMU boundary; unsupported values fail explicitly instead of
+    // branching into a silent fallback default.
     match format {
-        "r8unorm" => wgpu::TextureFormat::R8Unorm,
-        "rgba8unorm" => wgpu::TextureFormat::Rgba8Unorm,
-        "rgba16float" => wgpu::TextureFormat::Rgba16Float,
-        "r32float" => wgpu::TextureFormat::R32Float,
-        "rg32float" => wgpu::TextureFormat::Rg32Float,
-        "rgba32float" => wgpu::TextureFormat::Rgba32Float,
-        "depth32float" => wgpu::TextureFormat::Depth32Float,
-        "depth24plus-stencil8" => wgpu::TextureFormat::Depth24PlusStencil8,
-        _ => wgpu::TextureFormat::Rgba8Unorm,
+        "r8unorm" => Ok(wgpu::TextureFormat::R8Unorm),
+        "bgra8unorm" => Ok(wgpu::TextureFormat::Bgra8Unorm),
+        "rgba8unorm" => Ok(wgpu::TextureFormat::Rgba8Unorm),
+        "rgba16float" => Ok(wgpu::TextureFormat::Rgba16Float),
+        "r32float" => Ok(wgpu::TextureFormat::R32Float),
+        "r32uint" => Ok(wgpu::TextureFormat::R32Uint),
+        "rg32float" => Ok(wgpu::TextureFormat::Rg32Float),
+        "rgba32float" => Ok(wgpu::TextureFormat::Rgba32Float),
+        "depth24plus" => Ok(wgpu::TextureFormat::Depth24Plus),
+        "depth32float" => Ok(wgpu::TextureFormat::Depth32Float),
+        "depth24plus-stencil8" => Ok(wgpu::TextureFormat::Depth24PlusStencil8),
+        "depth32float-stencil8" => Ok(wgpu::TextureFormat::Depth32FloatStencil8),
+        "stencil8" => Ok(wgpu::TextureFormat::Stencil8),
+        _ => Err(format!("Unsupported texture format '{format}' in manifest.textures")),
     }
 }
 
-fn parse_address_mode(mode: &str) -> wgpu::AddressMode {
+fn parse_address_mode(mode: SamplerAddressMode) -> wgpu::AddressMode {
     match mode {
-        "repeat" => wgpu::AddressMode::Repeat,
-        "mirror-repeat" => wgpu::AddressMode::MirrorRepeat,
-        _ => wgpu::AddressMode::ClampToEdge,
+        SamplerAddressMode::ClampToEdge => wgpu::AddressMode::ClampToEdge,
+        SamplerAddressMode::Repeat => wgpu::AddressMode::Repeat,
+        SamplerAddressMode::MirrorRepeat => wgpu::AddressMode::MirrorRepeat,
     }
 }
 
-fn parse_filter_mode(mode: &str) -> wgpu::FilterMode {
+fn parse_filter_mode(mode: SamplerFilterMode) -> wgpu::FilterMode {
     match mode {
-        "linear" => wgpu::FilterMode::Linear,
-        _ => wgpu::FilterMode::Nearest,
+        SamplerFilterMode::Nearest => wgpu::FilterMode::Nearest,
+        SamplerFilterMode::Linear => wgpu::FilterMode::Linear,
+    }
+}
+
+fn parse_mipmap_filter_mode(mode: SamplerFilterMode) -> wgpu::MipmapFilterMode {
+    match mode {
+        SamplerFilterMode::Nearest => wgpu::MipmapFilterMode::Nearest,
+        SamplerFilterMode::Linear => wgpu::MipmapFilterMode::Linear,
+    }
+}
+
+fn parse_vertex_format(format: &str) -> Result<(wgpu::VertexFormat, WgslType, u64), String> {
+    // [LAW:dataflow-not-control-flow] Vertex format variance is normalized once
+    // during shape allocation so pipeline install consumes resolved layout data.
+    match format {
+        "float32x2" => Ok((wgpu::VertexFormat::Float32x2, WgslType::Vec2F32, 8)),
+        "float32x3" => Ok((wgpu::VertexFormat::Float32x3, WgslType::Vec3F32, 12)),
+        "float32x4" => Ok((wgpu::VertexFormat::Float32x4, WgslType::Vec4F32, 16)),
+        _ => Err(format!("Unsupported vertex attribute format '{format}' in shape vertexLayout")),
+    }
+}
+
+fn compare_function_for(mode: DepthCompare) -> wgpu::CompareFunction {
+    match mode {
+        DepthCompare::Never => wgpu::CompareFunction::Never,
+        DepthCompare::Less => wgpu::CompareFunction::Less,
+        DepthCompare::Equal => wgpu::CompareFunction::Equal,
+        DepthCompare::LessEqual => wgpu::CompareFunction::LessEqual,
+        DepthCompare::Greater => wgpu::CompareFunction::Greater,
+        DepthCompare::NotEqual => wgpu::CompareFunction::NotEqual,
+        DepthCompare::GreaterEqual => wgpu::CompareFunction::GreaterEqual,
+        DepthCompare::Always => wgpu::CompareFunction::Always,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_texture_format;
+
+    #[test]
+    fn parse_texture_format_accepts_new_supported_formats() {
+        assert_eq!(
+            parse_texture_format("bgra8unorm").unwrap(),
+            wgpu::TextureFormat::Bgra8Unorm
+        );
+        assert_eq!(
+            parse_texture_format("r32uint").unwrap(),
+            wgpu::TextureFormat::R32Uint
+        );
+        assert_eq!(
+            parse_texture_format("depth24plus").unwrap(),
+            wgpu::TextureFormat::Depth24Plus
+        );
+        assert_eq!(
+            parse_texture_format("depth32float-stencil8").unwrap(),
+            wgpu::TextureFormat::Depth32FloatStencil8
+        );
+        assert_eq!(
+            parse_texture_format("stencil8").unwrap(),
+            wgpu::TextureFormat::Stencil8
+        );
+    }
+
+    #[test]
+    fn parse_texture_format_rejects_unknown_formats() {
+        let message = parse_texture_format("definitely-not-a-format").unwrap_err();
+        assert!(message.contains("Unsupported texture format"));
+        assert!(message.contains("definitely-not-a-format"));
     }
 }
