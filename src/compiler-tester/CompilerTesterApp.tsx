@@ -154,7 +154,22 @@ export const CompilerTesterApp: React.FC = () => {
       const wasmModule = await import('../render/wasm/pkg/oscilla_rust_renderer_bg.wasm?url');
       const wasmUrl = (wasmModule as { default: string }).default;
       const wasmResponse = await fetch(wasmUrl);
+      if (!wasmResponse.ok) {
+        throw new Error(
+          `Failed to fetch renderer wasm: ${wasmResponse.status} ${wasmResponse.statusText} (${wasmUrl})`,
+        );
+      }
       const wasmBytes = await wasmResponse.arrayBuffer();
+      const wasmHeader = new Uint8Array(wasmBytes, 0, Math.min(4, wasmBytes.byteLength));
+      if (
+        wasmHeader.length !== 4 ||
+        wasmHeader[0] !== 0x00 ||
+        wasmHeader[1] !== 0x61 ||
+        wasmHeader[2] !== 0x73 ||
+        wasmHeader[3] !== 0x6d
+      ) {
+        throw new Error(`Invalid renderer wasm payload: missing wasm magic header (${wasmUrl})`);
+      }
 
       if (aborted) return;
 
