@@ -32,7 +32,6 @@ jobs:
         with:
           workspaces: |
             src/render/wasm/rust/oscilla-rust-renderer -> target
-            src/compiler/wasm/rust/oscilla-naga-shim -> target
 
       - name: Cache wasm-bindgen CLI
         id: cache-wasm-bindgen
@@ -69,5 +68,3 @@ jobs:
       - name: Verify oscilla-rust-renderer pkg parity
         run: pnpm run verify:rust-renderer-pkg
 
-      - name: Build oscilla-naga-shim
-        run: pnpm run build:naga-shim

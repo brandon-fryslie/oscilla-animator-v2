@@ -23,7 +23,7 @@ import {
   DEFAULT_CAMERA_INPUT,
   PREVIEW_CAMERA,
 } from '../runtime/CameraResolver';
-import { publishFramePayload } from '../render/rust/boundary-contract';
+
 
 export interface AnimationLoopState {
   frameCount: number;
@@ -473,21 +473,9 @@ export function executeAnimationFrame(
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
-    // [LAW:single-enforcer] All frame payloads go through boundary-contract
-    // for validation and normalization before reaching the renderer.
-    publishFramePayload(renderer, {
-      type: 'PUBLISH_FRAME_INPUT_V1',
-      frame: {
-        width: renderWidth,
-        height: renderHeight,
-        zoom,
-        panX: pan.x,
-        panY: pan.y,
-        timeMs: tMs,
-        ...runtimeInputPlaneValues,
-        ...cameraInput,
-      },
-    });
+    // TODO: Frame-input publishing path is being rebuilt.
+    // Previously called publishFramePayload(renderer, { type: 'PUBLISH_FRAME_INPUT_V1', frame: {...} })
+    // to send viewport, time, input, and camera data to the renderer each frame.
     markRuntimeFrameAdvanced(-1, tMs);
   } finally {
     // [LAW:single-enforcer] Frame arena lifecycle is owned at the animation-loop

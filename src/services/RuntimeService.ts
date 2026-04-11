@@ -69,11 +69,9 @@ import {
   shouldClearStoredStartupPatch,
   type StartupRestoreSource,
 } from './runtime-gpu-fault-policy';
-import {
-  publishPipelineInstallPayload,
-  type InstallPipelineBoundaryPayloadV1,
-  type PublishFrameInputBoundaryPayloadV1,
-} from '../render/rust/boundary-contract';
+// TODO: Rebuild with new PipelineInstallPayload path
+// Previously imported publishPipelineInstallPayload, InstallPipelineBoundaryPayloadV1,
+// PublishFrameInputBoundaryPayloadV1 from '../render/rust/boundary-contract'
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -151,8 +149,8 @@ export interface RuntimeSpyReadbackPacket {
 export interface RuntimeBoundaryFixtureV1 {
   readonly version: 1;
   readonly capturedAtMs: number;
-  readonly install: InstallPipelineBoundaryPayloadV1;
-  readonly frame: PublishFrameInputBoundaryPayloadV1;
+  readonly install: unknown;
+  readonly frame: unknown;
 }
 
 function isCompileWorkerUnavailableError(err: unknown): boolean {
@@ -236,13 +234,14 @@ export class RuntimeService {
 
   dumpLatestRendererBoundaryFixtureV1(): RuntimeBoundaryFixtureV1 {
     const runtime = this.requireActiveRuntimeResources('dumping renderer boundary fixture payloads');
-    const snapshot = runtime.renderer.getLatestBoundaryFixturePayloadV1();
-    if (snapshot.install === null) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const snapshot = runtime.renderer.getLatestBoundaryFixturePayloadV1() as any;
+    if (snapshot?.install === null || snapshot?.install === undefined) {
       throw new Error(
         'RuntimeService: no INSTALL_PIPELINE_V1 payload is available yet (compile + install has not completed)',
       );
     }
-    if (snapshot.frame === null) {
+    if (snapshot?.frame === null || snapshot?.frame === undefined) {
       throw new Error(
         'RuntimeService: no PUBLISH_FRAME_INPUT_V1 payload is available yet (animation loop has not published a frame)',
       );
@@ -469,22 +468,23 @@ export class RuntimeService {
 
     // [LAW:one-source-of-truth] RuntimeService publishes the canonical
     // worker-owned install contract without rebuilding static metadata.
-    const installContract = compiledGpuBundle.runtimeInstall;
-    const installPayload: InstallPipelineBoundaryPayloadV1 = {
-      type: 'INSTALL_PIPELINE_V1',
-      pipeline: {
-        passes: compiledGpuBundle.passes,
-        sinkPointerMap: installContract.drawPrep.sinkPointerMap,
-        shapeBankWords: Array.from(installContract.shapeBank.words),
-        shapeBankWordCount: installContract.shapeBank.wordCount,
-        topologyIdByHandle: Array.from(installContract.shapeBank.topologyIdByHandle),
-        sinkTableWords: Array.from(installContract.drawPrep.words),
-        sinkTableWordCount: installContract.drawPrep.wordCount,
-      },
-    };
+    // const installContract = compiledGpuBundle.runtimeInstall;
+    // TODO: Rebuild with new PipelineInstallPayload path
+    // const installPayload: InstallPipelineBoundaryPayloadV1 = {
+    //   type: 'INSTALL_PIPELINE_V1',
+    //   pipeline: {
+    //     passes: compiledGpuBundle.passes,
+    //     sinkPointerMap: installContract.drawPrep.sinkPointerMap,
+    //     shapeBankWords: Array.from(installContract.shapeBank.words),
+    //     shapeBankWordCount: installContract.shapeBank.wordCount,
+    //     topologyIdByHandle: Array.from(installContract.shapeBank.topologyIdByHandle),
+    //     sinkTableWords: Array.from(installContract.drawPrep.words),
+    //     sinkTableWordCount: installContract.drawPrep.wordCount,
+    //   },
+    // };
     shaderInspector.setPasses(compiledGpuBundle.passes);
-    // [LAW:single-enforcer] Validation + publishing go through boundary-contract.
-    await publishPipelineInstallPayload(renderer, installPayload);
+    // TODO: Rebuild with new PipelineInstallPayload path
+    // await publishPipelineInstallPayload(renderer, installPayload);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
@@ -587,6 +587,7 @@ export class RuntimeService {
       message: `GPU ${fault.severity}: [${fault.code}] ${fault.message}`,
     });
     store.diagnostics.setGpuFault({
+      // @ts-expect-error — GpuFault stub type is broader than DiagnosticsStore expects; rebuilt in Phase 4
       severity: fault.severity,
       code: fault.code,
       message: fault.message,
@@ -595,6 +596,7 @@ export class RuntimeService {
       type: 'GpuFault',
       patchId: 'patch-0',
       patchRevision: store.getPatchRevision(),
+      // @ts-expect-error — GpuFault stub type is broader; rebuilt in Phase 4
       severity: fault.severity,
       code: fault.code,
       message: fault.message,
@@ -671,7 +673,7 @@ export class RuntimeService {
       };
       // [LAW:single-enforcer] RuntimeService owns startup capability validation.
       // [LAW:no-silent-fallbacks] WebGPU-only runtime hard-fails when prerequisites are missing.
-      assertWebGPUStartupContract(canvas);
+      assertWebGPUStartupContract();
 
       const compileWorkerClient = new CompileWorkerClient();
       const asyncCompiler = new AsyncCompilerService({

@@ -4,9 +4,9 @@ set -euo pipefail
 # ─── get-screenshot-of-payload-tester.sh ─────────────────────────────────────
 #
 # Captures a screenshot of the payload tester after submitting a fixture.
-# Adapted from get-screenshot-of-demo-patch.sh for the standalone tester app.
+# Starts its own dev server, takes the screenshot, and shuts everything down.
 #
-# Requires: Chrome/Chromium, Node.js, dev server running
+# Requires: Chrome/Chromium, Node.js
 # ─────────────────────────────────────────────────────────────────────────────
 
 APP_PORT="${APP_PORT:-}"
@@ -20,7 +20,7 @@ fi
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
 
-FIXTURE_INDEX=0
+FIXTURE_NAME=""
 FRAME_WIDTH=720
 FRAME_HEIGHT=720
 
@@ -28,21 +28,19 @@ FRAME_HEIGHT=720
 
 show_help() {
   cat <<'HELP'
-Usage: ./scripts/get-screenshot-of-payload-tester.sh [options]
+Usage: ./scripts/get-screenshot-of-payload-tester.sh <fixture-name> [options]
 
-Captures a screenshot of the payload tester after submitting a fixture.
-Boots the standalone payload tester (no main app), waits for the Naga
-shim + renderer to be ready, clicks a fixture, submits it, and captures.
+Captures a canvas-only screenshot of a payload tester fixture.
+Uses query params (?fixture=name&canvas-only) so no clicking is needed.
 
 Options:
-  --fixture N               Zero-indexed fixture to submit (default: 0)
   --output <path>           Output path (file or directory)
   --no-headless             Show the browser window
 
 Examples:
-  ./scripts/get-screenshot-of-payload-tester.sh
-  ./scripts/get-screenshot-of-payload-tester.sh --fixture 1
-  ./scripts/get-screenshot-of-payload-tester.sh --output ./evidence/
+  ./scripts/get-screenshot-of-payload-tester.sh strange-attractor
+  ./scripts/get-screenshot-of-payload-tester.sh aurora-field --output ./evidence/
+  ./scripts/get-screenshot-of-payload-tester.sh hello-triangle --no-headless
 HELP
   exit 0
 }
@@ -56,38 +54,66 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h)        show_help ;;
     --output)         OUTPUT="${2:-}"; shift 2 ;;
-    --fixture)        FIXTURE_INDEX="${2:-0}"; shift 2 ;;
     --no-headless)    HEADLESS=false; shift ;;
-    *)
+    -*)
       echo "${RED}Error:${RESET} Unknown option: $1 (try --help)" >&2
       exit 1
+      ;;
+    *)
+      if [[ -z "$FIXTURE_NAME" ]]; then
+        FIXTURE_NAME="$1"; shift
+      else
+        echo "${RED}Error:${RESET} Unexpected argument: $1" >&2; exit 1
+      fi
       ;;
   esac
 done
 
-# ─── Dev server detection ───────────────────────────────────────────────────
-
-declare -a APP_PORT_CANDIDATES=()
-if [[ -n "$APP_PORT" ]]; then
-  APP_PORT_CANDIDATES=("$APP_PORT")
-else
-  APP_PORT_CANDIDATES=(5784 5785 5786)
-fi
-
-SELECTED_APP_PORT=""
-for candidate in "${APP_PORT_CANDIDATES[@]}"; do
-  if curl -fsS --max-time 3 "http://127.0.0.1:${candidate}/payload-tester.html" >/dev/null 2>&1; then
-    SELECTED_APP_PORT="$candidate"
-    break
-  fi
-done
-
-if [[ -z "$SELECTED_APP_PORT" ]]; then
-  echo "${RED}Error:${RESET} No dev server found serving payload-tester.html." >&2
-  echo "Start with: ${BOLD}npm run dev${RESET}" >&2
+if [[ -z "$FIXTURE_NAME" ]]; then
+  echo "${RED}Error:${RESET} Fixture name required. Example: ./scripts/get-screenshot-of-payload-tester.sh strange-attractor" >&2
   exit 1
 fi
-APP_PORT="$SELECTED_APP_PORT"
+
+# ─── Dev server ─────────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [[ -z "$APP_PORT" ]]; then
+  APP_PORT=5784
+fi
+
+# Start the dev server in the background
+DEV_SERVER_PID=""
+start_dev_server() {
+  cd "$PROJECT_ROOT"
+  npm run dev -- --port "$APP_PORT" >/dev/null 2>&1 &
+  DEV_SERVER_PID=$!
+  cd - >/dev/null
+
+  # Wait for the server to be ready
+  for i in $(seq 1 100); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${APP_PORT}/payload-tester.html" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$DEV_SERVER_PID" 2>/dev/null; then
+      echo "${RED}Error:${RESET} Dev server exited unexpectedly." >&2
+      exit 1
+    fi
+    sleep 0.2
+  done
+  echo "${RED}Error:${RESET} Dev server did not become ready within 20 seconds." >&2
+  exit 1
+}
+
+stop_dev_server() {
+  if [[ -n "$DEV_SERVER_PID" ]]; then
+    kill "$DEV_SERVER_PID" 2>/dev/null || true
+    wait "$DEV_SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+start_dev_server
 
 # ─── Chrome ────────────────────────────────────────────────────────────────
 
@@ -113,7 +139,7 @@ fi
 # ─── Output path ─────────────────────────────────────────────────────────────
 
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-AUTO_FILENAME="payload-tester_fixture${FIXTURE_INDEX}_${TIMESTAMP}.png"
+AUTO_FILENAME="${FIXTURE_NAME}_${TIMESTAMP}.png"
 
 if [[ -z "$OUTPUT" ]]; then
   mkdir -p "$DEFAULT_OUTPUT_DIR"
@@ -127,7 +153,7 @@ fi
 
 # ─── Print settings ────────────────────────────────────────────────────────
 
-printf "${DIM}%-12s${RESET} %s\n" "Fixture:" "${CYAN}#${FIXTURE_INDEX}${RESET}" >&2
+printf "${DIM}%-12s${RESET} %s\n" "Fixture:" "${CYAN}${FIXTURE_NAME}${RESET}" >&2
 printf "${DIM}%-12s${RESET} %s\n" "Viewport:" "${FRAME_WIDTH}x${FRAME_HEIGHT}" >&2
 printf "${DIM}%-12s${RESET} %s\n" "Port:" "${APP_PORT}" >&2
 
@@ -171,6 +197,7 @@ CHROME_PID=$!
 cleanup() {
   kill "$CHROME_PID" 2>/dev/null || true
   wait "$CHROME_PID" 2>/dev/null || true
+  stop_dev_server
   rm -rf "$PROFILE_DIR"
 }
 trap cleanup EXIT
@@ -184,11 +211,10 @@ done
 
 # ─── CDP capture ─────────────────────────────────────────────────────────────
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_URL="http://localhost:${APP_PORT}/payload-tester.html"
+APP_URL="http://localhost:${APP_PORT}/payload-tester.html?fixture=${FIXTURE_NAME}&canvas-only"
 
 node "${SCRIPT_DIR}/_payload-tester-cdp.mjs" \
-  "$DEBUG_PORT" "$APP_URL" "$SCREENSHOT_PATH" "$FRAME_WIDTH" "$FRAME_HEIGHT" "$FIXTURE_INDEX"
+  "$DEBUG_PORT" "$APP_URL" "$SCREENSHOT_PATH" "$FRAME_WIDTH" "$FRAME_HEIGHT"
 
 echo "${GREEN}Screenshot path:${RESET}" >&2
 echo "$SCREENSHOT_PATH"

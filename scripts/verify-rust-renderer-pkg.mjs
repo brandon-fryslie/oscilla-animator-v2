@@ -117,17 +117,17 @@ function compareNormalizedWasmArtifact(relativePath) {
   const generated = stripCustomSections(fs.readFileSync(path.join(repoRoot, relativePath)));
   const generatedInterface = describeWasmModule(generated, relativePath);
   // [LAW:one-source-of-truth] Required exports must track the canonical wasm-bindgen surface in pkg/*.d.ts.
+  // [LAW:one-source-of-truth] Keep in sync with #[wasm_bindgen] exports in lib.rs
   const requiredExports = [
     'memory:memory',
-    'function:attach_shared_input',
-    'function:attach_shared_shape_bank',
-    'function:attach_shared_sink_table',
     'function:init_engine',
     'function:inject_poison_alloc',
+    'function:install_pipeline',
     'function:pause_engine',
-    'function:rebuild_gpu_pipelines',
+    'function:render_frame',
     'function:resume_engine',
     'function:take_frame_pacing_packet',
+    'function:update_globals',
     'function:__wbindgen_malloc',
     'function:__wbindgen_realloc',
     'function:__wbindgen_exn_store',
@@ -168,21 +168,21 @@ if (!entryJs.includes('oscilla_rust_renderer_bg.wasm')) {
   fail('Entry shim does not import compiled wasm payload.');
 }
 
-if (!entryJs.includes('init_engine') || !entryJs.includes('rebuild_gpu_pipelines')) {
+if (!entryJs.includes('init_engine') || !entryJs.includes('install_pipeline')) {
   fail('Entry shim does not export required renderer symbols.');
 }
 
 assertContainsAll(
   entryDts,
   [
-    'export function attach_shared_input',
-    'export function attach_shared_shape_bank',
-    'export function attach_shared_sink_table',
     'export function init_engine',
-    'export function rebuild_gpu_pipelines',
-    'export function resume_engine',
+    'export function inject_poison_alloc',
+    'export function install_pipeline',
     'export function pause_engine',
+    'export function render_frame',
+    'export function resume_engine',
     'export function take_frame_pacing_packet',
+    'export function update_globals',
     'export interface InitOutput',
     'export function initSync',
     'export default function __wbg_init',
@@ -195,14 +195,14 @@ assertContainsAll(
   wasmDts,
   [
     'export const memory: WebAssembly.Memory;',
-    'export const attach_shared_input:',
-    'export const attach_shared_shape_bank:',
-    'export const attach_shared_sink_table:',
     'export const init_engine:',
-    'export const rebuild_gpu_pipelines:',
-    'export const resume_engine:',
+    'export const inject_poison_alloc:',
+    'export const install_pipeline:',
     'export const pause_engine:',
+    'export const render_frame:',
+    'export const resume_engine:',
     'export const take_frame_pacing_packet:',
+    'export const update_globals:',
     'export const __wbindgen_malloc:',
     'export const __wbindgen_realloc:',
     'export const __wbindgen_start:',

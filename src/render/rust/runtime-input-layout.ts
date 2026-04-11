@@ -1,42 +1,11 @@
-// [LAW:one-source-of-truth] Shared-input buffer layout is declared in one
+// [LAW:one-source-of-truth] Heartbeat shared-buffer layout is declared in one
 // module so main-thread facades and runtime workers cannot drift.
-export const RUNTIME_INPUT_SIGNAL_WORDS = 4 as const;
-export const RUNTIME_INPUT_FLOAT_WORDS = 32 as const;
-export const RUNTIME_INPUT_BUFFER_BYTES =
-  (RUNTIME_INPUT_SIGNAL_WORDS + RUNTIME_INPUT_FLOAT_WORDS) * Float32Array.BYTES_PER_ELEMENT;
 
-export const RUNTIME_INPUT_INDEX = Object.freeze({
-  width: 0,
-  height: 1,
-  zoom: 2,
-  panX: 3,
-  panY: 4,
-  timeMs: 5,
-  mouseX: 6,
-  mouseY: 7,
-  mouseButtons: 8,
-  audioLow: 9,
-  audioMid: 10,
-  audioHigh: 11,
-  gaugeActive: 12,
-  sinkTableWords: 13,
-  shapeBankWords: 14,
-  installRevision: 15,
-
-  // Camera parameters — written by CameraResolver, read by Rust engine
-  // to construct the FrameHeader.view_proj matrix each frame.
-  // [LAW:one-source-of-truth] Camera params flow through shared memory
-  // so the Rust engine is the single authority for VP matrix construction.
-  cameraProjection: 19,   // 0 = ortho (default), 1 = perspective
-  cameraCenterX: 20,      // world-space focal point X (default 0.5)
-  cameraCenterY: 21,      // world-space focal point Y (default 0.5)
-  cameraDistance: 22,      // perspective: camera distance (default 2.0)
-  cameraTiltRad: 23,       // perspective: tilt in radians (default 0.0)
-  cameraYawRad: 24,        // perspective: yaw in radians (default 0.0)
-  cameraFovYRad: 25,       // perspective: vertical FOV in radians (default ~0.785)
-  cameraNear: 26,          // near clip plane (default 0.01)
-  cameraFar: 27,           // far clip plane (default 100.0)
-} as const);
+// Heartbeat SAB layout: signal plane (Int32Array) + float plane (Float32Array).
+export const HEARTBEAT_SIGNAL_WORDS = 4 as const;
+export const HEARTBEAT_FLOAT_WORDS = 32 as const;
+export const HEARTBEAT_BUFFER_BYTES =
+  (HEARTBEAT_SIGNAL_WORDS + HEARTBEAT_FLOAT_WORDS) * Float32Array.BYTES_PER_ELEMENT;
 
 // Heartbeat channel: Rust worker → main thread via shared memory.
 // Written by the worker after each scheduler poll; read by the main-thread
@@ -71,10 +40,4 @@ export function decodeHeartbeatState(value: number): HeartbeatState {
   // Fail-safe: treat unknown state codes as 'Lost' so the circuit breaker
   // sees them as a runtime fault, not a benign booting phase.
   return HEARTBEAT_STATES[value] ?? 'Lost';
-}
-
-export interface RuntimeSharedPlanes {
-  readonly sharedInput: SharedArrayBuffer;
-  readonly sharedShapeBank: SharedArrayBuffer;
-  readonly sharedSinkTable: SharedArrayBuffer;
 }
