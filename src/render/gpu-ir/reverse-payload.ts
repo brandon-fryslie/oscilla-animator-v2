@@ -209,6 +209,9 @@ function emitDrawCall(dc: DrawCallSpec, manifest: MemoryManifest, _vpSymbol: str
     if (transform.scale) fields.push(`scale: ${quote(transform.scale)}`);
     shaderOpts.push(`        transform: { ${fields.join(', ')} },`);
   }
+  if (dc.varyings && Object.keys(dc.varyings).length > 0) {
+    shaderOpts.push(`        varyings: ${emitJson(dc.varyings)},`);
+  }
   shaderOpts.push(`        vertex: ${vertexArrow},`);
 
   // Omit fragment if it's a passthrough
@@ -245,12 +248,17 @@ function emitTargets(targets: RenderPassSpec['targets']): string {
   // Recognize DSL helpers for single-color-target patterns
   if (targets.colors.length === 1 && !('depthStencil' in targets && targets.depthStencil)) {
     const ct = targets.colors[0];
+    const isDefaultAttachmentState =
+      (ct.blendMode == null || ct.blendMode === 'opaque')
+      && (ct.writeMask == null || JSON.stringify(ct.writeMask) === JSON.stringify(['r', 'g', 'b', 'a']));
     if (ct.loadOp === 'clear' && ct.clearColor) {
       const cc = ct.clearColor;
-      if (ct.textureId === 'canvas') return `clearTarget([${cc.join(', ')}])`;
-      return `clearTexture(${quote(ct.textureId)}, [${cc.join(', ')}])`;
+      if (isDefaultAttachmentState) {
+        if (ct.textureId === 'canvas') return `clearTarget([${cc.join(', ')}])`;
+        return `clearTexture(${quote(ct.textureId)}, [${cc.join(', ')}])`;
+      }
     }
-    if (ct.loadOp === 'load' && ct.textureId === 'canvas') return `loadTarget()`;
+    if (ct.loadOp === 'load' && ct.textureId === 'canvas' && isDefaultAttachmentState) return `loadTarget()`;
   }
   return emitJson(targets);
 }
@@ -275,6 +283,7 @@ function inferVertexParams(dc: DrawCallSpec, manifest: MemoryManifest): string[]
 }
 
 function inferFragmentParams(dc: DrawCallSpec): string[] {
+  if (dc.varyings) return Object.keys(dc.varyings);
   // Find ReturnVertex in vertex AST and extract varying keys
   for (const stmt of dc.vertexAst) {
     if (stmt.type === 'ReturnVertex') {

@@ -204,7 +204,9 @@ function emitExpr(expr: ExprIR, parentPrec: number): string {
       return `${emitExpr(expr.target, 99)}[${emitExpr(expr.index, 0)}]`;
 
     case 'TextureLoad':
-      return `textureLoad('${expr.textureId}', ${emitExpr(expr.coords, 0)})`;
+      return expr.mipLevel
+        ? `textureLoad('${expr.textureId}', ${emitExpr(expr.coords, 0)}, ${emitExpr(expr.mipLevel, 0)})`
+        : `textureLoad('${expr.textureId}', ${emitExpr(expr.coords, 0)})`;
 
     case 'TextureSample':
       return `textureSample('${expr.textureId}', '${expr.samplerId}', ${emitExpr(expr.uv, 0)})`;

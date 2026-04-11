@@ -23,9 +23,11 @@ import { quad } from '../shapes';
 declare const $global: any;
 declare const $thread: any;
 declare const $domains: any;
+declare const $vertex: any;
 declare function vec4(a: any, b: any, c: any, d: any): any;
 declare function vec2i(a: any, b: any): any;
 declare function i32(a: any): any;
+declare function u32(a: any): any;
 declare function textureLoad(textureId: string, coords: any, mipLevel?: any): any;
 declare function vertex(pos: any, varyings: any): any;
 declare function fragment(outputs: any): any;
@@ -47,7 +49,7 @@ describe('manifest coverage', () => {
     expect(manifest.preserveStateOnRecompile).toBe(false);
   });
 
-  test('texture specs pass through', () => {
+  test('texture specs resolve relative dimensions during manifest expansion', () => {
     const manifest = expandManifest({
       textures: {
         tex_color: {
@@ -61,8 +63,8 @@ describe('manifest coverage', () => {
     });
     expect(manifest.textures.tex_color).toStrictEqual({
       dimension: '2d',
-      width: { relativeTo: 'canvas', scale: 1 },
-      height: { relativeTo: 'canvas', scale: 1 },
+      width: 800,
+      height: 600,
       format: 'rgba8unorm',
       usage: ['storage', 'sampled'],
     });
@@ -521,8 +523,8 @@ describe('render target coverage', () => {
   test('multiple color targets', () => {
     const targets: RenderPassSpec['targets'] = {
       colors: [
-        { textureId: 'canvas', loadOp: 'clear', clearColor: [0, 0, 0, 1] },
-        { textureId: 'tex_albedo', loadOp: 'clear', clearColor: [0, 0, 0, 0] },
+        { textureId: 'canvas', loadOp: 'clear', clearColor: [0, 0, 0, 1], blendMode: 'opaque', writeMask: ['r', 'g', 'b', 'a'] },
+        { textureId: 'tex_albedo', loadOp: 'clear', clearColor: [0, 0, 0, 0], blendMode: 'additive', writeMask: ['r', 'g'] },
       ],
     };
     const payload = gpu({
@@ -546,6 +548,8 @@ describe('render target coverage', () => {
     const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.targets.colors).toHaveLength(2);
     expect(renderPass.targets.colors[1].textureId).toBe('tex_albedo');
+    expect(renderPass.targets.colors[1].blendMode).toBe('additive');
+    expect(renderPass.targets.colors[1].writeMask).toStrictEqual(['r', 'g']);
   });
 
   test('load op (no clear)', () => {
@@ -702,5 +706,34 @@ describe('render target coverage', () => {
     ) as any;
     expect(returnFrag).toBeDefined();
     expect(Object.keys(returnFrag.outputs).sort()).toStrictEqual(['color', 'normal']);
+  });
+
+  test('declared varying metadata passes through', () => {
+    const payload = gpu({
+      roster: [
+        render('varying_meta', ortho(), clearTarget([0, 0, 0, 1]), [
+          draw('varying_fill', fsQuadSource(), OPAQUE, {
+            varyings: {
+              materialId: { type: 'u32', interpolation: 'flat' },
+            },
+            vertex: (position: any) => {
+              return vertex(
+                vec4(position.x, position.y, 0.0, 1.0),
+                { materialId: $vertex.index / u32(3) },
+              );
+            },
+            fragment: () => {
+              return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
+            },
+          }),
+        ]),
+      ],
+    });
+    const renderPass = payload.roster.find(
+      e => e.type === 'Render' && e.passId === 'varying_meta',
+    ) as RenderPassSpec;
+    expect(renderPass.drawCalls[0].varyings).toStrictEqual({
+      materialId: { type: 'u32', interpolation: 'flat' },
+    });
   });
 });

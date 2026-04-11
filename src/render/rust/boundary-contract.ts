@@ -86,11 +86,20 @@ export type StencilOp = z.infer<typeof StencilOpSchema>;
 export const StoreOpSchema = z.enum(['store', 'discard']);
 export type StoreOp = z.infer<typeof StoreOpSchema>;
 
+export const BlendModeSchema = z.enum(['opaque', 'alpha', 'additive', 'multiply']);
+export type BlendMode = z.infer<typeof BlendModeSchema>;
+
+export const ColorWriteChannelSchema = z.enum(['r', 'g', 'b', 'a']);
+export type ColorWriteChannel = z.infer<typeof ColorWriteChannelSchema>;
+
 export const SamplerFilterModeSchema = z.enum(['nearest', 'linear']);
 export type SamplerFilterMode = z.infer<typeof SamplerFilterModeSchema>;
 
 export const SamplerAddressModeSchema = z.enum(['clamp-to-edge', 'repeat', 'mirror-repeat']);
 export type SamplerAddressMode = z.infer<typeof SamplerAddressModeSchema>;
+
+export const VaryingInterpolationSchema = z.enum(['flat', 'perspective', 'linear']);
+export type VaryingInterpolation = z.infer<typeof VaryingInterpolationSchema>;
 
 // ---------------------------------------------------------------------------
 // Layer 2: Simple specs (depend on Layer 1)
@@ -178,7 +187,7 @@ export const StencilFaceStateSchema = z.object({
 export type StencilFaceState = z.infer<typeof StencilFaceStateSchema>;
 
 export const PipelineStateSpecSchema = z.object({
-  blendMode: z.enum(['opaque', 'alpha', 'additive', 'multiply']),
+  blendMode: BlendModeSchema,
   cullMode: z.enum(['none', 'front', 'back']),
   frontFace: z.enum(['ccw', 'cw']).optional(),
   polygonMode: z.enum(['fill', 'line', 'point']).optional(),
@@ -203,6 +212,12 @@ export const PipelineStateSpecSchema = z.object({
   stencilBack: StencilFaceStateSchema.optional(),
 });
 export type PipelineStateSpec = z.infer<typeof PipelineStateSpecSchema>;
+
+export const VaryingSpecSchema = z.object({
+  type: WgslTypeSchema,
+  interpolation: VaryingInterpolationSchema.optional(),
+});
+export type VaryingSpec = z.infer<typeof VaryingSpecSchema>;
 
 // ---------------------------------------------------------------------------
 // Layer 3: ExprIR and StatementIR (recursive)
@@ -360,6 +375,7 @@ export const DrawCallSpecSchema = z.object({
     domains: z.record(DomainIdSchema, z.literal('read')),
     textures: z.record(TextureIdSchema, z.literal('sampled')),
   }),
+  varyings: z.record(z.string(), VaryingSpecSchema).optional(),
   vertexAst: z.array(StatementIRSchema).readonly(),
   fragmentAst: z.array(StatementIRSchema).readonly(),
 });
@@ -396,6 +412,8 @@ export const RenderPassSpecSchema = z.object({
       loadOp: z.enum(['load', 'clear']),
       storeOp: StoreOpSchema.optional(),
       clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
+      blendMode: BlendModeSchema.optional(),
+      writeMask: z.array(ColorWriteChannelSchema).readonly().optional(),
     })).readonly(),
     depthStencil: z.object({
       textureId: TextureIdSchema,

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::contract::{
     AtomicOp, BinaryOp, ComputePassSpec, DrawCallSpec, ExprIR, IntrinsicName, MemoryDataType,
-    StatementIR, SystemPassSpec, UnaryOp, WgslType,
+    StatementIR, SystemPassSpec, UnaryOp, VaryingInterpolation, WgslType,
 };
 use crate::dsl::{Expr, FnBodyBuilder, FnBuilder, ModuleBuilder};
 use crate::mmu::{BufferKind, GpuMemoryArena, PhysicalSymbol};
@@ -1124,16 +1124,53 @@ fn collect_samplers_from_expr(expr: &ExprIR, out: &mut std::collections::HashSet
     }
 }
 
-/// Extract varying keys from vertexAst (sorted alphabetically).
-fn extract_varying_keys(stmts: &[StatementIR]) -> Vec<String> {
-    for stmt in stmts {
+/// Resolve the inter-stage varying contract for a draw call.
+/// [LAW:one-source-of-truth] Declared varying metadata is authoritative when
+/// present; legacy draws without declarations fall back to the historical
+/// vec4<f32>/perspective contract until they are upgraded.
+fn resolve_varying_contract(
+    draw_call: &DrawCallSpec,
+) -> Vec<(String, WgslType, Option<VaryingInterpolation>)> {
+    if let Some(varyings) = &draw_call.varyings {
+        let mut entries: Vec<_> = varyings
+            .iter()
+            .map(|(key, spec)| (key.clone(), spec.data_type, spec.interpolation))
+            .collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        return entries;
+    }
+    for stmt in &draw_call.vertex_ast {
         if let StatementIR::ReturnVertex { varyings, .. } = stmt {
             let mut keys: Vec<String> = varyings.keys().cloned().collect();
             keys.sort();
-            return keys;
+            return keys
+                .into_iter()
+                .map(|key| (key, WgslType::Vec4F32, Some(VaryingInterpolation::Perspective)))
+                .collect();
         }
     }
     Vec::new()
+}
+
+fn varying_binding(location: u32, interpolation: Option<VaryingInterpolation>) -> naga::Binding {
+    let (interpolation, sampling) = match interpolation {
+        Some(VaryingInterpolation::Flat) => (Some(naga::Interpolation::Flat), None),
+        Some(VaryingInterpolation::Linear) => (
+            Some(naga::Interpolation::Linear),
+            Some(naga::Sampling::Center),
+        ),
+        Some(VaryingInterpolation::Perspective) | None => (
+            Some(naga::Interpolation::Perspective),
+            Some(naga::Sampling::Center),
+        ),
+    };
+    naga::Binding::Location {
+        location,
+        blend_src: None,
+        per_primitive: false,
+        interpolation,
+        sampling,
+    }
 }
 
 /// Result of render pass translation, including which domains were actually bound.
@@ -1161,10 +1198,10 @@ pub fn translate_render_pass(
         crate::contract::DrawCallSource::Domain { shape_id, .. } => shape_id.as_str(),
         crate::contract::DrawCallSource::FullScreenQuad => "__builtin:fullscreen-triangle",
     };
+    let type_handles = build_type_handles(&mut m, None);
 
-    // Scan vertexAst for ReturnVertex to extract varying keys (sorted alpha)
-    let varying_keys = extract_varying_keys(&draw_call.vertex_ast);
-    let has_varyings = !varying_keys.is_empty();
+    let varying_contract = resolve_varying_contract(draw_call);
+    let has_varyings = !varying_contract.is_empty();
 
     // Build inter-stage structs if varyings present.
     // Vertex output struct has @builtin(position) + @location varyings.
@@ -1179,30 +1216,21 @@ pub fn translate_render_pass(
             offset: 0,
         }];
         let mut fs_members = Vec::new();
-        for (i, key) in varying_keys.iter().enumerate() {
-            let loc_binding = naga::Binding::Location {
-                location: i as u32,
-                blend_src: None,
-                per_primitive: false,
-                interpolation: Some(naga::Interpolation::Perspective),
-                sampling: Some(naga::Sampling::Center),
-            };
+        for (i, (key, data_type, interpolation)) in varying_contract.iter().enumerate() {
+            let loc_binding = varying_binding(i as u32, *interpolation);
+            let ty = *type_handles
+                .get(data_type)
+                .unwrap_or_else(|| panic!("varying contract: no type handle for '{data_type:?}'"));
             vs_members.push(naga::StructMember {
                 name: Some(key.clone()),
-                ty: vec4_f32_ty,
+                ty,
                 binding: Some(loc_binding.clone()),
                 offset: ((i + 1) * 16) as u32,
             });
             fs_members.push(naga::StructMember {
                 name: Some(key.clone()),
-                ty: vec4_f32_ty,
-                binding: Some(naga::Binding::Location {
-                    location: i as u32,
-                    blend_src: None,
-                    per_primitive: false,
-                    interpolation: Some(naga::Interpolation::Perspective),
-                    sampling: Some(naga::Sampling::Center),
-                }),
+                ty,
+                binding: Some(varying_binding(i as u32, *interpolation)),
                 offset: (i * 16) as u32,
             });
         }
@@ -1333,7 +1361,6 @@ pub fn translate_render_pass(
         group0_binding += 1;
     }
 
-    let type_handles = build_type_handles(&mut m, None);
     let shape = arena
         .shape_bank
         .get(shape_id)
@@ -1436,7 +1463,7 @@ pub fn translate_render_pass(
                     let pos = translate_expr_body(bb, &vs_ctx, position, &vs_scope);
                     if let Some(struct_ty) = vs_output_ty {
                         let mut components = vec![pos];
-                        for key in &varying_keys {
+                        for (key, _, _) in &varying_contract {
                             let val = varyings.get(key).unwrap_or_else(|| {
                                 panic!("ReturnVertex missing varying '{}'", key)
                             });
@@ -1508,7 +1535,7 @@ pub fn translate_render_pass(
             // Fragment receives its own struct (no @builtin(position) — different from VS output)
             let struct_ty = fs_input_ty.unwrap();
             let fs_input = fs.add_argument("fs_in", struct_ty, None);
-            for (i, key) in varying_keys.iter().enumerate() {
+            for (i, (key, _, _)) in varying_contract.iter().enumerate() {
                 let field_val = fs.access_index(fs_input, i as u32); // no position offset — FS struct only has varyings
                 fs_scope.insert_let(key.clone(), field_val);
             }

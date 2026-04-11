@@ -56,18 +56,43 @@ export const fsQuadSource = (): DrawCallSpec['source'] =>
   ({ type: 'FullScreenQuad' });
 
 /** Render target helpers — return RenderPassSpec['targets'] */
+type ColorTargetSpec = RenderPassSpec['targets']['colors'][number];
+const DEFAULT_COLOR_WRITE_MASK = ['r', 'g', 'b', 'a'] as const;
+
+function makeColorTarget(
+  textureId: ColorTargetSpec['textureId'],
+  loadOp: ColorTargetSpec['loadOp'],
+  opts?: {
+    clearColor?: ColorTargetSpec['clearColor'];
+    storeOp?: ColorTargetSpec['storeOp'];
+    blendMode?: ColorTargetSpec['blendMode'];
+    writeMask?: ColorTargetSpec['writeMask'];
+  },
+): ColorTargetSpec {
+  return {
+    textureId,
+    loadOp,
+    clearColor: opts?.clearColor,
+    storeOp: opts?.storeOp,
+    // [LAW:one-source-of-truth] Attachment-local color state is canonical on
+    // the target itself, so helper-built payloads always spell it out here.
+    blendMode: opts?.blendMode ?? 'opaque',
+    writeMask: [...(opts?.writeMask ?? DEFAULT_COLOR_WRITE_MASK)],
+  };
+}
+
 export const clearTarget = (clearColor: readonly [number, number, number, number]): RenderPassSpec['targets'] =>
-  ({ colors: [{ textureId: 'canvas', loadOp: 'clear', clearColor }] });
+  ({ colors: [makeColorTarget('canvas', 'clear', { clearColor })] });
 
 export const loadTarget = (): RenderPassSpec['targets'] =>
-  ({ colors: [{ textureId: 'canvas', loadOp: 'load' }] });
+  ({ colors: [makeColorTarget('canvas', 'load')] });
 
 /** Named texture target helpers */
 export const clearTexture = (
   textureId: string,
   clearColor: readonly [number, number, number, number],
 ): RenderPassSpec['targets'] =>
-  ({ colors: [{ textureId, loadOp: 'clear', clearColor }] });
+  ({ colors: [makeColorTarget(textureId, 'clear', { clearColor })] });
 
 /** Depth-only target — zero color attachments, depth clear to `value` (default 1.0). */
 export const depthOnlyTarget = (
@@ -162,6 +187,7 @@ interface DeferredDrawCall {
   readonly source: DrawCallSpec['source'];
   readonly pipelineState: DrawCallSpec['pipelineState'];
   readonly transform?: Transform2DSpec;
+  readonly varyings?: DrawCallSpec['varyings'];
   readonly vertexFn: Function;
   readonly fragmentFn?: Function;
   readonly constants?: Record<string, number>;
@@ -390,6 +416,7 @@ export interface Transform2DSpec {
 
 export interface ShaderFns {
   readonly transform?: Transform2DSpec;
+  readonly varyings?: DrawCallSpec['varyings'];
   readonly vertex: Function;
   readonly fragment?: Function;
   readonly constants?: Record<string, number>;
@@ -424,6 +451,7 @@ export function draw(
     source,
     pipelineState,
     transform: shaders.transform,
+    varyings: shaders.varyings,
     vertexFn: shaders.vertex,
     fragmentFn: shaders.fragment ?? undefined,
     constants: shaders.constants,
@@ -518,6 +546,39 @@ function generatePassthroughFragment(vertexAst: readonly StatementIR[]): Stateme
   }
   // No ReturnVertex found — empty fragment (shouldn't happen in valid shaders)
   return [B.returnFragment({ color: B.ref('color') })];
+}
+
+function extractVertexVaryingKeys(vertexAst: readonly StatementIR[]): string[] {
+  for (const stmt of vertexAst) {
+    if (stmt.type !== 'ReturnVertex') continue;
+    return Object.keys(stmt.varyings).sort();
+  }
+  return [];
+}
+
+function resolveDeclaredVaryings(
+  vertexAst: readonly StatementIR[],
+  declared: DrawCallSpec['varyings'] | undefined,
+  intentId: string,
+): DrawCallSpec['varyings'] | undefined {
+  const actualKeys = extractVertexVaryingKeys(vertexAst);
+  const declaredKeys = Object.keys(declared ?? {}).sort();
+  if (actualKeys.length === 0) {
+    if (declaredKeys.length > 0) {
+      throw new Error(`Draw '${intentId}' declares varyings but vertex() returns none`);
+    }
+    return undefined;
+  }
+  if (!declared) return undefined;
+  // [LAW:one-source-of-truth] Declared varying metadata and the vertex return
+  // must describe the same key set or the inter-stage contract can drift.
+  if (actualKeys.length !== declaredKeys.length
+    || actualKeys.some((key, index) => key !== declaredKeys[index])) {
+    throw new Error(
+      `Draw '${intentId}' varying keys ${JSON.stringify(declaredKeys)} do not match vertex() keys ${JSON.stringify(actualKeys)}`,
+    );
+  }
+  return declared;
 }
 
 function unwrapWalkerResult(result: WalkerResult): StatementIR[] {
@@ -635,6 +696,7 @@ function compileRenderEntry(
       source: dc.source,
       pipelineState: dc.pipelineState,
       dependencies: deps,
+      varyings: resolveDeclaredVaryings(vertexAst, dc.varyings, dc.intentId),
       vertexAst,
       fragmentAst,
     };
@@ -687,6 +749,7 @@ function compileCompositeEntry(
       source: dc.source,
       pipelineState: dc.pipelineState,
       dependencies: deps,
+      varyings: resolveDeclaredVaryings(vertexAst, dc.varyings, dc.intentId),
       vertexAst,
       fragmentAst,
     };

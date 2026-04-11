@@ -9,9 +9,9 @@ use wgpu::util::DeviceExt;
 
 use crate::allocator::StrictAllocator;
 use crate::contract::{
-    BlendMode, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp, DrawCallSource,
-    FrontFace, InstallReceipt, LoadOp, PipelineInstallPayload, PipelineStateSpec, PolygonMode,
-    RosterEntry, StencilCompare, StencilLoadOp, StencilOp, StoreOp,
+    BlendMode, ColorWriteChannel, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp,
+    DrawCallSource, FrontFace, InstallReceipt, LoadOp, PipelineInstallPayload, PipelineStateSpec,
+    PolygonMode, RosterEntry, StencilCompare, StencilLoadOp, StencilOp, StoreOp,
 };
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::mmu::{self, AllocatedShape, GpuMemoryArena};
@@ -190,6 +190,24 @@ fn blend_state_for(mode: BlendMode) -> Option<wgpu::BlendState> {
             alpha: wgpu::BlendComponent::OVER,
         },
     })
+}
+
+fn color_write_mask_for(channels: Option<&[ColorWriteChannel]>) -> wgpu::ColorWrites {
+    match channels {
+        None => wgpu::ColorWrites::ALL,
+        Some(channels) => {
+            // [LAW:dataflow-not-control-flow] Channel variance stays in data;
+            // the mapper always folds the full slice into one bitmask.
+            channels.iter().fold(wgpu::ColorWrites::empty(), |mask, channel| {
+                mask | match channel {
+                    ColorWriteChannel::R => wgpu::ColorWrites::RED,
+                    ColorWriteChannel::G => wgpu::ColorWrites::GREEN,
+                    ColorWriteChannel::B => wgpu::ColorWrites::BLUE,
+                    ColorWriteChannel::A => wgpu::ColorWrites::ALPHA,
+                }
+            })
+        }
+    }
 }
 
 fn cull_face_for(mode: CullMode) -> Option<wgpu::Face> {
@@ -1083,8 +1101,10 @@ impl Engine {
                             };
                             color_target_states.push(Some(wgpu::ColorTargetState {
                                 format: fmt,
-                                blend: blend_state_for(draw_call.pipeline_state.blend_mode),
-                                write_mask: wgpu::ColorWrites::ALL,
+                                blend: blend_state_for(
+                                    ct.blend_mode.unwrap_or(draw_call.pipeline_state.blend_mode),
+                                ),
+                                write_mask: color_write_mask_for(ct.write_mask.as_deref()),
                             }));
                         }
 
