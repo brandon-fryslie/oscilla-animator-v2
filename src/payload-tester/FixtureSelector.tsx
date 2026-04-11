@@ -1,12 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { PayloadFixture } from '../render/rust/fixtures';
 
 interface FixtureSelectorProps {
   fixtures: readonly PayloadFixture[];
+  initialSelectedId?: string;
   onSelect: (fixture: PayloadFixture) => void;
 }
 
-export const FixtureSelector: React.FC<FixtureSelectorProps> = ({ fixtures, onSelect }) => {
+export const FixtureSelector: React.FC<FixtureSelectorProps> = ({ fixtures, initialSelectedId, onSelect }) => {
+  const [selectedId, setSelectedId] = useState(initialSelectedId ?? fixtures[0]?.id);
+
+  const handleSelect = (fixture: PayloadFixture) => {
+    setSelectedId(fixture.id);
+    onSelect(fixture);
+  };
+
   return (
     <div style={{ padding: 8, fontSize: 13 }}>
       <div style={{
@@ -22,17 +30,17 @@ export const FixtureSelector: React.FC<FixtureSelectorProps> = ({ fixtures, onSe
       {fixtures.map((fixture) => (
         <button
           key={fixture.id}
-          onClick={() => onSelect(fixture)}
+          onClick={() => handleSelect(fixture)}
           style={{
             display: 'block',
             width: '100%',
             textAlign: 'left',
             padding: '6px 8px',
             marginBottom: 4,
-            background: 'transparent',
-            border: '1px solid #333',
+            background: fixture.id === selectedId ? '#2a2a3a' : 'transparent',
+            border: fixture.id === selectedId ? '1px solid #667' : '1px solid #333',
             borderRadius: 4,
-            color: '#ccc',
+            color: fixture.id === selectedId ? '#eee' : '#ccc',
             cursor: 'pointer',
             fontSize: 12,
           }}

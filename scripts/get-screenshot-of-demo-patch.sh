@@ -5,8 +5,9 @@ set -euo pipefail
 #
 # Captures screenshots of an Oscilla demo patch using headless Chrome.
 # By default produces a burst montage showing animation progression.
+# Starts its own dev server, takes the screenshot, and shuts everything down.
 #
-# Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode), dev server
+# Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode)
 # ─────────────────────────────────────────────────────────────────────────────
 
 APP_PORT="${APP_PORT:-}"
@@ -22,7 +23,7 @@ fi
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
 
-BURST_MODE=true
+BURST_MODE=false
 BURST_COUNT=3
 BURST_SIZE=3
 BURST_INTERVAL=100
@@ -70,7 +71,7 @@ Examples:
   ./scripts/get-screenshot-of-demo-patch.sh aurora-petal-showcase.hcl --burst-count 5 --burst-size 2
   ./scripts/get-screenshot-of-demo-patch.sh mouse-spiral.hcl --output ./evidence/
 
-Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode), dev server (npm run dev)
+Requires: Chrome/Chromium, Node.js, ImageMagick (burst mode)
 Set CHROME_BIN to override Chrome location.
 HELP
   exit 0
@@ -80,14 +81,13 @@ HELP
 
 DEMO_PATCH=""
 OUTPUT=""
-HEADLESS=true
+HEADLESS=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --help|-h)        show_help ;;
     --output)         OUTPUT="${2:-}"; shift 2 ;;
-    --no-burst)       BURST_MODE=false; shift ;;
-    --no-headless)    HEADLESS=false; shift ;;
+    --burst)          BURST_MODE=true; shift ;;
     --burst-count)    BURST_COUNT="${2:-}"; shift 2 ;;
     --burst-size)     BURST_SIZE="${2:-}"; shift 2 ;;
     --burst-interval) BURST_INTERVAL="${2:-}"; shift 2 ;;
@@ -163,85 +163,46 @@ if $BURST_MODE; then
   fi
 fi
 
-# ─── Dependency checks ───────────────────────────────────────────────────────
+# ─── Dev server ─────────────────────────────────────────────────────────────
 
-# [LAW:one-source-of-truth] App identity markers are declared once and reused
-# for every candidate port validation.
-OSCILLA_APP_TITLE_MARKER="Oscilla v2 - Editor"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-extract_html_title() {
-  local html="$1"
-  local title
-  title="$(printf '%s' "$html" | tr '\n' ' ' | sed -n 's|.*<title>\([^<]*\)</title>.*|\1|p')"
-  if [[ -z "$title" ]]; then
-    echo "<missing>"
-  else
-    echo "$title"
-  fi
-}
-
-# [LAW:single-enforcer] Server identity validation is centralized here so every
-# caller uses one deterministic acceptance rule.
-validate_oscilla_app_port() {
-  local candidate_port="$1"
-  local base_url="http://127.0.0.1:${candidate_port}"
-  local root_html
-  local observed_title
-
-  if ! root_html="$(curl -fsS --max-time 3 "${base_url}/" 2>/dev/null)"; then
-    echo "unreachable (GET / failed)"
-    return 1
-  fi
-
-  observed_title="$(extract_html_title "$root_html")"
-  if [[ "$root_html" != *"$OSCILLA_APP_TITLE_MARKER"* ]]; then
-    echo "mismatch (title '${observed_title}', expected '${OSCILLA_APP_TITLE_MARKER}')"
-    return 1
-  fi
-
-  echo "identity marker matched"
-}
-
-declare -a APP_PORT_CANDIDATES=()
-if [[ -n "$APP_PORT" ]]; then
-  APP_PORT_CANDIDATES=("$APP_PORT")
-else
-  APP_PORT_CANDIDATES=(5784 5785 5786)
+if [[ -z "$APP_PORT" ]]; then
+  APP_PORT=5784
 fi
 
-declare -a APP_PORT_DIAGNOSTICS=()
-SELECTED_APP_PORT=""
+DEV_SERVER_PID=""
+start_dev_server() {
+  cd "$PROJECT_ROOT"
+  npm run dev -- --port "$APP_PORT" >/dev/null 2>&1 &
+  DEV_SERVER_PID=$!
+  cd - >/dev/null
 
-for candidate in "${APP_PORT_CANDIDATES[@]}"; do
-  if ! [[ "$candidate" =~ ^[0-9]+$ ]]; then
-    APP_PORT_DIAGNOSTICS+=("${candidate}: invalid port (must be numeric)")
-    continue
-  fi
-
-  validation_result=""
-  if validation_result="$(validate_oscilla_app_port "$candidate")"; then
-    APP_PORT_DIAGNOSTICS+=("${candidate}: ok (${validation_result})")
-    SELECTED_APP_PORT="$candidate"
-    break
-  fi
-  APP_PORT_DIAGNOSTICS+=("${candidate}: ${validation_result}")
-done
-
-if [[ -z "$SELECTED_APP_PORT" ]]; then
-  if [[ -n "$APP_PORT" ]]; then
-    echo "${RED}Error:${RESET} APP_PORT=${APP_PORT} does not point to the Oscilla app." >&2
-  else
-    echo "${RED}Error:${RESET} No matching Oscilla dev server found on candidate ports." >&2
-  fi
-  echo "Checked ports:" >&2
-  for diag in "${APP_PORT_DIAGNOSTICS[@]}"; do
-    echo "  - ${diag}" >&2
+  for i in $(seq 1 100); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$DEV_SERVER_PID" 2>/dev/null; then
+      echo "${RED}Error:${RESET} Dev server exited unexpectedly." >&2
+      exit 1
+    fi
+    sleep 0.2
   done
-  echo "Start Oscilla with: ${BOLD}npm run dev${RESET} (default: 5784), or set APP_PORT to a validated instance." >&2
+  echo "${RED}Error:${RESET} Dev server did not become ready within 20 seconds." >&2
   exit 1
-fi
+}
 
-APP_PORT="$SELECTED_APP_PORT"
+stop_dev_server() {
+  if [[ -n "$DEV_SERVER_PID" ]]; then
+    kill "$DEV_SERVER_PID" 2>/dev/null || true
+    wait "$DEV_SERVER_PID" 2>/dev/null || true
+  fi
+}
+
+start_dev_server
+
+# ─── Chrome ──────────────────────────────────────────────────────────────────
 
 find_chrome() {
   if [[ -n "${CHROME_BIN:-}" ]]; then echo "$CHROME_BIN"; return; fi
@@ -372,6 +333,7 @@ CHROME_PID=$!
 cleanup() {
   kill "$CHROME_PID" 2>/dev/null || true
   wait "$CHROME_PID" 2>/dev/null || true
+  stop_dev_server
   rm -rf "$PROFILE_DIR" "$FRAME_DIR"
 }
 trap cleanup EXIT
@@ -392,7 +354,6 @@ done
 # ─── Run CDP capture ─────────────────────────────────────────────────────────
 
 APP_URL="http://localhost:${APP_PORT}/?loadDemoPatch=${DEMO_PATCH}&showPreview=true"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if $BURST_MODE; then
   BURST_JSON="{\"wait\":${BURST_WAIT},\"count\":${BURST_COUNT},\"size\":${BURST_SIZE},\"interval\":${BURST_INTERVAL},\"gap\":${BURST_GAP}}"

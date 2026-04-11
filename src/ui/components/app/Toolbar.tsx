@@ -280,12 +280,20 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
                 <Button
                   component="a"
                   href="/payload-tester.html"
-                  target="_blank"
                   variant="subtle"
                   color="gray"
                   size="xs"
                 >
                   WASM Tester
+                </Button>
+                <Button
+                  component="a"
+                  href="/compiler-tester.html"
+                  variant="subtle"
+                  color="gray"
+                  size="xs"
+                >
+                  Compiler Tester
                 </Button>
               </>
             )}

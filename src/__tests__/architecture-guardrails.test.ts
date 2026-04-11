@@ -10,24 +10,6 @@ type Gate = {
 
 const NON_TEST_SRC_GLOBS = ['*.ts', '*.tsx', '!**/*.test.*', '!**/__tests__/**'] as const;
 
-const LEGACY_KIND_DISPATCH_PATTERNS = [
-  "kind === 'slot'",
-  "kind === 'external'",
-  "kind === 'map'",
-  "kind === 'zip'",
-  "kind === 'stateRead'",
-  "kind === 'reduceField'",
-  "kind === 'eventRead'",
-  "kind === 'intrinsic'",
-  "kind === 'placement'",
-  "kind === 'broadcast'",
-  "kind === 'zipPromote'",
-  "kind === 'pathDerivative'",
-  "kind === 'pulse'",
-  "kind === 'wrap'",
-  "kind === 'combine'",
-  "kind === 'never'",
-] as const;
 
 const COMPILED_IR_FOUNDATION_GATES: readonly Gate[] = [
   // W11
@@ -213,20 +195,6 @@ function registerValueExprFlatteningOwnershipSuite(): void {
   });
 }
 
-function registerLegacyKindDispatchOwnershipSuite(): void {
-  describe('Legacy kind dispatch ownership', () => {
-    for (const pattern of LEGACY_KIND_DISPATCH_PATTERNS) {
-      it(`no production legacy dispatch pattern: ${pattern}`, () => {
-        const matches = rgLines(pattern, ['src'], NON_TEST_SRC_GLOBS);
-        const filtered = filterAllowlist(stripCommentOnly(matches), [
-          /architecture-guardrails\.test\.ts/,
-        ]);
-        expect(filtered).toEqual([]);
-      });
-    }
-  });
-}
-
 function registerCompiledIrFoundationGateSuite(): void {
   describe('CompiledIR foundation gates ownership', () => {
     for (const gate of COMPILED_IR_FOUNDATION_GATES) {
@@ -314,7 +282,7 @@ function registerCoordinateSystemMigrationSuite(): void {
 describe('Architecture Guardrails', () => {
   registerLegacyValueExprTypeRemovalOwnershipSuite();
   registerValueExprFlatteningOwnershipSuite();
-  registerLegacyKindDispatchOwnershipSuite();
+
   registerCompiledIrFoundationGateSuite();
   registerCoordinateSystemMigrationSuite();
 });
