@@ -466,7 +466,7 @@ function walkExpr(node: ESTree.Expression, ctx: WalkContext): ExprIR {
       if (resolved.kind === 'global') return B.loadGlobal(resolved.symbolId);
       if (resolved.kind === 'scalar') return B.loadScalar(resolved.symbolId);
       if (resolved.kind === 'domainActive') return B.loadScalar(resolved.symbolId);
-      if (resolved.kind === 'intrinsic') return B.intrinsic(resolved.symbolId as any);
+      if (resolved.kind === 'intrinsic') return B.intrinsic(resolved.symbolId as Parameters<typeof B.intrinsic>[0]);
       // domainField without index → error (need [idx])
       return errorExpr(ctx, node, `Domain field requires index: ${resolved.symbolId}`);
     }

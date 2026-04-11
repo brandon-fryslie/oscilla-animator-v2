@@ -293,7 +293,6 @@ function buildOrthoCameraBody(prefix: string, vpSymbol: string): Function {
     -sx * cx, -sy * cy, 0.0, 1.0
   );
 }`;
-  // eslint-disable-next-line no-new-func
   return new Function(`return (${src})`)();
 }
 
@@ -336,7 +335,6 @@ function buildPerspectiveCameraBody(prefix: string, vpSymbol: string): Function 
     1.0
   );
 }`;
-  // eslint-disable-next-line no-new-func
   return new Function(`return (${src})`)();
 }
 

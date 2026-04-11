@@ -28,9 +28,11 @@ import { MATH_CONSTANTS } from '../render/gpu-ir/ir-node-rules';
 
 // These exist so that `fn.toString()` captures their names in the arrow body.
 // They are NEVER called — the walker reads them from source text via TS parser.
-const STUB = new Proxy({}, { get: () => STUB }) as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- proxy returns itself for arbitrary property chains
+const STUB: any = new Proxy({}, { get: () => STUB });
 
 // Builtin math function names (stubs)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubs are proxy traps, not real values
 const BUILTIN_STUBS: Record<string, any> = {};
 for (const name of [
   'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2',
@@ -136,7 +138,7 @@ function wrapSource(source: string): string {
     return `"use strict"; return (${source});`;
   }
 
-  const body = (program as any).body as acorn.Node[];
+  const body = (program as unknown as { body: acorn.Node[] }).body;
   if (body.length === 0) {
     return `"use strict"; return (${source});`;
   }

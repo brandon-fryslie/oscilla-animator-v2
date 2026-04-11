@@ -31,7 +31,6 @@ function assertIRRoundtrip(stmts: readonly StatementIR[], ctx: ShaderContext, pa
   const source = stmtsToSource(stmts);
   const paramStr = params.join(', ');
   const wrappedSource = `(${paramStr}) => {\n${source}\n}`;
-  // eslint-disable-next-line no-new-func
   const fn = new Function(`return (${wrappedSource})`)();
   const result = compileShaderBody(fn, ctx);
   if (result.diagnostics.length > 0) {
@@ -104,7 +103,6 @@ describe('GPU-IR math constants: forward + inverse', () => {
   const manifest = loadFixturePayload('instanced-write').manifest;
 
   test('TAU in shader body compiles to LiteralF32(6.283...)', () => {
-    // eslint-disable-next-line no-new-func
     const fn = new Function('return () => { const x = TAU; }')();
     const result = compileShaderBody(fn, { stage: 'compute', manifest });
     expect(result.diagnostics).toHaveLength(0);
@@ -115,7 +113,6 @@ describe('GPU-IR math constants: forward + inverse', () => {
   });
 
   test('PI in shader body compiles to LiteralF32(3.14159...)', () => {
-    // eslint-disable-next-line no-new-func
     const fn = new Function('return () => { const x = PI; }')();
     const result = compileShaderBody(fn, { stage: 'compute', manifest });
     expect(result.diagnostics).toHaveLength(0);
@@ -129,7 +126,6 @@ describe('GPU-IR math constants: forward + inverse', () => {
   });
 
   test('math constant roundtrips: TAU → LiteralF32 → TAU', () => {
-    // eslint-disable-next-line no-new-func
     const fn = new Function('return () => { const x = TAU + PI; }')();
     const result = compileShaderBody(fn, { stage: 'compute', manifest });
     const src = stmtsToSource(result.stmts);

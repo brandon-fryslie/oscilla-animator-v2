@@ -61,7 +61,7 @@ export const DslPayloadSplitEditor: React.FC<DslPayloadSplitEditorProps> = ({
   useEffect(() => {
     setDsl(initialDsl);
     compile(initialDsl);
-  }, [initialDsl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialDsl]); // compile is stable ref — intentionally omitted
 
   const handleDslChange = useCallback((newDsl: string) => {
     setDsl(newDsl);

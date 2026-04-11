@@ -95,7 +95,7 @@ export const CompilerTesterApp: React.FC = () => {
   useEffect(() => {
     rendererReadyRef.current = rendererReady;
     // Expose status for CDP screenshot script
-    (window as any).__rendererStatus = rendererStatus.kind === 'error'
+    (window as unknown as Record<string, string>).__rendererStatus = rendererStatus.kind === 'error'
       ? `GPU fault: ${rendererStatus.message}`
       : rendererStatus.kind === 'info'
         ? rendererStatus.message
@@ -275,7 +275,7 @@ export const CompilerTesterApp: React.FC = () => {
       }
       workerRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // bootstrap — runs once on mount
 
   const handleFixtureSelect = useCallback((fixture: CompilerFixture) => {
     try { sessionStorage.setItem(STORAGE_KEY, fixture.id); } catch { /* ignore */ }

@@ -25,6 +25,7 @@ import type {
   SamplerSpec,
   RosterEntry,
   StatementIR,
+  ExprIR,
 } from '../rust/boundary-contract';
 import { stmtsToSource } from './reverse';
 import { OPAQUE, ALPHA_BLEND, DEPTH_TEST } from './compile';
@@ -386,7 +387,7 @@ function stripSemanticNodes(ast: readonly StatementIR[], domainId: string): Stri
     if (pos.type === 'ApplyTransform2D') {
       const t = pos;
       const prefix = domainId + ':';
-      const fieldName = (e: StatementIR['type'] extends string ? any : never) =>
+      const fieldName = (e: ExprIR) =>
         e.type === 'LoadField' && e.symbolId.startsWith(prefix)
           ? e.symbolId.slice(prefix.length)
           : undefined;
