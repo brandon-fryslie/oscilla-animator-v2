@@ -24,21 +24,43 @@ pub enum LoadOp {
     Clear,
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StoreOp {
+    #[default]
+    Store,
+    Discard,
+}
+
 /// Depth attachment load op with the clear value embedded in the Clear variant.
 /// [LAW:one-type-per-behavior] `op + value?` collapsed into one discriminated type.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum DepthLoadOp {
-    Load,
-    Clear { value: f32 },
+    Load {
+        #[serde(default)]
+        store_op: StoreOp,
+    },
+    Clear {
+        value: f32,
+        #[serde(default)]
+        store_op: StoreOp,
+    },
 }
 
 /// Stencil attachment load op with the clear value embedded in the Clear variant.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum StencilLoadOp {
-    Load,
-    Clear { value: u32 },
+    Load {
+        #[serde(default)]
+        store_op: StoreOp,
+    },
+    Clear {
+        value: u32,
+        #[serde(default)]
+        store_op: StoreOp,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -60,12 +82,31 @@ pub enum CullMode {
 
 /// Depth compare — restricted subset (less / always / equal / greater).
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum DepthCompare {
+    Never,
     Less,
-    Always,
     Equal,
+    LessEqual,
     Greater,
+    NotEqual,
+    GreaterEqual,
+    Always,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FrontFace {
+    Ccw,
+    Cw,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolygonMode {
+    Fill,
+    Line,
+    Point,
 }
 
 /// Stencil compare — full WebGPU set.
@@ -472,6 +513,8 @@ pub struct ColorTarget {
     pub texture_id: String,
     pub load_op: LoadOp,
     pub clear_color: Option<[f64; 4]>,
+    #[serde(default)]
+    pub store_op: StoreOp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -514,6 +557,12 @@ pub struct PipelineStateSpec {
     pub cull_mode: CullMode,
     pub depth_write: bool,
     pub depth_compare: DepthCompare,
+    pub depth_bias: Option<i32>,
+    pub depth_bias_slope_scale: Option<f32>,
+    pub depth_bias_clamp: Option<f32>,
+    pub front_face: Option<FrontFace>,
+    pub polygon_mode: Option<PolygonMode>,
+    pub unclipped_depth: Option<bool>,
     pub stencil_read_mask: Option<u32>,
     pub stencil_write_mask: Option<u32>,
     pub stencil_front: Option<StencilFaceState>,

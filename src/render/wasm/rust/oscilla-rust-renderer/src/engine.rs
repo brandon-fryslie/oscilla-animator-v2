@@ -10,8 +10,8 @@ use wgpu::util::DeviceExt;
 use crate::allocator::StrictAllocator;
 use crate::contract::{
     BlendMode, CompilationDiagnostic, CullMode, DepthCompare, DepthLoadOp, DrawCallSource,
-    InstallReceipt, LoadOp, PipelineInstallPayload, RosterEntry, StencilCompare, StencilLoadOp,
-    StencilOp,
+    FrontFace, InstallReceipt, LoadOp, PipelineInstallPayload, PolygonMode, RosterEntry,
+    StencilCompare, StencilLoadOp, StencilOp, StoreOp,
 };
 use crate::error_boundary::{send_engine_error, EngineErrorPayload};
 use crate::mmu::{self, AllocatedShape, GpuMemoryArena};
@@ -89,6 +89,7 @@ enum CompiledPass {
 struct CompiledColorAttachment {
     target_id: String,
     load_op: ColorLoadOp,
+    store_op: wgpu::StoreOp,
 }
 
 enum RenderDrawMode {
@@ -190,10 +191,36 @@ fn cull_face_for(mode: CullMode) -> Option<wgpu::Face> {
 
 fn depth_compare_for(mode: DepthCompare) -> wgpu::CompareFunction {
     match mode {
+        DepthCompare::Never => wgpu::CompareFunction::Never,
         DepthCompare::Less => wgpu::CompareFunction::Less,
-        DepthCompare::Always => wgpu::CompareFunction::Always,
         DepthCompare::Equal => wgpu::CompareFunction::Equal,
+        DepthCompare::LessEqual => wgpu::CompareFunction::LessEqual,
         DepthCompare::Greater => wgpu::CompareFunction::Greater,
+        DepthCompare::NotEqual => wgpu::CompareFunction::NotEqual,
+        DepthCompare::GreaterEqual => wgpu::CompareFunction::GreaterEqual,
+        DepthCompare::Always => wgpu::CompareFunction::Always,
+    }
+}
+
+fn front_face_for(mode: FrontFace) -> wgpu::FrontFace {
+    match mode {
+        FrontFace::Ccw => wgpu::FrontFace::Ccw,
+        FrontFace::Cw => wgpu::FrontFace::Cw,
+    }
+}
+
+fn polygon_mode_for(mode: PolygonMode) -> wgpu::PolygonMode {
+    match mode {
+        PolygonMode::Fill => wgpu::PolygonMode::Fill,
+        PolygonMode::Line => wgpu::PolygonMode::Line,
+        PolygonMode::Point => wgpu::PolygonMode::Point,
+    }
+}
+
+fn store_op_for(op: StoreOp) -> wgpu::StoreOp {
+    match op {
+        StoreOp::Store => wgpu::StoreOp::Store,
+        StoreOp::Discard => wgpu::StoreOp::Discard,
     }
 }
 
@@ -241,22 +268,28 @@ fn stencil_face_state_for(
 /// the wgpu Operations struct. The Clear value lives inside the enum variant —
 /// no Option<value> coupling, no unwrap_or(default).
 fn depth_ops_for(op: Option<DepthLoadOp>) -> Option<wgpu::Operations<f32>> {
-    op.map(|op| wgpu::Operations {
-        load: match op {
-            DepthLoadOp::Load => wgpu::LoadOp::Load,
-            DepthLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
+    op.map(|op| match op {
+        DepthLoadOp::Load { store_op } => wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: store_op_for(store_op),
         },
-        store: wgpu::StoreOp::Store,
+        DepthLoadOp::Clear { value, store_op } => wgpu::Operations {
+            load: wgpu::LoadOp::Clear(value),
+            store: store_op_for(store_op),
+        },
     })
 }
 
 fn stencil_ops_for(op: Option<StencilLoadOp>) -> Option<wgpu::Operations<u32>> {
-    op.map(|op| wgpu::Operations {
-        load: match op {
-            StencilLoadOp::Load => wgpu::LoadOp::Load,
-            StencilLoadOp::Clear { value } => wgpu::LoadOp::Clear(value),
+    op.map(|op| match op {
+        StencilLoadOp::Load { store_op } => wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: store_op_for(store_op),
         },
-        store: wgpu::StoreOp::Store,
+        StencilLoadOp::Clear { value, store_op } => wgpu::Operations {
+            load: wgpu::LoadOp::Clear(value),
+            store: store_op_for(store_op),
+        },
     })
 }
 
@@ -1009,6 +1042,16 @@ impl Engine {
                             }],
                         };
 
+                        let front_face = draw_call
+                            .pipeline_state
+                            .front_face
+                            .unwrap_or(FrontFace::Ccw);
+                        let polygon_mode = draw_call
+                            .pipeline_state
+                            .polygon_mode
+                            .unwrap_or(PolygonMode::Fill);
+                        let unclipped_depth =
+                            draw_call.pipeline_state.unclipped_depth.unwrap_or(false);
                         let depth_stencil_state = spec
                             .targets
                             .depth_stencil
@@ -1050,7 +1093,20 @@ impl Engine {
                                             .stencil_write_mask
                                             .unwrap_or(u32::MAX),
                                     },
-                                    bias: wgpu::DepthBiasState::default(),
+                                    bias: wgpu::DepthBiasState {
+                                        constant: draw_call
+                                            .pipeline_state
+                                            .depth_bias
+                                            .unwrap_or_default(),
+                                        slope_scale: draw_call
+                                            .pipeline_state
+                                            .depth_bias_slope_scale
+                                            .unwrap_or_default(),
+                                        clamp: draw_call
+                                            .pipeline_state
+                                            .depth_bias_clamp
+                                            .unwrap_or_default(),
+                                    },
                                 })
                             })
                             .transpose();
@@ -1108,12 +1164,12 @@ impl Engine {
                                     primitive: wgpu::PrimitiveState {
                                         topology: shape.topology,
                                         strip_index_format: None,
-                                        front_face: wgpu::FrontFace::Ccw,
+                                        front_face: front_face_for(front_face),
                                         cull_mode: cull_face_for(
                                             draw_call.pipeline_state.cull_mode,
                                         ),
-                                        polygon_mode: wgpu::PolygonMode::Fill,
-                                        unclipped_depth: false,
+                                        polygon_mode: polygon_mode_for(polygon_mode),
+                                        unclipped_depth,
                                         conservative: false,
                                     },
                                     depth_stencil: depth_stencil_state.clone(),
@@ -1148,6 +1204,7 @@ impl Engine {
                         // draw calls must load to preserve earlier draws' output,
                         // since each draw call starts its own begin_render_pass.
                         let is_first_draw = draw_idx == 0;
+                        let is_last_draw = draw_idx + 1 == spec.draw_calls.len();
                         let color_attachments: Vec<CompiledColorAttachment> = spec
                             .targets
                             .colors
@@ -1158,6 +1215,11 @@ impl Engine {
                                     color_load_op_for(ct.load_op, ct.clear_color)
                                 } else {
                                     ColorLoadOp::Load
+                                },
+                                store_op: if is_last_draw {
+                                    store_op_for(ct.store_op)
+                                } else {
+                                    wgpu::StoreOp::Store
                                 },
                             })
                             .collect();
@@ -1171,7 +1233,19 @@ impl Engine {
                                         // Load depth from previous draw call
                                         Some(wgpu::Operations {
                                             load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
+                                            store: if is_last_draw {
+                                                depth_target
+                                                    .depth
+                                                    .map(|op| match op {
+                                                        DepthLoadOp::Load { store_op }
+                                                        | DepthLoadOp::Clear { store_op, .. } => {
+                                                            store_op_for(store_op)
+                                                        }
+                                                    })
+                                                    .unwrap_or(wgpu::StoreOp::Store)
+                                            } else {
+                                                wgpu::StoreOp::Store
+                                            },
                                         })
                                     },
                                     stencil_ops: if is_first_draw {
@@ -1179,7 +1253,19 @@ impl Engine {
                                     } else {
                                         Some(wgpu::Operations {
                                             load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
+                                            store: if is_last_draw {
+                                                depth_target
+                                                    .stencil
+                                                    .map(|op| match op {
+                                                        StencilLoadOp::Load { store_op }
+                                                        | StencilLoadOp::Clear { store_op, .. } => {
+                                                            store_op_for(store_op)
+                                                        }
+                                                    })
+                                                    .unwrap_or(wgpu::StoreOp::Store)
+                                            } else {
+                                                wgpu::StoreOp::Store
+                                            },
                                         })
                                     },
                                 }
@@ -1398,7 +1484,7 @@ impl Engine {
                                     resolve_target,
                                     ops: wgpu::Operations {
                                         load,
-                                        store: wgpu::StoreOp::Store,
+                                        store: a.store_op,
                                     },
                                 })
                             })
