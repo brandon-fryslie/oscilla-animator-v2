@@ -83,6 +83,20 @@ export const StencilOpSchema = z.enum([
 ]);
 export type StencilOp = z.infer<typeof StencilOpSchema>;
 
+export const StoreOpSchema = z.enum(['store', 'discard']);
+export type StoreOp = z.infer<typeof StoreOpSchema>;
+
+export const DepthCompareSchema = z.enum([
+  'never', 'less', 'equal', 'less-equal', 'greater', 'not-equal', 'greater-equal', 'always',
+]);
+export type DepthCompare = z.infer<typeof DepthCompareSchema>;
+
+export const FrontFaceSchema = z.enum(['ccw', 'cw']);
+export type FrontFace = z.infer<typeof FrontFaceSchema>;
+
+export const PolygonModeSchema = z.enum(['fill', 'line', 'point']);
+export type PolygonMode = z.infer<typeof PolygonModeSchema>;
+
 // ---------------------------------------------------------------------------
 // Layer 2: Simple specs (depend on Layer 1)
 // ---------------------------------------------------------------------------
@@ -164,7 +178,13 @@ export const PipelineStateSpecSchema = z.object({
   blendMode: z.enum(['opaque', 'alpha', 'additive', 'multiply']),
   cullMode: z.enum(['none', 'front', 'back']),
   depthWrite: z.boolean(),
-  depthCompare: z.enum(['less', 'always', 'equal', 'greater']),
+  depthCompare: DepthCompareSchema,
+  depthBias: z.number().optional(),
+  depthBiasSlopeScale: z.number().optional(),
+  depthBiasClamp: z.number().optional(),
+  frontFace: FrontFaceSchema.optional(),
+  polygonMode: PolygonModeSchema.optional(),
+  unclippedDepth: z.boolean().optional(),
   stencilReadMask: z.number().optional(),
   stencilWriteMask: z.number().optional(),
   stencilFront: StencilFaceStateSchema.optional(),
@@ -363,18 +383,19 @@ export const RenderPassSpecSchema = z.object({
       textureId: z.union([TextureIdSchema, z.literal('canvas')]),
       loadOp: z.enum(['load', 'clear']),
       clearColor: z.tuple([z.number(), z.number(), z.number(), z.number()]).readonly().optional(),
+      storeOp: StoreOpSchema.optional(),
     })).readonly(),
     depthStencil: z.object({
       textureId: TextureIdSchema,
       // [LAW:dataflow-not-control-flow] Op + value live in one variant so the
       // load/clear distinction can't drift apart at consumer sites.
       depth: z.discriminatedUnion('op', [
-        z.object({ op: z.literal('load') }),
-        z.object({ op: z.literal('clear'), value: z.number() }),
+        z.object({ op: z.literal('load'), storeOp: StoreOpSchema.optional() }),
+        z.object({ op: z.literal('clear'), value: z.number(), storeOp: StoreOpSchema.optional() }),
       ]).optional(),
       stencil: z.discriminatedUnion('op', [
-        z.object({ op: z.literal('load') }),
-        z.object({ op: z.literal('clear'), value: z.number() }),
+        z.object({ op: z.literal('load'), storeOp: StoreOpSchema.optional() }),
+        z.object({ op: z.literal('clear'), value: z.number(), storeOp: StoreOpSchema.optional() }),
       ]).optional(),
     }).optional(),
   }),
