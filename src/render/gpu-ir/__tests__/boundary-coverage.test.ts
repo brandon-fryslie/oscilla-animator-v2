@@ -283,6 +283,37 @@ describe('pipeline state coverage', () => {
     const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
     expect(renderPass.drawCalls[0].pipelineState).toStrictEqual(state);
   });
+
+  test('phase-a pipeline widening passes through', () => {
+    const state: PipelineStateSpec = {
+      blendMode: 'opaque',
+      cullMode: 'front',
+      depthWrite: true,
+      depthCompare: 'less-equal',
+      depthBias: 2,
+      depthBiasSlopeScale: 1.5,
+      depthBiasClamp: 0.25,
+      frontFace: 'cw',
+      polygonMode: 'line',
+      unclippedDepth: true,
+    };
+    const payload = gpu({
+      roster: [
+        render('pass', ortho(), clearTarget([0, 0, 0, 1]), [
+          draw('fill', fsQuadSource(), state, {
+            vertex: (position: any) => {
+              return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
+            },
+            fragment: () => {
+              return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
+            },
+          }),
+        ]),
+      ],
+    });
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
+    expect(renderPass.drawCalls[0].pipelineState).toStrictEqual(state);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -375,6 +406,36 @@ describe('render target coverage', () => {
       textureId: 'depth_tex',
       depth: { op: 'clear', value: 1.0 },
     });
+  });
+
+  test('store ops pass through on color and depth-stencil targets', () => {
+    const targets: RenderPassSpec['targets'] = {
+      colors: [{ textureId: 'canvas', loadOp: 'clear', clearColor: [0, 0, 0, 1], storeOp: 'discard' }],
+      depthStencil: {
+        textureId: 'depth_tex',
+        depth: { op: 'clear', value: 1.0, storeOp: 'discard' },
+        stencil: { op: 'load', storeOp: 'store' },
+      },
+    };
+    const payload = gpu({
+      textures: {
+        depth_tex: { dimension: '2d', width: 512, height: 512, format: 'depth24plus', usage: ['render_attachment'] },
+      },
+      roster: [
+        render('pass', ortho(), targets, [
+          draw('fill', fsQuadSource(), DEPTH_TEST, {
+            vertex: (position: any) => {
+              return vertex(vec4(position.x, position.y, 0.0, 1.0), {});
+            },
+            fragment: () => {
+              return fragment({ color: vec4(1.0, 0.0, 0.0, 1.0) });
+            },
+          }),
+        ]),
+      ],
+    });
+    const renderPass = payload.roster.find(e => e.type === 'Render') as RenderPassSpec;
+    expect(renderPass.targets).toStrictEqual(targets);
   });
 
   test('depth-only pass (zero color attachments)', () => {
