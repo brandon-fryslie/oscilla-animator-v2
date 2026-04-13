@@ -44,7 +44,7 @@ Define immutable API contracts at each boundary layer. Verify each boundary inde
 
 **What crosses:** The `REBUILD_GPU_PIPELINES` message containing `RustRendererGpuPass[]` and `MemoryManifestIR`.
 
-**Current state** (from `worker-protocol.ts`):
+**Current state** (from the legacy worker transport contract):
 - `RustRendererGpuPass`: `{ passId, stage, entryPoint, wgsl, memoryManifest? }`
 - `MemoryManifestIR`: symbolic resource descriptors (id, type, cardinality, packing, updateClass)
 - Per-frame data flows via `SharedArrayBuffer` (input signals, shape bank, sink table)
