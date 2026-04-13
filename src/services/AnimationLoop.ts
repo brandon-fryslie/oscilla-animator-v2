@@ -473,9 +473,15 @@ export function executeAnimationFrame(
   const renderHeight = Math.max(1, Math.floor(store.viewport.canvasHeight || canvas.height));
   arena.beginFrame();
   try {
-    // TODO: Frame-input publishing path is being rebuilt.
-    // Previously called publishFramePayload(renderer, { type: 'PUBLISH_FRAME_INPUT_V1', frame: {...} })
-    // to send viewport, time, input, and camera data to the renderer each frame.
+    // [LAW:single-enforcer] The animation loop remains the only owner of
+    // per-frame publication even while the concrete renderer input path is a stub.
+    void runtimeInputPlaneValues;
+    void cameraInput;
+    void zoom;
+    void pan;
+    void renderWidth;
+    void renderHeight;
+    void renderer;
     markRuntimeFrameAdvanced(-1, tMs);
   } finally {
     // [LAW:single-enforcer] Frame arena lifecycle is owned at the animation-loop

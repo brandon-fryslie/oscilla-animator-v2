@@ -15,7 +15,6 @@ export type {
   GpuFaultCallback,
   WebGPURendererExecutionState,
 } from './webgpu';
-export { WEBGPU_RENDER_CONTRACT } from './webgpu/shaders';
 export {
   setRenderIssueReporter,
   getRenderIssues,

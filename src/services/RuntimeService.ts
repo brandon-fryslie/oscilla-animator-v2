@@ -61,17 +61,12 @@ import {
   type DebugProbeTransport,
 } from './DebugProbeProtocol';
 import { LocalDebugProbeTransport } from './LocalDebugProbeTransport';
-import { createWasmDebugProbeTransport } from './WasmDebugProbeTransport';
-import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 import { shaderInspector } from './ShaderInspectorService';
 import {
   deriveRendererExecutionStateFromGpuFault,
   shouldClearStoredStartupPatch,
   type StartupRestoreSource,
 } from './runtime-gpu-fault-policy';
-// TODO: Rebuild with new PipelineInstallPayload path
-// Previously imported publishPipelineInstallPayload, InstallPipelineBoundaryPayloadV1,
-// PublishFrameInputBoundaryPayloadV1 from '../render/rust/boundary-contract'
 
 const INITIAL_COMPILE_FAILURE_PROBE_MESSAGE =
   'initial_compile_failed: animation loop started but no program is ready';
@@ -146,13 +141,6 @@ export interface RuntimeSpyReadbackPacket {
   readonly samples: readonly DebugProbePacketSample[];
 }
 
-export interface RuntimeBoundaryFixtureV1 {
-  readonly version: 1;
-  readonly capturedAtMs: number;
-  readonly install: unknown;
-  readonly frame: unknown;
-}
-
 function isCompileWorkerUnavailableError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   const lowered = message.toLowerCase();
@@ -195,7 +183,6 @@ export class RuntimeService {
   private spyReadbackInFlight = false;
   private spyReadbackHz = 5;
   private debugProbeTransport: DebugProbeTransport;
-  private debugProbeUpgradeInFlight: Promise<void> | null = null;
   private spyReadbackAnomalyFrameId: number | null = null;
   private readonly spyReadbackAnomalyKeysForFrame = new Set<string>();
   private startupRestoreSource: StartupRestoreSource = 'none';
@@ -230,28 +217,6 @@ export class RuntimeService {
     // [LAW:no-shared-mutable-globals] Runtime-ready notifications are pushed
     // through explicit ownership callbacks, never window globals.
     this.runtimeReadySink = onRuntimeReady;
-  }
-
-  dumpLatestRendererBoundaryFixtureV1(): RuntimeBoundaryFixtureV1 {
-    const runtime = this.requireActiveRuntimeResources('dumping renderer boundary fixture payloads');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const snapshot = runtime.renderer.getLatestBoundaryFixturePayloadV1() as any;
-    if (snapshot?.install === null || snapshot?.install === undefined) {
-      throw new Error(
-        'RuntimeService: no INSTALL_PIPELINE_V1 payload is available yet (compile + install has not completed)',
-      );
-    }
-    if (snapshot?.frame === null || snapshot?.frame === undefined) {
-      throw new Error(
-        'RuntimeService: no PUBLISH_FRAME_INPUT_V1 payload is available yet (animation loop has not published a frame)',
-      );
-    }
-    return {
-      version: 1,
-      capturedAtMs: performance.now(),
-      install: snapshot.install,
-      frame: snapshot.frame,
-    };
   }
 
   private disposeRendererDebugTelemetryBridge(): void {
@@ -424,21 +389,12 @@ export class RuntimeService {
     const compilerServices = this.readCompilerServices();
     const next = compilerServices?.compiler.takeReadyArtifactsForSwap() ?? null;
     if (!next) return;
-    const expectedProgram = next.backendResult?.kind === 'ok'
-      ? next.backendResult.program
-      : null;
-
     const isInitialSwap = this.nextSwapIsInitial;
     this.nextSwapIsInitial = false;
     this.swapInFlight = true;
     try {
       // [LAW:single-enforcer] All compile/swap application goes through this queue.
       await compileAndSwap(this.compileDeps(), isInitialSwap, next);
-      if (expectedProgram && this.compileState.currentProgram === expectedProgram && next.compiledGpuBundle) {
-        // [RECOVER-08] Publish the worker-owned static install contract directly.
-        // Runtime services do not rebuild shape-bank or draw-prep metadata locally.
-        await this.installRendererCanonicalAssets(next.compiledGpuBundle);
-      }
       this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapComplete();
     } catch (err) {
       this.readMatchingCompilerServices(compilerServices)?.compiler.markSwapFailed(err);
@@ -453,38 +409,6 @@ export class RuntimeService {
         this.requestSwapFlush();
       }
     }
-  }
-
-  // [RECOVER-07] Install publishes compile-time topology headers and sink
-  // table descriptors only. No CPU materialization, no instance count
-  // resolution, no ShapeBank allocator. The compile-time topology install
-  // stage is the single GPU-visible runtime stage for shape-handle production.
-  private async installRendererCanonicalAssets(compiledGpuBundle: CompiledGpuArtifactBundle): Promise<void> {
-    const runtime = this.readActiveRuntimeResources();
-    if (!runtime || this.rendererExecutionState !== 'active') {
-      return;
-    }
-    const { renderer } = runtime;
-
-    // [LAW:one-source-of-truth] RuntimeService publishes the canonical
-    // worker-owned install contract without rebuilding static metadata.
-    // const installContract = compiledGpuBundle.runtimeInstall;
-    // TODO: Rebuild with new PipelineInstallPayload path
-    // const installPayload: InstallPipelineBoundaryPayloadV1 = {
-    //   type: 'INSTALL_PIPELINE_V1',
-    //   pipeline: {
-    //     passes: compiledGpuBundle.passes,
-    //     sinkPointerMap: installContract.drawPrep.sinkPointerMap,
-    //     shapeBankWords: Array.from(installContract.shapeBank.words),
-    //     shapeBankWordCount: installContract.shapeBank.wordCount,
-    //     topologyIdByHandle: Array.from(installContract.shapeBank.topologyIdByHandle),
-    //     sinkTableWords: Array.from(installContract.drawPrep.words),
-    //     sinkTableWordCount: installContract.drawPrep.wordCount,
-    //   },
-    // };
-    shaderInspector.setPasses(compiledGpuBundle.passes);
-    // TODO: Rebuild with new PipelineInstallPayload path
-    // await publishPipelineInstallPayload(renderer, installPayload);
   }
 
   private buildCompileRequest(): CompileWorkerRunRequest {
@@ -709,7 +633,6 @@ export class RuntimeService {
       });
       // [LAW:single-enforcer] RuntimeService owns debug lifecycle boundaries.
       debugService.clear();
-      this.primeWasmDebugProbeTransport();
       compilationInspector.setErrorReporter((payload) => {
         const phase = payload.passName ? `${payload.phase}(${payload.passName})` : payload.phase;
         const message = payload.error instanceof Error ? payload.error.message : String(payload.error);
@@ -919,36 +842,6 @@ export class RuntimeService {
     });
     this.syncSpyReadbackSubscriptions();
     this.syncSpyReadbackLoopForTrackedSlots(debugService.getTrackedDebugProbeSubscriptions(1).length);
-  }
-
-  private primeWasmDebugProbeTransport(): void {
-    if (this.debugProbeUpgradeInFlight) {
-      return;
-    }
-    this.debugProbeUpgradeInFlight = createWasmDebugProbeTransport(() => ({
-      program: this.compileState.currentProgram,
-      state: this.compileState.currentState,
-    }))
-      .then((transport) => {
-        this.debugProbeTransport = transport;
-        this.debugProbeTransport.debugCommand({
-          kind: 'set_rate_hz',
-          rateHz: this.spyReadbackHz,
-        });
-        this.syncSpyReadbackSubscriptions();
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        // [LAW:no-silent-fallbacks] Transport upgrade failures must be
-        // observable even when local fallback remains active.
-        this.store.diagnostics.log({
-          level: 'warn',
-          message: `WASM debug probe transport upgrade failed; continuing with LocalDebugProbeTransport: ${message}`,
-        });
-      })
-      .finally(() => {
-        this.debugProbeUpgradeInFlight = null;
-      });
   }
 
   private syncSpyReadbackSubscriptions(): void {

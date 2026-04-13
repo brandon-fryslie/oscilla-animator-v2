@@ -23,8 +23,6 @@ export interface WebGPURenderer {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getLatestSinkTableSample(): any;
   getLifecycleState(): string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getLatestBoundaryFixturePayloadV1(): any;
   setTelemetryEnabled(enabled: boolean): void;
 }
 
@@ -40,7 +38,6 @@ export async function createWebGPURenderer(
     getInstalledGpuPassIds() { return []; },
     getLatestSinkTableSample() { return null; },
     getLifecycleState() { return 'stub'; },
-    getLatestBoundaryFixturePayloadV1() { return null; },
     setTelemetryEnabled() {},
   };
 }
