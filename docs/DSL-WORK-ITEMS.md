@@ -12,7 +12,7 @@ Outstanding work identified during DSL audit (2026-04-04). Organized by DSL, rou
 
 ## Composite HCL DSL + Editor
 
-> Context: Editor was built as working infrastructure but wasn't prioritized while renderer and C1 backend were the focus. Much of this is "finish what was started" work.
+> Context: Editor was built as working infrastructure but wasn't prioritized while renderer and migration-backend work were the focus. Much of this is "finish what was started" work.
 
 ### COMP-1: Position loss on HCL round-trip
 When the user edits HCL text and blurs, `fromHCL()` resets all block positions to a deterministic grid. Visual layout built in the graph editor is destroyed. Options:
@@ -85,11 +85,6 @@ If a variable name in an arrow function doesn't match a known proxy property, th
 
 **Files:** `src/render/gpu-ir/walker.ts` (identifier resolution)
 
-### BDSL-3: No type tracking
-The walker emits IR without tracking types. The Boundary IR is untyped — type information is reconstructed on the Rust side by the translator via string-based dispatch (`load_typed()`/`store_typed()`). Two independent type reconstruction systems is a `[LAW:one-source-of-truth]` violation.
-
-**Files:** `src/render/gpu-ir/walker.ts`, `src/render/wasm/rust/oscilla-rust-renderer/src/translator.rs`
-
 ### BDSL-4: Scope for this DSL shrinking
 As C1 block migration progresses, blocks will emit `ExprIR` directly via `ir-builders.ts`. The Boundary DSL's role narrows to fixture authoring only. At some point the DSL may not justify its maintenance cost. Worth tracking but not actionable now.
 
@@ -97,33 +92,14 @@ As C1 block migration progresses, blocks will emit `ExprIR` directly via `ir-bui
 
 ---
 
-## Block DSL (C1)
+## Block DSL (Pillars)
 
-### BLKC1-1: Zero type safety in `registerC1Block()`
-C1 block registration is a plain object with `lower: (ctx) => ...`. No compile-time validation that port names, types, or lowering output are correct. V1's `defineBlock()` had factory abstractions that enforced constraints. C1 needs equivalent rigor as more blocks are migrated.
+### BLKC1-1: Registry erases concrete block generics
+The current Pillars registry is value-based, but `ALL_BLOCKS` and `buildRegistry()` still erase every block to `BlockDefinition<unknown, unknown>`. That means the compiler loses the concrete config/lower-args shape at registration time and relies on local discipline inside each block module instead of preserving those types across the registry boundary.
 
-**Files:** `src/blocks-v2/index.ts` (`registerC1Block()`)
+**Files:** `src/pillars/blocks/index.ts`, `src/pillars/frontend/registry.ts`, `src/pillars/block-api.ts`
 
-### BLKC1-2: ~190 blocks still need migration
-10 of ~200 blocks migrated. This is the long tail of the strangler fig migration. Each block needs: C1 registration, `lower()` implementation targeting ExprIR, test, and visual validation. Not a DSL design problem per se, but the C1 Block DSL will be the most-used API in the project for a while.
+### BLKC1-2: Block migration remains a long-tail problem
+Only a small Pillars block set is implemented today. The repo still carries the older `src/blocks/` library, so the migration problem is now "port or replace legacy block behavior into Pillars-style definitions with tests" rather than "add another side-effect registration layer." Not a DSL design problem by itself, but this remains the highest-volume authoring surface in the migration.
 
-**Files:** `src/blocks-v2/all.ts` (current list), `src/blocks/all.ts` (full V1 list for reference)
-
----
-
-## Naga Builder + Translator
-
-### NAGA-1: Translator has zero isolated unit tests
-`translator.rs` converts ExprIR/StatementIR -> naga::Module. All testing is end-to-end (fixture -> render -> screenshot). A translator bug requires a full GPU pipeline run to detect. Unit tests for individual ExprIR/StatementIR variants would catch regressions faster.
-
-**Files:** `src/render/wasm/rust/oscilla-rust-renderer/src/translator.rs`
-
-### NAGA-2: Type tracking reconstructed independently
-The translator builds its own `PassContext.type_handles` map, reconstructing type information that was available (or could have been available) on the TS side. String-based dispatch in `load_typed()`/`store_typed()` is fragile. Related to BDSL-3.
-
-**Files:** `src/render/wasm/rust/oscilla-rust-renderer/src/translator.rs`
-
-### NAGA-3: Builder leaks naga complexity
-`FnBodyBuilder` returns bare `Handle<Expression>` without type tracking. Callers must manually track which handles are floats vs vec3s. This is the naga API's problem, but the builder doesn't fully insulate consumers from it.
-
-**Files:** `src/render/wasm/rust/oscilla-rust-renderer/src/dsl.rs`
+**Files:** `src/pillars/blocks/index.ts`, `src/blocks/all.ts`

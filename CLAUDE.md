@@ -8,21 +8,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Migration State (READ THIS FIRST)
 
-The codebase is mid-migration via strangler fig pattern. Two compilation pipelines coexist:
+The codebase is mid-migration. The live app shell still compiles through the legacy frontend/backend worker path, while the Three migration work now lives in `src/pillars/` and the rebuilt renderer seam is still incomplete.
 
 | System | Status | Path |
 |--------|--------|------|
-| **V1 backend** (`compiler/backend/`) | **LEGACY — being replaced** | Frontend → Backend → JS Runtime → (stub renderer) |
-| **C1 backend** (`compiler/backend-v2/`) | **NEW — ~5% block coverage** | Frontend → C1 Backend → PipelineInstallPayload → Rust/WASM → WebGPU |
-| **Compiler frontend** (`compiler/frontend/`) | **SHARED** — used by both pipelines | |
+| **Legacy backend** (`src/compiler/backend/`) | **LIVE but legacy-shaped** | Frontend result → compiled runtime install contract |
+| **Compiler frontend** (`src/compiler/frontend/`) | **LIVE** | Graph/type pipeline feeding the compile worker |
+| **Three migration compiler** (`src/pillars/`) | **ACTIVE migration surface** | Frontend-style normalize → lowering → `PipelineInstallPayload` assembly |
 | **V1 blocks** (`src/blocks/`) | **LEGACY** — only for V1 backend lowering | |
-| **C1 blocks** (`src/blocks-v2/`) | **NEW** — 10 blocks migrated so far | |
+| **Three migration blocks** (`src/pillars/blocks/`) | **ACTIVE migration surface** | Value-based block definitions consumed by the Pillars compiler |
 | **V1 runtime** (`src/runtime/`) | **LEGACY** — JS frame executor | |
-| **Rust renderer** (`src/render/wasm/rust/`) | **NEW — feature complete** | WebGPU render worker |
-| **WebGPU facade** (`src/render/webgpu/`) | **STUB** — deleted during scorched earth, being rebuilt | |
+| **Legacy payload contract** (`src/legacy/`) | **LEGACY reference surface** | Old payload contract types and validation, not the future renderer architecture |
+| **WebGPU facade** (`src/render/webgpu/`) | **STUB / rebuild seam** | Surviving app-facing renderer interface being rebuilt after scorched-earth cleanup |
 | **Canvas2D / SVG renderers** | **DELETED** | |
 
-**Rules for legacy code**: Never fix bugs in V1 backend, V1 blocks, or V1 runtime. They are dead code being replaced. New work goes in `backend-v2/` and `blocks-v2/`.
+**Rules for legacy code**: Never revive deleted manual harnesses, the removed Rust worker transport, or the deleted legacy Rust renderer crate. New migration work goes in `src/pillars/`, the compile-worker seam, and the surviving `src/render/webgpu/` facade. Touch `src/legacy/` only when maintaining the frozen legacy payload contract.
 
 ## Development Commands
 
@@ -42,39 +42,17 @@ npx vitest run src/compiler/__tests__/compile.test.ts
 npx vitest run --include "**/cardinality*.test.ts"
 ```
 
-### Rust/WASM Components
-```bash
-npm run build:rust-renderer    # Build WebGPU Rust renderer (oscilla-rust-renderer)
-npm run build:debug-probe      # Build WASM debug probe (oscilla-debug-probe)
-npm run test:native-webgpu-gates   # Native headless WebGPU tests
-npm run test:rust-worker-gates     # Full E2E (requires built renderer + Playwright)
-```
-
 ### Visual Validation (required for rendering changes)
 ```bash
-# V1 pipeline — burst montage (9 frames)
+# Demo-patch montage from the surviving app shell
 ./scripts/get-screenshot-of-demo-patch.sh breathing-ring.hcl
-
-# GPU-IR fixtures — requires --no-headless (WebGPU needs real GPU)
-./scripts/get-screenshot-of-payload-tester.sh strange-attractor --no-headless
-
-# C1 compiler tester
-./scripts/get-screenshot-of-compiler-tester.sh
 ```
 
-## Multi-Language Architecture
+## Architecture
 
 ### JS/TS Plane (compiler, graph, UI)
 - Entry: `src/index.ts`, `src/compiler/index.ts`
 - Runs in main browser thread + compile worker
-
-### Rust/WASM Plane (rendering)
-| Crate | Path | Role |
-|-------|------|------|
-| `oscilla-rust-renderer` | `src/render/wasm/rust/oscilla-rust-renderer/` | WebGPU render worker + Naga translator |
-| `oscilla-debug-probe` | `src/services/wasm/rust/oscilla-debug-probe/` | Runtime debug snapshot ABI |
-
-The renderer runs in a `DedicatedWorker`. Key constraints: zero-allocation hot path (`StrictAllocator::lock()/unlock()`), pre-allocated VRAM (`GpuMemoryArena`), indirect draw (GPU determines instance count).
 
 ## Critical Rules
 
