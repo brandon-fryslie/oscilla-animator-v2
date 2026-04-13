@@ -2,7 +2,9 @@
 
 Use this prompt for pre-implementation migration work. This prompt is for deciding what the new backend model should be, what old backend machinery must be removed, and what seams/APIs must remain so a Three.js-first backend can be implemented cleanly.
 
-This is not the implementation prompt.
+Output: Your output must be
+- the concrete lists of items we will be removing, specific down to the files and line numbers
+- The redesigned front end 
 
 ## Mission
 
