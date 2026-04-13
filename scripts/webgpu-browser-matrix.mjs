@@ -118,7 +118,6 @@ async function startManagedServer(url) {
   // [LAW:single-enforcer] Browser matrix owns prerequisite orchestration:
   // build -> serve -> probe in one deterministic pipeline.
   if (BUILD_FIRST) {
-    await runCommand('pnpm', ['run', 'build:rust-renderer'], 'build-rust-renderer');
     await runCommand('pnpm', ['run', 'build'], 'build');
   }
 
