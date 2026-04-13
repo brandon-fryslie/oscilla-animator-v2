@@ -1,43 +1,12 @@
-/**
- * src/pillars/blocks/draw-bundle.ts
- *
- * DrawBundle — Intent (Pillar 4). Consumes a primary SourceBundle and emits
- * the three roster entries needed to render it: a compute pass, a
- * System_DrawPrep pass, and a render pass targeting the canvas.
- *
- * The block is now an orchestrator: every concern (geometry, camera, dot
- * material, compute pass body, draw call construction, canvas attachment)
- * lives in its own block-dsl module. Variation between fixtures comes
- * from data flowing through `attachment`, never from a flag this block
- * inspects.
- */
-
-import type {
-  RenderPassSpec,
-  RosterEntry,
-} from '../../render/rust/boundary-contract';
 import type {
   BlockDefinition,
   Diagnostic,
-  LoweredBlock,
-  LoweringContext,
   ManifestContribution,
 } from '../block-api';
 import { makeUnitQuad } from '../block-dsl/geometry/unit-quad';
-import {
-  DEFAULT_CAMERA_GLOBAL,
-  SYS_CAMERA_SYMBOL,
-} from '../block-dsl/presentation/default-camera';
+import { DEFAULT_CAMERA_GLOBAL } from '../block-dsl/presentation/default-camera';
 import type { CanvasAttachment } from '../block-dsl/presentation/canvas-attachment';
 import { clearCanvas } from '../block-dsl/presentation/canvas-attachment';
-import {
-  makeDotMaterial,
-  validateBundleForDotMaterial,
-} from '../block-dsl/materials/dot-material';
-import { buildComputePassFromBundle } from '../block-dsl/pass-builders/compute-from-bundle';
-import { buildDrawPrepPass } from '../block-dsl/pass-builders/draw-prep-pass';
-import { buildDrawCall } from '../block-dsl/pass-builders/draw-call';
-import { buildCanvasRenderPass } from '../block-dsl/pass-builders/canvas-render-pass';
 
 interface DrawBundleConfig {
   readonly domainId: string;
@@ -45,8 +14,6 @@ interface DrawBundleConfig {
   readonly quadScale: number;
   readonly attachment: CanvasAttachment;
 }
-
-type DrawBundleLowerArgs = DrawBundleConfig;
 
 const DEFAULT_CLEAR_COLOR: readonly [number, number, number, number] = [
   0.05, 0.05, 0.07, 1,
@@ -100,59 +67,8 @@ function buildManifestContribution(config: DrawBundleConfig): ManifestContributi
   };
 }
 
-function lower(args: DrawBundleLowerArgs, ctx: LoweringContext): LoweredBlock {
-  const primary = ctx.inputBundles.primary;
-  if (!primary) {
-    throw new Error('[DrawBundle] requires a primary input bundle');
-  }
-  if (Object.keys(primary).length === 0) {
-    throw new Error('[DrawBundle] primary input bundle has no fields');
-  }
-
-  // The DotMaterial validation is an invariant assertion: when the Material
-  // pillar lands the frontend will catch this during normalization.
-  validateBundleForDotMaterial(primary, args.domainId);
-
-  const computePass = buildComputePassFromBundle({
-    passId: `${args.domainId}_eval`,
-    sourceBlockId: args.domainId,
-    domainId: args.domainId,
-    bundle: primary,
-  });
-
-  const drawPrepPass = buildDrawPrepPass({
-    passId: `${args.domainId}_prep`,
-    sourceBlockId: args.domainId,
-    domainId: args.domainId,
-    vertexCount: 6,
-  });
-
-  const dotMaterial = makeDotMaterial(args.domainId);
-  const drawCall = buildDrawCall({
-    intentId: `${args.domainId}_fill`,
-    domainId: args.domainId,
-    shapeId: args.shapeId,
-    vertexAst: dotMaterial.vertexAst,
-    fragmentAst: dotMaterial.fragmentAst,
-    pipelineState: dotMaterial.pipelineState,
-    cameraRef: SYS_CAMERA_SYMBOL,
-  });
-
-  const renderPass: RenderPassSpec = buildCanvasRenderPass({
-    passId: `${args.domainId}_draw`,
-    sourceBlockId: args.domainId,
-    drawCall,
-    attachment: args.attachment,
-  });
-
-  const passes: RosterEntry[] = [computePass, drawPrepPass, renderPass];
-  return { kind: 'intent', passes };
-}
-
-export const DrawBundleBlock: BlockDefinition<DrawBundleConfig, DrawBundleLowerArgs> = {
+export const DrawBundleBlock: BlockDefinition<DrawBundleConfig> = {
   type: 'DrawBundle',
   readConfig,
   buildManifestContribution,
-  buildLowerArgs: (config) => config,
-  lower,
 };
