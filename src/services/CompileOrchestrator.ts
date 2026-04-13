@@ -35,7 +35,6 @@ import { debugService } from './DebugService';
 import { mapDebugMappings } from './mapDebugEdges';
 import { extractConstantValues } from './ConstantValueTracker';
 import { getExprAddressTable } from '../runtime/ExprAddressTable';
-import type { CompiledGpuArtifactBundle } from './compile-worker-protocol';
 
 
 /**
@@ -169,7 +168,6 @@ export interface PrecomputedCompileArtifacts {
   readonly sourcePatchRevision: number;
   readonly frontendResult: FrontendResult;
   readonly backendResult: CompileResult | null;
-  readonly compiledGpuBundle: CompiledGpuArtifactBundle | null;
   readonly compileDurationMs: number;
 }
 

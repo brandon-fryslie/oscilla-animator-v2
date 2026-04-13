@@ -44,7 +44,6 @@ async function toBackendResult(
   return {
     kind: 'ok',
     program,
-    compiledGpuBundle: null,
     warnings: result.warnings,
   };
 }

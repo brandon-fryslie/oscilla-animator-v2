@@ -69,8 +69,8 @@ export const DEBUG_SAMPLE_FLAG_NAN_DETECTED = 1 << 3;
 /**
  * Debug probe transport seam.
  *
- * [LAW:locality-or-seam] RuntimeService depends on this seam so the current JS
- * packet source can be swapped for Rust/WASM without changing UI consumers.
+ * [LAW:locality-or-seam] RuntimeService depends on this seam so packet
+ * collection stays localized to one boundary instead of leaking into UI consumers.
  */
 export interface DebugProbeTransport {
   debugCommand(command: DebugProbeCommand): void;

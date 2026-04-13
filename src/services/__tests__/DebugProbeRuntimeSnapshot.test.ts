@@ -4,8 +4,6 @@ import { valueSlot } from '../../types';
 import {
   createDebugProbeRuntimeSnapshot,
   extractDebugProbeSamplesFromRuntimeSnapshot,
-  packDebugProbeRuntimeSnapshot,
-  serializeDebugProbeRuntimeSnapshot,
 } from '../DebugProbeRuntimeSnapshot';
 import type { DebugProbeSubscription } from '../DebugProbeProtocol';
 
@@ -49,7 +47,7 @@ function makeProgramAndState() {
 }
 
 describe('DebugProbeRuntimeSnapshot', () => {
-  it('captures slot-local runtime regions and serializes them for wasm', () => {
+  it('captures slot-local runtime regions for debug probe extraction', () => {
     const { scalarSlot, fieldSlot, program, state } = makeProgramAndState();
     const subscriptions: DebugProbeSubscription[] = [
       {
@@ -84,32 +82,6 @@ describe('DebugProbeRuntimeSnapshot', () => {
     expect(Array.from(snapshot.slots[0]!.values)).toEqual([41]);
     expect(Array.from(snapshot.slots[1]!.values)).toEqual([10, 20, 30, 41]);
 
-    const serialized = serializeDebugProbeRuntimeSnapshot(snapshot);
-    expect(serialized).toEqual({
-      runtimeFrameId: 9,
-      slots: [
-        {
-          slotId: scalarSlot as number,
-          descriptor: { offset: 0, stride: 1, laneCount: 1, length: 1 },
-          values: new Float32Array([41]),
-        },
-        {
-          slotId: fieldSlot as number,
-          descriptor: { offset: 0, stride: 2, laneCount: 2, length: 4 },
-          values: new Float32Array([10, 20, 30, 41]),
-        },
-      ],
-    });
-    expect(serialized.slots[0]!.values.buffer).toBe(snapshot.slots[0]!.values.buffer);
-
-    const packed = packDebugProbeRuntimeSnapshot(serialized);
-    expect(packed.runtimeFrameId).toBe(9);
-    expect(Array.from(packed.slotMeta)).toEqual([
-      scalarSlot as number, 1, 1, 1, 0, 1, 1, 0, 0, 0,
-      fieldSlot as number, 2, 2, 4, 0, 1, 2, 0, 0, 1,
-    ]);
-    expect(Array.from(packed.componentOffsets)).toEqual([]);
-    expect(Array.from(packed.slotValues)).toEqual([41, 10, 20, 30, 41]);
   });
 
   it('extracts scalar and lane-window samples from the shared snapshot contract', () => {
@@ -186,46 +158,5 @@ describe('DebugProbeRuntimeSnapshot', () => {
         },
       ],
     });
-  });
-
-  it('throws when packed snapshot values length mismatches descriptor length', () => {
-    expect(() => packDebugProbeRuntimeSnapshot({
-      runtimeFrameId: 1,
-      slots: [
-        {
-          slotId: 1,
-          descriptor: { offset: 0, stride: 1, laneCount: 2, length: 2 },
-          values: new Float32Array([99]),
-        },
-      ],
-    })).toThrow(/value length mismatch/);
-  });
-
-  it('packs componentOffsets into metadata and side channel buffer', () => {
-    const packed = packDebugProbeRuntimeSnapshot({
-      runtimeFrameId: 2,
-      slots: [
-        {
-          slotId: 8,
-          descriptor: {
-            offset: 0,
-            stride: 2,
-            laneCount: 4,
-            length: 8,
-            packing: 'soa',
-            laneStride: 1,
-            componentStride: 4,
-            componentOffsets: [0, 4],
-          },
-          values: new Float32Array([1, 2, 3, 4, 10, 20, 30, 40]),
-        },
-      ],
-    });
-    expect(packed.runtimeFrameId).toBe(2);
-    expect(Array.from(packed.slotMeta)).toEqual([
-      8, 2, 4, 8, 0, 1, 4, 0, 2, 0,
-    ]);
-    expect(Array.from(packed.componentOffsets)).toEqual([0, 4]);
-    expect(Array.from(packed.slotValues)).toEqual([1, 2, 3, 4, 10, 20, 30, 40]);
   });
 });
