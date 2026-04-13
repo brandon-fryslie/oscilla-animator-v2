@@ -453,7 +453,7 @@ src/render/gpu-ir/
 2. **IR builder tests**: every builder function produces a valid ExprIR/StatementIR node (type-checked against boundary-contract)
 3. **Round-trip**: Rewrite each existing fixture in DSL → `deepStrictEqual(dslOutput, handWrittenPayload)` — proves zero information loss
 4. **Typecheck**: `npm run typecheck` — ambient type declarations catch mistyped shader code
-5. **Visual**: Rewritten fixtures render identically in payload-tester
+5. **Fixture parity**: Rewritten fixtures produce identical payload/test results in the surviving validation surface
 
 ## Risks & Mitigations
 
