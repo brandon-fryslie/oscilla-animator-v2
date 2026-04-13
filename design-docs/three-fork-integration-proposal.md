@@ -19,6 +19,10 @@ Relevant current references:
 - [design-docs/gpu-ir-gap-analysis.md](/Users/bmf/.codex/worktrees/356b/oscilla-animator-v2/design-docs/gpu-ir-gap-analysis.md)
 - [design-docs/renderer-webgpu-coverage-audit.md](/Users/bmf/.codex/worktrees/356b/oscilla-animator-v2/design-docs/renderer-webgpu-coverage-audit.md)
 
+Groundwork follow-up notes:
+
+- [three-migration-renderer-seam-inventory.md](./three-migration-renderer-seam-inventory.md)
+
 External references:
 
 - [Three WebGPU renderer manual](https://threejs.org/manual/en/webgpurenderer)
