@@ -1,14 +1,3 @@
-/**
- * src/pillars/frontend/build-normalized-graph.ts
- *
- * The frontend's main entry point. Iterates the PillarPatch, calls each
- * block's readConfig + buildManifestContribution + buildLowerArgs, and
- * builds opaque NormalizedNode closures from def.lower + args.
- *
- * Diagnostics are accumulated; if any severity:'error' diagnostic is
- * collected, the result graph is null and the caller halts before backend.
- */
-
 import type { Diagnostic, NodeId } from '../block-api';
 import type { PillarPatch } from '../types';
 import type { NormalizedGraph, NormalizedNode } from './normalized-graph';
@@ -40,13 +29,9 @@ export function buildNormalizedGraph(
     const config = def.readConfig(block.config, diagnostics);
     if (config === null) continue;
 
-    const contribution = def.buildManifestContribution(config);
-    const args = def.buildLowerArgs(config, contribution);
-
     nodes.push({
       id: block.id as NodeId,
-      manifestContribution: contribution,
-      lower: (ctx) => def.lower(args, ctx),
+      manifestContribution: def.buildManifestContribution(config),
     });
   }
 

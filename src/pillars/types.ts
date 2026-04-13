@@ -2,8 +2,6 @@
  * src/pillars/types.ts
  *
  * The user-authored graph type. PillarPatch is the input to the frontend.
- * Compiler-internal types (NormalizedGraph, LoweringContext, BlockDefinition,
- * etc.) live in block-api.ts and the phase directories.
  */
 
 export type PillarKind = 'generator' | 'modifier' | 'intent';

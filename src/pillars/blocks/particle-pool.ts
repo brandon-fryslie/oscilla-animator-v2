@@ -1,31 +1,10 @@
-/**
- * src/pillars/blocks/particle-pool.ts
- *
- * ParticlePool — Generator (Pillar 1). Declares a domain of N instances and
- * emits a SourceBundle whose field expressions define the initial values.
- */
-
 import type {
   ArenaScalarSpec,
-  GlobalSpec,
-  InstanceDomainSpec,
-  SymbolId,
-} from '../../render/rust/boundary-contract';
-import {
-  binop,
-  callBuiltin,
-  cast,
-  intrinsic,
-  litF32,
-  loadGlobal,
-} from '../../render/gpu-ir/ir-builders';
-import type {
   BlockDefinition,
   Diagnostic,
-  LoweredBlock,
-  LoweringContext,
+  GlobalSpec,
+  InstanceDomainSpec,
   ManifestContribution,
-  SourceBundle,
 } from '../block-api';
 
 interface ParticlePoolConfig {
@@ -34,8 +13,6 @@ interface ParticlePoolConfig {
   readonly radius: number;
   readonly timeFactor: number;
 }
-
-type ParticlePoolLowerArgs = ParticlePoolConfig;
 
 function readConfig(
   raw: Readonly<Record<string, unknown>>,
@@ -75,14 +52,14 @@ function buildManifestContribution(config: ParticlePoolConfig): ManifestContribu
 
   const domain: InstanceDomainSpec = {
     capacity: config.capacity,
-    activeLanesSymbol: activeSymbol as InstanceDomainSpec['activeLanesSymbol'],
+    activeLanesSymbol: activeSymbol,
     fields: {
       pos_x: { type: 'f32', clearValue: 0 },
       pos_y: { type: 'f32', clearValue: 0 },
       color_r: { type: 'f32', clearValue: 1 },
       color_g: { type: 'f32', clearValue: 1 },
       color_b: { type: 'f32', clearValue: 1 },
-    } as InstanceDomainSpec['fields'],
+    },
   };
 
   const timeGlobal: GlobalSpec = { type: 'f32', isDynamic: true, defaultValue: 0 };
@@ -95,46 +72,8 @@ function buildManifestContribution(config: ParticlePoolConfig): ManifestContribu
   };
 }
 
-function lower(args: ParticlePoolLowerArgs, _ctx: LoweringContext): LoweredBlock {
-  const twoPi = 2 * Math.PI;
-  const step = twoPi / args.capacity;
-
-  const gidF32 = cast('f32', intrinsic('global_invocation_id.x'));
-  const time = loadGlobal('sys:time' as SymbolId);
-  const baseAngle = binop('*', gidF32, litF32(step));
-  // [LAW:dataflow-not-control-flow] timeFactor is data, not control flow.
-  const scaledTime = binop('*', time, litF32(args.timeFactor));
-  const angle = binop('+', baseAngle, scaledTime);
-
-  const cosAngle = callBuiltin('cos', [angle]);
-  const sinAngle = callBuiltin('sin', [angle]);
-  const posX = binop('*', cosAngle, litF32(args.radius));
-  const posY = binop('*', sinAngle, litF32(args.radius));
-
-  const halfPlusHalf = (x: ReturnType<typeof litF32>) =>
-    binop('+', binop('*', x, litF32(0.5)), litF32(0.5));
-
-  const colorR = halfPlusHalf(sinAngle);
-  const greenAngle = binop('+', angle, litF32(2.094));
-  const colorG = halfPlusHalf(callBuiltin('sin', [greenAngle]));
-  const blueAngle = binop('+', angle, litF32(4.189));
-  const colorB = halfPlusHalf(callBuiltin('sin', [blueAngle]));
-
-  const output: SourceBundle = {
-    pos_x: posX,
-    pos_y: posY,
-    color_r: colorR,
-    color_g: colorG,
-    color_b: colorB,
-  };
-
-  return { kind: 'bundle', output, domainId: args.domainId };
-}
-
-export const ParticlePoolBlock: BlockDefinition<ParticlePoolConfig, ParticlePoolLowerArgs> = {
+export const ParticlePoolBlock: BlockDefinition<ParticlePoolConfig> = {
   type: 'ParticlePool',
   readConfig,
   buildManifestContribution,
-  buildLowerArgs: (config) => config,
-  lower,
 };
