@@ -47,7 +47,6 @@ design-docs/
 | Document | Description |
 |----------|-------------|
 | `current/renderer/RUST-RENDERER.md` | Full Rust/WASM renderer spec: memory, compute, render pipeline, execution loop. |
-| `current/renderer/rust-renderer-verification-matrix.md` | 4-gate verification matrix (headless, zero-alloc, visual snapshot, jitter). |
 | `current/renderer/RUST-WASM-DEBUG-ABI.md` | Debug probe ABI for edge/port inspection. |
 
 ### Runtime
@@ -108,4 +107,3 @@ Some documentation lives alongside its implementation:
 | `src/diagnostics/README.md` | Diagnostics system architecture |
 | `src/expr/README.md` | Expression DSL module |
 | `src/demo/README.md` | Demo library guide |
-| `src/render/wasm/rust/oscilla-rust-renderer/README.md` | Rust renderer crate |

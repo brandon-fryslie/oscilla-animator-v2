@@ -110,14 +110,10 @@ TypeScript arrow-function DSL that compiles to Boundary IR (`PipelineInstallPayl
 | **ESTree walker** | `src/render/gpu-ir/walker.ts` (arrow fn AST -> ExprIR/StatementIR) |
 | **IR builders** | `src/render/gpu-ir/ir-builders.ts` (constructors for 25 ExprIR + 14 StatementIR variants) |
 | **Operator/builtin rules** | `src/render/gpu-ir/ir-node-rules.ts` (single source of truth for walker + reverse translator) |
-| **Reverse translator** | `src/render/gpu-ir/reverse-payload.ts` (Boundary IR -> DSL source text) |
-| **Reverse helpers** | `src/render/gpu-ir/reverse.ts` |
 | **Manifest helpers** | `src/render/gpu-ir/manifest.ts` |
 | **Shape helpers** | `src/render/gpu-ir/shapes.ts` |
 | **Stdlib functions** | `src/render/gpu-ir/stdlib.ts` |
 | **Dependency inference** | `src/render/gpu-ir/deps.ts` |
-| **Fixtures** | `src/render/rust/fixtures/*.ts` |
-| **Screenshot validation** | `./scripts/get-screenshot-of-payload-tester.sh <fixture> --no-headless` |
 
 ### Key concepts
 - Proxy objects (`$global`, `$domains`, `$thread`) capture property access as IR nodes
@@ -128,12 +124,11 @@ TypeScript arrow-function DSL that compiles to Boundary IR (`PipelineInstallPayl
 
 ### Related: Boundary IR (not a DSL)
 
-The wire format (JSON) that crosses the TS -> WASM boundary. Defined as Zod schemas on the TS side and serde structs on the Rust side.
+The wire format (JSON) that crosses compile/runtime boundaries. The canonical schema lives in TypeScript.
 
 | | |
 |---|---|
-| **Canonical definition** | `src/render/rust/boundary-contract.ts` (Zod schemas) |
-| **Rust mirror** | `src/render/wasm/rust/oscilla-rust-renderer/src/contract.rs` |
+| **Canonical definition** | `src/legacy/pipeline-install-contract.ts` (Zod schemas) |
 | **Key type** | `PipelineInstallPayload = { manifest, roster, functions? }` |
 
 ---
@@ -153,27 +148,16 @@ Declarative registration via `defineBlock()` with factory abstractions for commo
 | **Registration** | `src/blocks/all.ts` -> `registerAllBlocks()` |
 | **Composite registration** | `src/blocks/composites/` |
 
-### C1 Block DSL (new — all new blocks here)
+### Pillars Block DSL (current migration surface)
 
-Imperative registration via `registerC1Block()`. Blocks declare `lower()` (emit ExprIR), optional `manifestRequirements()` (GPU resources), and `isSink` flag. Currently 10 of ~200 blocks migrated.
+Value-based block definitions exported from `src/pillars/blocks/`. Blocks validate config, declare manifest contributions, and lower into bundle or intent outputs through the `BlockDefinition<TConfig, TLowerArgs>` contract.
 
 | | |
 |---|---|
-| **Registry** | `src/blocks-v2/index.ts` — `registerC1Block()`, `getC1Block()` |
-| **Block definitions** | `src/blocks-v2/*.ts` |
-| **Registration** | `src/blocks-v2/all.ts` (side-effect imports) |
-| **Migrated blocks** | Const, Add, Subtract, Multiply, Divide, Sin, Cos, Time, InstanceIndex, RenderInstances2D |
-| **Adding a block** | See `.claude/CLAUDE.md` "Adding a New C1 Block" |
+| **Public contract** | `src/pillars/block-api.ts` — `BlockDefinition`, `ManifestContribution`, lowering types |
+| **Block definitions** | `src/pillars/blocks/*.ts` |
+| **Registration** | `src/pillars/blocks/index.ts` via the `ALL_BLOCKS` array |
+| **Registry builder** | `src/pillars/frontend/registry.ts` |
+| **Current blocks** | ParticlePool, Clock, ExpressionModifier, DrawBundle, TextureGrid, Materialize |
 
 ---
-
-## Related: Naga Builder (not a DSL)
-
-Rust builder API wrapping `naga::Module` AST construction. Hides expression emission scoping via `BlockState`. Used by the translator to convert Boundary IR into GPU shader modules.
-
-| | |
-|---|---|
-| **Entry point** | `src/render/wasm/rust/oscilla-rust-renderer/src/dsl.rs` |
-| **Key types** | `ModuleBuilder`, `FnBuilder`, `FnBodyBuilder` |
-| **Consumer** | `src/render/wasm/rust/oscilla-rust-renderer/src/translator.rs` |
-| **Reference skill** | `/oscilla-naga-dsl-reference` |
