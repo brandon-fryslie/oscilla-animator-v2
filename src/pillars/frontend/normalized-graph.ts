@@ -1,17 +1,8 @@
-/**
- * src/pillars/frontend/normalized-graph.ts
- *
- * The opaque-node interface the backend walker sees. There is no `kind`,
- * `type`, or metadata field the walker can branch on. Polymorphism is via
- * the `lower` closure reference (built by the frontend).
- */
-
-import type { LoweringContext, LoweredBlock, ManifestContribution, NodeId } from '../block-api';
+import type { ManifestContribution, NodeId } from '../block-api';
 
 export interface NormalizedNode {
   readonly id: NodeId;
   readonly manifestContribution: ManifestContribution;
-  readonly lower: (ctx: LoweringContext) => LoweredBlock;
 }
 
 export interface NormalizedEdge {

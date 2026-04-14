@@ -23,7 +23,7 @@ import { useStores } from '../../../stores';
 import type { RootStore } from '../../../stores';
 import type { LogEntry } from '../../../stores/DiagnosticsStore';
 import type { Diagnostic, Severity, TargetRef, DiagnosticAction } from '../../../diagnostics/types';
-import type { RustRendererSchedulerState } from '../../../render/rust/worker-protocol';
+import type { RendererLifecycleState } from '../../../render/webgpu/renderer-circuit-breaker';
 // Local replacement for deleted RustWasmWebGPURenderer type — only fields actually read by this component.
 interface RustRendererRuntimeTelemetry {
   readonly frameCount: number;
@@ -59,7 +59,7 @@ interface RustRendererRuntimeTelemetry {
 
 interface RuntimeTelemetryDetail {
   readonly kind: 'runtimeTelemetry';
-  readonly schedulerState: RustRendererSchedulerState;
+  readonly schedulerState: RendererLifecycleState;
   readonly fps: number;
   readonly telemetry: RustRendererRuntimeTelemetry;
 }

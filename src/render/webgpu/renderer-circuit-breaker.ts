@@ -1,9 +1,8 @@
-import type { RustRendererSchedulerState } from '../rust/worker-protocol';
-
 export type WebGPURendererExecutionState = 'active' | 'pausedByBreaker' | 'fatal';
+export type RendererLifecycleState = 'Booting' | 'Running' | 'Paused' | 'Lost';
 
 export interface RendererCircuitBreakerHeartbeat {
-  readonly state: RustRendererSchedulerState;
+  readonly state: RendererLifecycleState;
   readonly sequence: number;
   readonly frameCount: number;
   readonly lastSuccessMs: number;
@@ -27,7 +26,7 @@ const DEFAULT_RENDERER_CIRCUIT_BREAKER_OPTIONS: RendererCircuitBreakerOptions = 
 
 export class RendererCircuitBreaker {
   private executionState: WebGPURendererExecutionState = 'active';
-  private lifecycleState: RustRendererSchedulerState = 'Booting';
+  private lifecycleState: RendererLifecycleState = 'Booting';
   private lastFrameCount = -1;
   private lastSuccessMs = -1;
   private lastHeartbeatAtMs = 0;

@@ -247,17 +247,6 @@ export interface CompiledProgramIR {
   readonly generatedComputeProgram: GeneratedComputeProgramIR;
 
   /**
-   * Optional worker-attached GPU pass manifest describing installable runtime
-   * passes.
-   *
-   * [LAW:one-source-of-truth] Runtime pass identity/order metadata is attached
-   * once by the compile-worker validation boundary and consumed by worker
-   * transport/renderer install. Raw compiler IR may not carry this yet; the
-   * worker-enriched runtime contract does.
-   */
-  readonly generatedGpuArtifactManifest?: GeneratedGpuArtifactManifestIR;
-
-  /**
    * Compiler-generated typed Naga lowering artifact (P2-2).
    * Contains the structured module and expr/statement source-map provenance.
    */
@@ -274,31 +263,9 @@ export interface CompiledProgramIR {
   readonly fastPathOffsets: Readonly<Record<string, number>>;
 }
 
-/**
- * Worker-enriched compiled program contract for runtime GPU consumers.
- *
- * [LAW:one-source-of-truth] The compile worker is the single owner that
- * attaches validated GPU pass manifest metadata to compiled IR before runtime
- * transport; downstream runtime code consumes this total contract directly.
- */
-export interface GpuReadyCompiledProgramIR extends CompiledProgramIR {
-  readonly generatedGpuArtifactManifest: GeneratedGpuArtifactManifestIR;
-}
-
 export interface ProgramTopologyTableIR {
   readonly definitions: readonly SerializableTopologyDef[];
   readonly definitionIndexById: ReadonlyMap<TopologyId, number>;
-}
-
-export interface GpuPassManifestEntryIR {
-  readonly passId: string;
-  readonly stage: GpuPassStage;
-  readonly entryPoint: string;
-}
-
-export interface GeneratedGpuArtifactManifestIR {
-  readonly schemaVersion: 1;
-  readonly passes: readonly GpuPassManifestEntryIR[];
 }
 
 /**
