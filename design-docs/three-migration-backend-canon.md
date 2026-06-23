@@ -122,9 +122,16 @@ A fork delta is justified only when all of these are true:
 - the change can stay entirely inside vendored Three/backend code
 - no authored Oscilla semantics are encoded as fork-only object state
 - the public app-facing seam stays unchanged
-- the delta has an owner and a documented reason in `oscilla-pillars-cleanup-ulu.6`
+- the delta has an owner and a documented reason in the fork-delta register
 
 If any of those are false, the change is not a justified fork delta.
+
+The fork-delta register, vendor/update workflow, app-facing capability surface,
+and the reconciliation of legacy vm4 gap-analysis against Three adoption live in
+[three-fork-deltas.md](./three-fork-deltas.md) (owned by `oscilla-pillars-cleanup-ulu.6`).
+
+`// [LAW:single-enforcer]` That register is the only place a delta is recorded as
+justified; it starts empty and a row is added only when this rule admits one.
 
 ## Implementation Ticket Rules
 
@@ -138,5 +145,6 @@ If any of those are false, the change is not a justified fork delta.
 ## Related References
 
 - [three-fork-integration-proposal.md](./three-fork-integration-proposal.md)
+- [three-fork-deltas.md](./three-fork-deltas.md)
 - [three-migration-renderer-seam-inventory.md](./three-migration-renderer-seam-inventory.md)
 - [three-migration-first-proof-contract.md](./three-migration-first-proof-contract.md)
