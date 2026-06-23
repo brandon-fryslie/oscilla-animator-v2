@@ -434,23 +434,34 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
 }
 
 /**
- * Render the installed ScenePlan for one frame through the Three backend.
- *
- * [LAW:effects-at-boundaries] The runtime input channel values are computed
- * purely here; the GPU draw inside `renderFrame` is the one effect, performed at
- * the renderer boundary.
- * [LAW:one-source-of-truth] `time` is seconds. Every channel the runtime can
- * supply is offered; the renderer feeds only the channels its installed plan
- * declared in `render.inputs`, so this call site never tracks which subset a
- * given plan reads.
+ * One frame of a render source. Selected once at loop startup and invoked
+ * uniformly every frame — the value, not a per-frame branch, carries which
+ * source produces the frame. // [LAW:dataflow-not-control-flow]
  */
-async function renderScenePlanFrame(
+type FrameRenderer = (
   tMs: number,
-  renderer: WebGPURenderer,
+  deps: AnimationLoopDeps,
+  state: AnimationLoopState,
+) => Promise<void>;
+
+/**
+ * Pure projection of one frame's runtime inputs onto the plan's channel
+ * vocabulary. No effects — it can be reasoned about and tested with no GPU and
+ * no probe.
+ *
+ * [LAW:effects-at-boundaries] Computing the channel values is separated from the
+ *   act of rendering with them.
+ * [LAW:one-source-of-truth] `time` is seconds. Every channel the runtime can
+ *   supply is offered; the renderer feeds only the channels its installed plan
+ *   declared in `render.inputs`, so this projection never tracks which subset a
+ *   given plan reads.
+ */
+function scenePlanChannelValues(
+  tMs: number,
   currentState: RuntimeState | null
-): Promise<void> {
+): RuntimeInputChannelValues {
   const inputPlane = readRuntimeInputPlaneValues(currentState);
-  const channelValues: RuntimeInputChannelValues = {
+  return {
     time: tMs / 1000,
     mouseX: inputPlane.inputMouseX,
     mouseY: inputPlane.inputMouseY,
@@ -460,41 +471,40 @@ async function renderScenePlanFrame(
     audioHigh: inputPlane.inputAudioHigh,
     gaugeActive: inputPlane.inputGaugeActive,
   };
-  await renderer.renderFrame(channelValues);
-  markRuntimeFrameAdvanced(-1, tMs);
 }
 
 /**
- * Execute a single animation frame.
+ * Render source: the installed ScenePlan, drawn through the Three backend.
  *
- * [LAW:dataflow-not-control-flow] One frame boundary serves two render sources;
- * the startup-fixed installed-plan predicate selects which one produces this
- * frame's pixels. Both share the telemetry/cadence tail below.
+ * [LAW:effects-at-boundaries] Effect-only boundary — it acts on the world (the
+ *   GPU draw and the frame-advance probe write) but computes nothing; the
+ *   channel values come from the pure `scenePlanChannelValues` above.
  */
-export async function executeAnimationFrame(
-  tMs: number,
-  deps: AnimationLoopDeps,
-  state: AnimationLoopState
-): Promise<void> {
+const renderScenePlanFrame: FrameRenderer = async (tMs, deps, state) => {
+  const { renderer } = deps.runtime;
+  await renderer.renderFrame(scenePlanChannelValues(tMs, deps.getCurrentState()));
+  markRuntimeFrameAdvanced(-1, tMs);
+  state.frameCount++;
+};
+
+/**
+ * Render source: the legacy V1 program path (frame publication is being rebuilt;
+ * the body is a stub plus the runtime telemetry/cadence tail).
+ *
+ * [LAW:dataflow-not-control-flow] Within this source the same viewport
+ * publication + telemetry read runs every frame; worker-owned runtime data
+ * drives variability through shared planes and scheduler packets.
+ */
+export const renderV1Frame: FrameRenderer = async (tMs, deps, state) => {
   const {
     getCurrentProgram,
     getCurrentState,
-    isScenePlanInstalled,
     runtime,
     store,
     onStatsUpdate,
   } = deps;
 
   const { canvas, renderer, arena } = runtime;
-
-  // ScenePlan steel thread: self-contained Three render path. It has no V1
-  // program, so it draws and returns before the V1 telemetry tail (which reads
-  // V1 program internals) below.
-  if (isScenePlanInstalled()) {
-    await renderScenePlanFrame(tMs, renderer, getCurrentState());
-    state.frameCount++;
-    return;
-  }
 
   const currentProgram = getCurrentProgram();
   if (!currentProgram) {
@@ -555,7 +565,7 @@ export async function executeAnimationFrame(
     store,
     onStatsUpdate,
   });
-}
+};
 
 /**
  * Start the animation loop.
@@ -570,6 +580,13 @@ export function startAnimationLoop(
   // [LAW:single-enforcer] AnimationLoop owns runtime startup/compile boundaries,
   // so boundary checks are enforced here exactly once per published program.
   assertProgramPhaseBoundary(deps);
+
+  // [LAW:dataflow-not-control-flow] The render source is fixed at startup, so it
+  //   is selected once here as a value; every frame then invokes it uniformly,
+  //   with no per-frame branch on which source produces the frame.
+  const renderFrame: FrameRenderer = deps.isScenePlanInstalled()
+    ? renderScenePlanFrame
+    : renderV1Frame;
 
   let cancelled = false;
   let haltedByError = false;
@@ -588,7 +605,7 @@ export function startAnimationLoop(
     // [LAW:no-ambient-temporal-coupling] Frames serialize: the next frame is
     //   scheduled only after this one's async render settles, so concurrent
     //   `renderFrame` calls cannot overlap on the GPU device.
-    void executeAnimationFrame(tMs, deps, state).then(
+    void renderFrame(tMs, deps, state).then(
       () => {
         scheduleNextFrame();
       },

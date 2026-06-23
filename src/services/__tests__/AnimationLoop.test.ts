@@ -114,41 +114,41 @@ describe('AnimationLoop heartbeat consumers', () => {
   });
 
   it('reads showPreview at frame time so probe publication starts and stops without reload', async () => {
-    const { createAnimationLoopState, executeAnimationFrame } = await loadAnimationLoop(false);
+    const { createAnimationLoopState, renderV1Frame } = await loadAnimationLoop(false);
     const renderer = makeRenderer();
     const deps = makeDeps(renderer);
     const state = createAnimationLoopState();
     state.lastFpsUpdate = performance.now();
 
-    await executeAnimationFrame(1, deps, state);
+    await renderV1Frame(1, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toBeUndefined();
 
     window.history.replaceState({}, '', '/?showPreview=true');
-    await executeAnimationFrame(2, deps, state);
+    await renderV1Frame(2, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.latest).toMatchObject({
       kind: 'runtime-heartbeat',
     });
 
     const publishedAtMs = probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.publishedAtMs;
     window.history.replaceState({}, '', '/');
-    await executeAnimationFrame(3, deps, state);
+    await renderV1Frame(3, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.publishedAtMs).toBe(publishedAtMs);
   });
 
   it('skips non-cadence heartbeat builds when only runtimeConsole is enabled', async () => {
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
-    const { createAnimationLoopState, executeAnimationFrame } = await loadAnimationLoop(true);
+    const { createAnimationLoopState, renderV1Frame } = await loadAnimationLoop(true);
     const renderer = makeRenderer();
     const deps = makeDeps(renderer);
     const state = createAnimationLoopState();
     state.lastFpsUpdate = performance.now();
 
-    await executeAnimationFrame(1, deps, state);
+    await renderV1Frame(1, deps, state);
     expect(renderer.getLatestRuntimeTelemetry).not.toHaveBeenCalled();
     expect(consoleInfo).not.toHaveBeenCalled();
 
     state.lastFpsUpdate = performance.now() - 1000;
-    await executeAnimationFrame(2, deps, state);
+    await renderV1Frame(2, deps, state);
     expect(renderer.getLatestRuntimeTelemetry).toHaveBeenCalled();
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[runtimeConsole]'));
   });

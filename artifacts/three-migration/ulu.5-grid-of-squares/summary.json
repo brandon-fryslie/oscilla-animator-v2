@@ -5,17 +5,17 @@
     "name": "Grid of Squares"
   },
   "previewBooted": true,
-  "renderedFrameCount": 101,
+  "renderedFrameCount": 102,
   "rendererThreeBacked": true,
   "frames": {
     "frame0": {
-      "nonBlack": 99901,
-      "checksum": 83110591,
+      "nonBlack": 99978,
+      "checksum": 2214449961,
       "size": "720x720"
     },
     "frame1": {
-      "nonBlack": 99939,
-      "checksum": 3937724374,
+      "nonBlack": 99951,
+      "checksum": 349418910,
       "size": "720x720"
     }
   },
@@ -24,5 +24,5 @@
   "consoleErrors": [],
   "deviceInitFailures": [],
   "legacyPathReferences": [],
-  "generatedAt": "2026-06-23T12:27:26.347Z"
+  "generatedAt": "2026-06-23T12:38:50.665Z"
 }
