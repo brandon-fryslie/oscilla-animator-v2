@@ -1,0 +1,25 @@
+/**
+ * src/pillars/scene/index.ts
+ *
+ * Public surface of the ScenePlan compile path — authored `PillarPatch` lowered
+ * to the backend-neutral `ScenePlan` (src/render/scene-plan).
+ *
+ * Producer of: `ScenePlan` (consumed by the Three-backed renderer, ulu.2).
+ * Replaces, for new backend work, `assemblePipelineInstallPayload`
+ * (design-docs/three-migration-scene-plan.md).
+ */
+
+export { compileScenePlan } from './compile';
+export type { SceneCompileResult } from './assemble';
+
+export { ALL_SCENE_BLOCKS } from './blocks';
+export {
+  buildSceneRegistry,
+  type SceneBlockDefinition,
+  type SceneContribution,
+  type SceneDiagnostic,
+  type InstanceBundle,
+  type DrawShell,
+  type MaterialShell,
+  type SceneRegistry,
+} from './scene-block';
