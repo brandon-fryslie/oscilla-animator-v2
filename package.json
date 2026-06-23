@@ -18,6 +18,7 @@
     "test:payload-tester-visible": "node scripts/check-payload-tester-visible.mjs",
     "ci:webgpu-readiness": "node scripts/webgpu-ci-readiness-gate.mjs",
     "test:migration-readiness": "node scripts/webgpu-migration-readiness.mjs",
+    "verify:renderer-shell": "node scripts/verify-renderer-shell-baseline.mjs",
     "bench": "vitest bench",
     "lint": "eslint src",
     "build:rust-renderer": "scripts/build-rust-renderer.sh",

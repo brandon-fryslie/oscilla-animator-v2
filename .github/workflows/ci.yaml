@@ -63,3 +63,23 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  renderer-shell-baseline:
+    # [LAW:single-enforcer] CI runs the same one command a developer runs
+    # locally (npm run verify:renderer-shell), so the Three-migration baseline
+    # has one definition the script owns — not a second copy inlined here.
+    name: Renderer-shell baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run verify:renderer-shell
