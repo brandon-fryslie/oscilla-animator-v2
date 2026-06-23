@@ -65,6 +65,25 @@ export function consumeTestDemoFilename(): string | null {
   return filename;
 }
 
+// ─── scenePlan (ScenePlan steel-thread selector) ────────────────────────────
+
+const SCENE_PLAN_PARAM = 'scenePlan';
+
+/**
+ * Read ?scenePlan=<id> — select an authored patch to render through the
+ * ScenePlan → Three backend steel thread instead of the V1 editor runtime.
+ * Returns the id or null.
+ *
+ * Unlike loadDemoPatch this needs no reload: it touches neither localStorage
+ * nor the V1 patch store, so it is read directly at runtime init.
+ *
+ * [LAW:single-enforcer] All test-param parsing lives in this module.
+ */
+export function readScenePlanSelection(): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(SCENE_PLAN_PARAM);
+}
+
 // ─── showPreview (nuqs) ─────────────────────────────────────────────────────
 
 const VALID_SHOW_PREVIEW = new Set(['true', 'false', '1', '0']);
