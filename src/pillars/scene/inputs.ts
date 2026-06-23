@@ -29,6 +29,11 @@ function collectFromExpr(expr: PlanExpr, into: Set<PlanInputChannel>): void {
       collectFromExpr(expr.lhs, into);
       collectFromExpr(expr.rhs, into);
       return;
+    default:
+      // [LAW:types-are-the-program] A new PlanExpr kind is a compile error here
+      //   until handled — it cannot silently fall through and drop an input
+      //   channel from `render.inputs`.
+      return assertNever(expr);
   }
 }
 
@@ -41,7 +46,24 @@ export function colorChannels(color: ColorBinding): readonly PlanExpr[] {
       return [color.r, color.g, color.b];
     case 'rgba':
       return [color.r, color.g, color.b, color.a];
+    default:
+      // [LAW:types-are-the-program] A new color space is a compile error here
+      //   until its channels are enumerated — never an undefined return.
+      return assertNever(color);
   }
+}
+
+/**
+ * Exhaustiveness guard: forces every union consumer above to handle every
+ * member. Mirrors the renderer-side consumers (plan-expr-tsl.ts,
+ * scene-plan-realizer.ts) so the ScenePlan's producer and consumer share the
+ * same total-dispatch discipline.
+ *
+ * [LAW:single-enforcer] Both switches in this module route their unreachable
+ *   arm through this one helper rather than each throwing ad hoc.
+ */
+function assertNever(value: never): never {
+  throw new Error(`[scene] unhandled union member: ${JSON.stringify(value)}`);
 }
 
 /**
