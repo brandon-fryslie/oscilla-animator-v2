@@ -328,7 +328,18 @@ pub fn allocate_arena(
             .unwrap_or(1);
         let depth = spec.depth_or_array_layers.unwrap_or(1);
 
-        let format = parse_texture_format(&spec.format);
+        let format = match parse_texture_format(&spec.format) {
+            Ok(format) => format,
+            Err(message) => {
+                return Err(vec![CompilationDiagnostic {
+                    severity: "error".into(),
+                    phase: "manifest_allocation".into(),
+                    block_id: None,
+                    symbol_id: Some((*texture_id).clone()),
+                    message,
+                }]);
+            }
+        };
         let mut usage = wgpu::TextureUsages::empty();
         for u in &spec.usage {
             match u.as_str() {
@@ -509,17 +520,18 @@ fn resolve_dimension(value: &serde_json::Value, canvas_pixels: u32) -> u32 {
     }
 }
 
-fn parse_texture_format(format: &str) -> wgpu::TextureFormat {
+fn parse_texture_format(format: &str) -> Result<wgpu::TextureFormat, String> {
     match format {
-        "r8unorm" => wgpu::TextureFormat::R8Unorm,
-        "rgba8unorm" => wgpu::TextureFormat::Rgba8Unorm,
-        "rgba16float" => wgpu::TextureFormat::Rgba16Float,
-        "r32float" => wgpu::TextureFormat::R32Float,
-        "rg32float" => wgpu::TextureFormat::Rg32Float,
-        "rgba32float" => wgpu::TextureFormat::Rgba32Float,
-        "depth32float" => wgpu::TextureFormat::Depth32Float,
-        "depth24plus-stencil8" => wgpu::TextureFormat::Depth24PlusStencil8,
-        _ => wgpu::TextureFormat::Rgba8Unorm,
+        "r8unorm" => Ok(wgpu::TextureFormat::R8Unorm),
+        "rgba8unorm" => Ok(wgpu::TextureFormat::Rgba8Unorm),
+        "rgba16float" => Ok(wgpu::TextureFormat::Rgba16Float),
+        "r32float" => Ok(wgpu::TextureFormat::R32Float),
+        "rg32float" => Ok(wgpu::TextureFormat::Rg32Float),
+        "rgba32float" => Ok(wgpu::TextureFormat::Rgba32Float),
+        "depth24plus" => Ok(wgpu::TextureFormat::Depth24Plus),
+        "depth32float" => Ok(wgpu::TextureFormat::Depth32Float),
+        "depth24plus-stencil8" => Ok(wgpu::TextureFormat::Depth24PlusStencil8),
+        _ => Err(format!("Unknown texture format '{format}'")),
     }
 }
 
@@ -535,5 +547,26 @@ fn parse_filter_mode(mode: &str) -> wgpu::FilterMode {
     match mode {
         "linear" => wgpu::FilterMode::Linear,
         _ => wgpu::FilterMode::Nearest,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_texture_format;
+
+    #[test]
+    fn parse_texture_format_accepts_depth24plus() {
+        assert_eq!(
+            parse_texture_format("depth24plus").unwrap(),
+            wgpu::TextureFormat::Depth24Plus
+        );
+    }
+
+    #[test]
+    fn parse_texture_format_rejects_unknown_values() {
+        assert_eq!(
+            parse_texture_format("definitely-not-a-format").unwrap_err(),
+            "Unknown texture format 'definitely-not-a-format'"
+        );
     }
 }
