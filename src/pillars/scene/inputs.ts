@@ -12,7 +12,7 @@
  *   collects `input` leaves; channel membership is data, not a code path.
  */
 
-import type { ColorBinding, PlanExpr, PlanInputChannel } from '../../render/scene-plan';
+import type { ColorBinding, MaterialDef, PlanExpr, PlanInputChannel } from '../../render/scene-plan';
 
 function collectFromExpr(expr: PlanExpr, into: Set<PlanInputChannel>): void {
   switch (expr.kind) {
@@ -50,6 +50,24 @@ export function colorChannels(color: ColorBinding): readonly PlanExpr[] {
       // [LAW:types-are-the-program] A new color space is a compile error here
       //   until its channels are enumerated — never an undefined return.
       return assertNever(color);
+  }
+}
+
+/**
+ * The PlanExprs a material contributes to the plan's input set. A textured
+ * material samples a texture (no PlanExpr-valued color), so it contributes none.
+ *
+ * [LAW:types-are-the-program] Exhaustive over the material union; a new material
+ *   kind is a compile error here until its channels are declared.
+ */
+export function materialChannels(material: MaterialDef): readonly PlanExpr[] {
+  switch (material.kind) {
+    case 'unlitColor':
+      return colorChannels(material.color);
+    case 'texturedUnlit':
+      return [];
+    default:
+      return assertNever(material);
   }
 }
 

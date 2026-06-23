@@ -25,6 +25,7 @@
  *   `role`; the lowering joins the parts by role without re-deriving block kind.
  */
 
+import type { AssetId } from '../../core/ids';
 import type {
   CameraPlan,
   ColorBinding,
@@ -70,14 +71,19 @@ export interface InstanceBundle {
 }
 
 /**
- * A material whose per-instance color is supplied by the upstream
- * `InstanceBundle`. Only the surface *kind* is a draw-block decision; the color
- * channels come from the bundle, so the shell carries no color of its own.
+ * The surface a draw block wraps around its instance bundle.
  *
- * [LAW:no-mode-explosion] One material kind today. New kinds are added as
- *   variants here; the lowering's join stays a total switch.
+ * - `unlitColor` takes its per-instance color from the upstream `InstanceBundle`;
+ *   the shell carries no color of its own.
+ * - `texturedUnlit` samples a texture asset (named by {@link AssetId}); the
+ *   lowering mints the plan's `TextureRef` and the textures-table entry from it.
+ *
+ * [LAW:no-mode-explosion] Material kinds are variants of this union; the
+ *   lowering's join stays a total switch as kinds are added.
  */
-export type MaterialShell = { readonly kind: 'unlitColor' };
+export type MaterialShell =
+  | { readonly kind: 'unlitColor' }
+  | { readonly kind: 'texturedUnlit'; readonly assetId: AssetId };
 
 /**
  * What a draw (sink) block contributes before it is joined to its instance
@@ -180,6 +186,33 @@ export function readPositiveNumber(
     diagnostics.push({
       blockId,
       message: `[scene] block '${blockId}': config '${key}' must be > 0 (got ${value})`,
+    });
+    return null;
+  }
+  return value;
+}
+
+/**
+ * Read an optional non-empty string (e.g. an asset id reference). Absent config
+ * returns `undefined` (a legitimate "not set"); a present-but-non-string or
+ * empty value is a loud diagnostic and returns `null`.
+ *
+ * [LAW:dataflow-not-control-flow] The three outcomes are distinct values
+ *   (`undefined` set-absent, `null` invalid, the string when valid), so the
+ *   caller selects a material shell from the value rather than guessing.
+ */
+export function readOptionalString(
+  raw: Readonly<Record<string, unknown>>,
+  key: string,
+  blockId: string,
+  diagnostics: SceneDiagnostic[],
+): string | null | undefined {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    diagnostics.push({
+      blockId,
+      message: `[scene] block '${blockId}': config '${key}' must be a non-empty string when present`,
     });
     return null;
   }

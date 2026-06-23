@@ -32,8 +32,9 @@ import {
   Scene,
   type BufferGeometry,
   type Node,
+  type Texture,
 } from 'three/webgpu';
-import { add, cos, max, min, mod, mul, positionLocal, sin, sub, uniform, vec3, float } from 'three/tsl';
+import { add, cos, max, min, mod, mul, positionLocal, sin, sub, texture as sampleTexture, uniform, uv, vec3, float } from 'three/tsl';
 
 import {
   SCENE_PLAN_VERSION,
@@ -45,8 +46,12 @@ import {
   type PlanInputChannel,
   type ScenePlan,
   type SceneObjectRef,
+  type TextureRef,
 } from '../../scene-plan';
 import { planExprToTSL, type PlanExprContext, type TSLNode } from './plan-expr-tsl';
+
+/** Textures the loading bridge has already decoded, keyed by plan handle. */
+export type ResolvedTextures = ReadonlyMap<TextureRef, Texture>;
 
 /** A settable float uniform node, updated each frame from an input channel. */
 function floatUniform(value: number) {
@@ -122,9 +127,14 @@ function colorBindingToNodes(binding: ColorBinding, ctx: PlanExprContext): Color
   }
 }
 
-function materialDefToMaterial(def: MaterialDef, ctx: PlanExprContext): MeshBasicNodeMaterial {
-  // [LAW:dataflow-not-control-flow] One material kind today; a switch keeps the
-  //   addition of a future kind a compile error rather than a silent default.
+function materialDefToMaterial(
+  def: MaterialDef,
+  ctx: PlanExprContext,
+  resolvedTextures: ResolvedTextures,
+): MeshBasicNodeMaterial {
+  // [LAW:dataflow-not-control-flow] The shading model is a discriminated value;
+  //   a switch keeps the addition of a future kind a compile error, not a silent
+  //   default.
   switch (def.kind) {
     case 'unlitColor': {
       const material = new MeshBasicNodeMaterial();
@@ -136,9 +146,31 @@ function materialDefToMaterial(def: MaterialDef, ctx: PlanExprContext): MeshBasi
       }
       return material;
     }
+    case 'texturedUnlit': {
+      const material = new MeshBasicNodeMaterial();
+      const decoded = requireTexture(resolvedTextures, def.texture);
+      // Sample the decoded texture across the object's UVs.
+      material.colorNode = sampleTexture(decoded, uv());
+      return material;
+    }
     default:
-      return assertNever(def.kind);
+      return assertNever(def);
   }
+}
+
+/**
+ * A texture handle the plan references must have been resolved by the loading
+ * bridge before realization.
+ *
+ * [LAW:no-silent-failure] A missing decoded texture is a broken
+ *   resolve→realize handoff, surfaced loudly rather than drawn as blank.
+ */
+function requireTexture(resolved: ResolvedTextures, ref: TextureRef): Texture {
+  const texture = resolved.get(ref);
+  if (!texture) {
+    throw new Error(`scene-plan-realizer: texture '${ref}' was not resolved by the loading bridge before realization`);
+  }
+  return texture;
 }
 
 /**
@@ -205,10 +237,18 @@ function requireResource<T>(table: Readonly<Record<string, T>>, ref: string, kin
 /**
  * Realize a `ScenePlan` into a Three scene graph.
  *
- * @throws if the plan version is incompatible, a referenced resource is
- *   missing, or an object declares a non-positive instance count.
+ * `resolvedTextures` carries the textures the loading bridge has already decoded
+ * (keyed by plan handle); this function reads them but loads nothing — it stays
+ * pure. Plans with no textures pass an empty map.
+ *
+ * @throws if the plan version is incompatible, a referenced resource (including
+ *   an unresolved texture) is missing, or an object declares a non-positive
+ *   instance count.
  */
-export function realizeScenePlan(plan: ScenePlan): RealizedScene {
+export function realizeScenePlan(
+  plan: ScenePlan,
+  resolvedTextures: ResolvedTextures = new Map(),
+): RealizedScene {
   // [LAW:no-silent-failure] An incompatible plan is a loud contract mismatch,
   //   not a best-effort partial render. Mirrors SCENE_PLAN_VERSION's intent.
   if (plan.version !== SCENE_PLAN_VERSION) {
@@ -249,7 +289,11 @@ export function realizeScenePlan(plan: ScenePlan): RealizedScene {
 
     const ctx: PlanExprContext = { instanceCount: object.instancing.count, inputs: inputNodes };
     const geometry = geometryDefToGeometry(requireResource(plan.resources.geometries, object.geometry, 'geometry'));
-    const material = materialDefToMaterial(requireResource(plan.resources.materials, object.material, 'material'), ctx);
+    const material = materialDefToMaterial(
+      requireResource(plan.resources.materials, object.material, 'material'),
+      ctx,
+      resolvedTextures,
+    );
     material.positionNode = instanceTransformNode(object.instancing.transform, ctx);
 
     const mesh = new InstancedMesh(geometry, material, object.instancing.count);

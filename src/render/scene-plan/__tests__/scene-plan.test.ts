@@ -134,6 +134,7 @@ describe('ScenePlan — Grid of Squares proof target', () => {
     const grid = plan.objects[sceneObjectRef('grid:object')];
     const mat = plan.resources.materials[grid.material];
     expect(mat.kind).toBe('unlitColor');
+    if (mat.kind !== 'unlitColor') return;
     expect(mat.color.space).toBe('hsl');
   });
 
