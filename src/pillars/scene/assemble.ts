@@ -22,6 +22,7 @@ import {
   geometryRef,
   materialRef,
   sceneObjectRef,
+  textureRef,
   type CameraPlan,
   type DrawItem,
   type GeometryDef,
@@ -31,26 +32,60 @@ import {
   type ScenePlan,
   type SceneObject,
   type SceneObjectRef,
+  type TextureDef,
+  type TextureRef,
 } from '../../render/scene-plan';
-import type { SceneContribution } from './scene-block';
-import { collectInputChannels, colorChannels } from './inputs';
+import type { InstanceBundle, MaterialShell, SceneContribution } from './scene-block';
+import { collectInputChannels, materialChannels } from './inputs';
 
 export type SceneCompileResult =
   | { readonly kind: 'ok'; readonly plan: ScenePlan }
   | { readonly kind: 'error'; readonly errors: readonly string[] };
 
 /**
- * The deferred resource tables: textures, compute, and post are owned by later
- * tickets (asset bridge ulu.4; TSL compute/post per three-fork-deltas.md).
+ * The deferred resource tables: compute and post are owned by later tickets
+ * (TSL compute/post per three-fork-deltas.md). Textures are now produced from
+ * textured material shells (the asset bridge, ulu.4).
  *
  * [LAW:dataflow-not-control-flow] Deferred capabilities are present-but-empty
  *   collections, not absent fields — the shape is fixed; only contents vary.
  */
-function emptyDeferredResources(): Pick<
-  ScenePlan['resources'],
-  'textures' | 'computeResources' | 'postChains'
-> {
-  return { textures: {}, computeResources: {}, postChains: {} };
+function emptyDeferredResources(): Pick<ScenePlan['resources'], 'computeResources' | 'postChains'> {
+  return { computeResources: {}, postChains: {} };
+}
+
+/**
+ * Join a draw's material shell to its upstream instance bundle, minting any
+ * texture resource the shell references. A textured shell adds one entry to the
+ * shared `textures` table and refers to it by handle; an unlit shell pulls its
+ * per-instance color from the bundle.
+ *
+ * [LAW:one-source-of-truth] The texture is defined once in the table, keyed by a
+ *   minted handle; the material references it by that handle only.
+ * [LAW:types-are-the-program] Exhaustive over the material shell union; a new
+ *   material kind is a compile error here until its join is declared.
+ */
+function joinMaterial(
+  drawId: string,
+  shell: MaterialShell,
+  bundle: InstanceBundle,
+  textures: Record<TextureRef, TextureDef>,
+): MaterialDef {
+  switch (shell.kind) {
+    case 'unlitColor':
+      return { kind: 'unlitColor', color: bundle.color };
+    case 'texturedUnlit': {
+      const texRef = textureRef(`${drawId}:texture`);
+      textures[texRef] = { kind: 'asset', assetId: shell.assetId };
+      return { kind: 'texturedUnlit', texture: texRef };
+    }
+    default:
+      return assertNever(shell);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`[scene] unhandled material shell: ${JSON.stringify(value)}`);
 }
 
 /**
@@ -79,6 +114,7 @@ export function assembleScenePlan(
 
   const geometries: Record<GeometryRef, GeometryDef> = {};
   const materials: Record<MaterialRef, MaterialDef> = {};
+  const textures: Record<TextureRef, TextureDef> = {};
   const objects: Record<SceneObjectRef, SceneObject> = {};
   const draws: DrawItem[] = [];
   const cameras: CameraPlan[] = [];
@@ -113,8 +149,8 @@ export function assembleScenePlan(
     const objRef = sceneObjectRef(drawId);
 
     geometries[geoRef] = shell.geometry;
-    // Join: the material shell's kind + the upstream bundle's per-instance color.
-    materials[matRef] = { kind: shell.material.kind, color: bundle.color };
+    // Join the material shell to the bundle, minting any texture it references.
+    materials[matRef] = joinMaterial(drawId, shell.material, bundle, textures);
     objects[objRef] = {
       geometry: geoRef,
       material: matRef,
@@ -137,12 +173,12 @@ export function assembleScenePlan(
       o.instancing.transform.positionY,
       o.instancing.transform.rotation,
     ]),
-    ...Object.values(materials).flatMap((m) => colorChannels(m.color)),
+    ...Object.values(materials).flatMap((m) => materialChannels(m)),
   ];
 
   const plan = defineScenePlan({
     version: SCENE_PLAN_VERSION,
-    resources: { geometries, materials, ...emptyDeferredResources() },
+    resources: { geometries, materials, textures, ...emptyDeferredResources() },
     objects,
     render: {
       camera,

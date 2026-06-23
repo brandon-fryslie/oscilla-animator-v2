@@ -30,6 +30,7 @@ import {
 import { consumeTestDemoFilename, readScenePlanSelection } from '../testing/test-params';
 import { compileScenePlan } from '../pillars/scene';
 import { SCENE_PLAN_DEMOS } from '../pillars/fixtures/scene-demos';
+import { createAssetRegistry } from '../assets';
 import {
   markRuntimeBootstrapFailed,
   markRuntimeBootstrapStarted,
@@ -401,22 +402,25 @@ export class RuntimeService {
    *   that draws it starts, so the first frame always has a realized scene.
    */
   private async startScenePlanSteelThread(planId: string): Promise<void> {
-    const makePatch = SCENE_PLAN_DEMOS[planId];
-    if (!makePatch) {
+    const demo = SCENE_PLAN_DEMOS[planId];
+    if (!demo) {
       throw new Error(
         `RuntimeService: unknown scenePlan '${planId}'. Known: ${Object.keys(SCENE_PLAN_DEMOS).join(', ')}`,
       );
     }
 
-    const result = compileScenePlan(makePatch());
+    const result = compileScenePlan(demo.makePatch());
     if (result.kind === 'error') {
       throw new Error(
         `RuntimeService: scenePlan '${planId}' failed to compile:\n${result.errors.join('\n')}`,
       );
     }
 
+    // [LAW:one-source-of-truth] The demo's assets are the canonical registry for
+    //   this plan; the loading bridge resolves the plan's textures through it.
+    const registry = createAssetRegistry(demo.assets);
     const runtime = this.requireActiveRuntimeResources('installing a ScenePlan');
-    runtime.renderer.installScenePlan(result.plan);
+    await runtime.renderer.installScenePlan(result.plan, registry);
     this.scenePlanInstalled = true;
 
     // Re-render App so the preview canvas is live before the loop draws.

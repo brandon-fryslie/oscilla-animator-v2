@@ -25,8 +25,13 @@ import {
   sceneObjectRef,
   type ScenePlan,
 } from '../../../scene-plan';
+import { createAssetRegistry } from '../../../../assets';
 import { createWebGPURenderer } from '../../index';
 import { ThreeForkRenderer } from '../ThreeForkRenderer';
+
+// The static plans here reference no texture assets, so an empty registry is all
+// the install path needs.
+const emptyRegistry = createAssetRegistry([]);
 
 // The Three backend implementation modules live one level up from __tests__.
 const THREE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,15 +77,17 @@ describe('ThreeForkRenderer — lifecycle and seam', () => {
     expect(renderer.getLifecycleState()).toBe('idle');
   });
 
-  it('installs a valid ScenePlan without a device', () => {
+  it('installs a valid ScenePlan without a device', async () => {
     const renderer = new ThreeForkRenderer(fakeCanvas);
-    expect(() => renderer.installScenePlan(buildStaticPlan())).not.toThrow();
+    await expect(renderer.installScenePlan(buildStaticPlan(), emptyRegistry)).resolves.toBeUndefined();
     renderer.dispose();
   });
 
-  it('rejects an incompatible ScenePlan version on install', () => {
+  it('rejects an incompatible ScenePlan version on install', async () => {
     const renderer = new ThreeForkRenderer(fakeCanvas);
-    expect(() => renderer.installScenePlan(buildStaticPlan(2))).toThrow(/incompatible ScenePlan version/);
+    await expect(renderer.installScenePlan(buildStaticPlan(2), emptyRegistry)).rejects.toThrow(
+      /incompatible ScenePlan version/,
+    );
   });
 
   it('refuses to render before a plan is installed', async () => {
@@ -100,7 +107,7 @@ describe('ThreeForkRenderer — lifecycle and seam', () => {
     const renderer = new ThreeForkRenderer(fakeCanvas);
     renderer.dispose();
     expect(renderer.getLifecycleState()).toBe('disposed');
-    expect(() => renderer.installScenePlan(buildStaticPlan())).toThrow(/after dispose/);
+    await expect(renderer.installScenePlan(buildStaticPlan(), emptyRegistry)).rejects.toThrow(/after dispose/);
     await expect(renderer.renderFrame({})).rejects.toThrow(/after dispose/);
   });
 });

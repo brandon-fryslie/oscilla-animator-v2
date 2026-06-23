@@ -49,6 +49,15 @@ export type DomainTypeId = Brand<string, 'DomainTypeId'>;
  */
 export type InstanceId = Brand<string, 'InstanceId'>;
 
+/**
+ * Stable project-level identity for an asset (image, texture, geometry, model,
+ * material, node-material). Oscilla owns this identity; the Three loading bridge
+ * decodes the asset's bytes into a runtime object keyed by this id (canon:
+ * design-docs/three-migration-backend-canon.md). A decoded Three object is a
+ * derived cache entry, never the canonical asset — the AssetId is.
+ */
+export type AssetId = Brand<string, 'AssetId'>;
+
 // =============================================================================
 // Factory Functions (Zero-cost casts)
 // =============================================================================
@@ -63,3 +72,4 @@ export const instanceVarId = (s: string) => s as InstanceVarId;
 
 export const domainTypeId = (s: string) => s as DomainTypeId;
 export const instanceId = (s: string) => s as InstanceId;
+export const assetId = (s: string) => s as AssetId;

@@ -24,8 +24,10 @@
 
 import { WebGPURenderer as ThreeWebGPURenderer } from 'three/webgpu';
 
+import type { AssetRegistry } from '../../../assets';
 import type { ScenePlan } from '../../scene-plan';
 import { realizeScenePlan, type RealizedScene } from './scene-plan-realizer';
+import { ThreeLoadingBridge } from './asset-bridge';
 import type {
   GpuFault,
   GpuFaultCallback,
@@ -53,17 +55,24 @@ export class ThreeForkRenderer implements WebGPURenderer {
   private realized: RealizedScene | null = null;
   private onGpuFault: GpuFaultCallback = null;
   private deviceInit: Promise<ThreeWebGPURenderer> | null = null;
+  // [LAW:single-enforcer] The renderer owns the one loading bridge; all texture
+  //   decode/caching for installed plans flows through it.
+  private readonly bridge = new ThreeLoadingBridge();
 
   constructor(private readonly canvas: HTMLCanvasElement) {}
 
-  installScenePlan(plan: ScenePlan): void {
+  async installScenePlan(plan: ScenePlan, registry: AssetRegistry): Promise<void> {
+    this.assertNotDisposed('installing a ScenePlan');
+    // [LAW:effects-at-boundaries] Decode the plan's texture assets here (the
+    //   effect), then realize purely from the already-resolved textures.
+    const resolvedTextures = await this.bridge.resolveTextures(plan, registry);
     this.assertNotDisposed('installing a ScenePlan');
     // [LAW:one-source-of-truth] A renderer holds exactly one realized scene; a
     //   new plan replaces the old one and releases its resources.
     this.realized?.dispose();
     // realizeScenePlan throws on an incompatible version or dangling handle
     // ([LAW:no-silent-failure]); the throw propagates to the installer.
-    this.realized = realizeScenePlan(plan);
+    this.realized = realizeScenePlan(plan, resolvedTextures);
   }
 
   async renderFrame(values: RuntimeInputChannelValues): Promise<void> {
@@ -126,6 +135,9 @@ export class ThreeForkRenderer implements WebGPURenderer {
   dispose(): void {
     this.realized?.dispose();
     this.realized = null;
+    // [LAW:single-enforcer] The bridge owns the texture cache; disposing the
+    //   renderer releases every decoded texture wholesale.
+    this.bridge.dispose();
     this.device?.dispose();
     this.device = null;
     this.deviceInit = null;

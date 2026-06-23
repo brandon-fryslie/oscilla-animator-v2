@@ -19,6 +19,7 @@
  *   has a single source of truth.
  */
 
+import type { AssetRegistry } from '../../../assets';
 import type { PlanInputChannel, ScenePlan } from '../../scene-plan';
 
 /**
@@ -59,13 +60,16 @@ export type RuntimeInputChannelValues = Readonly<Partial<Record<PlanInputChannel
 export interface WebGPURenderer {
   /**
    * Install a compiled `ScenePlan`, realizing it into the backend's scene
-   * graph. Replaces any previously installed plan. Pure CPU work — no GPU
-   * device is required until the first {@link WebGPURenderer.renderFrame}.
+   * graph. Replaces any previously installed plan. The `registry` resolves the
+   * plan's texture assets through the loading bridge before realization; a plan
+   * with no textures resolves to nothing. No GPU device is required until the
+   * first {@link WebGPURenderer.renderFrame} — but asset decode is async, so
+   * this returns a promise.
    *
-   * [LAW:no-silent-failure] Throws on an incompatible plan version or a
-   *   dangling resource handle.
+   * [LAW:no-silent-failure] Rejects on an incompatible plan version, a dangling
+   *   resource handle, or an asset the registry cannot resolve.
    */
-  installScenePlan(plan: ScenePlan): void;
+  installScenePlan(plan: ScenePlan, registry: AssetRegistry): Promise<void>;
 
   /**
    * Draw one frame of the installed plan, feeding the declared runtime input

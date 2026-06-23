@@ -1,24 +1,21 @@
 /**
- * tests/e2e/webgpu/three-grid-of-squares.spec.ts
+ * tests/e2e/webgpu/three-textured-tiles.spec.ts
  *
- * Steel-thread proof for the Three migration (oscilla-pillars-cleanup-ulu.5).
- * The canonical proof contract is design-docs/three-migration-first-proof-contract.md
- * §"Verification Contract": boot the existing app shell, load the authored
- * `Grid of Squares` patch, render it through the Three backend, and prove the
- * preview canvas shows visible, time-animated content — with no Rust worker,
- * WASM renderer, or PipelineInstallPayload on the path.
+ * Asset-bridge proof for the Three migration (oscilla-pillars-cleanup-ulu.4).
+ * Boot the existing app shell, load the authored `Textured Tiles` patch, and
+ * prove the preview canvas shows visible, time-animated, texture-mapped content
+ * resolved through the Oscilla AssetRegistry + ThreeLoadingBridge — not an
+ * inline image and not the legacy GPU-IR / Rust-worker / WASM path.
  *
- * The render content originates from the canonical Oscilla patch model
- * (`makeGridOfSquaresPatch`) compiled by `compileScenePlan` and installed via the
- * `createWebGPURenderer()` seam (`?scenePlan=grid-of-squares`); no hand-authored
- * Three scene exists on the path. // [LAW:one-source-of-truth]
+ * The patch (`makeTexturedTilesPatch`) references its texture by stable AssetId;
+ * `compileScenePlan` emits a TextureRef into the plan's textures table, and the
+ * loading bridge decodes the registered asset before the scene realizes
+ * (`?scenePlan=textured-tiles`). // [LAW:one-source-of-truth]
  *
  * MUST run headed: the Three device acquires lazily on the first frame and has no
- * headless WebGPU adapter — headless reports a fatal GpuFault
- * (THREE_DEVICE_INIT_FAILED). // [LAW:no-silent-failure]
- *
- * The PNG-decode/frame-diff machinery is shared with the other steel-thread
- * proofs in ./canvas-frame-proof.ts. // [LAW:one-source-of-truth]
+ * headless WebGPU adapter (THREE_DEVICE_INIT_FAILED). The texture also loads
+ * through a real `TextureLoader`, which needs a real browser image decode.
+ * // [LAW:no-silent-failure]
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -31,25 +28,19 @@ import {
   readRuntimeProbe,
 } from './canvas-frame-proof';
 
-// The Three backend needs a real GPU adapter, which the default headless
-// Chromium lacks. Run this proof headed.
 test.use({
   headless: false,
   launchOptions: { args: ['--enable-unsafe-webgpu'] },
 });
 
-const SELECTED_PATCH_ID = 'grid-of-squares';
-const SELECTED_PATCH_NAME = 'Grid of Squares';
-const ARTIFACT_DIR = resolve('artifacts/three-migration/ulu.5-grid-of-squares');
+const SELECTED_PATCH_ID = 'textured-tiles';
+const SELECTED_PATCH_NAME = 'Textured Tiles';
+const ARTIFACT_DIR = resolve('artifacts/three-migration/ulu.4-textured-tiles');
 const FRAME_INTERVAL_MS = 400;
-// A black clear color means background channels are ~0; anything brighter is
-// rendered grid content.
 const BLACK_CHANNEL_THRESHOLD = 8;
 
-test.describe('Three Grid of Squares steel thread', () => {
-  test('renders the authored Grid of Squares patch through the Three backend with visible, animated content', async ({ page }) => {
-    // Headed boot pays a cold vite start, WASM bootstrap, and Three device
-    // acquisition; the probe polls below hold the real success criteria.
+test.describe('Three Textured Tiles asset bridge', () => {
+  test('renders the authored Textured Tiles patch with assets resolved through the registry + loading bridge', async ({ page }) => {
     test.setTimeout(120_000);
     const issues = attachBrowserIssueCollector(page);
 
@@ -64,22 +55,27 @@ test.describe('Three Grid of Squares steel thread', () => {
 
     const probe = await readRuntimeProbe(page);
 
-    // A render appears with no legacy GPU-IR / Rust-worker / WASM path engaged.
     const deviceFaultIssues = issues.filter((issue) => issue.text.includes('THREE_DEVICE_INIT_FAILED'));
     const legacyPathIssues = issues.filter((issue) =>
       /PipelineInstallPayload|INSTALL_PIPELINE|rust worker|engine\.worker|boundary-contract|WASM renderer/i.test(issue.text),
     );
     const bootstrapFailureIssues = issues.filter((issue) => issue.text.includes('Failed to initialize runtime:'));
+    // The asset path must resolve cleanly: a registry miss or an undecodable
+    // kind would surface as a loud error from the bridge.
+    const assetResolutionIssues = issues.filter((issue) =>
+      /unknown asset id|no texture decoder|was not resolved by the loading bridge|unsupported source kind/i.test(issue.text),
+    );
 
     const frame0Blank = frame0.nonBlack === 0;
     const frame1Blank = frame1.nonBlack === 0;
     const framesDiffered = frame0.checksum !== frame1.checksum;
 
     const summary = {
-      ticket: 'oscilla-pillars-cleanup-ulu.5',
+      ticket: 'oscilla-pillars-cleanup-ulu.4',
       patch: { id: SELECTED_PATCH_ID, name: SELECTED_PATCH_NAME },
       previewBooted: probe?.bootstrap.state === 'succeeded',
       renderedFrameCount: probe?.loop.renderedFrameCount ?? 0,
+      assetsResolvedThroughRegistry: assetResolutionIssues.length === 0,
       rendererThreeBacked: deviceFaultIssues.length === 0 && legacyPathIssues.length === 0,
       frames: {
         frame0: { nonBlack: frame0.nonBlack, checksum: frame0.checksum, size: `${frame0.width}x${frame0.height}` },
@@ -90,14 +86,16 @@ test.describe('Three Grid of Squares steel thread', () => {
       consoleErrors: issues.filter((issue) => issue.level === 'error').map((issue) => `${issue.source}: ${issue.text}`),
       deviceInitFailures: deviceFaultIssues.map((issue) => issue.text),
       legacyPathReferences: legacyPathIssues.map((issue) => issue.text),
+      assetResolutionFailures: assetResolutionIssues.map((issue) => issue.text),
       generatedAt: new Date().toISOString(),
     };
     writeFileSync(resolve(ARTIFACT_DIR, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
 
-    // ── Success signals (three-migration-first-proof-contract.md) ──
+    // ── Success signals ──
     expect(deviceFaultIssues, deviceFaultIssues.map((i) => i.text).join('\n')).toEqual([]);
     expect(bootstrapFailureIssues, bootstrapFailureIssues.map((i) => i.text).join('\n')).toEqual([]);
     expect(legacyPathIssues, legacyPathIssues.map((i) => i.text).join('\n')).toEqual([]);
+    expect(assetResolutionIssues, assetResolutionIssues.map((i) => i.text).join('\n')).toEqual([]);
     expect(frame0Blank, 'frame 0 rendered blank').toBe(false);
     expect(frame1Blank, 'frame 1 rendered blank').toBe(false);
     expect(framesDiffered, 'the two frames are identical — time-driven animation is not active').toBe(true);
