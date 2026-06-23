@@ -8,7 +8,7 @@
  * e2e, not here.
  */
 
-import { InstancedMesh, MeshBasicNodeMaterial, OrthographicCamera } from 'three/webgpu';
+import { InstancedMesh, MeshBasicNodeMaterial, OrthographicCamera, Texture } from 'three/webgpu';
 import { describe, it, expect } from 'vitest';
 
 import {
@@ -25,8 +25,10 @@ import {
   mod,
   mul,
   sceneObjectRef,
+  textureRef,
   type ScenePlan,
 } from '../../../scene-plan';
+import { assetId } from '../../../../core/ids';
 import { realizeScenePlan } from '../scene-plan-realizer';
 
 /** The `Grid of Squares` first proof target, built through the public API. */
@@ -120,6 +122,54 @@ describe('realizeScenePlan — Grid of Squares', () => {
     // means placement is delegated entirely to the material's positionNode.
     expect(mesh.instanceMatrix.array.slice(0, 16)).toEqual(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
     realized.dispose();
+  });
+});
+
+/** A single textured quad whose material samples a resolved texture. */
+function buildTexturedPlan(): ScenePlan {
+  const quad = geometryRef('tile:quad');
+  const textured = materialRef('tile:textured');
+  const tex = textureRef('tile:texture');
+  const object = sceneObjectRef('tile:object');
+  return defineScenePlan({
+    version: SCENE_PLAN_VERSION,
+    resources: {
+      geometries: { [quad]: { kind: 'rectangle', width: 0.1, height: 0.1 } },
+      materials: { [textured]: { kind: 'texturedUnlit', texture: tex } },
+      textures: { [tex]: { kind: 'asset', assetId: assetId('checker') } },
+      computeResources: {},
+      postChains: {},
+    },
+    objects: {
+      [object]: {
+        geometry: quad,
+        material: textured,
+        instancing: { count: 4, transform: { positionX: konst(0), positionY: konst(0), rotation: input('time') } },
+      },
+    },
+    render: {
+      camera: { kind: 'orthographic', halfExtentX: 1, halfExtentY: 1 },
+      inputs: ['time'],
+      draws: [{ target: 'previewCanvas', object }],
+      postChain: null,
+    },
+  });
+}
+
+describe('realizeScenePlan — textured material', () => {
+  it('shades a textured-unlit material from the resolved texture', () => {
+    const resolved = new Map([[textureRef('tile:texture'), new Texture()]]);
+    const realized = realizeScenePlan(buildTexturedPlan(), resolved);
+    const mesh = realized.scene.children.find((c): c is InstancedMesh => c instanceof InstancedMesh)!;
+    const material = mesh.material as MeshBasicNodeMaterial;
+    expect(material.colorNode).not.toBeNull();
+    realized.dispose();
+  });
+
+  it('fails loudly when a referenced texture was not resolved by the bridge', () => {
+    expect(() => realizeScenePlan(buildTexturedPlan(), new Map())).toThrow(
+      /texture .* was not resolved by the loading bridge/,
+    );
   });
 });
 

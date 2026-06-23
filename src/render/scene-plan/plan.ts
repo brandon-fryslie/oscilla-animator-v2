@@ -21,6 +21,7 @@
  *   a table keyed by its ref, and referenced everywhere else by that handle.
  */
 
+import type { AssetId } from '../../core/ids';
 import type {
   GeometryRef,
   MaterialRef,
@@ -68,18 +69,30 @@ export type ColorBinding =
       readonly a: PlanExpr;
     };
 
-/** A material resource: how an object's surface is shaded. */
-export type MaterialDef = { readonly kind: 'unlitColor'; readonly color: ColorBinding };
+/**
+ * A material resource: how an object's surface is shaded.
+ *
+ * - `unlitColor` shades by a per-instance {@link ColorBinding} (no texture).
+ * - `texturedUnlit` samples a texture resource (by handle) across the object's
+ *   UVs. The texture is resolved from an Oscilla asset by the loading bridge.
+ *
+ * [LAW:dataflow-not-control-flow] The shading model is a discriminated value;
+ *   each variant carries exactly the resources it needs, so a textured material
+ *   cannot exist without a texture handle and an unlit one cannot reference one.
+ */
+export type MaterialDef =
+  | { readonly kind: 'unlitColor'; readonly color: ColorBinding }
+  | { readonly kind: 'texturedUnlit'; readonly texture: TextureRef };
 
 /**
- * A texture resource, resolved from an Oscilla asset by the asset bridge.
+ * A texture resource, resolved from an Oscilla asset by the loading bridge.
  *
- * DEFERRED: asset decoding is owned by oscilla-pillars-cleanup-ulu.4
- *   (AssetRegistry + ThreeLoadingBridge). `assetId` is a plain string here; the
- *   branded AssetId and registry land with that ticket. The first proof target
- *   uses no textures, so this table is empty for the steel thread.
+ * `assetId` is the branded {@link AssetId} the {@link AssetRegistry} resolves to
+ * canonical metadata; the bridge (src/render/webgpu/three/asset-bridge.ts)
+ * decodes that into a Three `Texture`. The texture table is empty for plans that
+ * use no textures (e.g. the Grid of Squares steel thread).
  */
-export type TextureDef = { readonly kind: 'asset'; readonly assetId: string };
+export type TextureDef = { readonly kind: 'asset'; readonly assetId: AssetId };
 
 /**
  * A compute resource (storage buffer / compute job).
