@@ -66,6 +66,7 @@ export const TestPreviewPanel: React.FC<TestPreviewPanelProps> = observer(({ onC
       {/* Canvas always mounted — RuntimeService attaches to it regardless of error state */}
       <canvas
         ref={canvasRef}
+        data-testid="preview-canvas"
         style={{ display: 'block' }}
       />
       {hasErrors && (

@@ -85,6 +85,7 @@ function makeDeps(renderer: ReturnType<typeof makeRenderer>) {
   return {
     getCurrentProgram: () => makeProgram() as never,
     getCurrentState: () => null,
+    isScenePlanInstalled: () => false,
     runtime: {
       canvas: { width: 640, height: 360 } as HTMLCanvasElement,
       renderer: renderer as never,
@@ -119,18 +120,18 @@ describe('AnimationLoop heartbeat consumers', () => {
     const state = createAnimationLoopState();
     state.lastFpsUpdate = performance.now();
 
-    executeAnimationFrame(1, deps, state);
+    await executeAnimationFrame(1, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]).toBeUndefined();
 
     window.history.replaceState({}, '', '/?showPreview=true');
-    executeAnimationFrame(2, deps, state);
+    await executeAnimationFrame(2, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.latest).toMatchObject({
       kind: 'runtime-heartbeat',
     });
 
     const publishedAtMs = probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.publishedAtMs;
     window.history.replaceState({}, '', '/');
-    executeAnimationFrame(3, deps, state);
+    await executeAnimationFrame(3, deps, state);
     expect(probeHost()[RUNTIME_PROBE_GLOBAL_KEY]?.heartbeat?.publishedAtMs).toBe(publishedAtMs);
   });
 
@@ -142,12 +143,12 @@ describe('AnimationLoop heartbeat consumers', () => {
     const state = createAnimationLoopState();
     state.lastFpsUpdate = performance.now();
 
-    executeAnimationFrame(1, deps, state);
+    await executeAnimationFrame(1, deps, state);
     expect(renderer.getLatestRuntimeTelemetry).not.toHaveBeenCalled();
     expect(consoleInfo).not.toHaveBeenCalled();
 
     state.lastFpsUpdate = performance.now() - 1000;
-    executeAnimationFrame(2, deps, state);
+    await executeAnimationFrame(2, deps, state);
     expect(renderer.getLatestRuntimeTelemetry).toHaveBeenCalled();
     expect(consoleInfo).toHaveBeenCalledWith(expect.stringContaining('[runtimeConsole]'));
   });

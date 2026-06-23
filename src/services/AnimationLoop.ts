@@ -6,7 +6,7 @@
  */
 
 import { assertSchedulePhaseBoundaryStateReads } from '../runtime';
-import { RenderBufferArena, type WebGPURenderer } from '../render';
+import { RenderBufferArena, type WebGPURenderer, type RuntimeInputChannelValues } from '../render';
 import type { RuntimeState } from '../runtime/RuntimeState';
 import type { RootStore } from '../stores';
 import type { CompiledProgramIR } from '../compiler/ir/program';
@@ -46,6 +46,10 @@ export interface ActiveAnimationLoopRuntime {
 export interface AnimationLoopDeps {
   getCurrentProgram: () => CompiledProgramIR | null;
   getCurrentState: () => RuntimeState | null;
+  // [LAW:dataflow-not-control-flow] Which render source produces a frame is data
+  //   owned by the runtime: when a ScenePlan is installed, the loop drives the
+  //   Three backend via `renderFrame`; otherwise it runs the V1 frame path.
+  isScenePlanInstalled: () => boolean;
   runtime: ActiveAnimationLoopRuntime;
   store: RootStore;
   onStatsUpdate: (statsText: string) => void;
@@ -430,26 +434,68 @@ function resetAnimationLoopState(state: AnimationLoopState): void {
 }
 
 /**
+ * Render the installed ScenePlan for one frame through the Three backend.
+ *
+ * [LAW:effects-at-boundaries] The runtime input channel values are computed
+ * purely here; the GPU draw inside `renderFrame` is the one effect, performed at
+ * the renderer boundary.
+ * [LAW:one-source-of-truth] `time` is seconds. Every channel the runtime can
+ * supply is offered; the renderer feeds only the channels its installed plan
+ * declared in `render.inputs`, so this call site never tracks which subset a
+ * given plan reads.
+ */
+async function renderScenePlanFrame(
+  tMs: number,
+  renderer: WebGPURenderer,
+  currentState: RuntimeState | null
+): Promise<void> {
+  const inputPlane = readRuntimeInputPlaneValues(currentState);
+  const channelValues: RuntimeInputChannelValues = {
+    time: tMs / 1000,
+    mouseX: inputPlane.inputMouseX,
+    mouseY: inputPlane.inputMouseY,
+    mouseButtons: inputPlane.inputMouseButtons,
+    audioLow: inputPlane.inputAudioLow,
+    audioMid: inputPlane.inputAudioMid,
+    audioHigh: inputPlane.inputAudioHigh,
+    gaugeActive: inputPlane.inputGaugeActive,
+  };
+  await renderer.renderFrame(channelValues);
+  markRuntimeFrameAdvanced(-1, tMs);
+}
+
+/**
  * Execute a single animation frame.
  *
- * [LAW:dataflow-not-control-flow] Main-thread execution always performs the
- * same viewport publication + telemetry read; worker-owned runtime data drives
- * variability through shared planes and scheduler packets.
+ * [LAW:dataflow-not-control-flow] One frame boundary serves two render sources;
+ * the startup-fixed installed-plan predicate selects which one produces this
+ * frame's pixels. Both share the telemetry/cadence tail below.
  */
-export function executeAnimationFrame(
+export async function executeAnimationFrame(
   tMs: number,
   deps: AnimationLoopDeps,
   state: AnimationLoopState
-): void {
+): Promise<void> {
   const {
     getCurrentProgram,
     getCurrentState,
+    isScenePlanInstalled,
     runtime,
     store,
     onStatsUpdate,
   } = deps;
 
   const { canvas, renderer, arena } = runtime;
+
+  // ScenePlan steel thread: self-contained Three render path. It has no V1
+  // program, so it draws and returns before the V1 telemetry tail (which reads
+  // V1 program internals) below.
+  if (isScenePlanInstalled()) {
+    await renderScenePlanFrame(tMs, renderer, getCurrentState());
+    state.frameCount++;
+    return;
+  }
+
   const currentProgram = getCurrentProgram();
   if (!currentProgram) {
     return;
@@ -539,15 +585,19 @@ export function startAnimationLoop(
   function animate(tMs: number) {
     rafId = null;
     if (cancelled || haltedByError) return;
-    try {
-      executeAnimationFrame(tMs, deps, state);
-    } catch (err) {
-      // [LAW:single-enforcer] AnimationLoop is the single runtime boundary that fail-stops frame execution on exceptions.
-      haltedByError = true;
-      onError(err);
-      return;
-    }
-    scheduleNextFrame();
+    // [LAW:no-ambient-temporal-coupling] Frames serialize: the next frame is
+    //   scheduled only after this one's async render settles, so concurrent
+    //   `renderFrame` calls cannot overlap on the GPU device.
+    void executeAnimationFrame(tMs, deps, state).then(
+      () => {
+        scheduleNextFrame();
+      },
+      (err) => {
+        // [LAW:single-enforcer] AnimationLoop is the single runtime boundary that fail-stops frame execution on exceptions.
+        haltedByError = true;
+        onError(err);
+      },
+    );
   }
 
   scheduleNextFrame();
