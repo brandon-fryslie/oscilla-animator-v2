@@ -264,32 +264,54 @@ fn stencil_face_state_for(
     }
 }
 
-/// [LAW:dataflow-not-control-flow] Convert the depth load-op enum directly to
-/// the wgpu Operations struct. The Clear value lives inside the enum variant —
-/// no Option<value> coupling, no unwrap_or(default).
-fn depth_ops_for(op: Option<DepthLoadOp>) -> Option<wgpu::Operations<f32>> {
-    op.map(|op| match op {
-        DepthLoadOp::Load { store_op } => wgpu::Operations {
-            load: wgpu::LoadOp::Load,
-            store: store_op_for(store_op),
-        },
-        DepthLoadOp::Clear { value, store_op } => wgpu::Operations {
-            load: wgpu::LoadOp::Clear(value),
-            store: store_op_for(store_op),
-        },
+/// [LAW:dataflow-not-control-flow] Resolve depth attachment ops for one draw in
+/// a multi-draw render pass. The two axes are independent: the load-op follows
+/// `is_first_draw` (only the first draw honors the spec's Clear/Load; later
+/// draws Load to preserve earlier output), while the store-op follows
+/// `is_last_draw` (only the last draw may Discard — every earlier draw must
+/// Store so the next draw's Load reads defined content). [LAW:single-enforcer]
+/// this is the only place per-draw depth ops are decided.
+fn depth_ops_for(
+    op: Option<DepthLoadOp>,
+    is_first_draw: bool,
+    is_last_draw: bool,
+) -> Option<wgpu::Operations<f32>> {
+    op.map(|op| {
+        let (spec_load, spec_store) = match op {
+            DepthLoadOp::Load { store_op } => (wgpu::LoadOp::Load, store_op),
+            DepthLoadOp::Clear { value, store_op } => (wgpu::LoadOp::Clear(value), store_op),
+        };
+        wgpu::Operations {
+            load: if is_first_draw { spec_load } else { wgpu::LoadOp::Load },
+            store: if is_last_draw {
+                store_op_for(spec_store)
+            } else {
+                wgpu::StoreOp::Store
+            },
+        }
     })
 }
 
-fn stencil_ops_for(op: Option<StencilLoadOp>) -> Option<wgpu::Operations<u32>> {
-    op.map(|op| match op {
-        StencilLoadOp::Load { store_op } => wgpu::Operations {
-            load: wgpu::LoadOp::Load,
-            store: store_op_for(store_op),
-        },
-        StencilLoadOp::Clear { value, store_op } => wgpu::Operations {
-            load: wgpu::LoadOp::Clear(value),
-            store: store_op_for(store_op),
-        },
+/// Stencil counterpart of `depth_ops_for` — same first-draw load / last-draw
+/// store policy. [LAW:single-enforcer]
+fn stencil_ops_for(
+    op: Option<StencilLoadOp>,
+    is_first_draw: bool,
+    is_last_draw: bool,
+) -> Option<wgpu::Operations<u32>> {
+    op.map(|op| {
+        let (spec_load, spec_store) = match op {
+            StencilLoadOp::Load { store_op } => (wgpu::LoadOp::Load, store_op),
+            StencilLoadOp::Clear { value, store_op } => (wgpu::LoadOp::Clear(value), store_op),
+        };
+        wgpu::Operations {
+            load: if is_first_draw { spec_load } else { wgpu::LoadOp::Load },
+            store: if is_last_draw {
+                store_op_for(spec_store)
+            } else {
+                wgpu::StoreOp::Store
+            },
+        }
     })
 }
 
@@ -1227,47 +1249,16 @@ impl Engine {
                             spec.targets.depth_stencil.as_ref().map(|depth_target| {
                                 CompiledDepthStencilAttachment {
                                     texture_id: depth_target.texture_id.clone(),
-                                    depth_ops: if is_first_draw {
-                                        depth_ops_for(depth_target.depth)
-                                    } else {
-                                        // Load depth from previous draw call
-                                        Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: if is_last_draw {
-                                                depth_target
-                                                    .depth
-                                                    .map(|op| match op {
-                                                        DepthLoadOp::Load { store_op }
-                                                        | DepthLoadOp::Clear { store_op, .. } => {
-                                                            store_op_for(store_op)
-                                                        }
-                                                    })
-                                                    .unwrap_or(wgpu::StoreOp::Store)
-                                            } else {
-                                                wgpu::StoreOp::Store
-                                            },
-                                        })
-                                    },
-                                    stencil_ops: if is_first_draw {
-                                        stencil_ops_for(depth_target.stencil)
-                                    } else {
-                                        Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: if is_last_draw {
-                                                depth_target
-                                                    .stencil
-                                                    .map(|op| match op {
-                                                        StencilLoadOp::Load { store_op }
-                                                        | StencilLoadOp::Clear { store_op, .. } => {
-                                                            store_op_for(store_op)
-                                                        }
-                                                    })
-                                                    .unwrap_or(wgpu::StoreOp::Store)
-                                            } else {
-                                                wgpu::StoreOp::Store
-                                            },
-                                        })
-                                    },
+                                    depth_ops: depth_ops_for(
+                                        depth_target.depth,
+                                        is_first_draw,
+                                        is_last_draw,
+                                    ),
+                                    stencil_ops: stencil_ops_for(
+                                        depth_target.stencil,
+                                        is_first_draw,
+                                        is_last_draw,
+                                    ),
                                 }
                             });
                         let vp = &spec.viewport;
