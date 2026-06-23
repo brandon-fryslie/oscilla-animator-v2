@@ -1,0 +1,28 @@
+{
+  "ticket": "oscilla-pillars-cleanup-ulu.5",
+  "patch": {
+    "id": "grid-of-squares",
+    "name": "Grid of Squares"
+  },
+  "previewBooted": true,
+  "renderedFrameCount": 102,
+  "rendererThreeBacked": true,
+  "frames": {
+    "frame0": {
+      "nonBlack": 99978,
+      "checksum": 2214449961,
+      "size": "720x720"
+    },
+    "frame1": {
+      "nonBlack": 99951,
+      "checksum": 349418910,
+      "size": "720x720"
+    }
+  },
+  "framesDiffered": true,
+  "eitherFrameBlank": false,
+  "consoleErrors": [],
+  "deviceInitFailures": [],
+  "legacyPathReferences": [],
+  "generatedAt": "2026-06-23T12:38:50.665Z"
+}

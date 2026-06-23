@@ -27,7 +27,9 @@ import {
   loadPatchFromStorage,
   savePatchToStorage,
 } from './PatchPersistence';
-import { consumeTestDemoFilename } from '../testing/test-params';
+import { consumeTestDemoFilename, readScenePlanSelection } from '../testing/test-params';
+import { compileScenePlan } from '../pillars/scene';
+import { SCENE_PLAN_DEMOS } from '../pillars/fixtures/scene-demos';
 import {
   markRuntimeBootstrapFailed,
   markRuntimeBootstrapStarted,
@@ -202,6 +204,10 @@ export class RuntimeService {
   private startupStorageResetArmed = false;
   private startupStorageResetTimer: ReturnType<typeof setTimeout> | null = null;
   private rendererExecutionState: WebGPURendererExecutionState = 'active';
+  // [LAW:one-source-of-truth] Whether a ScenePlan steel thread owns the render
+  //   path is set once at init and read by the animation loop to decide which
+  //   render source drives each frame.
+  private scenePlanInstalled = false;
 
   constructor(
     private readonly store: RootStore,
@@ -375,10 +381,53 @@ export class RuntimeService {
     return {
       getCurrentProgram: () => this.compileState.currentProgram,
       getCurrentState: () => this.compileState.currentState,
+      isScenePlanInstalled: () => this.scenePlanInstalled,
       runtime,
       store: this.store,
       onStatsUpdate: this.statsSink,
     };
+  }
+
+  /**
+   * Start the ScenePlan steel thread: compile one authored patch to a backend-
+   * neutral ScenePlan, install it into the renderer, and drive it from the
+   * animation loop. The Three backend renders continuously without the V1
+   * compile worker, the Rust worker, or the WASM renderer
+   * (design-docs/three-migration-first-proof-contract.md).
+   *
+   * [LAW:no-silent-failure] An unknown selection or a compile error throws, so
+   *   the bootstrap is recorded as failed rather than silently rendering nothing.
+   * [LAW:no-ambient-temporal-coupling] The plan is installed before the loop
+   *   that draws it starts, so the first frame always has a realized scene.
+   */
+  private async startScenePlanSteelThread(planId: string): Promise<void> {
+    const makePatch = SCENE_PLAN_DEMOS[planId];
+    if (!makePatch) {
+      throw new Error(
+        `RuntimeService: unknown scenePlan '${planId}'. Known: ${Object.keys(SCENE_PLAN_DEMOS).join(', ')}`,
+      );
+    }
+
+    const result = compileScenePlan(makePatch());
+    if (result.kind === 'error') {
+      throw new Error(
+        `RuntimeService: scenePlan '${planId}' failed to compile:\n${result.errors.join('\n')}`,
+      );
+    }
+
+    const runtime = this.requireActiveRuntimeResources('installing a ScenePlan');
+    runtime.renderer.installScenePlan(result.plan);
+    this.scenePlanInstalled = true;
+
+    // Re-render App so the preview canvas is live before the loop draws.
+    this.runtimeReadySink();
+
+    this.animationState = createAnimationLoopState();
+    this.animationLoop = startAnimationLoop(
+      this.animationLoopDeps(),
+      this.animationState,
+      this.handleAnimationLoopError,
+    );
   }
 
   private handleAnimationLoopError = (err: unknown): void => {
@@ -763,6 +812,17 @@ export class RuntimeService {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
+      }
+
+      // [LAW:dataflow-not-control-flow] Startup selects one render source. The
+      //   ScenePlan steel thread (Three backend) is self-contained: it needs no
+      //   V1 compile worker, persistence, or live recompile, so it installs its
+      //   plan and starts the loop here, then returns before any V1 setup.
+      const scenePlanId = readScenePlanSelection();
+      if (scenePlanId !== null) {
+        await this.startScenePlanSteelThread(scenePlanId);
+        markRuntimeBootstrapSucceeded();
+        return;
       }
 
       // Check for test automation demo marker (set by ?loadDemoPatch= during pre-React parse)
