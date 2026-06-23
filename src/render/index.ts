@@ -13,6 +13,7 @@ export type {
   WebGPURenderer,
   GpuFault,
   GpuFaultCallback,
+  RuntimeInputChannelValues,
   WebGPURendererExecutionState,
 } from './webgpu';
 export { WEBGPU_RENDER_CONTRACT } from './webgpu/shaders';
