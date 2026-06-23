@@ -1,0 +1,30 @@
+{
+  "ticket": "oscilla-pillars-cleanup-ulu.4",
+  "patch": {
+    "id": "textured-tiles",
+    "name": "Textured Tiles"
+  },
+  "previewBooted": true,
+  "renderedFrameCount": 71,
+  "assetsResolvedThroughRegistry": true,
+  "rendererThreeBacked": true,
+  "frames": {
+    "frame0": {
+      "nonBlack": 96221,
+      "checksum": 2918972371,
+      "size": "720x720"
+    },
+    "frame1": {
+      "nonBlack": 96226,
+      "checksum": 3152249503,
+      "size": "720x720"
+    }
+  },
+  "framesDiffered": true,
+  "eitherFrameBlank": false,
+  "consoleErrors": [],
+  "deviceInitFailures": [],
+  "legacyPathReferences": [],
+  "assetResolutionFailures": [],
+  "generatedAt": "2026-06-23T13:12:10.719Z"
+}

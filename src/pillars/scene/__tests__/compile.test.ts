@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 
 import { compileScenePlan } from '../index';
 import { makeGridOfSquaresPatch } from '../../fixtures/grid-of-squares';
+import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from '../../fixtures/textured-tiles';
 import { sceneObjectRef } from '../../../render/scene-plan';
 import type { PillarPatch } from '../../types';
 import type { ScenePlan } from '../../../render/scene-plan';
@@ -47,8 +48,10 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     const transform = JSON.stringify(object.instancing.transform);
     expect(transform).toContain('"intrinsic"');
     expect(transform).toContain('"index"');
-    const color = JSON.stringify(plan.resources.materials[object.material].color);
-    expect(color).toContain('"rank"');
+    const material = plan.resources.materials[object.material];
+    expect(material.kind).toBe('unlitColor');
+    if (material.kind !== 'unlitColor') return;
+    expect(JSON.stringify(material.color)).toContain('"rank"');
   });
 
   it('binds time as a derived runtime input channel, not a compile-time constant', () => {
@@ -78,6 +81,7 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
   it('references one unlit HSL color material with a per-instance color payload', () => {
     const material = plan.resources.materials[object.material];
     expect(material.kind).toBe('unlitColor');
+    if (material.kind !== 'unlitColor') return;
     expect(material.color.space).toBe('hsl');
   });
 
@@ -111,6 +115,28 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(resolved).toBeDefined();
     expect(plan.resources.geometries[resolved.geometry]).toBeDefined();
     expect(plan.resources.materials[resolved.material]).toBeDefined();
+  });
+});
+
+describe('compileScenePlan — textured tiles asset path', () => {
+  const plan = compileOk(makeTexturedTilesPatch());
+  const object = plan.objects[sceneObjectRef('draw')];
+
+  it('emits one texture resource referencing the patch asset by id', () => {
+    const textures = Object.values(plan.resources.textures);
+    expect(textures).toHaveLength(1);
+    expect(textures[0]).toEqual({ kind: 'asset', assetId: TEXTURED_TILES_ASSETS[0].id });
+  });
+
+  it('shades the draw with a textured-unlit material referencing the texture handle', () => {
+    const material = plan.resources.materials[object.material];
+    expect(material.kind).toBe('texturedUnlit');
+    if (material.kind !== 'texturedUnlit') return;
+    expect(plan.resources.textures[material.texture]).toBeDefined();
+  });
+
+  it('keeps the textured plan JSON-serializable', () => {
+    expect(JSON.parse(JSON.stringify(plan))).toEqual(plan);
   });
 });
 
