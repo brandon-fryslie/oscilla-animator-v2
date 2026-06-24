@@ -19,7 +19,7 @@ export interface NormalizedEdge {
   readonly source: NodeId;
   readonly target: NodeId;
   readonly inputSlot: string;
-  readonly role: 'primary' | 'secondary';
+  readonly role: 'primary' | 'secondary' | 'material';
 }
 
 export interface NormalizedGraph {

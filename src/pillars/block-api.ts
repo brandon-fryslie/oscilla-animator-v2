@@ -24,8 +24,10 @@ import type {
   GlobalSpec,
   InstanceDomainSpec,
   MemoryManifest,
+  PipelineStateSpec,
   RosterEntry,
   SamplerSpec,
+  StatementIR,
   StaticGeometrySpec,
   TextureSpec,
 } from '../render/rust/boundary-contract';
@@ -95,12 +97,61 @@ export interface LoweredIntent {
 }
 
 /**
+ * A MaterialSpec is the WGSL composition a Material block (Pillar 3) emits:
+ * the vertex/fragment AST a render sink draws with, the optional compute AST
+ * a texture-materialize sink runs, and the data contract (`requiredFields`)
+ * the spec demands of whatever bundle is paired with it.
+ *
+ * It lives here — not in boundary-contract — because it appears in a block's
+ * `lower()` signature (`LoweredMaterial`, `LoweringContext.inputMaterials`),
+ * which is precisely what block-api.ts owns. It is NOT a boundary-crossing
+ * serialized type: `colorVaryingName`, `requiredFields`, and `wgslPreamble`
+ * are TS-only and never reach Rust. The block-dsl `defineMaterialSpec`
+ * constructor imports this type from here (block-dsl → block-api is allowed;
+ * the reverse is not). [LAW:one-way-deps]
+ *
+ * `requiredFields` is the single source of truth for "what fields must the
+ * paired bundle contain" — sinks validate against this list, they do not
+ * hand-check field names. [LAW:single-enforcer]
+ *
+ * Keep the shape minimal; do not add fields without a consumer.
+ * [LAW:no-mode-explosion]
+ */
+export interface MaterialSpec {
+  readonly vertexAst: readonly StatementIR[];
+  readonly fragmentAst: readonly StatementIR[];
+  /** For texture-materialize sinks, which have no vertex/fragment stage. */
+  readonly computeAst?: readonly StatementIR[];
+  readonly requiredFields: readonly string[];
+  /** Name of the color varying passed vertex → fragment. Typically 'color'. */
+  readonly colorVaryingName: string;
+  readonly pipelineState: PipelineStateSpec;
+  /** Optional helper WGSL (e.g. OKLab conversion fns); consumed by a later epic. */
+  readonly wgslPreamble?: string;
+}
+
+/**
+ * Result of lowering a Material block: a MaterialSpec carrying the WGSL
+ * fragments that turn a bundle into a color. A Material is wired into a sink
+ * via a `'material'`-role edge; the walker resolves it into
+ * `LoweringContext.inputMaterials`.
+ *
+ * This is a distinct variant from LoweredBundle because a material carries
+ * WGSL composition, not field expressions — different value, different
+ * behavior. [LAW:one-type-per-behavior]
+ */
+export interface LoweredMaterial {
+  readonly kind: 'material';
+  readonly spec: MaterialSpec;
+}
+
+/**
  * The discriminated union of every possible lowering result. The walker
  * checks `result.kind` to know what to do with the result, but it does
  * NOT use any field to determine what KIND of node produced the result —
  * that information is irrecoverable from the closure.
  */
-export type LoweredBlock = LoweredBundle | LoweredIntent;
+export type LoweredBlock = LoweredBundle | LoweredIntent | LoweredMaterial;
 
 // ---------------------------------------------------------------------------
 // LoweringContext — the only thing the closure receives at lowering time
@@ -119,15 +170,20 @@ export type LoweredBlock = LoweredBundle | LoweredIntent;
  *   - No graph reference (the walker is the only thing that walks the
  *     graph; nodes only see their resolved inputs).
  *
- * The context contains exactly two fields:
- *   - `inputBundles`: bundles resolved from this node's incoming edges,
- *     keyed by inputSlot name. The walker has already done cross-domain
- *     rewriting before populating this.
+ * The context contains:
+ *   - `inputBundles`: bundles resolved from this node's incoming bundle
+ *     edges (primary/secondary), keyed by inputSlot name. The walker has
+ *     already done cross-domain rewriting before populating this.
+ *   - `inputMaterials`: MaterialSpecs resolved from this node's incoming
+ *     material-role edges, keyed by inputSlot name. Kept SEPARATE from
+ *     `inputBundles` because a material and a bundle are different value
+ *     types with different behavior. [LAW:one-type-per-behavior]
  *   - `manifest`: the fully-merged MemoryManifest, frozen at this point
  *     in the pipeline.
  */
 export interface LoweringContext {
   readonly inputBundles: Readonly<Record<string, SourceBundle>>;
+  readonly inputMaterials: Readonly<Record<string, MaterialSpec>>;
   readonly manifest: MemoryManifest;
 }
 

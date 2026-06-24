@@ -54,7 +54,9 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
 
     const { inputBundles, primaryDomainId } = resolveInputBundles(blockId);
 
-    const ctx: LoweringContext = { inputBundles, manifest };
+    // inputMaterials is always present (empty until the walker resolves
+    // material-role edges in a later slice). [LAW:dataflow-not-control-flow]
+    const ctx: LoweringContext = { inputBundles, inputMaterials: {}, manifest };
 
     let result;
     try {
@@ -157,7 +159,9 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
     if ((outDegree.get(node.id) ?? 0) > 0) continue;
 
     const { inputBundles } = resolveInputBundles(node.id);
-    const ctx: LoweringContext = { inputBundles, manifest };
+    // inputMaterials is always present (empty until the walker resolves
+    // material-role edges in a later slice). [LAW:dataflow-not-control-flow]
+    const ctx: LoweringContext = { inputBundles, inputMaterials: {}, manifest };
 
     let result;
     try {
