@@ -1,6 +1,6 @@
 # V1 Type Solver Walkthrough — Fixpoint Normalization Architecture
 
-**Purpose.** This document captures how V1's type solver actually works end-to-end, as a reference for porting it to the pillar system. V1's solver in `src/compiler/frontend/` works correctly and is the ground truth for what the pillar replacement must achieve. The pillar port (epic `oscilla-pillars-types-ds8`) will reuse this architecture with pillar-appropriate types (`ZInferenceCanonicalType`, port contracts from `ZBlockContract`, etc.) and will drop V1's ad-hoc `TypePattern` dialect in favor of structural variables in the inference type.
+**Purpose.** This document captures how V1's type solver actually works end-to-end, as a reference for porting it to the pillar system. V1's solver in `src/compiler/frontend/` works correctly and is the ground truth for what the pillar replacement must achieve. The pillar port (epic `oscilla-pillars-types-wzm3`) will reuse this architecture with pillar-appropriate types (`ZInferenceCanonicalType`, port contracts from `ZBlockContract`, etc.) and will drop V1's ad-hoc `TypePattern` dialect in favor of structural variables in the inference type.
 
 This is a walkthrough, not a line-by-line reference. Its goal is to give a future agent enough mental model to propose a correct decomposition for the pillar version without re-reading ~5,500 lines of V1 TypeScript.
 
@@ -605,9 +605,9 @@ Most of V1's architecture translates directly:
 
 | V1 concept | Pillar equivalent |
 |---|---|
-| `InferenceCanonicalType` | `ZInferenceCanonicalType` (ds8.1) |
-| `CanonicalType` | `ZCanonicalType` (ds8.1) |
-| `InputDef.type` + `outputs.type` on BlockDef | `ZBlockContract.inputs[slot].shape` / `outputs[slot].shape` (ds8.2) |
+| `InferenceCanonicalType` | `ZInferenceCanonicalType` (wzm3.1) |
+| `CanonicalType` | `ZCanonicalType` (wzm3.1) |
+| `InputDef.type` + `outputs.type` on BlockDef | `ZBlockContract.inputs[slot].shape` / `outputs[slot].shape` (wzm3.2) |
 | `DraftGraph` (blocks + edges + obligations + meta) | New pillar equivalent — a mutable version of `NormalizedGraph` with obligations |
 | `DraftPortKey` | Pillar equivalent — `${nodeId}:${portId}:${dir}` |
 | `Substitution` (`{payloads, units, cardinalities}`) | Direct port; cardinality var ids stay `CardinalityVarId`, payload/unit var ids are branded strings |
@@ -623,17 +623,17 @@ Most of V1's architecture translates directly:
 
 ### What changes
 
-- **No `TypePattern` / `findAdapter(from, to)` dialect.** V1's `src/blocks/adapter-spec.ts` has a parallel type-matching vocabulary with `'same' | 'any'` magic literals. The pillar version does NOT reproduce this. Adapter matching is "iterate catalog, unify input contract against source, unify output contract against target" — the unifier is the matching mechanism. Polymorphism in adapter blocks is expressed via type variables in the adapter's declared port contracts, including nested variables inside concrete unit variants (e.g. `{kind: 'angle', unit: unitVar('U')}`). See `memory/project_pillar_adapters_are_blocks.md`.
+- **No `TypePattern` / `findAdapter(from, to)` dialect.** V1's `src/blocks/adapter-spec.ts` has a parallel type-matching vocabulary with `'same' | 'any'` magic literals. The pillar version does NOT reproduce this. Adapter matching is "iterate catalog, unify input contract against source, unify output contract against target" — the unifier is the matching mechanism. Polymorphism in adapter blocks is expressed via type variables in the adapter's declared port contracts, including nested variables inside concrete unit variants (e.g. `{kind: 'angle', unit: unitVar('U')}`). This "adapters are blocks, not a registry" correction is captured in the `wzm3.4` ticket.
 
-- **No separate `AdapterRegistry`.** The catalog of `ZBlockContract`-having blocks IS the registry. Filter by `adapterSpec?` presence to get adapter candidates. `findAdapterCandidates(sourceType, targetType, catalog)` is a pure function in ds8.4 that iterates and tries unification.
+- **No separate `AdapterRegistry`.** The catalog of `ZBlockContract`-having blocks IS the registry. Filter by `adapterSpec?` presence to get adapter candidates. `findAdapterCandidates(sourceType, targetType, catalog)` is a pure function in wzm3.4 that iterates and tries unification.
 
-- **No `narrowToCanonical` public API.** The "inference → concrete" commit step is a single `ZCanonicalTypeSchema.safeParse` call inside the pillar resolver. The ds8.1 schemas already enforce at parse time that a concrete value contains no variables.
+- **No `narrowToCanonical` public API.** The "inference → concrete" commit step is a single `ZCanonicalTypeSchema.safeParse` call inside the pillar resolver. The wzm3.1 schemas already enforce at parse time that a concrete value contains no variables.
 
-- **Combine mode is a first-class pillar concept on input field contracts.** V1 has `combineMode` on ports but didn't fully integrate it with the type solver; pillar puts it per-field in `ZInputFieldContract.combine` with ds8.2's minimum set (`first | last | sum`). The resolver in ds8.5 must emit the appropriate reducing IR per combine mode — forwarding for `first`/`last` (zero new IR nodes), emitting for `sum` (Add tree). See `memory/project_combine_mode_execution_model.md`.
+- **Combine mode is a first-class pillar concept on input field contracts.** V1 has `combineMode` on ports but didn't fully integrate it with the type solver; pillar puts it per-field in `ZInputFieldContract.combine` with wzm3.2's minimum set (`first | last | sum`). The resolver in wzm3.5 must emit the appropriate reducing IR per combine mode — forwarding for `first`/`last` (zero new IR nodes), emitting for `sum` (Add tree). This forwarder-vs-emitter distinction is captured in the `wzm3.5` and `wzm3.7` tickets.
 
 - **No `layer`, no `collect`/`array`.** V1 has both. Pillar drops `collect` entirely (variadic ports solve what collect hacked around) and defers `layer` until OKLab has a real consumer.
 
-- **Pillar payload kinds are fewer.** V1 has 9 payload kinds including `shape` and `cameraProjection`. Pillar has 7 — no `shape` (new shape system is manifest-level, not a bundle-field payload), no `cameraProjection` (camera system being reworked). See ds8.1 schemas.
+- **Pillar payload kinds are fewer.** V1 has 9 payload kinds including `shape` and `cameraProjection`. Pillar has 7 — no `shape` (new shape system is manifest-level, not a bundle-field payload), no `cameraProjection` (camera system being reworked). See wzm3.1 schemas.
 
 - **Pillar unit kinds drop `count`.** V1 declares it but has no producer (unitCount() returns `{kind: 'none'}`). Pillar omits it; integer counts are `int + none`.
 
@@ -641,18 +641,18 @@ Most of V1's architecture translates directly:
 
 ### Decomposition for the pillar solver epic
 
-Rewriting the ds8 epic decomposition to match V1's actual structure:
+Rewriting the wzm3 epic decomposition to match V1's actual structure:
 
 | Ticket | Scope |
 |---|---|
-| **ds8.3 — Pure solvers + substitution utilities** | Port `solvePayloadUnit` and `solveCardinality` as pure functions consuming pillar constraint types and producing a `Substitution`. Include `applySubstitution(type, subst)` helper. No unifier API — union-find IS the unifier for each sub-domain. Unit tests exercise the sub-solvers with hand-rolled constraints. |
-| **ds8.4 — Adapter spec + candidate search** | Add `adapterSpec?: ZAdapterSpec` to block contracts. Implement `findAdapterCandidates(source, target, catalog)` pure function: iterate adapter-marked blocks, try to unify each. Uses the sub-solvers from ds8.3 internally. Unit tests cover exact-match, variable-match, no-match, multi-candidate ranking. **No `TypePattern`, no registry.** |
-| **ds8.5 — Fixpoint driver + constraint extraction + TypeFacts + resolver pass** | The big one. Port `extractConstraints` to read pillar `ZBlockContract`. Port `TypeFacts` / `PortTypeHint` / `StrictTypedGraph`. Port `finalizeNormalizationFixpoint` — the driver loop. Implement per-iteration obligation creators (adapter / cardinality adapter / payload anchor / missing input / cycle break) and per-kind policies (adapters.v1 / cardinalityAdapters.v1 / payloadAnchor.v1 / defaultSources.v1 / cycleBreak.v1). Include the monotone one-at-a-time strategy for payload anchor and cardinality adapter obligations. |
-| **ds8.6 — `findInsertableBlocks` query API** | Uses `findAdapterCandidates` from ds8.4 as its core query. Port-side query: look up port's resolved type from cached TypedGraph, iterate catalog, return rankable candidates. Benchmark sub-millisecond per query. |
-| **ds8.7 — `validateAxes` gate + invariants** | Port V1's `axis-validate.ts`. Runs after the fixpoint produces a `StrictTypedGraph`. Enforces 17 invariants (category gating for combine modes — e.g. `sum` on `bool` is rejected here — plus event semantics, cardinality hygiene, etc.). Produces diagnostics, does not mutate. |
-| **ds8.8 — Migrate 7 existing pillar blocks to `defineBlock` + contracts** | Rewrite each block to declare a `ZBlockContract`. Remove each block's hand-rolled `readConfig` (Zod parse does it). Add `contract` as a mandatory field on `BlockDefinition` in block-api.ts. Walker/lowering consume the contract. Forbidden-pattern test ensures no imports from V1's `src/compiler/frontend/`. |
+| **wzm3.3 — Pure solvers + substitution utilities** | Port `solvePayloadUnit` and `solveCardinality` as pure functions consuming pillar constraint types and producing a `Substitution`. Include `applySubstitution(type, subst)` helper. No unifier API — union-find IS the unifier for each sub-domain. Unit tests exercise the sub-solvers with hand-rolled constraints. |
+| **wzm3.4 — Adapter spec + candidate search** | Add `adapterSpec?: ZAdapterSpec` to block contracts. Implement `findAdapterCandidates(source, target, catalog)` pure function: iterate adapter-marked blocks, try to unify each. Uses the sub-solvers from wzm3.3 internally. Unit tests cover exact-match, variable-match, no-match, multi-candidate ranking. **No `TypePattern`, no registry.** |
+| **wzm3.5 — Fixpoint driver + constraint extraction + TypeFacts + resolver pass** | The big one. Port `extractConstraints` to read pillar `ZBlockContract`. Port `TypeFacts` / `PortTypeHint` / `StrictTypedGraph`. Port `finalizeNormalizationFixpoint` — the driver loop. Implement per-iteration obligation creators (adapter / cardinality adapter / payload anchor / missing input / cycle break) and per-kind policies (adapters.v1 / cardinalityAdapters.v1 / payloadAnchor.v1 / defaultSources.v1 / cycleBreak.v1). Include the monotone one-at-a-time strategy for payload anchor and cardinality adapter obligations. |
+| **wzm3.6 — `findInsertableBlocks` query API** | Uses `findAdapterCandidates` from wzm3.4 as its core query. Port-side query: look up port's resolved type from cached TypedGraph, iterate catalog, return rankable candidates. Benchmark sub-millisecond per query. |
+| **wzm3.7 — `validateAxes` gate + invariants** | Port V1's `axis-validate.ts`. Runs after the fixpoint produces a `StrictTypedGraph`. Enforces 17 invariants (category gating for combine modes — e.g. `sum` on `bool` is rejected here — plus event semantics, cardinality hygiene, etc.). Produces diagnostics, does not mutate. |
+| **wzm3.8 — Migrate 7 existing pillar blocks to `defineBlock` + contracts** | Rewrite each block to declare a `ZBlockContract`. Remove each block's hand-rolled `readConfig` (Zod parse does it). Add `contract` as a mandatory field on `BlockDefinition` in block-api.ts. Walker/lowering consume the contract. Forbidden-pattern test ensures no imports from V1's `src/compiler/frontend/`. |
 
-**Dependency ordering:** `ds8.3 → ds8.4 → ds8.5`, with `ds8.6` and `ds8.7` depending on `ds8.5`, and `ds8.8` at the end.
+**Dependency ordering:** `wzm3.3 → wzm3.4 → wzm3.5`, with `wzm3.6` and `wzm3.7` depending on `wzm3.5`, and `wzm3.8` at the end.
 
 **What is NOT in these tickets:** any pairwise `unify(a, b)` public API (union-find IS the unifier inside sub-solvers); any `matchesPattern` function; any `AdapterRegistry` class; any `narrowToCanonical` bridge function.
 
@@ -697,10 +697,10 @@ Rewriting the ds8 epic decomposition to match V1's actual structure:
 | `frontend/policies/type-compatibility.ts` | 129 | `isEdgeTypeCompatible`, `acceptsBroadcast`, `isOneManyMismatchOnly` oracle |
 | `frontend/draft-graph.ts` | 385 | DraftGraph types + `buildDraftGraph` from Patch + initial obligation creation |
 | `blocks/adapter-spec.ts` (V1) | 704 | Legacy `TypePattern` dialect + `findAdapter` / `findAdapterChain`. **Do NOT port. Reference for what the pillar system explicitly replaces.** |
-| `frontend/axis-validate.ts` | 322 | Post-solve invariant gate (17 rules). Target for pillar ds8.7. |
+| `frontend/axis-validate.ts` | 322 | Post-solve invariant gate (17 rules). Target for pillar wzm3.7. |
 
 Total solver code (excluding axis-validate, adapter-spec): ~5,400 lines.
 
 ---
 
-**End of walkthrough.** Future ds8 agents: read this before proposing a decomposition. Then read `memory/project_pillar_adapters_are_blocks.md` and `memory/project_combine_mode_execution_model.md` for the two load-bearing design corrections specific to the pillar port.
+**End of walkthrough.** Future agents on the pillar type-system epic (`oscilla-pillars-types-wzm3`): read this before proposing a decomposition. The two load-bearing design corrections specific to the pillar port — "adapters are blocks, not a registry" and the combine-mode forwarder-vs-emitter execution model — are captured inline in §7 above and in the `wzm3` child tickets.
