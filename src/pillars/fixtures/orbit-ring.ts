@@ -65,6 +65,14 @@ export function makeOrbitRingPatch(): PillarPatch {
           attachment: clearCanvas([0.05, 0.05, 0.07, 1]),
         },
       },
+      // Material (Pillar 3): owns the dot's color composition. The sink reads
+      // it from its 'material' slot — color is no longer inlined in the sink.
+      {
+        id: 'material',
+        kind: 'material',
+        type: 'DotMaterial',
+        config: { domainId: 'dots' },
+      },
     ],
     edges: [
       {
@@ -80,6 +88,13 @@ export function makeOrbitRingPatch(): PillarPatch {
         target: 'sink',
         inputSlot: 'primary',
         role: 'primary',
+      },
+      {
+        id: 'e2',
+        source: 'material',
+        target: 'sink',
+        inputSlot: 'material',
+        role: 'material',
       },
     ],
   };

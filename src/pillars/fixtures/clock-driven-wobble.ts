@@ -82,6 +82,13 @@ export function makeClockDrivenWobblePatch(): PillarPatch {
           attachment: clearCanvas([0.05, 0.05, 0.07, 1]),
         },
       },
+      // Material (Pillar 3): the dot color composition for this sink.
+      {
+        id: 'material',
+        kind: 'material',
+        type: 'DotMaterial',
+        config: { domainId: 'dots' },
+      },
     ],
     edges: [
       // ParticlePool → ExpressionModifier (primary)
@@ -107,6 +114,14 @@ export function makeClockDrivenWobblePatch(): PillarPatch {
         target: 'sink',
         inputSlot: 'primary',
         role: 'primary',
+      },
+      // DotMaterial → DrawBundle (material)
+      {
+        id: 'e3',
+        source: 'material',
+        target: 'sink',
+        inputSlot: 'material',
+        role: 'material',
       },
     ],
   };
