@@ -126,6 +126,20 @@ export function makeCrossDomainFollowPatch(): PillarPatch {
           attachment: loadCanvas(),
         },
       },
+      // One Material per sink: each composes color over its own domain's
+      // fields. Two sinks → two DotMaterial blocks (pool_a, pool_b).
+      {
+        id: 'materialA',
+        kind: 'material',
+        type: 'DotMaterial',
+        config: { domainId: 'pool_a' },
+      },
+      {
+        id: 'materialB',
+        kind: 'material',
+        type: 'DotMaterial',
+        config: { domainId: 'pool_b' },
+      },
     ],
     edges: [
       // genA → sinkA (primary)
@@ -162,6 +176,22 @@ export function makeCrossDomainFollowPatch(): PillarPatch {
         target: 'sinkB',
         inputSlot: 'primary',
         role: 'primary',
+      },
+      // materialA → sinkA (material)
+      {
+        id: 'e4',
+        source: 'materialA',
+        target: 'sinkA',
+        inputSlot: 'material',
+        role: 'material',
+      },
+      // materialB → sinkB (material)
+      {
+        id: 'e5',
+        source: 'materialB',
+        target: 'sinkB',
+        inputSlot: 'material',
+        role: 'material',
       },
     ],
   };
