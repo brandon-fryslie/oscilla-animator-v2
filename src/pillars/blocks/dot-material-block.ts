@@ -6,10 +6,10 @@
  * dot: a vertex/fragment pair for render sinks (DrawBundle) and a compute
  * body for texture-materialize sinks (Materialize).
  *
- * The shader bodies are ported verbatim from the legacy `makeDotMaterial`
- * helper (block-dsl/materials/dot-material.ts) — the change is structural:
- * the composition is now a first-class block wired into a sink via a
- * `'material'`-role edge, not an inline call inside the sink's `lower()`.
+ * The shader bodies were ported from the former inline dot-material helper —
+ * the change is structural: the composition is now a first-class block wired
+ * into a sink via a `'material'`-role edge, not an inline call inside the
+ * sink's `lower()`.
  * [LAW:one-source-of-truth] this block is the sole owner of dot color
  * composition; sinks forward its fragments and never inline a vec4.
  *
