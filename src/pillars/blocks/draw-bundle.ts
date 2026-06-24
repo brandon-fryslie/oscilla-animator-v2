@@ -5,11 +5,13 @@
  * the three roster entries needed to render it: a compute pass, a
  * System_DrawPrep pass, and a render pass targeting the canvas.
  *
- * The block is now an orchestrator: every concern (geometry, camera, dot
- * material, compute pass body, draw call construction, canvas attachment)
- * lives in its own block-dsl module. Variation between fixtures comes
- * from data flowing through `attachment`, never from a flag this block
- * inspects.
+ * The block is now an orchestrator: every concern (geometry, camera,
+ * compute pass body, draw call construction, canvas attachment) lives in
+ * its own block-dsl module, and the color composition (the Material,
+ * Pillar 3) arrives as a resolved MaterialSpec on `ctx.inputMaterials`
+ * rather than being built inline. Variation between fixtures comes from
+ * data flowing through `attachment` and the wired material, never from a
+ * flag this block inspects.
  */
 
 import type {
@@ -30,10 +32,7 @@ import {
 } from '../block-dsl/presentation/default-camera';
 import type { CanvasAttachment } from '../block-dsl/presentation/canvas-attachment';
 import { clearCanvas } from '../block-dsl/presentation/canvas-attachment';
-import {
-  makeDotMaterial,
-  validateBundleForDotMaterial,
-} from '../block-dsl/materials/dot-material';
+import { consumeMaterial } from '../block-dsl/materials/consume-material';
 import { buildComputePassFromBundle } from '../block-dsl/pass-builders/compute-from-bundle';
 import { buildDrawPrepPass } from '../block-dsl/pass-builders/draw-prep-pass';
 import { buildDrawCall } from '../block-dsl/pass-builders/draw-call';
@@ -109,9 +108,10 @@ function lower(args: DrawBundleLowerArgs, ctx: LoweringContext): LoweredBlock {
     throw new Error('[DrawBundle] primary input bundle has no fields');
   }
 
-  // The DotMaterial validation is an invariant assertion: when the Material
-  // pillar lands the frontend will catch this during normalization.
-  validateBundleForDotMaterial(primary, args.domainId);
+  // The material is the single source of truth for both how color composes
+  // and what fields the bundle must contain; the sink only forwards it.
+  // [LAW:one-source-of-truth] [LAW:single-enforcer]
+  const material = consumeMaterial(ctx, 'material', primary, 'DrawBundle');
 
   const computePass = buildComputePassFromBundle({
     passId: `${args.domainId}_eval`,
@@ -127,14 +127,13 @@ function lower(args: DrawBundleLowerArgs, ctx: LoweringContext): LoweredBlock {
     vertexCount: 6,
   });
 
-  const dotMaterial = makeDotMaterial(args.domainId);
   const drawCall = buildDrawCall({
     intentId: `${args.domainId}_fill`,
     domainId: args.domainId,
     shapeId: args.shapeId,
-    vertexAst: dotMaterial.vertexAst,
-    fragmentAst: dotMaterial.fragmentAst,
-    pipelineState: dotMaterial.pipelineState,
+    vertexAst: material.vertexAst,
+    fragmentAst: material.fragmentAst,
+    pipelineState: material.pipelineState,
     cameraRef: SYS_CAMERA_SYMBOL,
   });
 

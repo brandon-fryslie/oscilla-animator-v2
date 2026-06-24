@@ -7,8 +7,10 @@
  * Where DrawBundle writes per-instance fields into a domain SoA and
  * renders them to the canvas with three roster entries (compute,
  * draw-prep, render), Materialize emits exactly one ComputePassSpec with
- * `dispatch.mode='Texture'` that writes the bundle's color components
- * into a storage texture as RGBA8 texels. There is no draw call.
+ * `dispatch.mode='Texture'` that writes the wired Material's composed
+ * color into a storage texture as RGBA8 texels. There is no draw call,
+ * and Materialize has zero knowledge of how that color is composed — it
+ * forwards the material's `computeAst` to the pass builder.
  *
  * The block is the second sink type in the new pillar system. The
  * walker handles it without modification — the opaque-node design pays
@@ -25,6 +27,7 @@ import type {
   ManifestContribution,
 } from '../block-api';
 import { makeStorageTexture2D } from '../block-dsl/presentation/storage-texture';
+import { consumeMaterial } from '../block-dsl/materials/consume-material';
 import { buildTextureMaterializePass } from '../block-dsl/pass-builders/texture-materialize-pass';
 
 interface MaterializeConfig {
@@ -35,8 +38,6 @@ interface MaterializeConfig {
 }
 
 type MaterializeLowerArgs = MaterializeConfig;
-
-const REQUIRED_FIELDS = ['color_r', 'color_g', 'color_b', 'color_a'] as const;
 
 function readConfig(
   raw: Readonly<Record<string, unknown>>,
@@ -86,20 +87,18 @@ function lower(args: MaterializeLowerArgs, ctx: LoweringContext): LoweredBlock {
   if (!primary) {
     throw new Error('[Materialize] requires a primary input bundle');
   }
-  const missing = REQUIRED_FIELDS.filter((f) => !(f in primary));
-  if (missing.length > 0) {
-    throw new Error(
-      `[Materialize] primary bundle is missing required field(s) ${missing
-        .map((f) => `'${f}'`)
-        .join(', ')}. Available: ${Object.keys(primary).sort().join(', ')}`,
-    );
-  }
+
+  // The material owns how color composes (its computeAst) and what fields the
+  // bundle must contain (its requiredFields); Materialize only forwards it.
+  // [LAW:one-source-of-truth] [LAW:single-enforcer]
+  const material = consumeMaterial(ctx, 'material', primary, 'Materialize');
 
   const computePass = buildTextureMaterializePass({
     passId: `${args.textureId}_materialize`,
     sourceBlockId: args.textureId,
     textureId: args.textureId,
     bundle: primary,
+    material,
   });
 
   return { kind: 'intent', passes: [computePass] };
