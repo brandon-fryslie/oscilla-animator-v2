@@ -55,10 +55,20 @@ export function makeMaterializeUvPatch(): PillarPatch {
           format: 'rgba8unorm',
         },
       },
+      // Material (Pillar 3): Materialize reads only its computeAst (the
+      // vec4 color path). domainId feeds the vertex path, which a
+      // texture-materialize sink never emits — inert here.
+      {
+        id: 'material',
+        kind: 'material',
+        type: 'DotMaterial',
+        config: { domainId: 'uv_gradient' },
+      },
     ],
     edges: [
       { id: 'e0', source: 'grid', target: 'tint', inputSlot: 'primary', role: 'primary' },
       { id: 'e1', source: 'tint', target: 'sink', inputSlot: 'primary', role: 'primary' },
+      { id: 'e2', source: 'material', target: 'sink', inputSlot: 'material', role: 'material' },
     ],
   };
 }

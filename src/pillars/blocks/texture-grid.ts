@@ -7,9 +7,18 @@
  *
  * Bundle fields:
  *   u, v               — normalized texel coordinates in [0, 1]
+ *   pos_x, pos_y       — = u, v (the texel's normalized position)
  *   color_r, color_g   — initial values = u, v (a uv gradient)
  *   color_b            — constant 0
  *   color_a            — constant 1
+ *
+ * pos_x/pos_y exist so a DotMaterial wired into the paired Materialize sink
+ * finds the pos fields its `requiredFields` declare. Materialize reads only
+ * the material's compute color path (color_r/g/b → vec4); the pos fields feed
+ * DotMaterial's vertex path, which a texture-materialize sink never emits.
+ * They are provided rather than weakening the material's contract.
+ * [LAW:single-enforcer] (A TextureMaterial whose requiredFields omits pos is
+ * the clean split; the Material epic scopes it out, so DotMaterial serves both.)
  *
  * The expressions reference `gid_x` and `gid_y` (let-bound at the top
  * of the Materialize compute pass). Like Clock, TextureGrid has no
@@ -81,6 +90,8 @@ function lower(args: TextureGridLowerArgs, _ctx: LoweringContext): LoweredBlock 
   const output: SourceBundle = {
     u,
     v,
+    pos_x: u,
+    pos_y: v,
     color_r: u,
     color_g: v,
     color_b: litF32(0),

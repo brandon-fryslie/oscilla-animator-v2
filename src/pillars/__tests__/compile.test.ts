@@ -612,12 +612,18 @@ describe('pillar compiler: cross-domain-follow fixture', () => {
           config: { expression: 'pos_x = primary.pos_x + a.pos_x\npos_y = primary.pos_y + a.pos_y' } },
         { id: 'sinkB', kind: 'intent', type: 'DrawBundle',
           config: { domainId: 'pool_b', shapeId: 'pool_b_quad', quadScale: 0.018, attachment: loadCanvas() } },
+        // Both sinks require a material; wire one each so compilation reaches
+        // the cardinality check rather than tripping the missing-material guard.
+        { id: 'materialA', kind: 'material', type: 'DotMaterial', config: { domainId: 'pool_a' } },
+        { id: 'materialB', kind: 'material', type: 'DotMaterial', config: { domainId: 'pool_b' } },
       ],
       edges: [
         { id: 'e0', source: 'genA', target: 'sinkA', inputSlot: 'primary', role: 'primary' },
         { id: 'e1', source: 'genB', target: 'modB', inputSlot: 'primary', role: 'primary' },
         { id: 'e2', source: 'genA', target: 'modB', inputSlot: 'a', role: 'secondary' },
         { id: 'e3', source: 'modB', target: 'sinkB', inputSlot: 'primary', role: 'primary' },
+        { id: 'e4', source: 'materialA', target: 'sinkA', inputSlot: 'material', role: 'material' },
+        { id: 'e5', source: 'materialB', target: 'sinkB', inputSlot: 'material', role: 'material' },
       ],
     };
 
@@ -711,7 +717,12 @@ describe('pillar compiler: materialize-uv fixture', () => {
     expect(pass.dependencies.textures['uv_gradient']).toBe('write');
   });
 
-  it('compute pass emits a TextureStore of vec4<f32> targeting the texture', () => {
+  it('compute pass stores the material-composed color varying into the texture', () => {
+    // The material owns color composition: its computeAst let-binds the color
+    // varying ('color') to a vec4<f32>, and the pass stores it by reference.
+    // Asserting that meaning — a vec4 color let-bound by the material, stored
+    // into the texture — rather than an inline Construct at the store site,
+    // which the material epic deliberately removed. [LAW:behavior-not-structure]
     const result = compilePillarPatch(makeMaterializeUvPatch());
     if (result.kind !== 'ok') throw new Error(result.errors.join('; '));
     const pass = result.payload.roster[0];
@@ -719,11 +730,21 @@ describe('pillar compiler: materialize-uv fixture', () => {
 
     const stores = pass.ast.filter((s) => s.type === 'TextureStore');
     expect(stores).toHaveLength(1);
-    const store = stores[0] as { textureId: string; value: { type: string; dataType?: string; args?: unknown[] } };
+    const store = stores[0] as { textureId: string; value: { type: string; name?: string } };
     expect(store.textureId).toBe('uv_gradient');
-    expect(store.value.type).toBe('Construct');
-    expect(store.value.dataType).toBe('vec4<f32>');
-    expect(store.value.args).toHaveLength(4);
+    // The pass never constructs a color itself — it stores the material's
+    // colorVaryingName by reference.
+    expect(store.value.type).toBe('VarRef');
+    expect(store.value.name).toBe('color');
+
+    // The color varying is let-bound to a vec4<f32> composed from the bundle.
+    const colorLet = pass.ast.find(
+      (s) => s.type === 'Let' && (s as { name: string }).name === 'color',
+    ) as { value: { type: string; dataType?: string; args?: unknown[] } } | undefined;
+    expect(colorLet).toBeDefined();
+    expect(colorLet!.value.type).toBe('Construct');
+    expect(colorLet!.value.dataType).toBe('vec4<f32>');
+    expect(colorLet!.value.args).toHaveLength(4);
   });
 
   it("modifier's tint is visible: color_r let-binding contains LiteralF32(0.8)", () => {
