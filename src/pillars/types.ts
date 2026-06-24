@@ -6,7 +6,7 @@
  * etc.) live in block-api.ts and the phase directories.
  */
 
-export type PillarKind = 'generator' | 'modifier' | 'intent';
+export type PillarKind = 'generator' | 'modifier' | 'material' | 'intent';
 
 export interface PillarBlock {
   readonly id: string;
@@ -20,7 +20,7 @@ export interface PillarEdge {
   readonly source: string;
   readonly target: string;
   readonly inputSlot: string;
-  readonly role: 'primary' | 'secondary';
+  readonly role: 'primary' | 'secondary' | 'material';
 }
 
 export interface PillarPatch {
