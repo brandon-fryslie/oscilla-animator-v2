@@ -10,7 +10,7 @@
  */
 
 import type { MemoryManifest, RosterEntry } from '../../render/rust/boundary-contract';
-import type { LoweringContext, NodeId, SourceBundle } from '../block-api';
+import type { LoweringContext, MaterialSpec, NodeId, SourceBundle } from '../block-api';
 import type { NormalizedGraph, NormalizedEdge, NormalizedNode } from '../frontend/normalized-graph';
 import { rewriteAsLoadFields, validateCardinality } from './cross-domain';
 
@@ -37,6 +37,11 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
   }
 
   const bundleCache = new Map<NodeId, BundleResolution>();
+  // A resolved material is a MaterialSpec, or null when resolution failed
+  // (unknown node, lower() threw, or the node returned a non-material kind).
+  // null is cached so a multi-fanout material reports its error once, and is
+  // distinct from `undefined` (absent) so the cache hit is unambiguous.
+  const materialCache = new Map<NodeId, MaterialSpec | null>();
   const errors: string[] = [];
   const allPasses: RosterEntry[] = [];
 
@@ -53,10 +58,12 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
     }
 
     const { inputBundles, primaryDomainId } = resolveInputBundles(blockId);
+    const inputMaterials = resolveInputMaterials(blockId);
 
-    // inputMaterials is always present (empty until the walker resolves
-    // material-role edges in a later slice). [LAW:dataflow-not-control-flow]
-    const ctx: LoweringContext = { inputBundles, inputMaterials: {}, manifest };
+    // The same two resolutions run for every node; a node with no material
+    // edges simply gets an empty inputMaterials map, not a skipped step.
+    // [LAW:dataflow-not-control-flow]
+    const ctx: LoweringContext = { inputBundles, inputMaterials, manifest };
 
     let result;
     try {
@@ -96,6 +103,9 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
 
     const resolvedBySlot = new Map<string, { edge: NormalizedEdge; resolution: BundleResolution }>();
     for (const edge of incoming) {
+      // Material-role edges live in a separate value space (inputMaterials);
+      // resolveInputMaterials owns them. [LAW:one-type-per-behavior]
+      if (edge.role === 'material') continue;
       if (resolvedBySlot.has(edge.inputSlot)) {
         errors.push(
           `[pillars walker] Block '${targetBlockId}' has multiple edges targeting input slot '${edge.inputSlot}'`,
@@ -154,14 +164,82 @@ export function walkAndLower(graph: NormalizedGraph, manifest: MemoryManifest): 
     return { inputBundles, primaryDomainId };
   }
 
+  /**
+   * Resolve a single material node to its MaterialSpec. Mirrors resolveBundle
+   * but simpler: a Material block has no inputs, so it lowers against an empty
+   * context, and there is no cross-domain rewriting or cardinality validation
+   * (a material has no domain). Returns null and records an error if the node
+   * is unknown, throws, or returns a non-material kind. [LAW:no-silent-failure]
+   */
+  function resolveMaterial(blockId: NodeId): MaterialSpec | null {
+    const cached = materialCache.get(blockId);
+    if (cached !== undefined) return cached;
+
+    const node = nodeById.get(blockId);
+    if (!node) {
+      errors.push(`[pillars walker] Unknown node id: '${blockId}'`);
+      materialCache.set(blockId, null);
+      return null;
+    }
+
+    // Material blocks have no inputs; both maps are empty by contract.
+    const ctx: LoweringContext = { inputBundles: {}, inputMaterials: {}, manifest };
+
+    let result;
+    try {
+      result = node.lower(ctx);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(
+        `[pillars walker] Material '${blockId}' failed to lower: ${message}`,
+      );
+      materialCache.set(blockId, null);
+      return null;
+    }
+    if (result.kind !== 'material') {
+      errors.push(
+        `[pillars walker] Block '${blockId}' is referenced as a material source but lower() returned '${result.kind}'`,
+      );
+      materialCache.set(blockId, null);
+      return null;
+    }
+
+    materialCache.set(blockId, result.spec);
+    return result.spec;
+  }
+
+  function resolveInputMaterials(targetBlockId: NodeId): Record<string, MaterialSpec> {
+    const incoming = edgesByTarget.get(targetBlockId) ?? [];
+
+    const inputMaterials: Record<string, MaterialSpec> = {};
+    const seenSlots = new Set<string>();
+    for (const edge of incoming) {
+      if (edge.role !== 'material') continue;
+      if (seenSlots.has(edge.inputSlot)) {
+        errors.push(
+          `[pillars walker] Block '${targetBlockId}' has multiple edges targeting material slot '${edge.inputSlot}'`,
+        );
+        continue;
+      }
+      seenSlots.add(edge.inputSlot);
+      const spec = resolveMaterial(edge.source);
+      // null already reported by resolveMaterial; leave the slot unfilled so
+      // the consuming sink surfaces a "missing material" error on its own.
+      if (spec === null) continue;
+      inputMaterials[edge.inputSlot] = spec;
+    }
+    return inputMaterials;
+  }
+
   // Sink set: zero out-degree.
   for (const node of graph.nodes) {
     if ((outDegree.get(node.id) ?? 0) > 0) continue;
 
     const { inputBundles } = resolveInputBundles(node.id);
-    // inputMaterials is always present (empty until the walker resolves
-    // material-role edges in a later slice). [LAW:dataflow-not-control-flow]
-    const ctx: LoweringContext = { inputBundles, inputMaterials: {}, manifest };
+    const inputMaterials = resolveInputMaterials(node.id);
+    // Same resolutions as every other node; an unmaterialed sink gets an
+    // empty inputMaterials map. [LAW:dataflow-not-control-flow]
+    const ctx: LoweringContext = { inputBundles, inputMaterials, manifest };
 
     let result;
     try {

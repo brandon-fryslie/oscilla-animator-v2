@@ -13,7 +13,12 @@ import type {
   ComputePassSpec,
   RenderPassSpec,
 } from '../../../render/rust/boundary-contract';
-import type { LoweredBlock, NodeId } from '../../block-api';
+import type {
+  LoweredBlock,
+  LoweringContext,
+  MaterialSpec,
+  NodeId,
+} from '../../block-api';
 import type { NormalizedGraph } from '../../frontend/normalized-graph';
 import { lowerNormalizedGraph } from '../index';
 
@@ -81,6 +86,88 @@ describe('lowering: walker is opaque over node closures', () => {
     const graph: NormalizedGraph = { nodes: [badSink], edges: [] };
     const result = lowerNormalizedGraph(graph);
     expect(result.errors.some((e) => /returned kind 'bundle'/.test(e))).toBe(true);
+  });
+
+  it('resolves a material-role edge into ctx.inputMaterials', () => {
+    const spec: MaterialSpec = {
+      vertexAst: [],
+      fragmentAst: [],
+      requiredFields: ['pos_x', 'pos_y'],
+      colorVaryingName: 'color',
+      pipelineState: {
+        blendMode: 'opaque',
+        cullMode: 'none',
+        depthWrite: false,
+        depthCompare: 'always',
+      },
+    };
+    const materialNode = {
+      id: 'mat' as NodeId,
+      manifestContribution: {},
+      lower: (): LoweredBlock => ({ kind: 'material', spec }),
+    };
+
+    let captured: Readonly<Record<string, MaterialSpec>> | undefined;
+    const sinkNode = {
+      id: 'sink' as NodeId,
+      manifestContribution: {},
+      lower: (ctx: LoweringContext): LoweredBlock => {
+        captured = ctx.inputMaterials;
+        return { kind: 'intent', passes: [] };
+      },
+    };
+
+    const graph: NormalizedGraph = {
+      nodes: [materialNode, sinkNode],
+      edges: [
+        {
+          id: 'e0',
+          source: 'mat' as NodeId,
+          target: 'sink' as NodeId,
+          inputSlot: 'material',
+          role: 'material',
+        },
+      ],
+    };
+
+    const result = lowerNormalizedGraph(graph);
+    expect(result.errors).toEqual([]);
+    expect(captured).toBeDefined();
+    // The exact spec object flows through untouched — no copy, no rewrite.
+    expect(captured?.material).toBe(spec);
+  });
+
+  it('errors when a material-role edge points at a bundle-returning node', () => {
+    const bundleNode = {
+      id: 'gen' as NodeId,
+      manifestContribution: {},
+      lower: (): LoweredBlock => ({ kind: 'bundle', output: {} }),
+    };
+    const sinkNode = {
+      id: 'sink' as NodeId,
+      manifestContribution: {},
+      lower: (): LoweredBlock => ({ kind: 'intent', passes: [] }),
+    };
+
+    const graph: NormalizedGraph = {
+      nodes: [bundleNode, sinkNode],
+      edges: [
+        {
+          id: 'e0',
+          source: 'gen' as NodeId,
+          target: 'sink' as NodeId,
+          inputSlot: 'material',
+          role: 'material',
+        },
+      ],
+    };
+
+    const result = lowerNormalizedGraph(graph);
+    expect(
+      result.errors.some((e) =>
+        /referenced as a material source but lower\(\) returned 'bundle'/.test(e),
+      ),
+    ).toBe(true);
   });
 
   it('does not need any block-* import to compile or run', () => {
