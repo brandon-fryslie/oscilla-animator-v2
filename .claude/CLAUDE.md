@@ -20,56 +20,42 @@ Oscilla Animator v2 is a browser-based animation editor for creating procedural,
 
 ## Migration State
 
-The codebase is mid-migration via **strangler fig pattern**. The renderer (Rust/WASM/WebGPU) is largely feature complete. The TS↔Rust boundary is ~90% done. The C1 compiler backend that produces GPU payloads from user graphs has ~5% of blocks migrated.
+The codebase is mid-migration via **strangler fig pattern**. The **renderer direction is the "Three fork"**: a three.js (`three@0.184`, TSL) `WebGPURenderer` (`ThreeForkRenderer`) behind the `createWebGPURenderer()` seam, fed by the **pillar compiler** (`src/pillars/`) which lowers an authored patch to a backend-neutral **`ScenePlan`** (`compileScenePlan`). The earlier **Rust/WASM/WebGPU + GPU-IR** renderer and the **`PipelineInstallPayload`** path are **frozen legacy** — operational as a replaceable backend, not extended (the code marks them `FROZEN LEGACY`, e.g. `src/pillars/assembly/payload.ts`). **V1** (backend + JS runtime) is still the **default boot**; the Three path is a `?scenePlan=<id>`-selected steel thread, not yet the default.
 
-### Two Pipelines Coexist
+> **Source of truth for this migration** (these win over older GPU-IR text and ambiguous ticket prose):
+> `design-docs/three-migration-backend-canon.md` · `design-docs/three-migration-renderer-seam-inventory.md` (keep/freeze/delete map) · `design-docs/three-fork-integration-proposal.md`. Tracker epic: `oscilla-pillars-cleanup-ulu`. [LAW:one-source-of-truth]
+
+### Three lineages (one live, one default-but-legacy, one frozen)
 
 ```
-                    ┌─────────────────────────────────────────────────────────┐
-                    │                  SHARED FRONTEND                       │
-  Patch ──► Normalize ──► Type Solve ──► TypedPatch / NormalizedPatch        │
-                    └────────────┬────────────────────┬──────────────────────┘
-                                 │                    │
-                    ┌────────────▼────────┐  ┌───────▼──────────────────────┐
-                    │    V1 BACKEND       │  │    C1 BACKEND (NEW)          │
-                    │    (LEGACY)         │  │                              │
-                    │ DepGraph → SCC →    │  │ TopoSort → Harvest →        │
-                    │ Lower → Schedule    │  │ SinkDiscover → Lower+Fuse → │
-                    │         │           │  │ RosterAssembly               │
-                    │         ▼           │  │         │                    │
-                    │ CompiledProgramIR   │  │ PipelineInstallPayload       │
-                    │         │           │  │         │                    │
-                    │         ▼           │  │         ▼                    │
-                    │ JS Runtime          │  │ Rust/WASM Worker             │
-                    │ (ScheduleExecutor)  │  │ (Naga → WGSL → WebGPU)      │
-                    │         │           │  │         │                    │
-                    │         ▼           │  │         ▼                    │
-                    │ (stub renderer)     │  │ WebGPU Canvas                │
-                    └─────────────────────┘  └──────────────────────────────┘
+  authored Patch
+       │
+       ├─► V1 backend (LEGACY, DEFAULT BOOT) ─► JS Runtime (ScheduleExecutor) ─► stub
+       │
+       ├─► Pillar compiler ─► ScenePlan ─► Three fork renderer (LIVE) ─► WebGPU Canvas
+       │     src/pillars/ · compileScenePlan      ScenePlan → TSL scene graph
+       │     (activated by ?scenePlan=<id>)
+       │
+       └─► [FROZEN] Pillar/C1 ─► PipelineInstallPayload ─► Rust/WASM Worker (Naga → WGSL → WebGPU)
 ```
 
-### What Maps to What
+### Status by area
 
-| Legacy (V1) | New (C1) | Status |
-|---|---|---|
-| `src/compiler/backend/` | `src/compiler/backend-v2/` | C1 has 5-phase pipeline working |
-| `src/blocks/` + `defineBlock()` | `src/blocks-v2/` + `registerC1Block()` | 10 of ~200 blocks migrated |
-| `src/runtime/` (JS frame executor) | Rust renderer (GPU compute+render) | Renderer feature complete |
-| `src/render/Canvas2DRenderer.ts` | Deleted | Canvas2D/SVG removed |
-| `src/render/SVGRenderer.ts` | Deleted | |
-| `src/render/webgpu/` (old facade) | Stub — scorched earth, being rebuilt | |
-| `src/compiler/passes-v2/` | Deleted (excluded from build) | Was an earlier false start |
-| `CompileOrchestrator.ts` (V1 backend) | `compileC1()` / `compileC1FromNormalized()` | C1 entry point standalone |
-
-### Migrated C1 Blocks (`src/blocks-v2/`)
-
-`Const`, `Add`, `Subtract`, `Multiply`, `Divide`, `Sin`, `Cos`, `InfiniteTimeRoot` (Time), `InstanceIndex`, `RenderInstances2D` (sink)
+| Area | Status |
+|---|---|
+| `src/render/webgpu/three/` — ThreeForkRenderer, ScenePlan realizer, TSL | **LIVE — current renderer** |
+| `src/pillars/` + `src/pillars/scene/` (`compileScenePlan`) | **ACTIVE — authored patch → ScenePlan; the open backlog is `pillars-*`** |
+| `compiler/backend/` + `src/blocks/` + `src/runtime/` (V1) | **LEGACY — still the default boot path** |
+| `compiler/backend-v2/` + `src/blocks-v2/`; `src/pillars/compile.ts` + `src/pillars/assembly/` (`PipelineInstallPayload`) | **FROZEN LEGACY** |
+| `src/render/wasm/rust/`, `src/render/rust/`, `src/render/gpu-ir/` (Rust renderer + GPU-IR / Boundary DSL) | **FROZEN LEGACY** |
+| `src/render/Canvas2DRenderer.ts`, `src/render/SVGRenderer.ts`, `src/compiler/passes-v2/` | **DELETED** |
 
 ### Migration Discipline
 
-- **No feature flags** — tests control which pipeline runs, not runtime toggles
-- **Never fix V1 bugs** — energy goes to C1 migration only
-- **Shared frontend stays** — `compiler/frontend/` serves both pipelines
+- **Never fix V1 bugs** — V1 (backend/blocks/runtime) is legacy.
+- **Do not extend the frozen stack** — the Rust/WASM/GPU-IR renderer and the `PipelineInstallPayload` path are frozen. New renderer/compiler work follows **pillar → `ScenePlan` → Three**.
+- **No feature flags** — path selection is `?scenePlan=<id>` (steel thread) vs default V1 boot, plus tests; never runtime toggles.
+- When ticket text or older docs conflict with the canon docs above, the canon docs win. [LAW:one-source-of-truth]
 
 ## Development Commands
 
@@ -264,19 +250,21 @@ See `.claude/rules/spec/invariants.md` for the full list and `.claude/rules/TYPE
 
 ## Common Tasks
 
-### Adding a New C1 Block
+> **Frozen-path warning**: the "Adding a New C1 Block / C1 Sink Block / GPU-IR Fixture" guides below describe the **frozen** Rust/WASM/GPU-IR stack (see Migration State). Do not extend it for new work — current block/renderer work lives in the pillar → `ScenePlan` → Three direction (`src/pillars/`). These remain only as reference for the legacy path.
+
+### Adding a New C1 Block (FROZEN — legacy reference only)
 1. Create `src/blocks-v2/my-block.ts`
 2. Call `registerC1Block('MyBlock', { lower: (ctx) => ... })` — returns `{ kind: 'proxy', outputs: { ... } }` for math blocks
 3. Import in `src/blocks-v2/all.ts`
 4. Add to a compiler-tester fixture to validate visually
 5. Run: `npx vitest run src/compiler/backend-v2/__tests__/`
 
-### Adding a New C1 Sink Block
+### Adding a New C1 Sink Block (FROZEN — legacy reference only)
 1. Create `src/blocks-v2/my-sink.ts`
 2. Register with `isSink: true`, implement `manifestRequirements()` for GPU resources, `lower()` returns `{ kind: 'sink', injectedPasses: [...] }`
 3. Passes can be `ComputePassSpec`, `SystemPassSpec`, or `RenderPassSpec`
 
-### Adding a GPU-IR Fixture (Boundary DSL)
+### Adding a GPU-IR Fixture (Boundary DSL) (FROZEN — legacy reference only)
 1. Create `src/render/rust/fixtures/my-fixture.ts`
 2. Use `gpu({ manifest, roster })` with `compute()` / `render()` helpers
 3. Export from `src/render/rust/fixtures/index.ts`

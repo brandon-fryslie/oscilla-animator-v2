@@ -4,25 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Full architectural guide**: `.claude/CLAUDE.md` — comprehensive layer-by-layer breakdown, design patterns, invariants, and common task guides. Read that before making significant changes.
 >
-> **DSL reference**: `docs/DSLs.md` — the five DSLs (Boundary IR, Boundary DSL, Naga DSL, Block DSL, Patch DSL) with entry points and key files.
+> **DSL reference**: `docs/DSLs.md` — the five DSLs (Boundary IR, Boundary DSL, Naga DSL, Block DSL, Patch DSL). Note: Boundary IR/DSL and Naga DSL describe the **frozen** GPU-IR renderer (see Migration State); Block DSL and Patch DSL remain current.
 
 ## Migration State (READ THIS FIRST)
 
-The codebase is mid-migration via strangler fig pattern. Two compilation pipelines coexist:
+The codebase is mid-migration via strangler fig. The **renderer direction is the "Three fork"**: a three.js (`three@0.184`, TSL) `WebGPURenderer` (`ThreeForkRenderer`) lives behind the `createWebGPURenderer()` seam in `src/render/webgpu/`, fed by the **pillar compiler** (`src/pillars/`), which lowers an authored patch into a backend-neutral **`ScenePlan`** (`compileScenePlan`). The earlier **Rust/WASM/WebGPU + GPU-IR** renderer and the **`PipelineInstallPayload`** path are now **frozen legacy** — operational as a replaceable backend, not extended (the code itself marks them `FROZEN LEGACY`, e.g. `src/pillars/assembly/payload.ts`; the Rust install call in `RuntimeService` is commented out).
 
-| System | Status | Path |
-|--------|--------|------|
-| **V1 backend** (`compiler/backend/`) | **LEGACY — being replaced** | Frontend → Backend → JS Runtime → (stub renderer) |
-| **C1 backend** (`compiler/backend-v2/`) | **NEW — ~5% block coverage** | Frontend → C1 Backend → PipelineInstallPayload → Rust/WASM → WebGPU |
-| **Compiler frontend** (`compiler/frontend/`) | **SHARED** — used by both pipelines | |
-| **V1 blocks** (`src/blocks/`) | **LEGACY** — only for V1 backend lowering | |
-| **C1 blocks** (`src/blocks-v2/`) | **NEW** — 10 blocks migrated so far | |
-| **V1 runtime** (`src/runtime/`) | **LEGACY** — JS frame executor | |
-| **Rust renderer** (`src/render/wasm/rust/`) | **NEW — feature complete** | WebGPU render worker |
-| **WebGPU facade** (`src/render/webgpu/`) | **STUB** — deleted during scorched earth, being rebuilt | |
+> **Source of truth for this migration** (these win over older GPU-IR docs and ambiguous ticket prose):
+> `design-docs/three-migration-backend-canon.md` · `design-docs/three-migration-renderer-seam-inventory.md` (keep/freeze/delete map) · `design-docs/three-fork-integration-proposal.md`. Tracker: epic `oscilla-pillars-cleanup-ulu`.
+
+| System | Status | Notes |
+|--------|--------|-------|
+| **Three fork renderer** (`src/render/webgpu/three/`) | **LIVE — the direction** | three.js `WebGPURenderer`; pure `ScenePlan` → TSL scene-graph realizer; constructed at the `createWebGPURenderer` seam, driven from `RuntimeService` |
+| **Pillar compiler → ScenePlan** (`src/pillars/`, `src/pillars/scene/`) | **ACTIVE** | authored patch → `ScenePlan` (`compileScenePlan`); the active backlog lives in the `pillars-*` epics |
+| **V1 backend / blocks / runtime** (`compiler/backend/`, `src/blocks/`, `src/runtime/`) | **LEGACY — still the default boot** | JS frame executor; the app boots this unless `?scenePlan=<id>` selects the Three steel thread |
+| **C1 backend / blocks-v2 + pillar `PipelineInstallPayload`** (`compiler/backend-v2/`, `src/blocks-v2/`, `src/pillars/compile.ts`, `src/pillars/assembly/`) | **FROZEN LEGACY** | targeted the Rust renderer; superseded by the ScenePlan path |
+| **Rust renderer + GPU-IR / Boundary DSL** (`src/render/wasm/rust/`, `src/render/rust/`, `src/render/gpu-ir/`) | **FROZEN LEGACY** | operational, not extended — do not add to it |
 | **Canvas2D / SVG renderers** | **DELETED** | |
 
-**Rules for legacy code**: Never fix bugs in V1 backend, V1 blocks, or V1 runtime. They are dead code being replaced. New work goes in `backend-v2/` and `blocks-v2/`.
+**Default boot is still V1.** The Three path activates via `?scenePlan=<id>` (a steel thread proven for two demos: Grid of Squares, Textured Tiles); promoting it to the default is remaining migration work (`oscilla-pillars-cleanup-ulu`).
+
+**Rules for legacy code**: Never fix bugs in V1 (backend/blocks/runtime). Treat the Rust/WASM/GPU-IR stack and the `PipelineInstallPayload` path (incl. C1 `backend-v2` and `src/pillars/compile.ts` / `src/pillars/assembly/`) as **frozen** — do not extend them. New renderer/compiler work follows **pillar → `ScenePlan` → Three** (see the canon docs above).
 
 ## Development Commands
 
