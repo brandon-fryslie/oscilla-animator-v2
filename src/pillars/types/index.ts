@@ -6,7 +6,9 @@
  *
  *   - `graph`   — the user-authored PillarPatch graph (frontend input).
  *   - `schemas` — the Zod type-system layer every compiler type is expressed in.
+ *   - `solve`   — the pure sub-solvers + substitution that resolve type variables.
  */
 
 export * from './graph';
 export * from './schemas';
+export * from './solve';
