@@ -36,6 +36,7 @@ import type {
   TextureSpec,
 } from '../render/rust/boundary-contract';
 import type {
+  ZAdapterSpec,
   ZBlockContract,
   ZCombineMode,
   ZInferenceBundleType,
@@ -288,6 +289,16 @@ export interface BlockDefinition<TConfig, TLowerArgs> {
   readonly contract?: ZBlockContract;
 
   /**
+   * Present iff this block is an adapter — a one-in/one-out conversion the type
+   * system may auto-insert to bridge an incompatible edge. It is block-role
+   * metadata at the same altitude as `type`, NOT part of the port type surface,
+   * so it lives here rather than inside `contract`. The adapter search reads it
+   * to filter the catalog; a block without it is never an insertion candidate.
+   * [LAW:decomposition]
+   */
+  readonly adapterSpec?: ZAdapterSpec;
+
+  /**
    * FRONTEND-ONLY. Validates and narrows raw user-supplied config.
    *
    * Contract:
@@ -342,6 +353,21 @@ export interface BlockDefinition<TConfig, TLowerArgs> {
    * the walker calls without ever seeing what's inside.
    */
   readonly lower: (args: TLowerArgs, ctx: LoweringContext) => LoweredBlock;
+}
+
+/**
+ * The read-only catalog projection of a block — exactly the slice the type
+ * system's pure passes (adapter search, insert-menu query) consult, and nothing
+ * more. It names only the covariant data fields, never `lower`/`readConfig`, so
+ * a `BlockDefinition<TConfig, TLowerArgs>` for ANY config is structurally
+ * assignable (the existing `ALL_BLOCKS: BlockDefinition<unknown, unknown>[]`
+ * passes straight through) while a pure search depends on no closures it does
+ * not call. [LAW:decomposition]
+ */
+export interface DefinedBlock {
+  readonly type: string;
+  readonly contract?: ZBlockContract;
+  readonly adapterSpec?: ZAdapterSpec;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +453,8 @@ export function defineBlock<
   readonly config: TConfig;
   readonly inputs: TInputs;
   readonly outputs: TOutputs;
+  /** Present iff this block is an adapter; rides through onto the definition. */
+  readonly adapterSpec?: ZAdapterSpec;
   readonly manifest?: (config: z.infer<TConfig>) => ManifestContribution;
   readonly lower: (
     config: z.infer<TConfig>,
@@ -441,6 +469,7 @@ export function defineBlock<
   return {
     type: spec.type,
     contract,
+    ...(spec.adapterSpec !== undefined ? { adapterSpec: spec.adapterSpec } : {}),
     readConfig: (raw, diagnostics) => {
       const parsed = spec.config.safeParse(raw);
       if (parsed.success) return parsed.data;

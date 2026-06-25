@@ -284,6 +284,25 @@ export const ZBlockContractSchema = z.object({
 });
 export type ZBlockContract = z.infer<typeof ZBlockContractSchema>;
 
+/**
+ * Marks a block as an adapter — a one-in/one-out conversion the type system may
+ * insert to bridge an otherwise-incompatible edge. There is NO adapter registry
+ * and NO pattern dialect: an adapter is a regular block whose polymorphism is
+ * expressed in its ports' `ZInferenceCanonicalType` variables, and "find an
+ * adapter" is unification over the catalog. So the only data an adapter spec
+ * carries beyond the block's existing contract is human-facing description plus
+ * a tiebreak priority. [LAW:one-type-per-behavior] [LAW:no-mode-explosion]
+ *
+ * `priority` is lower-is-preferred (default 0), the deterministic tiebreak when
+ * several adapters unify the same edge. It is data on the type, never a mode the
+ * search branches on.
+ */
+export const ZAdapterSpecSchema = z.object({
+  description: z.string(),
+  priority: z.number().int().optional(),
+});
+export type ZAdapterSpec = z.infer<typeof ZAdapterSpecSchema>;
+
 // ---------------------------------------------------------------------------
 // Constructors — produce inference types ergonomically
 // ---------------------------------------------------------------------------
