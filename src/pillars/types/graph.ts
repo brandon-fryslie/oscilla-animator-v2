@@ -1,5 +1,5 @@
 /**
- * src/pillars/types.ts
+ * src/pillars/types/graph.ts
  *
  * The user-authored graph type. PillarPatch is the input to the frontend.
  * Compiler-internal types (NormalizedGraph, LoweringContext, BlockDefinition,
