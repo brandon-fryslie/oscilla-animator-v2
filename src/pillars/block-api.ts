@@ -15,7 +15,11 @@
  *
  * dependency-cruiser rule: src/pillars/block-api.ts must not import from
  * any phase directory. See `.dependency-cruiser.cjs` for the enforcement.
+ * The schema layer (`./types/schemas`) is the one exception — it is a leaf
+ * the ABI is allowed to build on, one-way. [LAW:one-way-deps]
  */
+
+import { z } from 'zod';
 
 import type {
   ArenaScalarSpec,
@@ -31,6 +35,13 @@ import type {
   StaticGeometrySpec,
   TextureSpec,
 } from '../render/rust/boundary-contract';
+import type {
+  ZBlockContract,
+  ZCombineMode,
+  ZInferenceBundleType,
+  ZInferenceCanonicalType,
+  ZPortBinding,
+} from './types/schemas';
 
 // ---------------------------------------------------------------------------
 // NodeId — opaque brand for nodes in the NormalizedGraph
@@ -267,6 +278,16 @@ export interface BlockDefinition<TConfig, TLowerArgs> {
   readonly type: string;
 
   /**
+   * The block's type surface: input/output ports with their declared bundle
+   * types. Optional in this child because not every block has been migrated to
+   * declare one yet; it becomes mandatory once the block-migration child lands.
+   * Blocks built via `defineBlock` always carry one. The frontend type solver,
+   * the validate gate, and the insert-menu query read this — never the block
+   * body. [LAW:locality-or-seam]
+   */
+  readonly contract?: ZBlockContract;
+
+  /**
    * FRONTEND-ONLY. Validates and narrows raw user-supplied config.
    *
    * Contract:
@@ -321,4 +342,122 @@ export interface BlockDefinition<TConfig, TLowerArgs> {
    * the walker calls without ever seeing what's inside.
    */
   readonly lower: (args: TLowerArgs, ctx: LoweringContext) => LoweredBlock;
+}
+
+// ---------------------------------------------------------------------------
+// defineBlock — the authoring helper with end-to-end TypeScript inference
+// ---------------------------------------------------------------------------
+
+/**
+ * The author-facing shape of one input port: the bundle of fields it carries
+ * and (optionally) how multiple incoming edges combine. Direction and the
+ * port's stable id are NOT written by the author — `defineBlock` derives `dir`
+ * from whether the port sits under `inputs` or `outputs`, and sets `id` to the
+ * slot key. The author states each fact once. [LAW:one-source-of-truth]
+ */
+type InputPortDecl = {
+  readonly type: ZInferenceBundleType;
+  readonly combine?: ZCombineMode;
+};
+
+type OutputPortDecl = {
+  readonly type: ZInferenceBundleType;
+};
+
+/**
+ * Maps a declared input-port set to the precisely-typed `inputBundles` the
+ * block's `lower` sees. Each slot becomes a record whose keys are EXACTLY the
+ * fields that slot's bundle declared (no index signature), so reading a
+ * declared field yields its runtime `ExprIR` and reading an undeclared field is
+ * a compile error. This is what turns the contract into a compile-time spec
+ * rather than a runtime hope. [LAW:types-are-the-program]
+ */
+type InferBundles<TInputs> = {
+  readonly [Slot in keyof TInputs]: TInputs[Slot] extends { readonly type: infer Bundle }
+    ? { readonly [Field in keyof Bundle]: ExprIR }
+    : never;
+};
+
+/**
+ * The `LoweringContext` a `defineBlock` block sees, with the wide
+ * `Record<string, SourceBundle>` inputBundles REPLACED (not intersected) by the
+ * precise per-slot view. Intersecting would re-admit arbitrary keys through the
+ * record's index signature and defeat the field-level checking, so the wide
+ * member is omitted first. [LAW:types-are-the-program]
+ */
+type TypedLoweringContext<TInputs> = Omit<LoweringContext, 'inputBundles'> & {
+  readonly inputBundles: InferBundles<TInputs>;
+};
+
+const toBindings = (
+  decls: Readonly<Record<string, InputPortDecl>>,
+  dir: 'in' | 'out',
+): Record<string, ZPortBinding> => {
+  const out: Record<string, ZPortBinding> = {};
+  for (const [slot, decl] of Object.entries(decls)) {
+    out[slot] =
+      decl.combine === undefined
+        ? { id: slot, dir, type: decl.type }
+        : { id: slot, dir, type: decl.type, combine: decl.combine };
+  }
+  return out;
+};
+
+/**
+ * Builds a fully-typed `BlockDefinition` from Zod schemas, giving block authors
+ * end-to-end inference: `config` validates with a one-line `.safeParse` instead
+ * of a hand-rolled `readConfig`, and `lower` receives both the parsed config and
+ * an `inputBundles` view typed field-by-field from the declared ports.
+ *
+ * The `TConfig`/`TLowerArgs` split collapses here — `lower` receives the parsed
+ * config directly (`buildLowerArgs` is identity). A block that needs to inject
+ * resolved symbol ids into the backend still uses the longhand `BlockDefinition`
+ * literal; `defineBlock` covers the common case where config IS the lower args.
+ *
+ * `const` type parameters preserve the literal slot and field keys through
+ * inference (Zod discussion #670), which is the entire point: without them the
+ * field keys widen to `string` and the compile-time checking evaporates.
+ */
+export function defineBlock<
+  TConfig extends z.ZodType,
+  const TInputs extends Record<string, InputPortDecl>,
+  const TOutputs extends Record<string, OutputPortDecl>,
+>(spec: {
+  readonly type: string;
+  readonly config: TConfig;
+  readonly inputs: TInputs;
+  readonly outputs: TOutputs;
+  readonly manifest?: (config: z.infer<TConfig>) => ManifestContribution;
+  readonly lower: (
+    config: z.infer<TConfig>,
+    ctx: TypedLoweringContext<TInputs>,
+  ) => LoweredBlock;
+}): BlockDefinition<z.infer<TConfig>, z.infer<TConfig>> {
+  const contract: ZBlockContract = {
+    inputs: toBindings(spec.inputs, 'in'),
+    outputs: toBindings(spec.outputs, 'out'),
+  };
+
+  return {
+    type: spec.type,
+    contract,
+    readConfig: (raw, diagnostics) => {
+      const parsed = spec.config.safeParse(raw);
+      if (parsed.success) return parsed.data;
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.length > 0 ? `config.${issue.path.join('.')}: ` : '';
+        diagnostics.push({
+          severity: 'error',
+          message: `[${spec.type}] ${path}${issue.message}`,
+        });
+      }
+      return null;
+    },
+    buildManifestContribution: spec.manifest ?? (() => ({})),
+    buildLowerArgs: (config) => config,
+    // The walker hands us the wide LoweringContext; the contract guarantees the
+    // declared fields are present, so we refine the view to the typed one at
+    // this single seam rather than threading a generic ctx through the walker.
+    lower: (args, ctx) => spec.lower(args, ctx as TypedLoweringContext<TInputs>),
+  };
 }

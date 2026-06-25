@@ -241,6 +241,50 @@ export const ZInferenceBundleTypeSchema = z.record(z.string(), ZInferenceCanonic
 export type ZInferenceBundleType = z.infer<typeof ZInferenceBundleTypeSchema>;
 
 // ---------------------------------------------------------------------------
+// Ports — where a block declares the types it consumes and emits
+// ---------------------------------------------------------------------------
+
+/**
+ * How a multi-fanout input field reduces when several edges target one port.
+ * `first`/`last` pick a single contributor; `sum` adds numeric fields; `or`/`and`
+ * combine booleans. Which mode is legal for which payload category is a semantic
+ * rule the validate gate enforces in a later child — the schema admits the set,
+ * the gate decides the pairing. [LAW:decomposition]
+ */
+export const ZCombineModeSchema = z.enum(['first', 'last', 'sum', 'or', 'and']);
+export type ZCombineMode = z.infer<typeof ZCombineModeSchema>;
+
+/**
+ * A single port: its stable identity, its direction, and the bundle of typed
+ * fields it carries. The type is a `ZInferenceBundleType` because a port may
+ * declare variables (a modifier ties its output field to its input field by
+ * sharing a variable) that only become concrete after the resolver runs.
+ *
+ * Types live on PORTS, never on edges — an edge is `{source, target}` only.
+ * A catalog block has fully-typed ports with no edges at all, which is what
+ * makes `findInsertableBlocks` answerable without walking a graph. [LAW:one-source-of-truth]
+ */
+export const ZPortBindingSchema = z.object({
+  id: z.string(),
+  dir: z.enum(['in', 'out']),
+  type: ZInferenceBundleTypeSchema,
+  combine: ZCombineModeSchema.optional(),
+});
+export type ZPortBinding = z.infer<typeof ZPortBindingSchema>;
+
+/**
+ * A block's complete type surface: its input and output ports, each keyed by
+ * slot name. This is the block's seam — the rest of the compiler (unifier,
+ * validate gate, insert-menu query) reads the contract, never the block body.
+ * [LAW:locality-or-seam]
+ */
+export const ZBlockContractSchema = z.object({
+  inputs: z.record(z.string(), ZPortBindingSchema),
+  outputs: z.record(z.string(), ZPortBindingSchema),
+});
+export type ZBlockContract = z.infer<typeof ZBlockContractSchema>;
+
+// ---------------------------------------------------------------------------
 // Constructors — produce inference types ergonomically
 // ---------------------------------------------------------------------------
 
