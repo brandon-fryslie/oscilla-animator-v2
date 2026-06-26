@@ -50,6 +50,7 @@ import type {
 import type { ZCanonicalType } from '../schemas';
 import { isOpen } from './typed-graph';
 import type { PolicyContext } from './policies/policy-types';
+import { validateAxes } from '../validate/axis-validate';
 
 const DEFAULT_MAX_ITERATIONS = 20;
 
@@ -126,7 +127,17 @@ export function resolveTypes(
         if (ob.status.kind !== 'discharged') continue;
       }
 
-      const strict = tryFinalizeStrict(g, facts, accumulatedDiagnostics);
+      let strict = tryFinalizeStrict(g, facts, accumulatedDiagnostics);
+
+      // [LAW:single-enforcer] — axis invariants validated once, here, after convergence.
+      if (strict !== null) {
+        const axisViolations = validateAxes(strict, catalog);
+        if (axisViolations.length > 0) {
+          accumulatedDiagnostics.push(...axisViolations);
+          strict = null;
+        }
+      }
+
       return {
         graph: g,
         facts,
