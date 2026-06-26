@@ -42,6 +42,8 @@ describe('no-legacy-types gate', () => {
       '*.tsx',
       '!**/*.test.*',
       '!**/__tests__/**',
+      // derive-kind.ts is the canonical definition site. [LAW:single-enforcer]
+      '!src/pillars/types/validate/derive-kind.ts',
     ]);
     expect(matches).toEqual([]);
   });
