@@ -243,7 +243,13 @@ export type FixpointDiagnosticCode =
   | 'OpenObligation'
   | 'UnresolvedPort'
   | 'CheaterAdapterUsed'
-  | 'TypeConflict';
+  | 'TypeConflict'
+  // validateAxes codes
+  | 'EventInvariantBroken'
+  | 'NoInstance'
+  | 'AdapterShapeError'
+  | 'CategoryGatingError'
+  | 'VarEscape';
 
 export interface FixpointDiagnostic {
   readonly code: FixpointDiagnosticCode;
