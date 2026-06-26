@@ -1,14 +1,51 @@
 /**
  * src/pillars/types/solve/index.ts
  *
- * The pure variable-resolution layer: the two sub-solvers, the substitution they
- * contribute to, and the vocabulary they share. Everything here is a pure
- * function of its input — the fixpoint driver (wzm3.5) composes these, owning
- * all graph mutation itself. [LAW:effects-at-boundaries]
+ * Public API for the pillar type solver. Organized by layer:
+ *
+ *   - Vocabulary (shared types, substitution)
+ *   - Sub-solvers (payload/unit, cardinality, adapter search)
+ *   - Fixpoint driver (resolveTypes + graph helpers + result types)
+ *
+ * Everything exported from the sub-solver layer is pure (same input → same
+ * output); the fixpoint driver composes them, owning all graph mutation.
+ * [LAW:effects-at-boundaries]
  */
 
+// Vocabulary
 export * from './shared';
 export * from './substitution';
+
+// Sub-solvers
 export * from './payload-unit';
 export * from './cardinality';
 export * from './adapters';
+
+// Core data model
+export type {
+  DraftPortKey,
+  MutableBlockId,
+  ObligationId,
+  MutableBlock,
+  MutableEdge,
+  MutableGraph,
+  BlockOrigin,
+  EdgeOrigin,
+  ObligationKind,
+  ObligationAnchor,
+  FactDependency,
+  ObligationStatus,
+  Obligation,
+  ElaborationPlan,
+  TypeFacts,
+  PortTypeHint,
+  PortHintStatus,
+  StrictTypedGraph,
+  FixpointDiagnostic,
+  FixpointDiagnosticCode,
+  FixpointResult,
+} from './typed-graph';
+export { draftPortKey, mutableBlockId, obligationId, isOpen, isDischarged, discharged, blocked } from './typed-graph';
+
+// Fixpoint driver
+export { resolveTypes, makeMutableGraph } from './fixpoint';
