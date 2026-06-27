@@ -23,7 +23,9 @@ export * from './adapters';
 
 // Core data model
 export type {
+  DraftPortDirection,
   DraftPortKey,
+  DraftPortParts,
   MutableBlockId,
   ObligationId,
   MutableBlock,
@@ -45,7 +47,7 @@ export type {
   FixpointDiagnosticCode,
   FixpointResult,
 } from './typed-graph';
-export { draftPortKey, mutableBlockId, obligationId, isOpen, isDischarged, discharged, blocked } from './typed-graph';
+export { draftPortKey, parseDraftPortKey, mutableBlockId, obligationId, isOpen, isDischarged, discharged, blocked } from './typed-graph';
 
 // Fixpoint driver
 export { resolveTypes, makeMutableGraph } from './fixpoint';

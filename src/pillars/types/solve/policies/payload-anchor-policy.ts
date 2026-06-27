@@ -14,7 +14,7 @@ import type { ZBlockContract } from '../../schemas';
 import { canonical } from '../../schemas';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
 import type { FixpointDiagnostic } from '../typed-graph';
-import { obligationId as obId } from '../typed-graph';
+import { parseDraftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
 import type { ZInferenceBundleType } from '../../schemas';
 
@@ -32,16 +32,10 @@ export function payloadAnchorPolicy(ctx: PolicyContext): PolicyResult {
     return { kind: 'blocked', reason: 'port already resolved (stale obligation)' };
   }
 
-  // Find an edge that involves this port so we can insert the anchor
   const portKey = dep.port;
-  const parts = portKey.split(':');
-  const blockId = parts[0];
-  const slotName = parts[1];
-  const fieldName = parts[2];
-  const dir = parts[3] as 'in' | 'out';
+  const { blockId, slotName, fieldName, dir } = parseDraftPortKey(portKey);
 
-  // Find an edge touching this port (as source or target)
-  let targetEdge = graph.edges.find((e) => {
+  const targetEdge = graph.edges.find((e) => {
     if (dir === 'out') return e.source === blockId && e.outputSlot === slotName;
     return e.target === blockId && e.inputSlot === slotName;
   });
