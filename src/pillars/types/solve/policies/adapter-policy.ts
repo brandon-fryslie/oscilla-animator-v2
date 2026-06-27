@@ -14,6 +14,7 @@
 
 import { findAdapterCandidates } from '../adapters';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
+import { draftPortKey } from '../typed-graph';
 import type { ZBlockContract, ZInferenceCanonicalType } from '../../schemas';
 import type { PolicyContext, PolicyResult } from './policy-types';
 import { applySubstitution } from '../substitution';
@@ -47,8 +48,8 @@ export function adapterPolicy(ctx: PolicyContext): PolicyResult {
 
   for (const fieldName of Object.keys(srcSlot.type)) {
     if (!(fieldName in tgtSlot.type)) continue;
-    const srcKey = `${edge.source}:${edge.outputSlot}:${fieldName}:out` as import('../typed-graph').DraftPortKey;
-    const tgtKey = `${edge.target}:${edge.inputSlot}:${fieldName}:in` as import('../typed-graph').DraftPortKey;
+    const srcKey = draftPortKey(edge.source, edge.outputSlot, fieldName, 'out');
+    const tgtKey = draftPortKey(edge.target, edge.inputSlot, fieldName, 'in');
     const srcHint = facts.ports.get(srcKey);
     const tgtHint = facts.ports.get(tgtKey);
     if (srcHint?.status === 'ok' && tgtHint?.status === 'ok') {

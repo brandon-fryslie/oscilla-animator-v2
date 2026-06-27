@@ -19,7 +19,7 @@
 import type { ZBlockContract, ZInferenceBundleType } from '../../schemas';
 import { canonical } from '../../schemas';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
-import { mutableBlockId } from '../typed-graph';
+import { draftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
 
 const SYS_DEFAULT = '_sys/DefaultSource';
@@ -53,7 +53,7 @@ export function defaultSourcePolicy(ctx: PolicyContext): PolicyResult {
   // type, substituting any unresolved vars with a default float type.
   const outputBundle: ZInferenceBundleType = {};
   for (const [fieldName, fieldType] of Object.entries(tgtSlot.type)) {
-    const key = `${blockId}:${slotName}:${fieldName}:in` as import('../typed-graph').DraftPortKey;
+    const key = draftPortKey(blockId, slotName, fieldName, 'in');
     const hint = facts.ports.get(key);
     if (hint?.status === 'ok') {
       outputBundle[fieldName] = hint.canonical!;

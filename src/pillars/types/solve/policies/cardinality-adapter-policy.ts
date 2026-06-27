@@ -16,6 +16,7 @@ import type { InstanceRef, ZBlockContract } from '../../schemas';
 import { payloadVar, unitVar } from '../../schemas';
 import { instanceRef } from '../../schemas';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
+import { draftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
 import type { ZInferenceBundleType } from '../../schemas';
 import { canonical } from '../../schemas';
@@ -44,7 +45,7 @@ export function cardinalityAdapterPolicy(ctx: PolicyContext): PolicyResult {
   const firstField = Object.keys(tgtSlot.type)[0];
   if (!firstField) return { kind: 'blocked', reason: 'target slot has no fields' };
 
-  const tgtKey = `${edge.target}:${edge.inputSlot}:${firstField}:in` as import('../typed-graph').DraftPortKey;
+  const tgtKey = draftPortKey(edge.target, edge.inputSlot, firstField, 'in');
   const tgtHint = facts.ports.get(tgtKey);
 
   let manyInstance: InstanceRef;

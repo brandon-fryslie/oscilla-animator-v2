@@ -12,3 +12,5 @@
 export * from './graph';
 export * from './schemas';
 export * from './solve';
+export * from './query';
+export * from './validate';
