@@ -19,7 +19,7 @@ import type { DefinedBlock } from '../block-api';
 import type { ZAdapterSpec, ZBlockContract, ZCanonicalType, ZInferenceCanonicalType } from './schemas';
 import type { ZPayloadType, ZUnitType } from './schemas';
 import type { ZInferenceCardinality } from './schemas';
-import { solvePayloadUnit } from './solve/payload-unit';
+import { portVarInfoOf, solvePayloadUnit } from './solve/payload-unit';
 import type { PortVarInfo, ZPayloadUnitConstraint } from './solve/payload-unit';
 import { solveCardinality } from './solve/cardinality';
 import type { ZCardinalityConstraint } from './solve/cardinality';
@@ -155,8 +155,8 @@ function typesDirectlyCompatible(
 
   // Payload / unit — two-port equality check
   const puPorts = new Map<PortKey, PortVarInfo>([
-    ['r', varInfoOf(resolved)],
-    ['c', varInfoOf(candidate)],
+    ['r', portVarInfoOf(resolved)],
+    ['c', portVarInfoOf(candidate)],
   ]);
   const puConstraints: ZPayloadUnitConstraint[] = [
     { kind: 'payloadEq', a: 'r', b: 'c', origin },
@@ -186,15 +186,6 @@ function typesDirectlyCompatible(
   const card = solveCardinality({ ports: cardPorts, constraints: cardConstraints });
   return card.errors.length === 0;
 }
-
-/**
- * Extract variable IDs for the payload/unit solver. Concrete axes have no
- * variable; their values are pinned by separate `concrete*` constraints.
- */
-const varInfoOf = (t: ZInferenceCanonicalType): PortVarInfo => ({
-  ...(t.payload.kind === 'var' ? { payloadVar: t.payload.var } : {}),
-  ...(t.unit.kind === 'var' ? { unitVar: t.unit.var } : {}),
-});
 
 // ---------------------------------------------------------------------------
 // Sorting
