@@ -20,6 +20,7 @@
 import type {
   PayloadVarId,
   UnitVarId,
+  ZInferenceCanonicalType,
   ZPayloadType,
   ZUnitType,
 } from '../schemas';
@@ -54,6 +55,15 @@ export interface PortVarInfo {
   readonly payloadVar?: PayloadVarId;
   readonly unitVar?: UnitVarId;
 }
+
+/**
+ * The solver owns this projection so absent variables stay absent keys under
+ * exact-optional typing. [LAW:one-source-of-truth]
+ */
+export const portVarInfoOf = (t: ZInferenceCanonicalType): PortVarInfo => ({
+  ...(t.payload.kind === 'var' ? { payloadVar: t.payload.var } : {}),
+  ...(t.unit.kind === 'var' ? { unitVar: t.unit.var } : {}),
+});
 
 /**
  * A post-solve safety net: after union-find settles, re-check that the two ends
