@@ -1,12 +1,12 @@
 /**
  * src/pillars/types/__tests__/find-insertable-blocks.test.ts
  *
- * `findInsertableBlocks` — contract tests. All scenarios run without calling
+ * Query-helper contract tests. All scenarios run without calling
  * `resolveTypes`; the `StrictTypedGraph` is constructed directly to isolate
  * the query layer from the fixpoint driver. [LAW:behavior-not-structure]
  *
  * Scenarios:
- *   1. Catalog-side — returns all blocks, no type filtering
+ *   1. Catalog listing — returns all blocks, no type filtering
  *   2. Context-side direct match — float out → float-input block
  *   3. Context-side adapter match — degrees out → radians-input block + DegToRad
  *   4. Context-side no match — float out → vec2-input block, no adapter
@@ -14,7 +14,7 @@
  *   6. Multi-slot — correct matchingSlotId reported when second slot matches
  *   7. Ranking — direct before via-adapter
  *   8. In-port direction — in port queries candidate output slots
- *   9. Benchmark — 1000 queries on 100-block catalog complete in < 1 s
+ *   9. Benchmark — 1000 queries on 100-block catalog complete in < 5 s
  */
 
 import { describe, it, expect } from 'vitest';
@@ -29,7 +29,7 @@ import {
   type ZCanonicalType,
 } from '../schemas';
 import type { DefinedBlock } from '../../block-api';
-import { findInsertableBlocks } from '../query';
+import { findInsertableBlocks, listCatalogEntries } from '../query';
 import { draftPortKey } from '../solve/typed-graph';
 import type { StrictTypedGraph, MutableGraph, DraftPortKey } from '../solve/typed-graph';
 
@@ -132,7 +132,7 @@ const bareBlock = (type: string): DefinedBlock => ({ type });
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('findInsertableBlocks — catalog-side overload', () => {
+describe('listCatalogEntries — catalog-side listing', () => {
   it('returns every block in the catalog with no filtering', () => {
     const catalog: DefinedBlock[] = [
       source('FloatSource', zFloat()),
@@ -141,7 +141,7 @@ describe('findInsertableBlocks — catalog-side overload', () => {
       bareBlock('Passthrough'),
     ];
 
-    const entries = findInsertableBlocks(catalog);
+    const entries = listCatalogEntries(catalog);
 
     expect(entries).toHaveLength(4);
     expect(entries.map((e) => e.blockType)).toEqual(
@@ -151,16 +151,16 @@ describe('findInsertableBlocks — catalog-side overload', () => {
 
   it('maps adapterSpec through to the entry', () => {
     const catalog: DefinedBlock[] = [adapterDef('DegToRad', degrees(), radians(), { description: 'Degrees → Radians' })];
-    const [entry] = findInsertableBlocks(catalog);
+    const [entry] = listCatalogEntries(catalog);
     expect(entry.adapterSpec?.description).toBe('Degrees → Radians');
   });
 
   it('returns an empty array for an empty catalog', () => {
-    expect(findInsertableBlocks([])).toHaveLength(0);
+    expect(listCatalogEntries([])).toHaveLength(0);
   });
 });
 
-describe('findInsertableBlocks — context-side overload', () => {
+describe('findInsertableBlocks — context-side query', () => {
   it('direct match: float out port → float-input block', () => {
     const catalog: DefinedBlock[] = [sink('FloatSink', zFloat())];
     const key = draftPortKey('srcBlock', 'output', 'value', 'out');

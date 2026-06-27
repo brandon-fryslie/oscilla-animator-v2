@@ -17,8 +17,8 @@
  * loop. [LAW:no-silent-failure]
  */
 
-import type { Obligation, DraftPortKey, MutableGraph, TypeFacts, FactDependency } from '../typed-graph';
-import { obligationId, draftPortKey } from '../typed-graph';
+import type { Obligation, MutableGraph, TypeFacts, FactDependency } from '../typed-graph';
+import { obligationId, draftPortKey, parseDraftPortKey } from '../typed-graph';
 import type { DefinedBlock } from '../../../block-api';
 import type { ZCanonicalType } from '../../schemas';
 
@@ -193,12 +193,13 @@ export function createDerivedObligations(
     if (!hint.inference || hint.inference.payload.kind !== 'var') continue;
 
     const id = obligationId(`needsPayloadAnchor:${key}`);
-    const deps: FactDependency[] = [{ kind: 'portHasUnresolvedPayload', port: key as DraftPortKey }];
+    const deps: FactDependency[] = [{ kind: 'portHasUnresolvedPayload', port: key }];
+    const { blockId, slotName } = parseDraftPortKey(key);
 
     obligations.push({
       id,
       kind: 'needsPayloadAnchor',
-      anchor: { kind: 'port', blockId: key.split(':')[0], slotName: key.split(':')[1] },
+      anchor: { kind: 'port', blockId, slotName },
       status: { kind: 'open' },
       deps,
       policy: { name: 'payloadAnchor.v1' },

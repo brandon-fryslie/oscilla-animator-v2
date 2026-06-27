@@ -42,13 +42,35 @@ export const obligationId = (s: string): ObligationId => s as ObligationId;
  * `${blockId}:${slotName}:${fieldName}:${dir}`. The field-level key is what
  * the solver indexes — a bundle with 3 fields produces 3 keys. [LAW:decomposition]
  */
+export type DraftPortDirection = 'in' | 'out';
 export type DraftPortKey = string & { readonly __draftPortKey: unique symbol };
+export interface DraftPortParts {
+  readonly blockId: string;
+  readonly slotName: string;
+  readonly fieldName: string;
+  readonly dir: DraftPortDirection;
+}
+
 export const draftPortKey = (
   blockId: string,
   slotName: string,
   fieldName: string,
-  dir: 'in' | 'out',
+  dir: DraftPortDirection,
 ): DraftPortKey => `${blockId}:${slotName}:${fieldName}:${dir}` as DraftPortKey;
+
+export const parseDraftPortKey = (key: DraftPortKey): DraftPortParts => {
+  // Keep the key format owned beside its constructor; callers receive fields,
+  // never permission to duplicate the encoding. [LAW:one-source-of-truth]
+  const parts = key.split(':');
+  if (parts.length !== 4) {
+    throw new Error(`Invalid DraftPortKey '${key}'`);
+  }
+  const [blockId, slotName, fieldName, dir] = parts as [string, string, string, string];
+  if (dir !== 'in' && dir !== 'out') {
+    throw new Error(`Invalid DraftPortKey direction '${dir}' in '${key}'`);
+  }
+  return { blockId, slotName, fieldName, dir };
+};
 
 // ---------------------------------------------------------------------------
 // MutableGraph — blocks, edges, obligations

@@ -22,6 +22,7 @@
 import type { DefinedBlock } from '../../block-api';
 import type { ZCanonicalType, ZInferenceCanonicalType } from '../schemas';
 import type { DraftPortKey, FixpointDiagnostic, StrictTypedGraph } from '../solve/typed-graph';
+import { draftPortKey } from '../solve/typed-graph';
 
 export function validateAxes(
   strict: StrictTypedGraph,
@@ -169,7 +170,7 @@ function validateCombineModes(
       if (!binding.combine) continue;
 
       for (const fieldName of Object.keys(binding.type)) {
-        const portKey = `${graphBlock.id}:${slotName}:${fieldName}:in` as DraftPortKey;
+        const portKey = draftPortKey(graphBlock.id, slotName, fieldName, 'in');
         const resolved = strict.portTypes.get(portKey);
         if (!resolved) continue;
 

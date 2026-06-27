@@ -1,15 +1,9 @@
 /**
  * src/pillars/types/query.ts
  *
- * `findInsertableBlocks` — the partial-graph query API. Two overloads:
- *
- *   1. Catalog-side (palette, drag): returns every block in the catalog with no
- *      type filtering. Sub-millisecond trivially — it's just a map over an array.
- *
- *   2. Context-side (right-click): given a resolved port on the active typed
- *      graph, returns every catalog block that could validly wire to that port,
- *      ranked by confidence. Never calls `resolveTypes` — it reads the cached
- *      `StrictTypedGraph.portTypes`. [LAW:no-ambient-temporal-coupling]
+ * Catalog listing and context-side matching are separate entry points because
+ * their data contracts differ: listing is a palette projection, matching is a
+ * typed-graph query. [LAW:dataflow-not-control-flow] [LAW:one-type-per-behavior]
  *
  * The context-side matching vocabulary is the SAME as the adapter search:
  * a direct-check is a mini unification through the sub-solvers (zero adapter
@@ -22,7 +16,7 @@
  */
 
 import type { DefinedBlock } from '../block-api';
-import type { ZAdapterSpec, ZBlockContract, ZInferenceCanonicalType } from './schemas';
+import type { ZAdapterSpec, ZBlockContract, ZCanonicalType, ZInferenceCanonicalType } from './schemas';
 import type { ZPayloadType, ZUnitType } from './schemas';
 import type { ZInferenceCardinality } from './schemas';
 import { solvePayloadUnit } from './solve/payload-unit';
@@ -32,7 +26,8 @@ import type { ZCardinalityConstraint } from './solve/cardinality';
 import type { ConstraintOrigin, PortKey } from './solve/shared';
 import { findAdapterCandidates } from './solve/adapters';
 import type { AdapterCandidate } from './solve/adapters';
-import type { DraftPortKey, StrictTypedGraph } from './solve/typed-graph';
+import type { DraftPortDirection, DraftPortKey, StrictTypedGraph } from './solve/typed-graph';
+import { parseDraftPortKey } from './solve/typed-graph';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -61,73 +56,45 @@ export interface CatalogEntry {
  *               sub-solvers produce no error; no adapter block needed).
  * `via-adapter` — a `findAdapterCandidates` candidate exists; the solver would
  *               insert one of those adapters automatically.
- * `partial`   — a multi-field slot where some fields match and some do not
- *               (reserved; not emitted in this implementation).
  */
 export interface InsertableBlock {
   readonly blockType: string;
   readonly matchingSlotId: string;
   readonly adapter: AdapterCandidate | null;
-  readonly confidence: 'direct' | 'via-adapter' | 'partial';
+  readonly confidence: 'direct' | 'via-adapter';
 }
 
 // ---------------------------------------------------------------------------
-// Overloaded public entry point
+// Public entry points
 // ---------------------------------------------------------------------------
 
 /**
- * Catalog-side overload: every block in the catalog, no filtering.
+ * Catalog-side listing: every block in the catalog, no filtering.
  * Callers use this for the insertion palette. O(catalog).
  */
-export function findInsertableBlocks(catalog: readonly DefinedBlock[]): readonly CatalogEntry[];
+export function listCatalogEntries(catalog: readonly DefinedBlock[]): readonly CatalogEntry[] {
+  return catalog.map((b): CatalogEntry => ({
+    blockType: b.type,
+    contract: b.contract,
+    adapterSpec: b.adapterSpec,
+  }));
+}
 
-/**
- * Context-side overload: blocks whose ports could validly wire to `portRef` on
- * `typedGraph`, ranked by confidence. The slot direction is inferred from the
- * port key: an `out` port queries the catalog's INPUT slots; an `in` port
- * queries OUTPUT slots (the block we insert goes between the existing blocks).
- */
 export function findInsertableBlocks(
   portRef: PortRef,
   typedGraph: StrictTypedGraph,
   catalog: readonly DefinedBlock[],
-): readonly InsertableBlock[];
-
-export function findInsertableBlocks(
-  first: readonly DefinedBlock[] | PortRef,
-  typedGraph?: StrictTypedGraph,
-  catalogArg?: readonly DefinedBlock[],
-): readonly CatalogEntry[] | readonly InsertableBlock[] {
-  // Catalog-side: first argument is the DefinedBlock array
-  if (Array.isArray(first)) {
-    const catalog = first as readonly DefinedBlock[];
-    return catalog.map((b): CatalogEntry => ({
-      blockType: b.type,
-      contract: b.contract,
-      adapterSpec: b.adapterSpec,
-    }));
-  }
-
-  // Context-side
-  const portRef = first as PortRef;
-  const graph = typedGraph!;
-  const catalog = catalogArg!;
-
-  const resolvedType = graph.portTypes.get(portRef);
+): readonly InsertableBlock[] {
+  const resolvedType = typedGraph.portTypes.get(portRef);
   if (!resolvedType) return [];
-
-  // Parse direction from the DraftPortKey: last segment is 'in' or 'out'
-  const parts = portRef.split(':');
-  const dir = parts[parts.length - 1] as 'in' | 'out';
+  const { dir } = parseDraftPortKey(portRef);
 
   const results: InsertableBlock[] = [];
 
   for (const block of catalog) {
     if (!block.contract) continue;
 
-    // If the queried port is an OUTPUT, candidate blocks' INPUTS receive it.
-    // If the queried port is an INPUT, candidate blocks' OUTPUTS feed it.
-    const candidateSlots = dir === 'out' ? block.contract.inputs : block.contract.outputs;
+    const candidateSlots = block.contract[candidateSlotsByQueriedPort[dir]];
 
     for (const [slotName, binding] of Object.entries(candidateSlots)) {
       const fieldEntries = Object.entries(binding.type);
@@ -141,11 +108,8 @@ export function findInsertableBlocks(
         break; // first matching slot per block is enough
       }
 
-      // Try adapter bridge: resolvedType → adapter → slotFieldType (for out port)
-      // or slotFieldType → adapter → resolvedType (for in port)
-      const srcType: ZInferenceCanonicalType = dir === 'out' ? resolvedType : slotFieldType;
-      const tgtType: ZInferenceCanonicalType = dir === 'out' ? slotFieldType : resolvedType;
-      const adapters = findAdapterCandidates(srcType, tgtType, catalog);
+      const endpoints = adapterEndpointsByQueriedPort[dir](resolvedType, slotFieldType);
+      const adapters = findAdapterCandidates(endpoints.source, endpoints.target, catalog);
       if (adapters.length > 0) {
         results.push({ blockType: block.type, matchingSlotId: slotName, adapter: adapters[0], confidence: 'via-adapter' });
         break;
@@ -155,6 +119,22 @@ export function findInsertableBlocks(
 
   return results.sort(rankInsertable);
 }
+
+const candidateSlotsByQueriedPort: Record<DraftPortDirection, 'inputs' | 'outputs'> = {
+  out: 'inputs',
+  in: 'outputs',
+};
+
+const adapterEndpointsByQueriedPort: Record<
+  DraftPortDirection,
+  (resolvedType: ZCanonicalType, slotFieldType: ZInferenceCanonicalType) => {
+    readonly source: ZInferenceCanonicalType;
+    readonly target: ZInferenceCanonicalType;
+  }
+> = {
+  out: (resolvedType, slotFieldType) => ({ source: resolvedType, target: slotFieldType }),
+  in: (resolvedType, slotFieldType) => ({ source: slotFieldType, target: resolvedType }),
+};
 
 // ---------------------------------------------------------------------------
 // Direct compatibility check — the matching primitive for zero-adapter cases
@@ -168,7 +148,7 @@ export function findInsertableBlocks(
  * [LAW:one-type-per-behavior] [LAW:single-enforcer]
  */
 function typesDirectlyCompatible(
-  resolved: import('./schemas').ZCanonicalType,
+  resolved: ZCanonicalType,
   candidate: ZInferenceCanonicalType,
 ): boolean {
   const origin: ConstraintOrigin = { kind: 'blockRule', blockId: '__query__', rule: 'direct-check' };
@@ -223,7 +203,6 @@ const varInfoOf = (t: ZInferenceCanonicalType): PortVarInfo => ({
 const confidenceRank: Record<InsertableBlock['confidence'], number> = {
   'direct': 0,
   'via-adapter': 1,
-  'partial': 2,
 };
 
 const rankInsertable = (a: InsertableBlock, b: InsertableBlock): number => {
