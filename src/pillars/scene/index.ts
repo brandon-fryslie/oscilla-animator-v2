@@ -15,9 +15,14 @@ export type { SceneCompileResult } from './assemble';
 export { ALL_SCENE_BLOCKS } from './blocks';
 export {
   buildSceneRegistry,
+  defineSceneBlock,
+  sceneConfig,
   type SceneBlockDefinition,
   type SceneContribution,
   type SceneDiagnostic,
+  type SceneCatalogMetadata,
+  type ScenePortDeclaration,
+  type SceneValueKind,
   type InstanceBundle,
   type DrawShell,
   type MaterialShell,

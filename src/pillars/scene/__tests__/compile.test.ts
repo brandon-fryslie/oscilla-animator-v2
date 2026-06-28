@@ -14,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
-import { compileScenePlan } from '../index';
+import { buildSceneRegistry, compileScenePlan } from '../index';
+import { ALL_SCENE_BLOCKS } from '../blocks';
 import { makeGridOfSquaresPatch } from '../../fixtures/grid-of-squares';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from '../../fixtures/textured-tiles';
 import { sceneObjectRef } from '../../../render/scene-plan';
@@ -195,6 +196,7 @@ describe('compileScenePlan — loud failures', () => {
     expect(message).toContain("'cols'");
     expect(message).toContain("'spacing'");
     expect(message).toContain("'rotationPerIndex'");
+    expect(message).toContain('(InstanceGrid)');
   });
 
   it('reports a patch with no draw block', () => {
@@ -209,6 +211,56 @@ describe('compileScenePlan — loud failures', () => {
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;
     expect(result.errors.join('\n')).toMatch(/renders nothing/);
+  });
+});
+
+describe('scene block contract — catalog and registration', () => {
+  it('publishes catalog metadata for palette ports and config fields', () => {
+    const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
+    const catalog = registry.catalog;
+
+    expect(catalog.map((block) => block.displayName)).toEqual([
+      'Instance Grid',
+      'Draw Instances',
+    ]);
+    expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
+      'instanceBundle',
+      'instanceBundle',
+      'materialShell',
+    ]);
+    expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
+      'rows',
+      'cols',
+      'spacing',
+      'rotationPerIndex',
+      'rotationPerTime',
+      'huePerTime',
+      'saturation',
+      'lightness',
+      'size',
+      'cameraHalfExtentX',
+      'cameraHalfExtentY',
+      'textureAssetId',
+    ]);
+  });
+
+  it('rejects registration without the required scene block contract metadata', () => {
+    const malformed = {
+      type: 'MalformedSceneBlock',
+      role: 'draw',
+      catalog: {
+        displayName: '',
+        category: 'draw',
+        ports: [],
+      },
+      configSchema: undefined,
+      readConfig: () => null,
+      contribute: () => ({ role: 'draw', shell: {} }),
+    };
+
+    expect(() =>
+      buildSceneRegistry([malformed as unknown as (typeof ALL_SCENE_BLOCKS)[number]]),
+    ).toThrow(/catalog\.displayName.*catalog\.ports.*configSchema/);
   });
 });
 
@@ -231,6 +283,8 @@ describe('compileScenePlan — backend neutrality (source-level)', () => {
       // concepts ([LAW:behavior-not-structure] — test the dependency, not prose).
       // [LAW:one-source-of-truth] No dependency on the frozen Rust payload.
       expect(src).not.toMatch(/from ['"][^'"]*boundary-contract/);
+      expect(src).not.toMatch(/from ['"][^'"]*block-api/);
+      expect(src).not.toMatch(/import\s+[^;]*(ExprIR|SourceBundle|RosterEntry)[^;]*from/);
       // [LAW:locality-or-seam] No Three / WASM coupling in the compiler output.
       expect(src).not.toMatch(/from ['"]three/);
       expect(src).not.toMatch(/from ['"][^'"]*render\/wasm/);
