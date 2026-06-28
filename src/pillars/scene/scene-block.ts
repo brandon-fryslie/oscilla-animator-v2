@@ -1,30 +1,4 @@
-/**
- * src/pillars/scene/scene-block.ts
- *
- * The ABI between scene-block authors and the ScenePlan lowering.
- *
- * Scope source: design-docs/three-fork-integration-proposal.md §2.1, §2.2, §3.
- * Ownership/seam canon: design-docs/three-migration-backend-canon.md
- *   (Oscilla owns "compile/lower stages from authored graph to backend-neutral
- *   execution data"; ScenePlan is that data).
- * Replacement narrative: design-docs/three-migration-scene-plan.md §"Concept
- *   Mapping".
- *
- * This is the NEW lowering ABI for the Three migration. It is deliberately NOT
- * the GPU-IR `BlockDefinition` (src/pillars/block-api.ts): that ABI's `lower`
- * produces `ExprIR`/`RosterEntry` for the frozen Rust-boundary payload (canon
- * §"Dead Concepts"). A scene block instead `contribute`s backend-neutral
- * ScenePlan fragments.
- *
- * [LAW:decomposition] A scene block is a genuinely different part from a GPU-IR
- *   block — different target representation, different seam — so it gets its own
- *   ABI rather than being forced through the GPU-IR contract.
- * [LAW:effects-at-boundaries] `contribute` is pure: declarative config in,
- *   ScenePlan-fragment description out. Nothing here touches a renderer.
- * [LAW:types-are-the-program] The contribution is a discriminated union on
- *   `role`; the lowering joins the parts by role without re-deriving block kind.
- */
-
+import { z } from 'zod';
 import type { AssetId } from '../../core/ids';
 import type {
   CameraPlan,
@@ -34,61 +8,21 @@ import type {
   TransformBinding,
 } from '../../render/scene-plan';
 
-// ---------------------------------------------------------------------------
-// Diagnostics — the loud-failure channel for config validation.
-// ---------------------------------------------------------------------------
-
-/**
- * A config-validation failure. There is no `warning`/`info` severity here: a
- * scene block either has a usable config or it does not.
- *
- * [LAW:no-silent-failure] An invalid config is a collected, surfaced error, not
- *   a silently-defaulted value that renders the wrong scene.
- */
 export interface SceneDiagnostic {
   readonly message: string;
   readonly blockId: string;
 }
 
-// ---------------------------------------------------------------------------
-// Contributions — what a block hands the lowering, before parts are joined.
-// ---------------------------------------------------------------------------
-
-/**
- * The per-instance field bundle an instance-source block emits: how many
- * instances exist and the fields that vary across them. Each field is a
- * `PlanExpr` (carried inside `TransformBinding` / `ColorBinding`), so it may
- * reference `index`/`rank` intrinsics and runtime inputs.
- *
- * [LAW:one-source-of-truth] The bundle is the canonical per-instance data; the
- *   draw block wraps it (geometry, material shell, camera) without re-deriving
- *   any of these fields.
- */
 export interface InstanceBundle {
   readonly count: number;
   readonly transform: TransformBinding;
   readonly color: ColorBinding;
 }
 
-/**
- * The surface a draw block wraps around its instance bundle.
- *
- * - `unlitColor` takes its per-instance color from the upstream `InstanceBundle`;
- *   the shell carries no color of its own.
- * - `texturedUnlit` samples a texture asset (named by {@link AssetId}); the
- *   lowering mints the plan's `TextureRef` and the textures-table entry from it.
- *
- * [LAW:no-mode-explosion] Material kinds are variants of this union; the
- *   lowering's join stays a total switch as kinds are added.
- */
 export type MaterialShell =
   | { readonly kind: 'unlitColor' }
   | { readonly kind: 'texturedUnlit'; readonly assetId: AssetId };
 
-/**
- * What a draw (sink) block contributes before it is joined to its instance
- * bundle: the rendering shell around the per-instance data.
- */
 export interface DrawShell {
   readonly geometry: GeometryDef;
   readonly material: MaterialShell;
@@ -96,42 +30,161 @@ export interface DrawShell {
   readonly target: RenderTarget;
 }
 
-/**
- * The discriminated contribution every scene block produces. The lowering
- * joins an `instanceSource` to the `draw` that reads it (via the primary edge).
- */
 export type SceneContribution =
   | { readonly role: 'instanceSource'; readonly bundle: InstanceBundle }
   | { readonly role: 'draw'; readonly shell: DrawShell };
 
-// ---------------------------------------------------------------------------
-// Block definition — the contract every scene block file exports.
-// ---------------------------------------------------------------------------
+export type SceneContributionRole = SceneContribution['role'];
 
-/**
- * The shape every scene-block file exports as a named constant.
- *
- * `readConfig` validates/narrows raw authored config (loud diagnostics on bad
- * input, never throws on user input). `contribute` is the pure mapping from the
- * narrowed config to a backend-neutral ScenePlan fragment.
- */
-export interface SceneBlockDefinition<TConfig> {
+export type SceneValueKind =
+  | 'instanceBundle'
+  | 'geometry'
+  | 'materialShell'
+  | 'texture'
+  | 'camera'
+  | 'color'
+  | 'scalar'
+  | 'mask';
+
+export type ScenePortDirection = 'input' | 'output';
+
+export interface ScenePortDeclaration {
+  readonly id: string;
+  readonly label: string;
+  readonly direction: ScenePortDirection;
+  readonly value: SceneValueKind;
+}
+
+export type SceneBlockCategory =
+  | 'instance'
+  | 'modifier'
+  | 'draw'
+  | 'material'
+  | 'asset'
+  | 'color';
+
+export type SceneConfigControl =
+  | 'number'
+  | 'integer'
+  | 'asset'
+  | 'color'
+  | 'toggle'
+  | 'select';
+
+export interface SceneConfigFieldCatalog {
+  readonly label: string;
+  readonly control: SceneConfigControl;
+}
+
+export interface SceneConfigField<TValue> {
+  readonly schema: z.ZodType<TValue>;
+  readonly catalog: SceneConfigFieldCatalog;
+}
+
+export type SceneConfigFields = Readonly<Record<string, SceneConfigField<unknown>>>;
+
+export type SceneConfigFor<TFields extends SceneConfigFields> = {
+  readonly [K in keyof TFields]: z.infer<TFields[K]['schema']>;
+};
+
+export interface SceneCatalogMetadata {
+  readonly displayName: string;
+  readonly category: SceneBlockCategory;
+  readonly ports: readonly ScenePortDeclaration[];
+  readonly configFields: readonly SceneCatalogConfigField[];
+}
+
+export interface SceneCatalogConfigField extends SceneConfigFieldCatalog {
+  readonly key: string;
+}
+
+export interface SceneBlockDefinition<
+  TConfig,
+  TRole extends SceneContributionRole = SceneContributionRole,
+> {
   readonly type: string;
-  readonly role: SceneContribution['role'];
+  readonly role: TRole;
+  readonly catalog: SceneCatalogMetadata;
+  readonly configSchema: z.ZodType<TConfig>;
   readonly readConfig: (
     raw: Readonly<Record<string, unknown>>,
     blockId: string,
     diagnostics: SceneDiagnostic[],
   ) => TConfig | null;
-  readonly contribute: (config: TConfig) => SceneContribution;
+  readonly contribute: (config: TConfig) => Extract<SceneContribution, { readonly role: TRole }>;
 }
 
-// ---------------------------------------------------------------------------
-// Registry — value-constructor, no module-level singleton (mirrors frontend).
-// ---------------------------------------------------------------------------
+export interface SceneBlockDeclaration<
+  TFields extends SceneConfigFields,
+  TRole extends SceneContributionRole,
+> {
+  readonly type: string;
+  readonly role: TRole;
+  readonly catalog: Omit<SceneCatalogMetadata, 'configFields'>;
+  readonly config: TFields;
+  readonly contribute: (
+    config: SceneConfigFor<TFields>,
+  ) => Extract<SceneContribution, { readonly role: TRole }>;
+}
+
+type SceneConfigShape<TFields extends SceneConfigFields> = {
+  readonly [K in keyof TFields]: TFields[K]['schema'];
+};
+
+export function defineSceneBlock<
+  const TFields extends SceneConfigFields,
+  const TRole extends SceneContributionRole,
+>(
+  declaration: SceneBlockDeclaration<TFields, TRole>,
+): SceneBlockDefinition<SceneConfigFor<TFields>, TRole> {
+  // [LAW:one-source-of-truth] One field map derives both parsing and catalog metadata.
+  const configSchema = z.object(configShape(declaration.config)) as z.ZodType<
+    SceneConfigFor<TFields>
+  >;
+  const catalog: SceneCatalogMetadata = {
+    ...declaration.catalog,
+    configFields: Object.entries(declaration.config).map(([key, field]) => ({
+      key,
+      ...field.catalog,
+    })),
+  };
+
+  return {
+    type: declaration.type,
+    role: declaration.role,
+    catalog,
+    configSchema,
+    readConfig: (raw, blockId, diagnostics) => {
+      const result = configSchema.safeParse(raw);
+      if (result.success) return result.data;
+      for (const issue of result.error.issues) {
+        diagnostics.push({
+          blockId,
+          message: formatConfigIssue(blockId, declaration.type, issue),
+        });
+      }
+      return null;
+    },
+    contribute: declaration.contribute,
+  };
+}
+
+function configShape<TFields extends SceneConfigFields>(
+  fields: TFields,
+): SceneConfigShape<TFields> {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [key, field.schema]),
+  ) as SceneConfigShape<TFields>;
+}
+
+function formatConfigIssue(blockId: string, blockType: string, issue: z.core.$ZodIssue): string {
+  const path = issue.path.length === 0 ? '<root>' : issue.path.join('.');
+  return `[scene] block '${blockId}' (${blockType}): config '${path}' ${issue.message}`;
+}
 
 export interface SceneRegistry {
   readonly get: (type: string) => SceneBlockDefinition<unknown> | undefined;
+  readonly catalog: readonly SceneCatalogMetadata[];
 }
 
 export function buildSceneRegistry(
@@ -139,101 +192,64 @@ export function buildSceneRegistry(
 ): SceneRegistry {
   const byType = new Map<string, SceneBlockDefinition<unknown>>();
   for (const block of blocks) {
+    validateSceneBlockDefinition(block);
     if (byType.has(block.type)) {
       throw new Error(`[scene] Duplicate scene block type in registry: '${block.type}'`);
     }
     byType.set(block.type, block);
   }
-  return { get: (type) => byType.get(type) };
+  return {
+    get: (type) => byType.get(type),
+    catalog: Array.from(byType.values(), (block) => block.catalog),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Config-reading helpers — one loud, validated read per primitive.
-// ---------------------------------------------------------------------------
+function validateSceneBlockDefinition(block: SceneBlockDefinition<unknown>): void {
+  const catalog = block.catalog;
+  const missing = [
+    requiredText(block.type, 'type'),
+    requiredValue(catalog, 'catalog'),
+    catalog === undefined ? null : requiredText(catalog.displayName, 'catalog.displayName'),
+    catalog === undefined ? null : requiredText(catalog.category, 'catalog.category'),
+    catalog === undefined ? null : requiredItems(catalog.ports, 'catalog.ports'),
+    requiredValue(block.configSchema, 'configSchema'),
+  ].filter((entry): entry is string => entry !== null);
 
-/**
- * Read a finite number from raw config, pushing a diagnostic if absent or not a
- * finite number. Returns null on failure so the caller can keep collecting
- * other field errors before bailing.
- */
-export function readFiniteNumber(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = raw[key];
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a finite number`,
-    });
-    return null;
+  if (missing.length > 0) {
+    throw new Error(`[scene] invalid scene block contract '${block.type || '<unknown>'}': ${missing.join(', ')}`);
   }
-  return value;
 }
 
-/** Read a number that must be strictly positive (e.g. a spacing or size). */
-export function readPositiveNumber(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = readFiniteNumber(raw, key, blockId, diagnostics);
-  if (value === null) return null;
-  if (value <= 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be > 0 (got ${value})`,
-    });
-    return null;
-  }
-  return value;
+function requiredText(value: string, label: string): string | null {
+  return value.length === 0 ? label : null;
 }
 
-/**
- * Read an optional non-empty string (e.g. an asset id reference). Absent config
- * returns `undefined` (a legitimate "not set"); a present-but-non-string or
- * empty value is a loud diagnostic and returns `null`.
- *
- * [LAW:dataflow-not-control-flow] The three outcomes are distinct values
- *   (`undefined` set-absent, `null` invalid, the string when valid), so the
- *   caller selects a material shell from the value rather than guessing.
- */
-export function readOptionalString(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): string | null | undefined {
-  const value = raw[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a non-empty string when present`,
-    });
-    return null;
-  }
-  return value;
+function requiredItems(value: readonly unknown[], label: string): string | null {
+  return value.length === 0 ? label : null;
 }
 
-/** Read a positive integer (e.g. a grid row/column count). */
-export function readPositiveInt(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = readFiniteNumber(raw, key, blockId, diagnostics);
-  if (value === null) return null;
-  if (!Number.isInteger(value) || value <= 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a positive integer (got ${value})`,
-    });
-    return null;
-  }
-  return value;
+function requiredValue(value: unknown, label: string): string | null {
+  return value === undefined || value === null ? label : null;
 }
+
+export const sceneConfig = {
+  finiteNumber: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite(),
+    catalog,
+  }),
+  positiveNumber: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite().positive(),
+    catalog,
+  }),
+  positiveInt: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().int().positive(),
+    catalog,
+  }),
+  optionalAssetId: (
+    catalog: SceneConfigFieldCatalog,
+  ): SceneConfigField<string | undefined> => ({
+    // [LAW:types-are-the-program] Empty strings are not asset identities.
+    schema: z.string().min(1).optional(),
+    catalog,
+  }),
+} as const;
