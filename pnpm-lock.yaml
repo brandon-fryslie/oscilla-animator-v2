@@ -80,8 +80,8 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3
       three:
-        specifier: 0.184.0
-        version: 0.184.0
+        specifier: 0.185.0
+        version: 0.185.0
       wgsl_reflect:
         specifier: ^1.2.3
         version: 1.2.3
@@ -3245,8 +3245,8 @@ packages:
   text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
 
-  three@0.184.0:
-    resolution: {integrity: sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==}
+  three@0.185.0:
+    resolution: {integrity: sha512-+yRrcRO2iZa8uzvNNl0d7cL4huhgKgBvVJ0njcTe8xFqZ6DMAFZdCKDP91SEAuj25bNAj7k1QQdf+srZywVK6w==}
 
   through@2.3.8:
     resolution: {integrity: sha512-w89qg7PI8wAdvX60bMDP+bFoD5Dvhm9oLheFp5O4a2QF0cSBGsBX4qZmadPMvVqlLJBBci+WqGGOAPvcDeNSVg==}
@@ -6874,7 +6874,7 @@ snapshots:
 
   text-table@0.2.0: {}
 
-  three@0.184.0: {}
+  three@0.185.0: {}
 
   through@2.3.8: {}
 
