@@ -173,18 +173,31 @@ describe('ScenePlan — handle discipline', () => {
 });
 
 describe('ScenePlan — backend neutrality (source-level)', () => {
-  it('imports nothing from the Rust boundary or any renderer backend', () => {
+  it('imports nothing from Three, the Rust boundary, or the legacy payload path', () => {
     const sources = readdirSync(SCENE_PLAN_DIR)
       .filter((f) => f.endsWith('.ts'))
       .map((f) => readFileSync(join(SCENE_PLAN_DIR, f), 'utf8'));
     expect(sources.length).toBeGreaterThan(0);
     for (const src of sources) {
-      // [LAW:one-source-of-truth] ScenePlan must not re-derive or depend on the
-      // frozen Rust-boundary payload (no dual ownership).
-      expect(src).not.toContain('boundary-contract');
+      // Assert the *imports*, not mere mentions: doc comments legitimately name
+      // PipelineInstallPayload to explain what ScenePlan replaces.
+      // [LAW:behavior-not-structure] Test the dependency, not the prose.
+
+      // [LAW:one-source-of-truth] No dependency on the frozen Rust-boundary
+      //   payload or the legacy GPU-IR/PipelineInstallPayload assembly path —
+      //   ScenePlan does not re-derive from or sync with a second target.
+      expect(src).not.toMatch(/from ['"][^'"]*boundary-contract/);
+      expect(src).not.toMatch(/from ['"][^'"]*pillars\/assembly/);
+      expect(src).not.toMatch(/from ['"][^'"]*render\/gpu-ir/);
+      expect(src).not.toMatch(/from ['"][^'"]*render\/rust/);
+      // Legacy payload types must not be imported even via a re-export barrel.
+      expect(src).not.toMatch(
+        /import\s+[^;]*(PipelineInstallPayload|ExprIR|RosterEntry|MemoryManifest|SourceBundle)[^;]*from/,
+      );
+
       // [LAW:locality-or-seam] No Three / WASM coupling leaks into the plan types.
       expect(src).not.toMatch(/from ['"]three/);
-      expect(src).not.toContain('render/wasm');
+      expect(src).not.toMatch(/from ['"][^'"]*render\/wasm/);
     }
   });
 });
