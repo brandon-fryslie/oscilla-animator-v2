@@ -65,7 +65,10 @@ describe('validateScenePatch — direct match', () => {
   it('accepts the authored Grid of Squares patch with no diagnostics', () => {
     const result = validateScenePatch(registry, makeGridOfSquaresPatch());
     expect(result.diagnostics).toEqual([]);
-    expect(result.edges).toEqual([{ edgeId: 'e0', compatibility: { kind: 'compatible' } }]);
+    expect(result.edges).toEqual([
+      { edgeId: 'e0', compatibility: { kind: 'compatible' } },
+      { edgeId: 'e1', compatibility: { kind: 'compatible' } },
+    ]);
   });
 });
 

@@ -54,10 +54,6 @@ export function makeTexturedTilesPatch(): PillarPatch {
           spacing: 0.16,
           rotationPerIndex: 0.3,
           rotationPerTime: 1.2,
-          // Color is unused by a textured material; kept valid for the bundle.
-          huePerTime: 0.0,
-          saturation: 0.0,
-          lightness: 1.0,
         },
       },
       {

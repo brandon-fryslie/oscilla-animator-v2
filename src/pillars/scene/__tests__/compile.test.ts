@@ -45,14 +45,10 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(object.instancing.count).toBe(100);
   });
 
-  it('exposes index and rank as per-instance intrinsics', () => {
+  it('exposes index as a per-instance intrinsic in the transform', () => {
     const transform = JSON.stringify(object.instancing.transform);
     expect(transform).toContain('"intrinsic"');
     expect(transform).toContain('"index"');
-    const material = plan.resources.materials[object.material];
-    expect(material.kind).toBe('unlitColor');
-    if (material.kind !== 'unlitColor') return;
-    expect(JSON.stringify(material.color)).toContain('"rank"');
   });
 
   it('binds time as a derived runtime input channel, not a compile-time constant', () => {
@@ -79,11 +75,12 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(geo.height).toBe(0.08);
   });
 
-  it('references one unlit HSL color material with a per-instance color payload', () => {
+  it('references one unlit rgb color material from the SolidColor block', () => {
     const material = plan.resources.materials[object.material];
     expect(material.kind).toBe('unlitColor');
     if (material.kind !== 'unlitColor') return;
-    expect(material.color.space).toBe('hsl');
+    // The opaque SolidColor block mints an rgb ColorBinding behind the seam.
+    expect(material.color.space).toBe('rgb');
   });
 
   it('emits one draw item targeting the preview canvas', () => {
@@ -204,7 +201,7 @@ describe('compileScenePlan — loud failures', () => {
       blocks: [
         { id: 'grid', kind: 'generator', type: 'InstanceGrid',
           config: { rows: 10, cols: 10, spacing: 0.1, rotationPerIndex: 0.5,
-            rotationPerTime: 2, huePerTime: 0.2, saturation: 0.8, lightness: 0.6 } },
+            rotationPerTime: 2 } },
       ],
       edges: [],
     });
@@ -222,6 +219,7 @@ describe('scene block contract — catalog and registration', () => {
     expect(catalog.map((block) => block.displayName)).toEqual([
       'Instance Grid',
       'Wave Offset',
+      'Solid Color',
       'Brightness',
       'Draw Instances',
     ]);
@@ -229,6 +227,8 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // InstanceGrid output
       'instanceBundle', // WaveOffset input
       'instanceBundle', // WaveOffset output
+      'instanceBundle', // SolidColor input
+      'instanceBundle', // SolidColor output
       'instanceBundle', // Brightness input
       'instanceBundle', // Brightness output
       'instanceBundle', // DrawInstances input
@@ -240,12 +240,10 @@ describe('scene block contract — catalog and registration', () => {
       'spacing',
       'rotationPerIndex',
       'rotationPerTime',
-      'huePerTime',
-      'saturation',
-      'lightness',
       'amplitude',
       'frequency',
       'speed',
+      'color',
       'factor',
       'size',
       'cameraHalfExtentX',
