@@ -26,10 +26,13 @@ import {
   mul,
   sceneObjectRef,
   textureRef,
+  type DrawItem,
+  type MaterialDef,
+  type SceneObject,
   type ScenePlan,
 } from '../../../scene-plan';
 import { assetId } from '../../../../core/ids';
-import { realizeScenePlan } from '../scene-plan-realizer';
+import { realizeScenePlan, reconcileScenePlan } from '../scene-plan-realizer';
 
 /** The `Grid of Squares` first proof target, built through the public API. */
 function buildGridPlan(overrides?: { count?: number }): ScenePlan {
@@ -196,5 +199,155 @@ describe('realizeScenePlan — loud failure on malformed plans', () => {
 
   it('rejects a non-positive instance count', () => {
     expect(() => realizeScenePlan(buildGridPlan({ count: 0 }))).toThrow(/non-positive instance count/);
+  });
+});
+
+/**
+ * A plan with one instanced object per named ref. Each object's hue offset is a
+ * baked const, so changing it changes the object's structure (its TSL graph),
+ * while a stable ref + identical spec means the realized object is reusable.
+ */
+function buildScenePlan(specs: Record<string, { count: number; hue: number }>): ScenePlan {
+  const square = geometryRef('shared:square');
+  const time = input('time');
+  const index = intrinsic('index');
+  const materials: Record<string, MaterialDef> = {};
+  const objects: Record<string, SceneObject> = {};
+  const draws: DrawItem[] = [];
+  for (const [name, spec] of Object.entries(specs)) {
+    const matRef = materialRef(`${name}:unlit`);
+    const objRef = sceneObjectRef(name);
+    materials[matRef] = {
+      kind: 'unlitColor',
+      color: { space: 'hsl', h: konst(spec.hue), s: konst(0.8), l: konst(0.6) },
+    };
+    objects[objRef] = {
+      geometry: square,
+      material: matRef,
+      instancing: {
+        count: spec.count,
+        transform: {
+          positionX: mul(index, konst(0.1)),
+          positionY: konst(0),
+          rotation: mul(time, konst(2.0)),
+        },
+      },
+    };
+    draws.push({ target: 'previewCanvas', object: objRef });
+  }
+  return defineScenePlan({
+    version: SCENE_PLAN_VERSION,
+    resources: {
+      geometries: { [square]: { kind: 'rectangle', width: 0.08, height: 0.08 } },
+      materials: materials as ScenePlan['resources']['materials'],
+      textures: {},
+      computeResources: {},
+      postChains: {},
+    },
+    objects: objects as ScenePlan['objects'],
+    render: {
+      camera: { kind: 'orthographic', halfExtentX: 1, halfExtentY: 1 },
+      inputs: ['time'],
+      draws,
+      postChain: null,
+    },
+  });
+}
+
+function meshFor(scene: RealizedSceneLike, ref: string): InstancedMesh | undefined {
+  return scene.objects.get(sceneObjectRef(ref))?.mesh;
+}
+
+// Minimal structural view of the realized scene the reuse tests assert against.
+type RealizedSceneLike = ReturnType<typeof realizeScenePlan>;
+
+describe('reconcileScenePlan — live-edit continuity', () => {
+  it('reuses the same live Three object when an equivalent plan is reinstalled', () => {
+    // time-pure tier: a recompile that produces a structurally identical plan
+    // must keep the live mesh (its compiled TSL graph + instance buffers), so
+    // time-driven animation does not restart.
+    const prev = realizeScenePlan(buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    const meshBefore = meshFor(prev, 'grid');
+
+    const next = reconcileScenePlan(prev, buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    expect(meshFor(next, 'grid')).toBe(meshBefore);
+    next.dispose();
+  });
+
+  it('preserves the runtime input uniform node across an equivalent reinstall', () => {
+    // The reused object's TSL graph captured the prev uniform node; that exact
+    // node must remain the one the renderer writes each frame, or the reused
+    // mesh would freeze at its last value.
+    const prev = realizeScenePlan(buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    const timeBefore = prev.inputs.get('time');
+
+    const next = reconcileScenePlan(prev, buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    expect(next.inputs.get('time')).toBe(timeBefore);
+    next.dispose();
+  });
+
+  it('rebuilds only the object whose structure changed, reusing the rest', () => {
+    // config tier: changing one object's baked const rebuilds that object;
+    // unchanged siblings keep their live mesh.
+    const prev = realizeScenePlan(
+      buildScenePlan({ a: { count: 25, hue: 0.3 }, b: { count: 16, hue: 0.7 } }),
+    );
+    const meshA = meshFor(prev, 'a');
+    const meshB = meshFor(prev, 'b');
+
+    const next = reconcileScenePlan(
+      prev,
+      buildScenePlan({ a: { count: 25, hue: 0.3 }, b: { count: 16, hue: 0.9 } }),
+    );
+    expect(meshFor(next, 'a'), 'unchanged object should be reused').toBe(meshA);
+    expect(meshFor(next, 'b'), 'changed object should be rebuilt').not.toBe(meshB);
+    next.dispose();
+  });
+
+  it('rebuilds an object whose instance count changed', () => {
+    const prev = realizeScenePlan(buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    const meshBefore = meshFor(prev, 'grid');
+
+    const next = reconcileScenePlan(prev, buildScenePlan({ grid: { count: 36, hue: 0.3 } }));
+    expect(meshFor(next, 'grid')).not.toBe(meshBefore);
+    expect(meshFor(next, 'grid')!.count).toBe(36);
+    next.dispose();
+  });
+
+  it('builds an added object and reuses the existing one (topology grows)', () => {
+    const prev = realizeScenePlan(buildScenePlan({ a: { count: 25, hue: 0.3 } }));
+    const meshA = meshFor(prev, 'a');
+
+    const next = reconcileScenePlan(
+      prev,
+      buildScenePlan({ a: { count: 25, hue: 0.3 }, b: { count: 9, hue: 0.7 } }),
+    );
+    expect(meshFor(next, 'a'), 'existing object reused').toBe(meshA);
+    expect(meshFor(next, 'b'), 'added object realized').toBeInstanceOf(InstancedMesh);
+    expect(next.scene.children).toContain(meshFor(next, 'b'));
+    next.dispose();
+  });
+
+  it('disposes and removes an object the new plan no longer draws (topology shrinks)', () => {
+    const prev = realizeScenePlan(
+      buildScenePlan({ a: { count: 25, hue: 0.3 }, b: { count: 9, hue: 0.7 } }),
+    );
+    const meshA = meshFor(prev, 'a');
+    const meshB = meshFor(prev, 'b')!;
+
+    const next = reconcileScenePlan(prev, buildScenePlan({ a: { count: 25, hue: 0.3 } }));
+    expect(meshFor(next, 'a'), 'kept object reused').toBe(meshA);
+    expect(next.objects.has(sceneObjectRef('b')), 'removed object dropped from map').toBe(false);
+    expect(next.scene.children, 'removed mesh detached from scene').not.toContain(meshB);
+    next.dispose();
+  });
+
+  it('reuses the camera when the camera plan is unchanged', () => {
+    const prev = realizeScenePlan(buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    const cameraBefore = prev.camera;
+
+    const next = reconcileScenePlan(prev, buildScenePlan({ grid: { count: 25, hue: 0.3 } }));
+    expect(next.camera).toBe(cameraBefore);
+    next.dispose();
   });
 });

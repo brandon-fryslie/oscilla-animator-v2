@@ -117,4 +117,45 @@ test.describe('Three native editor live preview', () => {
     expect(afterEdit.checksum !== beforeEdit.checksum, 'preview did not update after the edit').toBe(true);
     expect(compileOrRuntimeErrors, compileOrRuntimeErrors.map((i) => i.text).join('\n')).toEqual([]);
   });
+
+  // oscilla-pillars-scene-nt56.9: a live edit reinstalls a new ScenePlan by
+  // reconciling against the realized scene (reusing unchanged objects, rebuilding
+  // changed ones) instead of tearing the scene down. After the reinstall,
+  // time-driven animation must keep advancing — the edit must not freeze or
+  // restart the loop. // [LAW:no-ambient-temporal-coupling]
+  test('keeps time-driven animation advancing across a live reinstall', async ({ page }) => {
+    test.setTimeout(120_000);
+    const issues = attachBrowserIssueCollector(page);
+
+    await page.goto('/?scenePlan=editor', { waitUntil: 'domcontentloaded' });
+    const canvas = page.getByTestId('native-editor-canvas');
+    await expect(canvas).toBeVisible();
+    mkdirSync(ARTIFACT_DIR, { recursive: true });
+
+    await expect
+      .poll(
+        async () => (await captureFrame(canvas, resolve(ARTIFACT_DIR, 'reinstall-boot.png'), BLACK_CHANNEL_THRESHOLD)).nonBlack,
+        { timeout: 30_000, message: 'the editor preview never rendered content' },
+      )
+      .toBeGreaterThan(0);
+
+    // Trigger a live reinstall (a config edit recompiles → reconcile install).
+    const rows = page.getByTestId('native-config-grid-rows');
+    await rows.fill('6');
+    await rows.blur();
+    await page.waitForTimeout(FRAME_INTERVAL_MS);
+
+    // Two frames captured AFTER the reinstall must differ: the time-driven
+    // animation is still running, so the reinstall did not freeze the loop.
+    const post0 = await captureFrame(canvas, resolve(ARTIFACT_DIR, 'reinstall-post-0.png'), BLACK_CHANNEL_THRESHOLD);
+    await page.waitForTimeout(FRAME_INTERVAL_MS);
+    const post1 = await captureFrame(canvas, resolve(ARTIFACT_DIR, 'reinstall-post-1.png'), BLACK_CHANNEL_THRESHOLD);
+
+    const compileOrRuntimeErrors = issues.filter((i) => i.level === 'error' && !LEGACY_PATH.test(i.text));
+
+    expect(post0.nonBlack, 'preview blank after reinstall').toBeGreaterThan(0);
+    expect(post1.nonBlack, 'preview blank after reinstall').toBeGreaterThan(0);
+    expect(post1.checksum !== post0.checksum, 'animation frozen after reinstall — the loop did not keep advancing').toBe(true);
+    expect(compileOrRuntimeErrors, compileOrRuntimeErrors.map((i) => i.text).join('\n')).toEqual([]);
+  });
 });
