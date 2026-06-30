@@ -219,15 +219,27 @@ describe('scene block contract — catalog and registration', () => {
 
     expect(catalog.map((block) => block.displayName)).toEqual([
       'Instance Grid',
+      'Instance Count',
+      'Ring Layout',
+      'Spirograph',
+      'Kaleidoscope',
       'Wave Offset',
       'Solid Color',
       'Gradient',
       'Color Cycle',
       'Brightness',
+      'Threshold Visibility',
       'Draw Instances',
     ]);
     expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
       'instanceBundle', // InstanceGrid output
+      'instanceBundle', // InstanceCount output
+      'instanceBundle', // RingLayout input
+      'instanceBundle', // RingLayout output
+      'instanceBundle', // Spirograph input
+      'instanceBundle', // Spirograph output
+      'instanceBundle', // Kaleidoscope input
+      'instanceBundle', // Kaleidoscope output
       'instanceBundle', // WaveOffset input
       'instanceBundle', // WaveOffset output
       'instanceBundle', // SolidColor input
@@ -238,6 +250,8 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // ColorCycle output
       'instanceBundle', // Brightness input
       'instanceBundle', // Brightness output
+      'instanceBundle', // ThresholdVisibility input
+      'instanceBundle', // ThresholdVisibility output
       'instanceBundle', // DrawInstances input
       'materialShell', // DrawInstances output
     ]);
@@ -247,6 +261,14 @@ describe('scene block contract — catalog and registration', () => {
       'spacing',
       'rotationPerIndex',
       'rotationPerTime',
+      'count', // InstanceCount
+      'radius', // RingLayout
+      'angularSpeed',
+      'radius', // Spirograph
+      'freqA',
+      'freqB',
+      'speed',
+      // Kaleidoscope has no config fields — N-fold order is the upstream count.
       'amplitude',
       'frequency',
       'speed',
@@ -258,6 +280,10 @@ describe('scene block contract — catalog and registration', () => {
       'vividness',
       'brightness',
       'factor',
+      'color', // ThresholdVisibility
+      'threshold',
+      'frequency',
+      'speed',
       'size',
       'cameraHalfExtentX',
       'cameraHalfExtentY',

@@ -53,8 +53,17 @@ export type PlanIntrinsic = 'index' | 'rank';
 /** Single-operand math operators. */
 export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate';
 
-/** Two-operand math operators. */
-export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod';
+/**
+ * Two-operand math operators.
+ *
+ * `step` is the threshold primitive: `step(edge, x)` is `1` when `x >= edge`,
+ * else `0`. It is what turns a smooth per-instance field into a boolean
+ * show/hide decision — the Conditional Visibility demo's "opacity is a material
+ * binding" claim is unrepresentable without it, and a smooth fade would be a
+ * dishonest stand-in. [LAW:no-mode-explosion] One operator, every consumer kept
+ * exhaustive; no flag selects "threshold mode".
+ */
+export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'step';
 
 /**
  * A backend-neutral scalar expression.
@@ -99,3 +108,5 @@ export const sub = binary('sub');
 export const mul = binary('mul');
 export const div = binary('div');
 export const mod = binary('mod');
+/** `step(edge, x)` → `1` when `x >= edge`, else `0`. */
+export const step = binary('step');

@@ -50,6 +50,7 @@ export {
   mul,
   div,
   mod,
+  step,
 } from './expr';
 
 // Plan structure.

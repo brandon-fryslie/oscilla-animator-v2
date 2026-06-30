@@ -13,7 +13,18 @@
  *   it does not touch three or the renderer.
  */
 
-import { add, cos, konst, mul, sin, type ColorBinding, type PlanExpr } from '../../render/scene-plan';
+import {
+  add,
+  cos,
+  input,
+  intrinsic,
+  konst,
+  mul,
+  sin,
+  step,
+  type ColorBinding,
+  type PlanExpr,
+} from '../../render/scene-plan';
 
 const TAU = 2 * Math.PI;
 
@@ -81,6 +92,49 @@ export function gradientColorBinding(hexFrom: string, hexTo: string, t: PlanExpr
   const c1 = hexToOklab(hexTo);
   const lerp = (from: number, to: number): PlanExpr => add(konst(from), mul(konst(to - from), t));
   return { space: 'oklab', l: lerp(c0.l, c1.l), a: lerp(c0.a, c1.a), b: lerp(c0.b, c1.b) };
+}
+
+/**
+ * An opaque base color shown or hidden per instance by a threshold: an `rgba`
+ * `ColorBinding` whose `a` channel is a boolean `step` over a per-instance
+ * field. The field is a `rank`-spread, `time`-drifting sine remapped to `[0,1]`;
+ * `step(threshold, field)` yields exactly `1` (shown) or `0` (hidden), so a
+ * single global `threshold` scalar controls apparent density — show/hide is a
+ * material decision, never a domain operation.
+ *
+ * The base rgb is the opaque authored color decoded to linear light (the
+ * realizer hands `rgb` straight through, unlike the `oklab` ops); `rgba` carries
+ * no perceptual space, so this seam is the one place that layout is minted.
+ *
+ * [LAW:dataflow-not-control-flow] Visibility is the *value* of `a` (0 or 1), not
+ *   a branch that skips drawing an instance; every instance runs one expression.
+ * [LAW:one-source-of-truth] The threshold/visibility channel layout lives here at
+ *   the seam, never on the block API — the block hands an opaque color + scalars.
+ */
+export function thresholdVisibilityBinding(
+  hex: string,
+  threshold: number,
+  frequency: number,
+  speed: number,
+): ColorBinding {
+  const channel = (start: number): number =>
+    srgbToLinear(parseInt(hex.slice(start, start + 2), 16) / CHANNEL_MAX);
+  // A per-instance field in [0,1]: rank spreads it across the field, time drifts
+  // which instances clear the threshold, so the visible set sweeps over time.
+  const field = mul(
+    add(
+      sin(add(mul(intrinsic('rank'), konst(frequency)), mul(input('time'), konst(speed)))),
+      konst(1),
+    ),
+    konst(0.5),
+  );
+  return {
+    space: 'rgba',
+    r: konst(channel(1)),
+    g: konst(channel(3)),
+    b: konst(channel(5)),
+    a: step(konst(threshold), field),
+  };
 }
 
 /**
