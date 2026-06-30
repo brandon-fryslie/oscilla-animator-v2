@@ -50,8 +50,21 @@ export type PlanInputChannel =
  */
 export type PlanIntrinsic = 'index' | 'rank';
 
-/** Single-operand math operators. */
-export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate';
+/**
+ * Single-operand math operators.
+ *
+ * `fract` is the fractional part: `fract(x)` is `x - floor(x)`, always in
+ * `[0, 1)`. `hash` is a pseudo-random map: `hash(seed)` is a deterministic value
+ * in `[0, 1)` whose output decorrelates from the seed. `hash` is the one operator
+ * here that is *not* expressible by composing the others — a quality hash needs
+ * integer bit-mixing the float-only leaf vocabulary (`const`/`input`/`intrinsic`)
+ * cannot denote, so it is a named primitive the backend realizes. Together they
+ * are the minimal vocabulary for value noise and Halton-style scatter: faking
+ * pseudo-randomness with a smooth function would be a dishonest stand-in.
+ * [LAW:no-mode-explosion] Two operators, every consumer kept exhaustive; no flag
+ * selects "noise mode".
+ */
+export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate' | 'fract' | 'hash';
 
 /**
  * Two-operand math operators.
@@ -102,6 +115,10 @@ export const floor = unary('floor');
 export const sin = unary('sin');
 export const cos = unary('cos');
 export const negate = unary('negate');
+/** `fract(x)` → the fractional part of `x`, always in `[0, 1)`. */
+export const fract = unary('fract');
+/** `hash(seed)` → a deterministic pseudo-random value in `[0, 1)`. */
+export const hash = unary('hash');
 
 export const add = binary('add');
 export const sub = binary('sub');

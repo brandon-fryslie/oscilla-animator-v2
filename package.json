@@ -40,7 +40,8 @@
     "test:three-textured-tiles": "playwright test tests/e2e/webgpu/three-textured-tiles.spec.ts",
     "test:three-native-editor": "playwright test tests/e2e/webgpu/three-native-editor.spec.ts",
     "test:three-modifier-chain": "playwright test tests/e2e/webgpu/three-modifier-chain.spec.ts",
-    "test:three-gradient": "playwright test tests/e2e/webgpu/three-gradient.spec.ts"
+    "test:three-gradient": "playwright test tests/e2e/webgpu/three-gradient.spec.ts",
+    "test:three-scatter": "playwright test tests/e2e/webgpu/three-scatter.spec.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

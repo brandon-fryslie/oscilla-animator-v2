@@ -60,7 +60,7 @@ describe('native target-animation fixtures — registry sweep', () => {
   it('every demo is built on a bare InstanceCount source, not a fused layout source', () => {
     // [LAW:composability] The foundational cut: layouts are modifiers folded onto
     //   a count source. The only legacy fused source still in use is the grid.
-    const layoutDemos = ['ring-orbit', 'spirograph', 'kaleidoscope', 'conditional-visibility'];
+    const layoutDemos = ['ring-orbit', 'spirograph', 'kaleidoscope', 'conditional-visibility', 'scatter-cloud'];
     for (const id of layoutDemos) {
       const patch = SCENE_PLAN_DEMOS[id].makePatch();
       const sources = patch.blocks.filter((b) => b.kind === 'generator');
