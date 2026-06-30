@@ -48,7 +48,7 @@ describe('connectableScenePorts — over the native block set', () => {
     const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'output' });
     // A modifier consumes a bundle and a draw consumes a bundle, so every
     // modifier and the draw are valid sinks for a bundle output.
-    expect(matches.map((m) => m.blockType)).toEqual(['RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility', 'DrawInstances']);
+    expect(matches.map((m) => m.blockType)).toEqual(['RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorByIndex', 'ColorFromGradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility', 'DrawInstances']);
     for (const match of matches) {
       expect(match.port).toMatchObject({ id: 'primary', direction: 'input', value: 'instanceBundle' });
       expect(match.compatibility).toMatchObject({ kind: 'compatible' });
@@ -59,7 +59,7 @@ describe('connectableScenePorts — over the native block set', () => {
     const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'input' });
     // Instance sources and modifiers both *produce* a bundle, so each is offerable
     // as a source — the draw is excluded since its only output is a materialShell.
-    expect(matches.map((m) => m.blockType)).toEqual(['InstanceGrid', 'InstanceCount', 'RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility']);
+    expect(matches.map((m) => m.blockType)).toEqual(['InstanceGrid', 'InstanceCount', 'RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorByIndex', 'ColorFromGradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility']);
     for (const match of matches) {
       expect(match.port).toMatchObject({ id: 'instances', direction: 'output', value: 'instanceBundle' });
     }

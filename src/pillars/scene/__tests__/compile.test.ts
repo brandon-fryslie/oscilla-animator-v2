@@ -227,6 +227,8 @@ describe('scene block contract — catalog and registration', () => {
       'Wave Offset',
       'Solid Color',
       'Gradient',
+      'Color By Index',
+      'Color From Gradient',
       'Color Cycle',
       'Brightness',
       'Threshold Visibility',
@@ -249,6 +251,10 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // SolidColor output
       'instanceBundle', // Gradient input
       'instanceBundle', // Gradient output
+      'instanceBundle', // ColorByIndex input
+      'instanceBundle', // ColorByIndex output
+      'instanceBundle', // ColorFromGradient input
+      'instanceBundle', // ColorFromGradient output
       'instanceBundle', // ColorCycle input
       'instanceBundle', // ColorCycle output
       'instanceBundle', // Brightness input
@@ -281,6 +287,8 @@ describe('scene block contract — catalog and registration', () => {
       'color',
       'colorStart',
       'colorEnd',
+      'palette', // ColorByIndex
+      'stops', // ColorFromGradient
       'spread',
       'cycleSpeed',
       'vividness',

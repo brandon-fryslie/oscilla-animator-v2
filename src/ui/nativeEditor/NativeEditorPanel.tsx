@@ -271,6 +271,25 @@ const ConfigControl: React.FC<{
           onChange={(e) => onChange(e.target.value)}
         />
       );
+    case 'colorList':
+      // A palette/ramp is a list of hex colors; edit it as a comma-separated
+      // text field, parsing back to the array the config schema validates.
+      return (
+        <input
+          data-testid={testId}
+          style={styles.input as React.CSSProperties}
+          type="text"
+          value={Array.isArray(value) ? value.join(', ') : ''}
+          onChange={(e) =>
+            onChange(
+              e.target.value
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry.length > 0),
+            )
+          }
+        />
+      );
     case 'asset':
     case 'select':
       return (

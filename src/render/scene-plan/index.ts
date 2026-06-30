@@ -70,6 +70,7 @@ export type {
   MaterialDef,
   ColorBinding,
   TextureDef,
+  TextureFilter,
   ComputeResourceDef,
   PostChainDef,
 } from './plan';

@@ -82,6 +82,13 @@ export type ColorBinding =
  * - `unlitColor` shades by a per-instance {@link ColorBinding} (no texture).
  * - `texturedUnlit` samples a texture resource (by handle) across the object's
  *   UVs. The texture is resolved from an Oscilla asset by the loading bridge.
+ * - `unlitColorLut` shades by *sampling a color lookup table* at a per-instance
+ *   `coord`: the LUT is a `{kind:'data'}` texture whose texels are OKLab triples,
+ *   and the renderer maps the sampled triple back to linear sRGB (the same
+ *   OKLab→display step `unlitColor`'s `oklab` binding uses). This is how a
+ *   palette/index/gradient color source ("every dot a different color", a heatmap
+ *   ramp) is expressed without a per-channel-math `ColorBinding`: the lookup that
+ *   the pure-math expression vocabulary lacks is the texture sample itself.
  *
  * [LAW:dataflow-not-control-flow] The shading model is a discriminated value;
  *   each variant carries exactly the resources it needs, so a textured material
@@ -89,17 +96,42 @@ export type ColorBinding =
  */
 export type MaterialDef =
   | { readonly kind: 'unlitColor'; readonly color: ColorBinding }
-  | { readonly kind: 'texturedUnlit'; readonly texture: TextureRef };
+  | { readonly kind: 'texturedUnlit'; readonly texture: TextureRef }
+  | { readonly kind: 'unlitColorLut'; readonly texture: TextureRef; readonly coord: PlanExpr };
+
+/** Texture minification/magnification filter for a {@link TextureDef}. */
+export type TextureFilter = 'nearest' | 'linear';
 
 /**
- * A texture resource, resolved from an Oscilla asset by the loading bridge.
+ * A texture resource. Two origins:
  *
- * `assetId` is the branded {@link AssetId} the {@link AssetRegistry} resolves to
- * canonical metadata; the bridge (src/render/webgpu/three/asset-bridge.ts)
- * decodes that into a Three `Texture`. The texture table is empty for plans that
- * use no textures (e.g. the Grid of Squares steel thread).
+ * - `asset` — resolved from an Oscilla asset by the loading bridge. `assetId` is
+ *   the branded {@link AssetId} the {@link AssetRegistry} resolves to canonical
+ *   metadata; the bridge (src/render/webgpu/three/asset-bridge.ts) decodes that
+ *   into a Three `Texture`.
+ * - `data` — a CPU-built lookup table the compiler bakes inline (e.g. a palette
+ *   ramp): `pixels` is a flat `width × height × 4` array of float RGBA channel
+ *   values in declaration order. It resolves to no asset, so it is never looked
+ *   up in the registry; the bridge builds a `DataTexture` directly from it. The
+ *   sampling `filter` (a palette wants `nearest`, a gradient `linear`) is a
+ *   property of the resource, applied when the bridge realizes it.
+ *
+ * The texture table is empty for plans that use no textures (e.g. the Grid of
+ * Squares steel thread).
+ *
+ * [LAW:dataflow-not-control-flow] Texture origin is a discriminated value; an
+ *   `asset` texture cannot carry inline pixels and a `data` texture cannot carry
+ *   an assetId. The "where does this texture come from" branch lives in the type.
  */
-export type TextureDef = { readonly kind: 'asset'; readonly assetId: AssetId };
+export type TextureDef =
+  | { readonly kind: 'asset'; readonly assetId: AssetId }
+  | {
+      readonly kind: 'data';
+      readonly width: number;
+      readonly height: number;
+      readonly pixels: readonly number[];
+      readonly filter: TextureFilter;
+    };
 
 /**
  * A compute resource (storage buffer / compute job).

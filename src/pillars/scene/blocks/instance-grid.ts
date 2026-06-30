@@ -25,6 +25,7 @@ import {
   mul,
 } from '../../../render/scene-plan';
 import { defineSceneBlock, sceneConfig } from '../scene-block';
+import { neutralColorPlan } from '../color';
 
 const config = {
   rows: sceneConfig.positiveInt({ label: 'Rows', control: 'integer' }),
@@ -64,7 +65,7 @@ export const InstanceGridBlock = defineSceneBlock({
           ),
         },
         // Neutral base color; a downstream color block replaces it.
-        color: { space: 'rgb', r: konst(1), g: konst(1), b: konst(1) },
+        color: neutralColorPlan(),
       },
     };
   },

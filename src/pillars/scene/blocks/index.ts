@@ -15,6 +15,8 @@ import { ScatterBlock } from './scatter';
 import { WaveOffsetBlock } from './wave-offset';
 import { SolidColorBlock } from './solid-color';
 import { GradientBlock } from './gradient';
+import { ColorByIndexBlock } from './color-by-index';
+import { ColorFromGradientBlock } from './color-from-gradient';
 import { ColorCycleBlock } from './color-cycle';
 import { BrightnessBlock } from './brightness';
 import { ThresholdVisibilityBlock } from './threshold-visibility';
@@ -30,6 +32,8 @@ export const ALL_SCENE_BLOCKS: readonly SceneBlockDefinition<unknown>[] = [
   WaveOffsetBlock as SceneBlockDefinition<unknown>,
   SolidColorBlock as SceneBlockDefinition<unknown>,
   GradientBlock as SceneBlockDefinition<unknown>,
+  ColorByIndexBlock as SceneBlockDefinition<unknown>,
+  ColorFromGradientBlock as SceneBlockDefinition<unknown>,
   ColorCycleBlock as SceneBlockDefinition<unknown>,
   BrightnessBlock as SceneBlockDefinition<unknown>,
   ThresholdVisibilityBlock as SceneBlockDefinition<unknown>,

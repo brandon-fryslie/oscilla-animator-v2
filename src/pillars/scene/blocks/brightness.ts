@@ -2,59 +2,21 @@
  * src/pillars/scene/blocks/brightness.ts
  *
  * A color modifier: scales the upstream bundle's luminance by a factor. Proves
- * the modifier shape generalizes beyond `TransformBinding` to `ColorBinding` —
- * a modifier rewrites whichever bundle field it owns.
+ * the modifier shape generalizes beyond `TransformBinding` to color — a modifier
+ * rewrites whichever bundle field it owns, here the whole {@link ColorPlan}, so
+ * it brightens a per-channel binding and a sampled palette/gradient LUT alike.
  *
- * [LAW:types-are-the-program] `scaleLuminance` is exhaustive over the color-space
- *   union: each space scales its own luminance-carrying channels, so a new color
- *   space is a compile error here until its brightening is declared — never a
- *   silent pass-through.
- * [LAW:locality-or-seam] Self-contained: ports + a pure bundle transform. Adding
- *   it edits no draw block and no assembly code.
+ * [LAW:locality-or-seam] Self-contained: ports + a pure bundle transform. The
+ *   luminance math lives at the color seam (`scaleColorPlanLuminance`); this
+ *   block edits no draw block and no assembly code.
  */
 
-import { konst, mul, type ColorBinding } from '../../../render/scene-plan';
 import { defineSceneBlock, sceneConfig } from '../scene-block';
+import { scaleColorPlanLuminance } from '../color';
 
 const config = {
   factor: sceneConfig.positiveNumber({ label: 'Factor', control: 'number' }),
 } as const;
-
-/**
- * Scale a color's luminance by `factor`. For HSL that is the lightness channel;
- * for RGB/RGBA it is each color channel uniformly (alpha is opacity, not
- * luminance, so it is preserved).
- */
-function scaleLuminance(color: ColorBinding, factor: number): ColorBinding {
-  const k = konst(factor);
-  switch (color.space) {
-    case 'oklab':
-      // Darken along the OKLab ray toward black: scale lightness AND the
-      // Cartesian chroma axes together. a/b are absolute chroma, so scaling l
-      // alone holds chroma fixed and over-saturates at lower lightness —
-      // pushing the color out of gamut and clipping its hue. Scaling all three
-      // preserves the hue angle atan2(b,a) and reduces chroma in step.
-      return { space: 'oklab', l: mul(color.l, k), a: mul(color.a, k), b: mul(color.b, k) };
-    case 'hsl':
-      return { ...color, l: mul(color.l, k) };
-    case 'rgb':
-      return { space: 'rgb', r: mul(color.r, k), g: mul(color.g, k), b: mul(color.b, k) };
-    case 'rgba':
-      return {
-        space: 'rgba',
-        r: mul(color.r, k),
-        g: mul(color.g, k),
-        b: mul(color.b, k),
-        a: color.a,
-      };
-    default:
-      return assertNever(color);
-  }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`[scene] unhandled color space in Brightness: ${JSON.stringify(value)}`);
-}
 
 export const BrightnessBlock = defineSceneBlock({
   type: 'Brightness',
@@ -70,6 +32,6 @@ export const BrightnessBlock = defineSceneBlock({
   config,
   contribute: (config) => ({
     role: 'modifier',
-    apply: (bundle) => ({ ...bundle, color: scaleLuminance(bundle.color, config.factor) }),
+    apply: (bundle) => ({ ...bundle, color: scaleColorPlanLuminance(bundle.color, config.factor) }),
   }),
 });

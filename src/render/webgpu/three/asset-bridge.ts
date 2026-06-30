@@ -28,8 +28,15 @@
  */
 
 import {
+  DataTexture,
+  DataUtils,
+  HalfFloatType,
+  LinearFilter,
   LinearSRGBColorSpace,
   LoadingManager,
+  NearestFilter,
+  NoColorSpace,
+  RGBAFormat,
   SRGBColorSpace,
   TextureLoader,
   type Texture,
@@ -96,6 +103,43 @@ export function createDefaultTextureDecoder(manager: LoadingManager = new Loadin
 }
 
 /**
+ * Build a Three `DataTexture` from a compiler-baked `data` texture def. The
+ * pixels are float RGBA channel values (OKLab triples + 1.0 alpha for a color
+ * LUT); they upload as half-float so the GPU can *linearly filter* the table
+ * (a gradient ramp), which 32-bit float textures cannot do in WebGPU without an
+ * optional feature. `NoColorSpace` keeps the raw values untouched — the texels
+ * are not sRGB, so no transfer function may be applied on sample; the material
+ * that reads the LUT owns the OKLab→display conversion.
+ *
+ * [LAW:no-silent-failure] A pixel count that does not match `width × height × 4`
+ *   is a mis-baked LUT, surfaced loudly rather than uploaded as a torn texture.
+ */
+function buildDataTexture(def: Extract<TextureDef, { kind: 'data' }>): Texture {
+  const expected = def.width * def.height * 4;
+  if (def.pixels.length !== expected) {
+    throw new Error(
+      `ThreeLoadingBridge: data texture has ${def.pixels.length} pixel channels, expected ${expected} (${def.width}×${def.height}×4)`,
+    );
+  }
+  const half = new Uint16Array(def.pixels.length);
+  for (let i = 0; i < def.pixels.length; i += 1) {
+    half[i] = DataUtils.toHalfFloat(def.pixels[i]);
+  }
+  const texture = new DataTexture(half, def.width, def.height, RGBAFormat, HalfFloatType);
+  const filter = def.filter === 'linear' ? LinearFilter : NearestFilter;
+  texture.magFilter = filter;
+  texture.minFilter = filter;
+  texture.colorSpace = NoColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** A stable cache key for a `data` texture, derived from its content. */
+function dataTextureCacheKey(def: Extract<TextureDef, { kind: 'data' }>): string {
+  return `data:${def.width}x${def.height}:${def.filter}:${def.pixels.join(',')}`;
+}
+
+/**
  * Owns the runtime cache of decoded textures and resolves a plan's texture table
  * into ref-keyed Three `Texture`s for realization.
  *
@@ -121,15 +165,28 @@ export class ThreeLoadingBridge {
     const resolved = new Map<TextureRef, Texture>();
     const entries = Object.entries(plan.resources.textures) as [TextureRef, TextureDef][];
     for (const [ref, def] of entries) {
-      const metadata = registry.getMetadata(def.assetId);
-      const variant = DEFAULT_ASSET_VARIANT;
-      const key = assetCacheKey(def.assetId, variant);
-      const cached = this.cache.get(key);
-      const texture = cached ?? (await this.decode(metadata, variant));
+      // [LAW:dataflow-not-control-flow] Texture origin is a value; each arm
+      //   resolves the same way (cache lookup → realize-on-miss → cache), only
+      //   the realize step differs (asset decode vs. data build).
+      const { key, texture } = await this.resolveOne(def, registry);
       this.cache.set(key, texture);
       resolved.set(ref, texture);
     }
     return resolved;
+  }
+
+  private async resolveOne(
+    def: TextureDef,
+    registry: AssetRegistry,
+  ): Promise<{ readonly key: string; readonly texture: Texture }> {
+    if (def.kind === 'data') {
+      const key = dataTextureCacheKey(def);
+      return { key, texture: this.cache.get(key) ?? buildDataTexture(def) };
+    }
+    const variant = DEFAULT_ASSET_VARIANT;
+    const key = assetCacheKey(def.assetId, variant);
+    const cached = this.cache.get(key);
+    return { key, texture: cached ?? (await this.decode(registry.getMetadata(def.assetId), variant)) };
   }
 
   /**

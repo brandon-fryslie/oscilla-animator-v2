@@ -68,6 +68,10 @@ export function materialChannels(material: MaterialDef): readonly PlanExpr[] {
       return colorChannels(material.color);
     case 'texturedUnlit':
       return [];
+    case 'unlitColorLut':
+      // The LUT itself is baked data, but its sample coord may read an input
+      // (e.g. a mouse-driven heatmap), so the coord contributes its channels.
+      return [material.coord];
     default:
       return assertNever(material);
   }

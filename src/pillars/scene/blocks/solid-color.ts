@@ -20,7 +20,7 @@
  */
 
 import { defineSceneBlock, sceneConfig } from '../scene-block';
-import { hexColorBinding } from '../color';
+import { bindingColor, hexColorBinding } from '../color';
 
 const config = {
   color: sceneConfig.color({ label: 'Color', control: 'color' }),
@@ -40,6 +40,6 @@ export const SolidColorBlock = defineSceneBlock({
   config,
   contribute: (config) => ({
     role: 'modifier',
-    apply: (bundle) => ({ ...bundle, color: hexColorBinding(config.color) }),
+    apply: (bundle) => ({ ...bundle, color: bindingColor(hexColorBinding(config.color)) }),
   }),
 });
