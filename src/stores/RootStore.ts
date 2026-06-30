@@ -37,6 +37,7 @@ import {
   clearPatchPersistenceIssues,
 } from '../services/PatchPersistence';
 import { debugService } from '../services/DebugService';
+import { loadPillarPatchFromStorage } from '../services/PillarPatchPersistence';
 import type { Edge } from '../graph/Patch';
 
 type PatchSnapshot = ImmutablePatch;
@@ -225,8 +226,24 @@ export class RootStore {
     // Create ExpressionEditorStore (active block for docked expression workbench)
     this.expressionEditor = new ExpressionEditorStore();
 
-    // Create PillarPatchStore (authored native patch for the ScenePlan editor)
-    this.pillarPatch = new PillarPatchStore();
+    // Create PillarPatchStore (authored native patch for the ScenePlan editor),
+    // seeded from storage. [LAW:effects-at-boundaries] The load is performed once
+    // at the composition root; the store itself stays seeded by pure data and
+    // owns only its save reaction.
+    // [LAW:no-silent-failure] A stored-but-unreadable patch is logged as an error
+    //   before falling back to the default starter — never silently discarded.
+    const loadedPillarPatch = loadPillarPatchFromStorage();
+    if (loadedPillarPatch.kind === 'failed') {
+      this.diagnostics.log({
+        level: 'error',
+        message: `PillarPatchPersistence(load): ${loadedPillarPatch.error}`,
+      });
+    }
+    // `undefined` triggers the store's default starter patch (the single source
+    // of the first-visit fallback). [LAW:one-source-of-truth]
+    this.pillarPatch = new PillarPatchStore(
+      loadedPillarPatch.kind === 'loaded' ? loadedPillarPatch.patch : undefined,
+    );
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
@@ -346,6 +363,9 @@ export class RootStore {
 
     // Dispose PatchStore persistence
     this.patch.stopPersistence();
+
+    // Dispose PillarPatchStore persistence
+    this.pillarPatch.stopPersistence();
 
     // Dispose DiagnosticHub
     this.diagnosticHub.dispose();

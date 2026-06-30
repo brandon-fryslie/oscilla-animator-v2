@@ -472,6 +472,13 @@ export class RuntimeService {
     await this.installEditorPlan(initial.plan);
     this.scenePlanInstalled = true;
 
+    // [LAW:single-enforcer] The native editor thread is where the authored patch
+    //   becomes live and user-editable, so it is where its persistence begins.
+    //   Save failures route to the diagnostics boundary this service owns.
+    store.pillarPatch.startPersistence((message) => {
+      store.diagnostics.log({ level: 'warn', message: `PillarPatchPersistence(save): ${message}` });
+    });
+
     // [LAW:effects-at-boundaries] The store computes the plan (pure); this
     //   reaction is the single effect boundary that installs it.
     // [LAW:dataflow-not-control-flow] An edit that fails to compile skips the
