@@ -31,6 +31,7 @@ import {
   PlaneGeometry,
   Scene,
   type BufferGeometry,
+  type Material,
   type Node,
   type Texture,
 } from 'three/webgpu';
@@ -45,6 +46,7 @@ import {
   type MaterialDef,
   type PlanInputChannel,
   type ScenePlan,
+  type SceneObject,
   type SceneObjectRef,
   type TextureRef,
 } from '../../scene-plan';
@@ -60,8 +62,25 @@ function floatUniform(value: number) {
 export type InputUniform = ReturnType<typeof floatUniform>;
 
 /**
+ * One realized scene object — the live Three mesh for a plan `SceneObject`, plus
+ * the structural `fingerprint` of the plan slice it was built from. The
+ * fingerprint is what a reinstall compares to decide reuse vs. rebuild: equal
+ * fingerprint under the same authored `SceneObjectRef` means the object is
+ * structurally identical and its live Three object (geometry, material, compiled
+ * TSL graph, instance buffers) is kept untouched across the edit.
+ *
+ * [LAW:one-source-of-truth] The authored `SceneObjectRef` is the only identity;
+ *   the fingerprint is a derived structural digest, not a second identity.
+ */
+export interface RealizedObject {
+  readonly mesh: InstancedMesh;
+  readonly fingerprint: string;
+}
+
+/**
  * A realized scene: everything the renderer needs to draw and to drive the
- * declared runtime inputs each frame.
+ * declared runtime inputs each frame, plus the per-object map a reinstall
+ * reconciles against.
  *
  * [LAW:locality-or-seam] This is internal to the renderer backend. The Three
  *   `Scene`/`OrthographicCamera` it holds never cross back to app code — the
@@ -70,6 +89,10 @@ export type InputUniform = ReturnType<typeof floatUniform>;
 export interface RealizedScene {
   readonly scene: Scene;
   readonly camera: OrthographicCamera;
+  /** Structural digest of the camera plan, so a reinstall can reuse the camera. */
+  readonly cameraFingerprint: string;
+  /** Live realized object per authored `SceneObjectRef`, for reinstall reuse. */
+  readonly objects: ReadonlyMap<SceneObjectRef, RealizedObject>;
   /** Uniform node per declared input channel; the renderer writes `.value`. */
   readonly inputs: ReadonlyMap<PlanInputChannel, InputUniform>;
   /** Releases every GPU-backed resource this scene allocated. */
@@ -235,17 +258,115 @@ function requireResource<T>(table: Readonly<Record<string, T>>, ref: string, kin
 }
 
 /**
- * Realize a `ScenePlan` into a Three scene graph.
+ * The structural digest of a scene object: the plan slice that determines its
+ * realized Three structure (geometry, material, per-instance graphs, count).
+ * Texture handles are resolved to their stable `assetId`, so a changed asset
+ * busts reuse; every other input is already pure plan data.
+ *
+ * [LAW:dataflow-not-control-flow] Reuse is decided by comparing these digests as
+ *   values, not by a ladder of "did the count change / did the color change"
+ *   branches. The continuity tiers (time-pure / config / topology) are emergent
+ *   from one equality, not enumerated modes ([LAW:no-mode-explosion]).
+ */
+function objectFingerprint(plan: ScenePlan, object: SceneObject): string {
+  const geometry = requireResource(plan.resources.geometries, object.geometry, 'geometry');
+  const material = requireResource(plan.resources.materials, object.material, 'material');
+  const materialKey =
+    material.kind === 'texturedUnlit'
+      ? {
+          kind: 'texturedUnlit',
+          assetId: requireResource(plan.resources.textures, material.texture, 'texture').assetId,
+        }
+      : material;
+  return JSON.stringify({ geometry, material: materialKey, instancing: object.instancing });
+}
+
+/** Release every GPU-backed resource a realized object allocated. */
+function disposeObject(object: RealizedObject): void {
+  object.mesh.geometry.dispose();
+  (object.mesh.material as Material).dispose();
+  object.mesh.dispose();
+}
+
+/**
+ * Build the live Three object for one plan `SceneObject` against the shared
+ * input-uniform nodes. The per-instance transform/color are TSL graphs that
+ * capture those uniform nodes, so placement is computed on the GPU from
+ * intrinsics and runtime inputs — no per-instance CPU payload bag.
+ */
+function buildObject(
+  ref: SceneObjectRef,
+  plan: ScenePlan,
+  object: SceneObject,
+  inputNodes: Partial<Record<PlanInputChannel, TSLNode>>,
+  resolvedTextures: ResolvedTextures,
+): RealizedObject {
+  // [LAW:no-silent-failure] A zero/negative count would build a draw that
+  //   renders nothing while looking installed; reject it.
+  if (object.instancing.count <= 0) {
+    throw new Error(
+      `scene-plan-realizer: scene object '${ref}' declares non-positive instance count ${object.instancing.count}`,
+    );
+  }
+  const ctx: PlanExprContext = { instanceCount: object.instancing.count, inputs: inputNodes };
+  const geometry = geometryDefToGeometry(requireResource(plan.resources.geometries, object.geometry, 'geometry'));
+  const material = materialDefToMaterial(
+    requireResource(plan.resources.materials, object.material, 'material'),
+    ctx,
+    resolvedTextures,
+  );
+  material.positionNode = instanceTransformNode(object.instancing.transform, ctx);
+  const mesh = new InstancedMesh(geometry, material, object.instancing.count);
+  initIdentityInstances(mesh);
+  return { mesh, fingerprint: objectFingerprint(plan, object) };
+}
+
+/** The de-duplicated scene-object refs the plan actually draws, in draw order. */
+function drawnObjectRefs(plan: ScenePlan): readonly SceneObjectRef[] {
+  const refs: SceneObjectRef[] = [];
+  const seen = new Set<SceneObjectRef>();
+  for (const draw of plan.render.draws) {
+    if (seen.has(draw.object)) continue;
+    seen.add(draw.object);
+    refs.push(draw.object);
+  }
+  return refs;
+}
+
+/**
+ * Reconcile a `ScenePlan` into a Three scene graph, reusing the live objects of
+ * `prev` whose authored identity and structure are unchanged. This is the
+ * continuity seam: an equivalent reinstall keeps every Three object (and its
+ * compiled TSL graph and instance buffers) untouched, so time-pure animation —
+ * driven by the preserved input uniforms — never restarts or drops a frame. A
+ * `prev` of `null` is the from-scratch install (nothing to reuse).
  *
  * `resolvedTextures` carries the textures the loading bridge has already decoded
  * (keyed by plan handle); this function reads them but loads nothing — it stays
- * pure. Plans with no textures pass an empty map.
+ * pure aside from owning the Three object lifecycle it is explicitly given.
+ *
+ * [LAW:one-source-of-truth] Input-uniform nodes are preserved across installs by
+ *   channel, so a reused object's captured uniform is the same node the renderer
+ *   writes each frame — there is one uniform per live channel, not a fresh set
+ *   per install that would orphan reused graphs.
+ * [LAW:no-silent-failure] An incompatible version, dangling handle, or
+ *   non-positive count fails loudly during reconciliation.
+ *
+ * Stateful-continuity extension path (deferred, oscilla-pillars-scene-nt56.9
+ *   follow-up): every `PlanExpr` today is a pure function of time/index/input,
+ *   so reusing an object's live mesh is sufficient for continuity — there is no
+ *   renderer-owned state to migrate. When ScenePlan gains a stateful value
+ *   (an accumulator/integrator/feedback buffer that owns renderer-side storage),
+ *   that storage attaches to the `RealizedObject` and is carried across the diff
+ *   exactly where the live mesh is reused here; a fingerprint change that forces
+ *   a rebuild is then also the explicit point a migration/seed decision is made.
  *
  * @throws if the plan version is incompatible, a referenced resource (including
  *   an unresolved texture) is missing, or an object declares a non-positive
  *   instance count.
  */
-export function realizeScenePlan(
+export function reconcileScenePlan(
+  prev: RealizedScene | null,
   plan: ScenePlan,
   resolvedTextures: ResolvedTextures = new Map(),
 ): RealizedScene {
@@ -260,7 +381,7 @@ export function realizeScenePlan(
   const inputs = new Map<PlanInputChannel, InputUniform>();
   for (const channel of plan.render.inputs) {
     if (!inputs.has(channel)) {
-      inputs.set(channel, uniform(0));
+      inputs.set(channel, prev?.inputs.get(channel) ?? uniform(0));
     }
   }
   const inputNodes: Partial<Record<PlanInputChannel, TSLNode>> = {};
@@ -268,54 +389,71 @@ export function realizeScenePlan(
     inputNodes[channel] = node;
   }
 
-  const scene = new Scene();
-  const disposables: Array<{ dispose(): void }> = [];
-  const placed = new Set<SceneObjectRef>();
+  const scene = prev?.scene ?? new Scene();
+  const objects = new Map<SceneObjectRef, RealizedObject>();
 
-  for (const draw of plan.render.draws) {
-    if (placed.has(draw.object)) {
+  for (const ref of drawnObjectRefs(plan)) {
+    const object = requireResource(plan.objects, ref, 'scene object');
+    const fingerprint = objectFingerprint(plan, object);
+    const existing = prev?.objects.get(ref);
+    if (existing && existing.fingerprint === fingerprint) {
+      // Reuse: same authored identity, identical structure → keep the live mesh.
+      objects.set(ref, existing);
       continue;
     }
-    placed.add(draw.object);
-
-    const object = requireResource(plan.objects, draw.object, 'scene object');
-    // [LAW:no-silent-failure] A zero/negative count would build a draw that
-    //   renders nothing while looking installed; reject it.
-    if (object.instancing.count <= 0) {
-      throw new Error(
-        `scene-plan-realizer: scene object '${draw.object}' declares non-positive instance count ${object.instancing.count}`,
-      );
+    const built = buildObject(ref, plan, object, inputNodes, resolvedTextures);
+    if (existing) {
+      scene.remove(existing.mesh);
+      disposeObject(existing);
     }
-
-    const ctx: PlanExprContext = { instanceCount: object.instancing.count, inputs: inputNodes };
-    const geometry = geometryDefToGeometry(requireResource(plan.resources.geometries, object.geometry, 'geometry'));
-    const material = materialDefToMaterial(
-      requireResource(plan.resources.materials, object.material, 'material'),
-      ctx,
-      resolvedTextures,
-    );
-    material.positionNode = instanceTransformNode(object.instancing.transform, ctx);
-
-    const mesh = new InstancedMesh(geometry, material, object.instancing.count);
-    initIdentityInstances(mesh);
-    scene.add(mesh);
-
-    disposables.push(geometry, material);
+    scene.add(built.mesh);
+    objects.set(ref, built);
   }
 
-  const camera = buildCamera(plan.render.camera);
+  // Dispose prev objects the new plan no longer draws (a replaced ref is present
+  // in `objects` with its rebuilt object, so it is not double-disposed here).
+  if (prev) {
+    for (const [ref, object] of prev.objects) {
+      if (!objects.has(ref)) {
+        scene.remove(object.mesh);
+        disposeObject(object);
+      }
+    }
+  }
+
+  const cameraFingerprint = JSON.stringify(plan.render.camera);
+  const camera =
+    prev && prev.cameraFingerprint === cameraFingerprint ? prev.camera : buildCamera(plan.render.camera);
 
   return {
     scene,
     camera,
+    cameraFingerprint,
+    objects,
     inputs,
     dispose() {
-      for (const d of disposables) {
-        d.dispose();
+      for (const object of objects.values()) {
+        disposeObject(object);
       }
       scene.clear();
     },
   };
+}
+
+/**
+ * Realize a `ScenePlan` into a fresh Three scene graph (no reuse). The
+ * from-scratch case of {@link reconcileScenePlan}; the renderer uses it for the
+ * first install and tests use it where reuse is irrelevant.
+ *
+ * @throws if the plan version is incompatible, a referenced resource (including
+ *   an unresolved texture) is missing, or an object declares a non-positive
+ *   instance count.
+ */
+export function realizeScenePlan(
+  plan: ScenePlan,
+  resolvedTextures: ResolvedTextures = new Map(),
+): RealizedScene {
+  return reconcileScenePlan(null, plan, resolvedTextures);
 }
 
 function assertNever(value: never): never {

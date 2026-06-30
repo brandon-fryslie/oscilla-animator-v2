@@ -26,7 +26,7 @@ import { WebGPURenderer as ThreeWebGPURenderer } from 'three/webgpu';
 
 import type { AssetRegistry } from '../../../assets';
 import type { ScenePlan } from '../../scene-plan';
-import { realizeScenePlan, type RealizedScene } from './scene-plan-realizer';
+import { reconcileScenePlan, type RealizedScene } from './scene-plan-realizer';
 import { ThreeLoadingBridge } from './asset-bridge';
 import type {
   GpuFault,
@@ -67,12 +67,15 @@ export class ThreeForkRenderer implements WebGPURenderer {
     //   effect), then realize purely from the already-resolved textures.
     const resolvedTextures = await this.bridge.resolveTextures(plan, registry);
     this.assertNotDisposed('installing a ScenePlan');
-    // [LAW:one-source-of-truth] A renderer holds exactly one realized scene; a
-    //   new plan replaces the old one and releases its resources.
-    this.realized?.dispose();
-    // realizeScenePlan throws on an incompatible version or dangling handle
+    // [LAW:one-source-of-truth] A renderer holds exactly one realized scene.
+    //   Reconcile the new plan against it: objects whose authored identity and
+    //   structure are unchanged are reused untouched (so time-pure animation
+    //   does not restart across a live edit), changed/added objects are rebuilt,
+    //   and removed objects are released. The previous RealizedScene's surviving
+    //   objects are transplanted into the returned one, so it is not disposed.
+    // reconcileScenePlan throws on an incompatible version or dangling handle
     // ([LAW:no-silent-failure]); the throw propagates to the installer.
-    this.realized = realizeScenePlan(plan, resolvedTextures);
+    this.realized = reconcileScenePlan(this.realized, plan, resolvedTextures);
   }
 
   async renderFrame(values: RuntimeInputChannelValues): Promise<void> {
