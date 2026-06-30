@@ -27,6 +27,8 @@ coverage/
 playwright-report/
 test-results/
 artifacts/three-migration/renderer-shell-baseline/
+artifacts/three-migration/nt56.16.2-chain-focus/
+artifacts/three-migration/nt56.16.3-perspective-rotation/
 
 # Vite cache
 node_modules/.vite/

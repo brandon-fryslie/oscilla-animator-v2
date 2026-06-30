@@ -21,12 +21,14 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
-const ARTIFACT_DIR = resolve('artifacts/three-migration/nt56.16.2-chain-focus');
+// [LAW:one-source-of-truth] The persisted envelope (storage key + versioned wire
+// format) has exactly one home; the test seeds it through that home rather than
+// re-declaring the key, version, or `{version, patch}` shape.
+import { serializePillarPatch } from '../../src/pillars/persistence';
+import type { PillarPatch } from '../../src/pillars/types';
+import { PILLAR_PATCH_STORAGE_KEY } from '../../src/services/PillarPatchPersistence';
 
-// Mirrors src/pillars/persistence.ts PILLAR_PATCH_FORMAT_VERSION and the
-// PillarPatchPersistence storage key — the persisted envelope the store reads.
-const PILLAR_PATCH_STORAGE_KEY = 'oscilla-pillar-patch-v1';
-const PILLAR_PATCH_FORMAT_VERSION = 1;
+const ARTIFACT_DIR = resolve('artifacts/three-migration/nt56.16.2-chain-focus');
 
 const BRANCHY_PATCH = {
   blocks: [
@@ -41,7 +43,7 @@ const BRANCHY_PATCH = {
     { id: 'e1', source: 'color', target: 'draw', inputSlot: 'primary', role: 'primary' },
     { id: 'e2', source: 'gridB', target: 'colorB', inputSlot: 'primary', role: 'primary' },
   ],
-};
+} satisfies PillarPatch;
 
 /** Computed opacity of a block's `.react-flow__node` wrapper (where node.style lands). */
 function nodeOpacity(page: Page, blockId: string): Promise<number> {
@@ -71,10 +73,7 @@ test.describe('Native editor chain focus', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(
       ([key, blob]) => window.localStorage.setItem(key, blob),
-      [
-        PILLAR_PATCH_STORAGE_KEY,
-        JSON.stringify({ version: PILLAR_PATCH_FORMAT_VERSION, patch: BRANCHY_PATCH }),
-      ] as const,
+      [PILLAR_PATCH_STORAGE_KEY, serializePillarPatch(BRANCHY_PATCH)] as const,
     );
     await page.goto('/?scenePlan=editor', { waitUntil: 'domcontentloaded' });
     // All five seeded blocks must lay out before we probe focus behavior.

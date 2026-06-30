@@ -12,8 +12,9 @@
  *   render; the canvas stores only the ELK-resolved positions, never block truth.
  * [LAW:no-ambient-temporal-coupling] Relayout is owned by one effect keyed on the
  *   patch topology; config edits (which never change topology) do not reflow it.
- *   Selection/dimming is a SECOND, independent derivation that reads positions but
- *   never writes them — focusing a chain must not reflow the graph.
+ *   Selection/dimming/perspective-rotation is a SECOND, independent derivation that
+ *   reads positions but never writes them — focusing or re-rooting a path must not
+ *   reflow the graph.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
@@ -33,7 +34,14 @@ import { useStores } from '../../stores';
 import type { SceneRegistry } from '../../pillars/scene';
 import type { PillarPatch } from '../../pillars/types';
 import { layoutGraphLeftToRight } from './graphLayout';
-import { computeChainSet, stepChain, type ChainDirection } from './chainFocus';
+import {
+  computeFocusPath,
+  rotatePerspective,
+  stepChain,
+  DEFAULT_PERSPECTIVE,
+  type ChainDirection,
+  type PerspectiveChoices,
+} from './chainFocus';
 import { SceneBlockNode, computeNodeSize, type SceneBlockNodeData } from './SceneBlockNode';
 
 const nodeTypes: NodeTypes = { sceneBlock: SceneBlockNode };
@@ -147,6 +155,9 @@ const GraphInner: React.FC = observer(() => {
 
   // --- Chain focus (view state; deliberately separate from the layout above) ---
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The perspective: which branch is followed at each pivot. Resets with a fresh
+  // selection and accumulates as right-clicks rotate pivots; the lit path is derived.
+  const [choices, setChoices] = useState<PerspectiveChoices>(DEFAULT_PERSPECTIVE);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // A selection survives only as long as its block does; a topology change that
@@ -155,13 +166,14 @@ const GraphInner: React.FC = observer(() => {
   useEffect(() => {
     if (selectedId !== null && !patch.blocks.some((b) => b.id === selectedId)) {
       setSelectedId(null);
+      setChoices(DEFAULT_PERSPECTIVE);
     }
   }, [key, selectedId, patch.blocks]);
 
-  // The focused dataflow chain; `null` when nothing is selected means "dim nothing".
-  const chain = useMemo(
-    () => (selectedId === null ? null : computeChainSet(patch.edges, selectedId)),
-    [selectedId, key, patch.edges],
+  // The focused dataflow path; `null` when nothing is selected means "dim nothing".
+  const focusPath = useMemo(
+    () => (selectedId === null ? null : computeFocusPath(patch.edges, selectedId, choices)),
+    [selectedId, choices, key, patch.edges],
   );
 
   // Dimming is a pure overlay on the laid-out nodes/edges: it adds opacity (and a
@@ -169,7 +181,7 @@ const GraphInner: React.FC = observer(() => {
   const displayNodes = useMemo(
     () =>
       nodes.map((node) => {
-        const onChain = chain === null || chain.has(node.id);
+        const onChain = focusPath === null || focusPath.has(node.id);
         const selected = node.id === selectedId;
         return {
           ...node,
@@ -182,40 +194,60 @@ const GraphInner: React.FC = observer(() => {
           },
         };
       }),
-    [nodes, chain, selectedId],
+    [nodes, focusPath, selectedId],
   );
 
   const displayEdges = useMemo(
     () =>
       edges.map((edge) => {
-        const onChain = chain === null || (chain.has(edge.source) && chain.has(edge.target));
+        const onChain =
+          focusPath === null || (focusPath.has(edge.source) && focusPath.has(edge.target));
         return {
           ...edge,
           style: { ...edge.style, opacity: onChain ? ON_CHAIN_OPACITY : OFF_CHAIN_OPACITY },
         };
       }),
-    [edges, chain],
+    [edges, focusPath],
   );
 
+  // A fresh selection starts from the default perspective — clicking a block is "show
+  // me this block's path following first branches", and rotation builds from there.
   const selectNode: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedId(node.id);
+    setChoices(DEFAULT_PERSPECTIVE);
     wrapperRef.current?.focus();
   }, []);
 
-  const clearSelection = useCallback(() => setSelectedId(null), []);
+  const clearSelection = useCallback(() => {
+    setSelectedId(null);
+    setChoices(DEFAULT_PERSPECTIVE);
+  }, []);
 
-  // Arrow keys step the selection along its chain; the key→direction map keeps the
-  // variability in data, so the handler is one lookup, not a branch per key.
+  // Right-click rotates the perspective at a pivot to follow a different branch. The
+  // selection holds; only the followed branch changes, so the lit path re-roots
+  // without reflowing the graph. A non-pivot returns the same choices (a no-op).
+  const rotateAt: NodeMouseHandler = useCallback(
+    (event, node) => {
+      event.preventDefault();
+      if (selectedId === null) return;
+      setChoices((current) => rotatePerspective(patch.edges, selectedId, current, node.id));
+    },
+    [selectedId, patch.edges],
+  );
+
+  // Arrow keys step the selection along the followed path; the key→direction map keeps
+  // the variability in data, so the handler is one lookup, not a branch per key. The
+  // perspective is preserved so arrowing walks exactly the path that is lit.
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (selectedId === null) return;
       const direction = KEY_DIRECTION[event.key];
       if (direction === undefined) return;
       event.preventDefault();
-      const next = stepChain(patch.edges, selectedId, direction);
+      const next = stepChain(patch.edges, selectedId, direction, choices);
       if (next !== null) setSelectedId(next);
     },
-    [selectedId, patch.edges],
+    [selectedId, choices, patch.edges],
   );
 
   return (
@@ -234,6 +266,7 @@ const GraphInner: React.FC = observer(() => {
         nodesConnectable={false}
         elementsSelectable={false}
         onNodeClick={selectNode}
+        onNodeContextMenu={rotateAt}
         onPaneClick={clearSelection}
         fitView
         minZoom={0.2}
