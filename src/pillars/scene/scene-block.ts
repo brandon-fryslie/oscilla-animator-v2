@@ -274,6 +274,13 @@ export const sceneConfig = {
     schema: z.number().int().positive(),
     catalog,
   }),
+  color: (catalog: SceneConfigFieldCatalog): SceneConfigField<string> => ({
+    // [LAW:one-source-of-truth] An opaque `#rrggbb` value — one color, no
+    //   exposed channels. The channel layout is minted only at the seam
+    //   (`hexColorBinding`), never on the block API.
+    schema: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb hex color'),
+    catalog,
+  }),
   optionalAssetId: (
     catalog: SceneConfigFieldCatalog,
   ): SceneConfigField<string | undefined> => ({

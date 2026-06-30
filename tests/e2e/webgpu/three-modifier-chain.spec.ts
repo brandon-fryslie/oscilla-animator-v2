@@ -75,7 +75,7 @@ test.describe('Three native modifier chain', () => {
       `${JSON.stringify(
         {
           ticket: 'oscilla-pillars-scene-nt56.4',
-          chain: 'InstanceGrid → WaveOffset → Brightness → DrawInstances',
+          chain: 'InstanceGrid → WaveOffset → SolidColor → Brightness → DrawInstances',
           frames: { wave0, wave1, grid },
           waveAnimated: wave0.checksum !== wave1.checksum,
           modifierChangedOutput: wave0.checksum !== grid.checksum,
