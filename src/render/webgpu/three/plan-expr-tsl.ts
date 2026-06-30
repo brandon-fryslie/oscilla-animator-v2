@@ -25,7 +25,7 @@
  */
 
 import type { Node } from 'three/webgpu';
-import { add, cos, div, floor, instanceIndex, mod, mul, negate, sin, step, sub, float } from 'three/tsl';
+import { add, cos, div, floor, fract, hash, instanceIndex, mod, mul, negate, sin, step, sub, float } from 'three/tsl';
 
 import type {
   PlanBinaryOp,
@@ -68,6 +68,10 @@ const UNARY_OPS: Record<PlanUnaryOp, (arg: TSLNode) => TSLNode> = {
   sin: (arg) => sin(arg),
   cos: (arg) => cos(arg),
   negate: (arg) => negate(arg),
+  fract: (arg) => fract(arg),
+  // TSL `hash(seed)` → a PCG-mixed pseudo-random float in [0, 1). The float
+  // vocabulary cannot compose this honestly, so the renderer owns the realization.
+  hash: (arg) => hash(arg),
 };
 
 const BINARY_OPS: Record<PlanBinaryOp, (lhs: TSLNode, rhs: TSLNode) => TSLNode> = {

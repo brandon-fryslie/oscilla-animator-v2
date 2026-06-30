@@ -128,7 +128,7 @@ consumers stay exhaustive.
 |--------------------|---------|--------|
 | Runtime inputs (`PlanInputChannel`) | `time` (realized); `mouseX/Y`, `mouseButtons`, `audioLow/Mid/High`, `gaugeActive` (mirrors runtime envelope) | **Realized** (`time`) |
 | Intrinsics (`PlanIntrinsic`) | `index`, `rank` | **Realized** |
-| Unary ops (`PlanUnaryOp`) | `floor`, `sin`, `cos`, `negate` | **Realized** |
+| Unary ops (`PlanUnaryOp`) | `floor`, `sin`, `cos`, `negate`, `fract`, `hash` (pseudo-random `[0,1)` — the one op not composable from the float leaves) | **Realized** |
 | Binary ops (`PlanBinaryOp`) | `add`, `sub`, `mul`, `div`, `mod`, `step` (threshold → boolean) | **Realized** |
 | Leaves | `const` (baked) vs `input` (runtime channel) — structurally distinct | **Realized** |
 

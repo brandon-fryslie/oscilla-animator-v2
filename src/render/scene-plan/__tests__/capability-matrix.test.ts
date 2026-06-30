@@ -39,6 +39,8 @@ import {
   sin,
   cos,
   negate,
+  fract,
+  hash,
   add,
   sub,
   mul,
@@ -98,7 +100,8 @@ function buildCapabilityCoveragePlan(): ScenePlan {
     // unary: sin, cos
     positionX: sin(rank),
     positionY: cos(rank),
-    rotation: konst(0),
+    // unary: fract (fractional part of a ramp), hash (pseudo-random from the index)
+    rotation: add(fract(mul(rank, konst(3))), hash(index)),
   };
 
   return defineScenePlan({
@@ -257,7 +260,7 @@ describe('ScenePlan capability matrix — representative coverage', () => {
   it('exercises the entire PlanExpr vocabulary', () => {
     const { kinds, unary, binary } = collectExprVocabulary(plan);
     expect(kinds).toEqual(new Set(['const', 'input', 'intrinsic', 'unary', 'binary']));
-    expect(unary).toEqual(new Set<PlanUnaryOp>(['floor', 'sin', 'cos', 'negate']));
+    expect(unary).toEqual(new Set<PlanUnaryOp>(['floor', 'sin', 'cos', 'negate', 'fract', 'hash']));
     expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod', 'step']));
   });
 

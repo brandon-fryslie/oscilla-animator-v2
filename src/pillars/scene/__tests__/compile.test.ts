@@ -223,6 +223,7 @@ describe('scene block contract — catalog and registration', () => {
       'Ring Layout',
       'Spirograph',
       'Kaleidoscope',
+      'Scatter',
       'Wave Offset',
       'Solid Color',
       'Gradient',
@@ -240,6 +241,8 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // Spirograph output
       'instanceBundle', // Kaleidoscope input
       'instanceBundle', // Kaleidoscope output
+      'instanceBundle', // Scatter input
+      'instanceBundle', // Scatter output
       'instanceBundle', // WaveOffset input
       'instanceBundle', // WaveOffset output
       'instanceBundle', // SolidColor input
@@ -269,6 +272,9 @@ describe('scene block contract — catalog and registration', () => {
       'freqB',
       'speed',
       // Kaleidoscope has no config fields — N-fold order is the upstream count.
+      'width', // Scatter
+      'height',
+      'seed',
       'amplitude',
       'frequency',
       'speed',

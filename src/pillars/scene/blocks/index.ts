@@ -11,6 +11,7 @@ import { InstanceCountBlock } from './instance-count';
 import { RingLayoutBlock } from './ring-layout';
 import { SpirographBlock } from './spirograph';
 import { KaleidoscopeBlock } from './kaleidoscope';
+import { ScatterBlock } from './scatter';
 import { WaveOffsetBlock } from './wave-offset';
 import { SolidColorBlock } from './solid-color';
 import { GradientBlock } from './gradient';
@@ -25,6 +26,7 @@ export const ALL_SCENE_BLOCKS: readonly SceneBlockDefinition<unknown>[] = [
   RingLayoutBlock as SceneBlockDefinition<unknown>,
   SpirographBlock as SceneBlockDefinition<unknown>,
   KaleidoscopeBlock as SceneBlockDefinition<unknown>,
+  ScatterBlock as SceneBlockDefinition<unknown>,
   WaveOffsetBlock as SceneBlockDefinition<unknown>,
   SolidColorBlock as SceneBlockDefinition<unknown>,
   GradientBlock as SceneBlockDefinition<unknown>,
