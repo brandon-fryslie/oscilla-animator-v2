@@ -13,13 +13,37 @@
  *   it does not touch three or the renderer.
  */
 
-import { konst, type ColorBinding } from '../../render/scene-plan';
+import { add, konst, mul, type ColorBinding, type PlanExpr } from '../../render/scene-plan';
 
 const CHANNEL_MAX = 255;
 
 /** Decode one sRGB display channel (0..1) to linear light. */
 function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** The OKLab coordinates of an opaque `#rrggbb` color, as plain numbers. */
+interface OklabTriple {
+  readonly l: number;
+  readonly a: number;
+  readonly b: number;
+}
+
+/** Parse `#rrggbb` → linear sRGB → OKLab coordinates (Ottosson). */
+function hexToOklab(hex: string): OklabTriple {
+  const channel = (start: number): number =>
+    srgbToLinear(parseInt(hex.slice(start, start + 2), 16) / CHANNEL_MAX);
+  const r = channel(1);
+  const g = channel(3);
+  const b = channel(5);
+  const l_ = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m_ = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s_ = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return {
+    l: 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
+    a: 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
+    b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_,
+  };
 }
 
 /**
@@ -36,19 +60,23 @@ function srgbToLinear(c: number): number {
  *   sees either matrix.
  */
 export function hexColorBinding(hex: string): ColorBinding {
-  const channel = (start: number): number =>
-    srgbToLinear(parseInt(hex.slice(start, start + 2), 16) / CHANNEL_MAX);
-  const lin = { r: channel(1), g: channel(3), b: channel(5) };
+  const c = hexToOklab(hex);
+  return { space: 'oklab', l: konst(c.l), a: konst(c.a), b: konst(c.b) };
+}
 
-  // linear sRGB → LMS (Ottosson) → cube-root → OKLab.
-  const l_ = Math.cbrt(0.4122214708 * lin.r + 0.5363325363 * lin.g + 0.0514459929 * lin.b);
-  const m_ = Math.cbrt(0.2119034982 * lin.r + 0.6806995451 * lin.g + 0.1073969566 * lin.b);
-  const s_ = Math.cbrt(0.0883024619 * lin.r + 0.2817188376 * lin.g + 0.6299787005 * lin.b);
-
-  return {
-    space: 'oklab',
-    l: konst(0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_),
-    a: konst(1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_),
-    b: konst(0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_),
-  };
+/**
+ * An OKLab gradient `ColorBinding` interpolating two opaque colors by a
+ * per-instance / per-frame parameter `t` (typically a normalized `rank`). The
+ * lerp runs in OKLab Cartesian — `mix` per channel — so the ramp is
+ * perceptually uniform and hue-correct, with no muddy midtones. Each channel is
+ * `c0 + (c1 - c0) * t`; `c1 - c0` folds at authoring time into one `const`.
+ *
+ * [LAW:dataflow-not-control-flow] The ramp is one expression evaluated per
+ *   instance; the position along it is the value `t`, not a branch.
+ */
+export function gradientColorBinding(hexFrom: string, hexTo: string, t: PlanExpr): ColorBinding {
+  const c0 = hexToOklab(hexFrom);
+  const c1 = hexToOklab(hexTo);
+  const lerp = (from: number, to: number): PlanExpr => add(konst(from), mul(konst(to - from), t));
+  return { space: 'oklab', l: lerp(c0.l, c1.l), a: lerp(c0.a, c1.a), b: lerp(c0.b, c1.b) };
 }

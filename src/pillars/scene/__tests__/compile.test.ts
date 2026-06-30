@@ -221,6 +221,7 @@ describe('scene block contract — catalog and registration', () => {
       'Instance Grid',
       'Wave Offset',
       'Solid Color',
+      'Gradient',
       'Brightness',
       'Draw Instances',
     ]);
@@ -230,6 +231,8 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // WaveOffset output
       'instanceBundle', // SolidColor input
       'instanceBundle', // SolidColor output
+      'instanceBundle', // Gradient input
+      'instanceBundle', // Gradient output
       'instanceBundle', // Brightness input
       'instanceBundle', // Brightness output
       'instanceBundle', // DrawInstances input
@@ -245,6 +248,8 @@ describe('scene block contract — catalog and registration', () => {
       'frequency',
       'speed',
       'color',
+      'colorStart',
+      'colorEnd',
       'factor',
       'size',
       'cameraHalfExtentX',
