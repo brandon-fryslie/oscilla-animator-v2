@@ -57,21 +57,32 @@ function buildNodes(patch: PillarPatch, registry: SceneRegistry): Node<SceneBloc
   });
 }
 
-/** Build the reactflow edges, anchoring each to the source block's sole output. */
+/**
+ * Build the reactflow edges, anchoring each to the source block's sole output.
+ *
+ * The store invariant guarantees every edge references existing blocks
+ * (`PillarPatchStore.removeBlock` prunes edges with their blocks; `addEdge` only
+ * wires existing sources), so the source block is always present — the handle map
+ * is keyed by block id with no missing-block coercion. The one optionality that
+ * legitimately remains is a block whose *type* is unregistered (a stale persisted
+ * patch): its output handle is absent, which renders as an unanchored edge and is
+ * reported by the validation/diagnostics boundary, not swallowed here.
+ */
 function buildEdges(patch: PillarPatch, registry: SceneRegistry): Edge[] {
-  return patch.edges.map((edge) => {
-    const sourceOutput = registry
-      .get(patch.blocks.find((b) => b.id === edge.source)?.type ?? '')
-      ?.catalog.ports.find((p) => p.direction === 'output');
-    return {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: sourceOutput?.id,
-      targetHandle: edge.inputSlot,
-      style: { stroke: '#5a5a72', strokeWidth: 1.5 },
-    };
-  });
+  const outputHandleByBlock = new Map<string, string | undefined>(
+    patch.blocks.map((b) => [
+      b.id,
+      registry.get(b.type)?.catalog.ports.find((p) => p.direction === 'output')?.id,
+    ]),
+  );
+  return patch.edges.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: outputHandleByBlock.get(edge.source),
+    targetHandle: edge.inputSlot,
+    style: { stroke: '#5a5a72', strokeWidth: 1.5 },
+  }));
 }
 
 /** A stable signature of the patch *topology* — changes only on add/remove/wire. */
@@ -100,15 +111,21 @@ const GraphInner: React.FC = observer(() => {
 
   useEffect(() => {
     let cancelled = false;
-    void layoutGraphLeftToRight(base.nodes, base.edges).then((positioned) => {
-      if (cancelled) return;
-      setNodes(positioned);
-      setEdges(base.edges);
-      // Fit after the new positions paint so the whole graph is visible.
-      requestAnimationFrame(() => {
-        if (!cancelled) fitView({ padding: 0.15, duration: 200 });
+    layoutGraphLeftToRight(base.nodes, base.edges)
+      .then((positioned) => {
+        if (cancelled) return;
+        setNodes(positioned);
+        setEdges(base.edges);
+        // Fit after the new positions paint so the whole graph is visible.
+        requestAnimationFrame(() => {
+          if (!cancelled) fitView({ padding: 0.15, duration: 200 });
+        });
+      })
+      // [LAW:no-silent-failure] An ELK rejection must surface, not vanish — a
+      // swallowed layout error would leave the graph blank with no signal.
+      .catch((err: unknown) => {
+        console.error('Native graph layout failed:', err);
       });
-    });
     return () => {
       cancelled = true;
     };
