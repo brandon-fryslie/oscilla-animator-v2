@@ -129,7 +129,7 @@ consumers stay exhaustive.
 | Runtime inputs (`PlanInputChannel`) | `time` (realized); `mouseX/Y`, `mouseButtons`, `audioLow/Mid/High`, `gaugeActive` (mirrors runtime envelope) | **Realized** (`time`) |
 | Intrinsics (`PlanIntrinsic`) | `index`, `rank` | **Realized** |
 | Unary ops (`PlanUnaryOp`) | `floor`, `sin`, `cos`, `negate` | **Realized** |
-| Binary ops (`PlanBinaryOp`) | `add`, `sub`, `mul`, `div`, `mod` | **Realized** |
+| Binary ops (`PlanBinaryOp`) | `add`, `sub`, `mul`, `div`, `mod`, `step` (threshold → boolean) | **Realized** |
 | Leaves | `const` (baked) vs `input` (runtime channel) — structurally distinct | **Realized** |
 
 `// [LAW:dataflow-not-control-flow]` The `const` vs `input` split is structural,

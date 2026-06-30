@@ -25,7 +25,7 @@
  */
 
 import type { Node } from 'three/webgpu';
-import { add, cos, div, floor, instanceIndex, mod, mul, negate, sin, sub, float } from 'three/tsl';
+import { add, cos, div, floor, instanceIndex, mod, mul, negate, sin, step, sub, float } from 'three/tsl';
 
 import type {
   PlanBinaryOp,
@@ -76,6 +76,8 @@ const BINARY_OPS: Record<PlanBinaryOp, (lhs: TSLNode, rhs: TSLNode) => TSLNode> 
   mul: (lhs, rhs) => mul(lhs, rhs),
   div: (lhs, rhs) => div(lhs, rhs),
   mod: (lhs, rhs) => mod(lhs, rhs),
+  // TSL `step(edge, x)` → 1 when x >= edge, else 0; lhs is the edge.
+  step: (lhs, rhs) => step(lhs, rhs),
 };
 
 function intrinsicToTSL(name: PlanIntrinsic, ctx: PlanExprContext): TSLNode {

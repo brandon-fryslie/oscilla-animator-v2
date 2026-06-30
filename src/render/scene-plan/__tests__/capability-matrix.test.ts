@@ -44,6 +44,7 @@ import {
   mul,
   div,
   mod,
+  step,
   type PlanExpr,
   type PlanUnaryOp,
   type PlanBinaryOp,
@@ -118,7 +119,8 @@ function buildCapabilityCoveragePlan(): ScenePlan {
         },
         [matRgba]: {
           kind: 'unlitColor',
-          color: { space: 'rgba', r: konst(1), g: konst(0), b: konst(0), a: konst(0.5) },
+          // binary: step — a per-instance boolean opacity (rank past a threshold).
+          color: { space: 'rgba', r: konst(1), g: konst(0), b: konst(0), a: step(konst(0.5), rank) },
         },
         [matOklab]: {
           kind: 'unlitColor',
@@ -256,7 +258,7 @@ describe('ScenePlan capability matrix — representative coverage', () => {
     const { kinds, unary, binary } = collectExprVocabulary(plan);
     expect(kinds).toEqual(new Set(['const', 'input', 'intrinsic', 'unary', 'binary']));
     expect(unary).toEqual(new Set<PlanUnaryOp>(['floor', 'sin', 'cos', 'negate']));
-    expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod']));
+    expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod', 'step']));
   });
 
   it('frames with an orthographic camera and draws to the preview canvas', () => {

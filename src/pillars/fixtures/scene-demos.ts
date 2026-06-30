@@ -27,6 +27,10 @@ import { makeGridOfSquaresPatch } from './grid-of-squares';
 import { makeInstanceWavePatch } from './instance-wave';
 import { makeInstanceGradientPatch } from './instance-gradient';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from './textured-tiles';
+import { makeRingOrbitPatch } from './ring-orbit';
+import { makeSpirographPatch } from './spirograph';
+import { makeKaleidoscopePatch } from './kaleidoscope';
+import { makeConditionalVisibilityPatch } from './conditional-visibility';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -48,4 +52,11 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // Asset-bridge proof target (oscilla-pillars-cleanup-ulu.4): a grid of
   // texture-mapped tiles resolved through the AssetRegistry + ThreeLoadingBridge.
   'textured-tiles': { makePatch: makeTexturedTilesPatch, assets: TEXTURED_TILES_ASSETS },
+  // Target-animation fixtures (oscilla-pillars-scene-nt56.8): each recreates a
+  // legacy demo behavior from native blocks only, with layouts authored as
+  // composable modifiers over a bare InstanceCount source. No assets.
+  'ring-orbit': { makePatch: makeRingOrbitPatch, assets: [] },
+  'spirograph': { makePatch: makeSpirographPatch, assets: [] },
+  'kaleidoscope': { makePatch: makeKaleidoscopePatch, assets: [] },
+  'conditional-visibility': { makePatch: makeConditionalVisibilityPatch, assets: [] },
 };
