@@ -221,12 +221,18 @@ describe('scene block contract — catalog and registration', () => {
 
     expect(catalog.map((block) => block.displayName)).toEqual([
       'Instance Grid',
+      'Wave Offset',
+      'Brightness',
       'Draw Instances',
     ]);
     expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
-      'instanceBundle',
-      'instanceBundle',
-      'materialShell',
+      'instanceBundle', // InstanceGrid output
+      'instanceBundle', // WaveOffset input
+      'instanceBundle', // WaveOffset output
+      'instanceBundle', // Brightness input
+      'instanceBundle', // Brightness output
+      'instanceBundle', // DrawInstances input
+      'materialShell', // DrawInstances output
     ]);
     expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
       'rows',
@@ -237,6 +243,10 @@ describe('scene block contract — catalog and registration', () => {
       'huePerTime',
       'saturation',
       'lightness',
+      'amplitude',
+      'frequency',
+      'speed',
+      'factor',
       'size',
       'cameraHalfExtentX',
       'cameraHalfExtentY',

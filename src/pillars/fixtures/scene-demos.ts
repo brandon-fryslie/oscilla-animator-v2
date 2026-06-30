@@ -24,6 +24,7 @@
 import type { AssetMetadata } from '../../assets';
 import type { PillarPatch } from '../types';
 import { makeGridOfSquaresPatch } from './grid-of-squares';
+import { makeInstanceWavePatch } from './instance-wave';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from './textured-tiles';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
@@ -36,6 +37,10 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // Three-migration first proof target
   // (design-docs/three-migration-first-proof-contract.md). No assets.
   'grid-of-squares': { makePatch: makeGridOfSquaresPatch, assets: [] },
+  // Native modifier-foundation proof target (oscilla-pillars-scene-nt56.4): the
+  // grid fed through a WaveOffset transform modifier and a Brightness color
+  // modifier before the draw. No assets.
+  'instance-wave': { makePatch: makeInstanceWavePatch, assets: [] },
   // Asset-bridge proof target (oscilla-pillars-cleanup-ulu.4): a grid of
   // texture-mapped tiles resolved through the AssetRegistry + ThreeLoadingBridge.
   'textured-tiles': { makePatch: makeTexturedTilesPatch, assets: TEXTURED_TILES_ASSETS },
