@@ -6,8 +6,9 @@
  *   without throwing. Never assert internal block array identity.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
+import { loadPillarPatchFromStorage } from '../../services/PillarPatchPersistence';
 import { PillarPatchStore } from '../PillarPatchStore';
 
 describe('PillarPatchStore', () => {
@@ -74,5 +75,95 @@ describe('PillarPatchStore', () => {
     const types = store.catalog.map((c) => c.type);
     expect(types).toContain('InstanceGrid');
     expect(types).toContain('DrawInstances');
+  });
+
+  it('seeds from an explicit saved patch instead of the default starter', () => {
+    const saved = {
+      blocks: [{ id: 'grid', kind: 'generator' as const, type: 'InstanceGrid', config: { rows: 3, cols: 3 } }],
+      edges: [],
+    };
+    const store = new PillarPatchStore(saved);
+    expect(store.patch.blocks).toHaveLength(1);
+    expect(store.patch.blocks[0].config.rows).toBe(3);
+  });
+});
+
+describe('PillarPatchStore persistence', () => {
+  const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    const store = new Map<string, string>();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+        setItem: (key: string, value: string) => void store.set(key, value),
+        removeItem: (key: string) => void store.delete(key),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (originalLocalStorage) {
+      Object.defineProperty(globalThis, 'localStorage', originalLocalStorage);
+    } else {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
+
+  it('persists an edit so a fresh store reloads it (survives reload)', () => {
+    const store = new PillarPatchStore();
+    store.startPersistence(() => {});
+    store.updateConfig('grid', 'rows', 7);
+    vi.runAllTimers(); // flush the debounced save reaction
+
+    const loaded = loadPillarPatchFromStorage();
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+
+    const reloaded = new PillarPatchStore(loaded.patch);
+    const grid = reloaded.patch.blocks.find((b) => b.id === 'grid');
+    expect(grid?.config.rows).toBe(7);
+    store.stopPersistence();
+  });
+
+  it('stops writing after stopPersistence', () => {
+    const store = new PillarPatchStore();
+    store.startPersistence(() => {});
+    store.updateConfig('grid', 'rows', 5);
+    vi.runAllTimers();
+    store.stopPersistence();
+
+    store.updateConfig('grid', 'rows', 9);
+    vi.runAllTimers();
+
+    const loaded = loadPillarPatchFromStorage();
+    expect(loaded.kind).toBe('loaded');
+    if (loaded.kind !== 'loaded') return;
+    const grid = loaded.patch.blocks.find((b) => b.id === 'grid');
+    // The post-stop edit (9) was never written; storage still holds 5.
+    expect(grid?.config.rows).toBe(5);
+  });
+
+  it('reports a write failure through the injected reporter', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('quota exceeded');
+        },
+      },
+    });
+    const issues: string[] = [];
+    const store = new PillarPatchStore();
+    store.startPersistence((message) => issues.push(message));
+    store.updateConfig('grid', 'rows', 4);
+    vi.runAllTimers();
+    store.stopPersistence();
+
+    expect(issues.some((m) => /quota exceeded/.test(m))).toBe(true);
   });
 });

@@ -17,10 +17,11 @@
  *   data the runtime and UI read, not a branch this store takes.
  */
 
-import { makeAutoObservable } from 'mobx';
+import { makeAutoObservable, reaction } from 'mobx';
 
 import { makeGridOfSquaresPatch } from '../pillars/fixtures/grid-of-squares';
 import type { PillarBlock, PillarEdge, PillarPatch } from '../pillars/types';
+import { savePillarPatchToStorage } from '../services/PillarPatchPersistence';
 import {
   ALL_SCENE_BLOCKS,
   buildSceneRegistry,
@@ -163,6 +164,38 @@ export class PillarPatchStore {
 
   removeEdge(id: string): void {
     this.edges = this.edges.filter((e) => e.id !== id);
+  }
+
+  // ── Persistence ───────────────────────────────────────────────────────────
+
+  private persistDisposer: (() => void) | null = null;
+
+  /**
+   * Auto-persist the authored patch to storage on every edit (debounced). The
+   * store owns its own save lifecycle — the only writer of the pillar-patch key.
+   * [LAW:single-enforcer] [LAW:effects-at-boundaries] The store computes; the
+   *   injected `savePillarPatchToStorage` performs the write at the boundary.
+   *
+   * A write failure (e.g. quota) flows to `onIssue` rather than being swallowed;
+   * the diagnostics boundary (RuntimeService) injects the reporter so this store
+   * keeps no global state. [LAW:no-silent-failure] [LAW:no-shared-mutable-globals]
+   */
+  startPersistence(onIssue: (message: string) => void): void {
+    this.stopPersistence();
+    this.persistDisposer = reaction(
+      () => this.patch,
+      (patch) => {
+        const result = savePillarPatchToStorage(patch);
+        if (result.kind === 'failed') onIssue(result.error);
+      },
+      { delay: 500 },
+    );
+  }
+
+  /** Stop auto-persistence. Call on dispose/HMR cleanup. */
+  stopPersistence(): void {
+    this.persistDisposer?.();
+    this.persistDisposer = null;
   }
 
   // ── Internal ──────────────────────────────────────────────────────────────
