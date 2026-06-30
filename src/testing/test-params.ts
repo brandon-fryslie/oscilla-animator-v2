@@ -1,14 +1,17 @@
 /**
- * Test Automation Query Parameters
+ * Startup Query Parameters
  *
- * Single source of truth for test parameter detection and nuqs parsers.
+ * Single source of truth for startup/test parameter detection and nuqs parsers,
+ * including the product boot-path selection (see {@link resolveBootSelection}).
  *
- * Two params:
+ * Params:
+ * - `v1=<true|false|1|0>` — opt into the legacy V1 runtime (default boot is Three)
+ * - `scenePlan=<id>` — select the native editor (`editor`) or a fixed demo steel thread
  * - `loadDemoPatch=<filename>` — pre-React, raw URLSearchParams (EXCEPTION: cannot use nuqs)
  * - `showPreview=<true|false|1|0>` — nuqs hook for minimal preview layout
  * - `runtimeConsole=<true|false|1|0>` — enable periodic runtime frame logs in browser console
  *
- * [LAW:one-source-of-truth] All test param logic lives here.
+ * [LAW:one-source-of-truth] All startup param logic lives here.
  * [LAW:single-enforcer] Pre-React validation runs once in main.ts.
  */
 
@@ -65,41 +68,86 @@ export function consumeTestDemoFilename(): string | null {
   return filename;
 }
 
-// ─── scenePlan (ScenePlan steel-thread selector) ────────────────────────────
+// ─── boot selection (which render path the URL selects) ─────────────────────
 
 const SCENE_PLAN_PARAM = 'scenePlan';
+const V1_OPT_IN_PARAM = 'v1';
+const VALID_V1_OPT_IN = new Set(['true', 'false', '1', '0']);
 
 /**
  * The reserved `?scenePlan=` id that selects the live native editor instead of a
  * fixed demo fixture: the authored patch is driven from `PillarPatchStore` and
- * recompiled into the renderer on every edit, rather than compiled once.
- *
- * [LAW:no-mode-explosion] One selector (`scenePlan`) chooses the non-V1 render
- *   path; the editor is a documented reserved value of it, not a parallel param.
+ * recompiled into the renderer on every edit, rather than compiled once. This is
+ * the explicit spelling of the default boot path (see {@link resolveBootSelection}).
  */
-export const NATIVE_EDITOR_SCENE_PLAN_ID = 'editor';
+const NATIVE_EDITOR_SCENE_PLAN_ID = 'editor';
 
 /**
- * Whether the current URL selects the live native editor surface.
+ * The boot path the current URL selects. Exactly one of three outcomes; this
+ * compiler-checked union is the single authority that both the runtime dispatch
+ * (`RuntimeService.init`) and the UI layout (`App`) match on.
+ *
+ * [LAW:types-are-the-program] Three boot outcomes are three variants, not an
+ *   overloaded `string | null` where one branch's absence silently meant "V1".
+ *   The default and the V1 opt-in are encoded once in the resolver below, never
+ *   re-derived from a "was a param present?" check at a callsite.
  */
-export function isNativeEditorSelection(): boolean {
-  return readScenePlanSelection() === NATIVE_EDITOR_SCENE_PLAN_ID;
+export type BootSelection =
+  | { readonly kind: 'native-editor' }
+  | { readonly kind: 'scene-plan-demo'; readonly planId: string }
+  | { readonly kind: 'v1-legacy' };
+
+function isV1OptIn(params: URLSearchParams): boolean {
+  const value = params.get(V1_OPT_IN_PARAM);
+  return value === 'true' || value === '1';
 }
 
 /**
- * Read ?scenePlan=<id> — select an authored patch to render through the
- * ScenePlan → Three backend steel thread instead of the V1 editor runtime.
- * Returns the id or null. The reserved id {@link NATIVE_EDITOR_SCENE_PLAN_ID}
- * selects the live editor; any other id selects a fixed demo fixture.
+ * Resolve which render path boot selects from the current URL. The Three-backed
+ * native editor is the default; the legacy V1 runtime is an explicit opt-in.
  *
- * Unlike loadDemoPatch this needs no reload: it touches neither localStorage
- * nor the V1 patch store, so it is read directly at runtime init.
+ * Policy (single authority for boot-path selection):
+ *   ?v1=true|1            → V1 legacy runtime (the documented escape hatch)
+ *   ?scenePlan=editor     → native editor (explicit spelling of the default)
+ *   ?scenePlan=<other>    → fixed ScenePlan demo steel thread
+ *   (no relevant param)   → native editor
  *
- * [LAW:single-enforcer] All test-param parsing lives in this module.
+ * [LAW:single-enforcer] All boot-path URL policy lives here; consumers match the
+ *   union, they never re-read these params.
+ * [LAW:dataflow-not-control-flow] The default is a value the resolver emits, not
+ *   a "no param ⇒ fall through to V1" branch hidden at the dispatch site.
  */
-export function readScenePlanSelection(): string | null {
-  if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get(SCENE_PLAN_PARAM);
+export function resolveBootSelection(): BootSelection {
+  if (typeof window === 'undefined') return { kind: 'native-editor' };
+  const params = new URLSearchParams(window.location.search);
+  if (isV1OptIn(params)) return { kind: 'v1-legacy' };
+  const planId = params.get(SCENE_PLAN_PARAM);
+  if (planId === null || planId === NATIVE_EDITOR_SCENE_PLAN_ID) {
+    return { kind: 'native-editor' };
+  }
+  return { kind: 'scene-plan-demo', planId };
+}
+
+/**
+ * Whether the current URL selects the live native editor surface — the UI-layout
+ * projection of {@link resolveBootSelection} (native-editor chrome vs. V1 chrome).
+ */
+export function isNativeEditorSelection(): boolean {
+  return resolveBootSelection().kind === 'native-editor';
+}
+
+/**
+ * Validate ?v1= early (pre-React). Throws on invalid values — fast feedback for
+ * the legacy opt-in. No-op if param is absent.
+ */
+export function validateV1OptIn(): void {
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(V1_OPT_IN_PARAM);
+  if (value !== null && !VALID_V1_OPT_IN.has(value)) {
+    throw new Error(
+      `[test-params] Invalid v1 value: "${value}". Must be true/false/1/0.`
+    );
+  }
 }
 
 // ─── showPreview (nuqs) ─────────────────────────────────────────────────────

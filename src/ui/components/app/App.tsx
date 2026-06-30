@@ -114,9 +114,9 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus }) => {
   const showPreview = useShowPreview();
-  // [LAW:no-mode-explosion] The native editor is selected by the same
-  //   ?scenePlan= mechanism as the demo steel thread (reserved id), not a
-  //   separate runtime toggle.
+  // [LAW:single-enforcer] The native editor is the default boot surface; both
+  //   this layout choice and the runtime dispatch read the same resolved boot
+  //   selection, so the UI chrome and the render path can never disagree.
   const nativeEditor = isNativeEditorSelection();
   const [stats, setStats] = useState('FPS: --');
 

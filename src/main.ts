@@ -13,17 +13,20 @@ import {
   interceptLoadDemoPatch,
   validateRuntimeConsole,
   validateShowPreview,
+  validateV1OptIn,
 } from './testing/test-params';
 
-// ─── Pre-React test parameter handling ───────────────────────────────────────
+// ─── Pre-React startup parameter handling ────────────────────────────────────
 // [LAW:single-enforcer] These run once before React mounts.
 // interceptLoadDemoPatch: clears localStorage, stashes filename, triggers reload.
 // validateShowPreview: throws on invalid values (fast feedback for test runners).
 // validateRuntimeConsole: validates runtime logging toggle for debug sessions.
+// validateV1OptIn: validates the ?v1= legacy opt-in (default boot is the Three editor).
 const navigating = interceptLoadDemoPatch();
 if (!navigating) {
   validateShowPreview();
   validateRuntimeConsole();
+  validateV1OptIn();
 }
 
 // ─── Normal boot (only if not redirecting) ───────────────────────────────────

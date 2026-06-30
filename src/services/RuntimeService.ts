@@ -29,8 +29,7 @@ import {
 } from './PatchPersistence';
 import {
   consumeTestDemoFilename,
-  readScenePlanSelection,
-  NATIVE_EDITOR_SCENE_PLAN_ID,
+  resolveBootSelection,
 } from '../testing/test-params';
 import { compileScenePlan } from '../pillars/scene';
 import type { ScenePlan } from '../render/scene-plan';
@@ -933,18 +932,20 @@ export class RuntimeService {
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
 
-      // [LAW:dataflow-not-control-flow] Startup selects one render source. The
-      //   ScenePlan steel thread (Three backend) is self-contained: it needs no
-      //   V1 compile worker, persistence, or live recompile, so it installs its
-      //   plan and starts the loop here, then returns before any V1 setup.
-      const scenePlanId = readScenePlanSelection();
-      if (scenePlanId === NATIVE_EDITOR_SCENE_PLAN_ID) {
+      // [LAW:dataflow-not-control-flow] Startup selects one render source from a
+      //   resolved discriminated value, not scattered "is the param present?"
+      //   checks. The native editor is the default; V1 is the explicit opt-in.
+      //   Both Three paths are self-contained — they need no V1 compile worker,
+      //   persistence, or live recompile — so they install their plan, start the
+      //   loop, and return before any V1 setup. Only `v1-legacy` falls through.
+      const boot = resolveBootSelection();
+      if (boot.kind === 'native-editor') {
         await this.startNativeEditorThread();
         markRuntimeBootstrapSucceeded();
         return;
       }
-      if (scenePlanId !== null) {
-        await this.startScenePlanSteelThread(scenePlanId);
+      if (boot.kind === 'scene-plan-demo') {
+        await this.startScenePlanSteelThread(boot.planId);
         markRuntimeBootstrapSucceeded();
         return;
       }
