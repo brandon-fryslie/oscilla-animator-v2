@@ -30,8 +30,33 @@ export interface DrawShell {
   readonly target: RenderTarget;
 }
 
+/**
+ * A pure transform from one instance bundle to another. A modifier rewrites the
+ * `TransformBinding` / `ColorBinding` `PlanExpr` trees of its upstream bundle —
+ * count and the bundle's shape are preserved; only the per-instance value
+ * expressions change.
+ *
+ * [LAW:effects-at-boundaries] This is a pure description-rewriting function: it
+ *   composes `PlanExpr` trees, it does not evaluate them. Evaluation happens in
+ *   TSL behind the renderer seam.
+ */
+export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
+
+/**
+ * What a scene block hands to assembly.
+ *
+ * - `instanceSource` carries a concrete bundle (a source: config → bundle).
+ * - `modifier` carries a bundle *transform* (a modifier: bundle → bundle); the
+ *   concrete bundle is produced only once assembly folds it over its upstream.
+ * - `draw` carries the shell assembly joins to the resolved upstream bundle.
+ *
+ * [LAW:dataflow-not-control-flow] A modifier's behavior is the `apply` *value*,
+ *   not a branch in assembly: folding the modifier chain is one generic walk, so
+ *   adding a modifier adds no assembly code path.
+ */
 export type SceneContribution =
   | { readonly role: 'instanceSource'; readonly bundle: InstanceBundle }
+  | { readonly role: 'modifier'; readonly apply: BundleTransform }
   | { readonly role: 'draw'; readonly shell: DrawShell };
 
 export type SceneContributionRole = SceneContribution['role'];

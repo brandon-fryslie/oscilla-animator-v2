@@ -44,21 +44,25 @@ function metadataRegistry(catalogs: readonly SceneCatalogMetadata[]): SceneRegis
 describe('connectableScenePorts — over the native block set', () => {
   const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
 
-  it('a selected instanceBundle output offers the draw primary input', () => {
+  it('a selected instanceBundle output offers every instanceBundle input — the modifiers and the draw', () => {
     const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'output' });
-    expect(matches).toHaveLength(1);
-    expect(matches[0]).toMatchObject({
-      blockType: 'DrawInstances',
-      displayName: 'Draw Instances',
-      port: { id: 'primary', direction: 'input', value: 'instanceBundle' },
-      compatibility: { kind: 'compatible' },
-    });
+    // A modifier consumes a bundle and a draw consumes a bundle, so all three
+    // are valid sinks for a bundle output.
+    expect(matches.map((m) => m.blockType)).toEqual(['WaveOffset', 'Brightness', 'DrawInstances']);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ id: 'primary', direction: 'input', value: 'instanceBundle' });
+      expect(match.compatibility).toMatchObject({ kind: 'compatible' });
+    }
   });
 
-  it('a selected instanceBundle input offers the grid instances output', () => {
+  it('a selected instanceBundle input offers the grid and the modifiers as bundle outputs', () => {
     const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'input' });
-    expect(matches.map((m) => m.blockType)).toEqual(['InstanceGrid']);
-    expect(matches[0].port).toMatchObject({ id: 'instances', direction: 'output' });
+    // A modifier also *produces* a bundle, so it is offerable as a source — the
+    // draw is excluded since its only output is a materialShell.
+    expect(matches.map((m) => m.blockType)).toEqual(['InstanceGrid', 'WaveOffset', 'Brightness']);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ id: 'instances', direction: 'output', value: 'instanceBundle' });
+    }
   });
 
   it('offers nothing for a value no port consumes (materialShell input)', () => {

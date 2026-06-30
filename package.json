@@ -38,7 +38,8 @@
     "complexity:all": "node scripts/complexity/run-all.mjs",
     "complexity:delta": "node scripts/complexity/commit-delta.mjs",
     "test:three-textured-tiles": "playwright test tests/e2e/webgpu/three-textured-tiles.spec.ts",
-    "test:three-native-editor": "playwright test tests/e2e/webgpu/three-native-editor.spec.ts"
+    "test:three-native-editor": "playwright test tests/e2e/webgpu/three-native-editor.spec.ts",
+    "test:three-modifier-chain": "playwright test tests/e2e/webgpu/three-modifier-chain.spec.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

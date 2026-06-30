@@ -18,8 +18,9 @@ import {
 const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
 
 describe('pillarKindForRole', () => {
-  it('maps an instance source to a generator and a draw to an intent', () => {
+  it('maps an instance source to a generator, a modifier to a modifier, and a draw to an intent', () => {
     expect(pillarKindForRole('instanceSource')).toBe('generator');
+    expect(pillarKindForRole('modifier')).toBe('modifier');
     expect(pillarKindForRole('draw')).toBe('intent');
   });
 });

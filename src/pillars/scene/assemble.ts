@@ -3,10 +3,12 @@
  *
  * Joins resolved block contributions into a normalized `ScenePlan`.
  *
- * Each draw block is joined to the instance source on its primary edge: the
- * draw's shell (geometry, material kind, camera) plus the source's bundle
- * (count, transform, color) become one `SceneObject` + `DrawItem`. Resources
- * are normalized into ref-keyed tables.
+ * Each draw block is joined to the instance bundle feeding its primary edge: the
+ * draw's shell (geometry, material kind, camera) plus the resolved bundle
+ * (count, transform, color) become one `SceneObject` + `DrawItem`. The bundle is
+ * resolved by folding any modifier chain back to its instance source, so a
+ * source→modifier→…→draw chain and a direct source→draw wire assemble the same
+ * way. Resources are normalized into ref-keyed tables.
  *
  * [LAW:one-source-of-truth] Each geometry/material is defined exactly once in
  *   its table and referenced by handle from the scene object — no inline
@@ -89,6 +91,64 @@ function assertNever(value: never): never {
 }
 
 /**
+ * Resolve the instance bundle a block feeds downstream by folding the modifier
+ * chain back to its instance source. A source is the base case (its bundle); a
+ * modifier resolves its own `primary` upstream and applies its transform to it.
+ *
+ * [LAW:dataflow-not-control-flow] One generic fold over the chain: a modifier is
+ *   a value carrying `apply`, not a per-type branch here — adding a modifier
+ *   block adds no code path to this walk.
+ * [LAW:no-silent-failure] A chain that dangles, cycles, or bottoms out at a draw
+ *   (which produces no bundle) is a surfaced error, never a silently-dropped or
+ *   default bundle.
+ */
+function resolveBundle(
+  blockId: string,
+  edges: readonly PillarEdge[],
+  contributions: ReadonlyMap<string, SceneContribution>,
+  errors: string[],
+  visiting: ReadonlySet<string>,
+): InstanceBundle | null {
+  if (visiting.has(blockId)) {
+    errors.push(`[scene] instance chain has a cycle through block '${blockId}'`);
+    return null;
+  }
+  const contribution = contributions.get(blockId);
+  if (contribution === undefined) {
+    errors.push(`[scene] instance chain references unknown block '${blockId}'`);
+    return null;
+  }
+
+  switch (contribution.role) {
+    case 'instanceSource':
+      return contribution.bundle;
+    case 'modifier': {
+      const primaryEdge = edges.find((e) => e.target === blockId && e.role === 'primary');
+      if (!primaryEdge) {
+        errors.push(`[scene] modifier block '${blockId}' has no primary input edge`);
+        return null;
+      }
+      const upstream = resolveBundle(
+        primaryEdge.source,
+        edges,
+        contributions,
+        errors,
+        new Set(visiting).add(blockId),
+      );
+      if (upstream === null) return null;
+      return contribution.apply(upstream);
+    }
+    case 'draw':
+      errors.push(
+        `[scene] instance chain ends at draw block '${blockId}', which is not an instance source`,
+      );
+      return null;
+    default:
+      return assertNever(contribution);
+  }
+}
+
+/**
  * Reconcile the cameras declared by every draw into the single scene camera.
  * One scene has one camera; if draws disagree, that is a loud error rather than
  * an arbitrary winner.
@@ -133,16 +193,12 @@ export function assembleScenePlan(
       errors.push(`[scene] draw block '${drawId}' has no primary input edge`);
       continue;
     }
-    const source = contributions.get(primaryEdge.source);
-    if (!source || source.role !== 'instanceSource') {
-      errors.push(
-        `[scene] draw block '${drawId}' primary source '${primaryEdge.source}' is not an instance source`,
-      );
-      continue;
-    }
+    // Resolve the bundle feeding this draw by folding any modifier chain back to
+    // its instance source. A direct source→draw wire is the zero-modifier case.
+    const bundle = resolveBundle(primaryEdge.source, edges, contributions, errors, new Set());
+    if (bundle === null) continue;
 
     const { shell } = contribution;
-    const { bundle } = source;
 
     const geoRef = geometryRef(`${drawId}:geometry`);
     const matRef = materialRef(`${drawId}:material`);
