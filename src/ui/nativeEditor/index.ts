@@ -6,3 +6,4 @@
 
 export { NativeEditorLayout } from './NativeEditorLayout';
 export { NativeEditorPanel } from './NativeEditorPanel';
+export { NativeGraphCanvas } from './NativeGraphCanvas';
