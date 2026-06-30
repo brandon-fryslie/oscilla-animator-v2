@@ -22,8 +22,9 @@ import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
-import { useShowPreview } from '../../../testing/test-params';
+import { useShowPreview, isNativeEditorSelection } from '../../../testing/test-params';
 import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
+import { NativeEditorLayout } from '../../nativeEditor';
 import { EngineDebugOverlay } from './EngineDebugOverlay';
 
 // Mantine dark theme configuration - gorgeous modern look
@@ -113,6 +114,10 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus }) => {
   const showPreview = useShowPreview();
+  // [LAW:no-mode-explosion] The native editor is selected by the same
+  //   ?scenePlan= mechanism as the demo steel thread (reserved id), not a
+  //   separate runtime toggle.
+  const nativeEditor = isNativeEditorSelection();
   const [stats, setStats] = useState('FPS: --');
 
   // Get store from context and expose to non-React code via callback
@@ -214,6 +219,9 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
         {showPreview ? (
           /* Test automation: full-viewport canvas or errors, zero chrome */
           <TestPreviewPanel onCanvasReady={handleCanvasReady} />
+        ) : nativeEditor ? (
+          /* Native ScenePlan editor: authoring surface + live Three preview */
+          <NativeEditorLayout onCanvasReady={handleCanvasReady} />
         ) : (
           <EditorProvider>
           {/* Capture EditorContext methods */}

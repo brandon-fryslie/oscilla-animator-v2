@@ -52,3 +52,16 @@ export {
   type ScenePortSelection,
   type ConnectableScenePort,
 } from './insertability';
+
+// Pure authoring policy — how the editor builds a PillarPatch from the catalog.
+export {
+  pillarKindForRole,
+  edgeRoleForPort,
+  defaultSceneConfig,
+} from './authoring';
+export type {
+  SceneBlockCategory,
+  SceneCatalogConfigField,
+  SceneConfigControl,
+  SceneContributionRole,
+} from './scene-block';
