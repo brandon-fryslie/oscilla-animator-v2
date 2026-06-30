@@ -49,9 +49,12 @@ export const SCENE_VALUE_REALIZATION: Readonly<
  * block the user must insert. Adaptation is never an implicit coercion: a wire
  * that needs it is a diagnostic naming the adapter, not a silent conversion.
  *
- * The native adaptation vocabulary (broadcast, unit/color conversion,
- * cross-domain remap) is owned by `oscilla-pillars-scene-brkm.1`; this table
- * grows there as real adapter blocks land.
+ * The native adaptation vocabulary was investigated (brkm.1) and is empty by
+ * decision: broadcast and unit conversion are unrepresentable in this model (no
+ * cardinality axis, no unit type), color-space difference is resolved inside
+ * color-consuming blocks (not a wire coercion), and cross-domain remap is a
+ * deferred ScenePlan binding owned by the demo that needs it — not a route. This
+ * table grows only if a future ticket cuts a real adapter block to register here.
  */
 export interface AdaptationRoute {
   readonly from: SceneValueKind;
