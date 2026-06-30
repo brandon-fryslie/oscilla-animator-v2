@@ -62,10 +62,11 @@ function buildCapabilityCoveragePlan(): ScenePlan {
   const rect = geometryRef('cap:rect');
   const point = geometryRef('cap:point');
 
-  // Materials: unlitColor over hsl / rgb / rgba, plus texturedUnlit.
+  // Materials: unlitColor over hsl / rgb / rgba / oklab, plus texturedUnlit.
   const matHsl = materialRef('cap:mat-hsl');
   const matRgb = materialRef('cap:mat-rgb');
   const matRgba = materialRef('cap:mat-rgba');
+  const matOklab = materialRef('cap:mat-oklab');
   const matTex = materialRef('cap:mat-tex');
 
   const tex = textureRef('cap:tex');
@@ -75,6 +76,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
   const objHsl = sceneObjectRef('cap:obj-hsl');
   const objRgb = sceneObjectRef('cap:obj-rgb');
   const objRgba = sceneObjectRef('cap:obj-rgba');
+  const objOklab = sceneObjectRef('cap:obj-oklab');
   const objTex = sceneObjectRef('cap:obj-tex');
 
   const index = intrinsic('index');
@@ -118,6 +120,10 @@ function buildCapabilityCoveragePlan(): ScenePlan {
           kind: 'unlitColor',
           color: { space: 'rgba', r: konst(1), g: konst(0), b: konst(0), a: konst(0.5) },
         },
+        [matOklab]: {
+          kind: 'unlitColor',
+          color: { space: 'oklab', l: add(konst(0.6), mul(rank, konst(0.1))), a: konst(0.1), b: konst(-0.05) },
+        },
         [matTex]: { kind: 'texturedUnlit', texture: tex },
       },
       textures: {
@@ -136,6 +142,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
       [objHsl]: { geometry: rect, material: matHsl, instancing: { count: 16, transform: transformA } },
       [objRgb]: { geometry: point, material: matRgb, instancing: { count: 4, transform: transformB } },
       [objRgba]: { geometry: rect, material: matRgba, instancing: { count: 1, transform: transformB } },
+      [objOklab]: { geometry: rect, material: matOklab, instancing: { count: 4, transform: transformB } },
       [objTex]: { geometry: rect, material: matTex, instancing: { count: 1, transform: transformB } },
     },
     render: {
@@ -145,6 +152,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
         { target: 'previewCanvas', object: objHsl },
         { target: 'previewCanvas', object: objRgb },
         { target: 'previewCanvas', object: objRgba },
+        { target: 'previewCanvas', object: objOklab },
         { target: 'previewCanvas', object: objTex },
       ],
       postChain: post,
@@ -200,6 +208,11 @@ function collectExprVocabulary(plan: ScenePlan): {
       visit(c.s);
       visit(c.l);
     }
+    if (c.space === 'oklab') {
+      visit(c.l);
+      visit(c.a);
+      visit(c.b);
+    }
   }
 
   return { kinds, unary, binary };
@@ -218,12 +231,12 @@ describe('ScenePlan capability matrix — representative coverage', () => {
     expect(kinds).toEqual(['point', 'rectangle']);
   });
 
-  it('covers all three color spaces', () => {
+  it('covers all four color spaces', () => {
     const spaces = Object.values(plan.resources.materials)
       .filter((m) => m.kind === 'unlitColor')
       .map((m) => (m.kind === 'unlitColor' ? m.color.space : null))
       .sort();
-    expect(spaces).toEqual(['hsl', 'rgb', 'rgba']);
+    expect(spaces).toEqual(['hsl', 'oklab', 'rgb', 'rgba']);
   });
 
   it('covers both material variants', () => {

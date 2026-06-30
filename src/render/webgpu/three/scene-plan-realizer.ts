@@ -129,6 +129,33 @@ function hslToRgb(h: TSLNode, s: TSLNode, l: TSLNode): Node<'vec3'> {
   return vec3(channel(0), channel(8), channel(4));
 }
 
+/**
+ * OKLab (L,a,b) → linear sRGB as a TSL graph (Björn Ottosson's matrices, cube
+ * via `mul` since the cube-root only runs authoring-side). Channels are
+ * gamut-clamped to [0,1]; three encodes linear → display sRGB on output, so this
+ * is the render-side inverse of `hexColorBinding`'s sRGB → OKLab.
+ *
+ * [LAW:one-source-of-truth] The only place the OKLab→display matrix lives on the
+ *   render side; no block or material references these coefficients.
+ */
+function oklabToLinearSrgb(L: TSLNode, A: TSLNode, B: TSLNode): Node<'vec3'> {
+  const lp = add(L, add(mul(A, float(0.3963377774)), mul(B, float(0.2158037573))));
+  const mp = sub(L, add(mul(A, float(0.1055613458)), mul(B, float(0.0638541728))));
+  const sp = sub(L, add(mul(A, float(0.0894841775)), mul(B, float(1.291485548))));
+  const cube = (x: TSLNode): TSLNode => mul(mul(x, x), x);
+  const l = cube(lp);
+  const m = cube(mp);
+  const s = cube(sp);
+  const lin = (cl: number, cm: number, cs: number): TSLNode =>
+    add(add(mul(l, float(cl)), mul(m, float(cm))), mul(s, float(cs)));
+  const clamp01 = (c: TSLNode): TSLNode => max(float(0), min(float(1), c));
+  return vec3(
+    clamp01(lin(4.0767416621, -3.3077115913, 0.2309699292)),
+    clamp01(lin(-1.2684380046, 2.6097574011, -0.3413193965)),
+    clamp01(lin(-0.0041960863, -0.7034186147, 1.707614701)),
+  );
+}
+
 interface ColorNodes {
   readonly colorNode: Node<'vec3'>;
   readonly opacityNode: TSLNode | null;
@@ -145,6 +172,8 @@ function colorBindingToNodes(binding: ColorBinding, ctx: PlanExprContext): Color
       return { colorNode: vec3(e(binding.r), e(binding.g), e(binding.b)), opacityNode: e(binding.a) };
     case 'hsl':
       return { colorNode: hslToRgb(e(binding.h), e(binding.s), e(binding.l)), opacityNode: null };
+    case 'oklab':
+      return { colorNode: oklabToLinearSrgb(e(binding.l), e(binding.a), e(binding.b)), opacityNode: null };
     default:
       return assertNever(binding);
   }
