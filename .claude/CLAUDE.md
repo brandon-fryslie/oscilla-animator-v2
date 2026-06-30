@@ -20,21 +20,21 @@ Oscilla Animator v2 is a browser-based animation editor for creating procedural,
 
 ## Migration State
 
-The codebase is mid-migration via **strangler fig pattern**. The **renderer direction is the "Three fork"**: a three.js (`three@0.184`, TSL) `WebGPURenderer` (`ThreeForkRenderer`) behind the `createWebGPURenderer()` seam, fed by the **pillar compiler** (`src/pillars/`) which lowers an authored patch to a backend-neutral **`ScenePlan`** (`compileScenePlan`). The earlier **Rust/WASM/WebGPU + GPU-IR** renderer and the **`PipelineInstallPayload`** path are **frozen legacy** — operational as a replaceable backend, not extended (the code marks them `FROZEN LEGACY`, e.g. `src/pillars/assembly/payload.ts`). **V1** (backend + JS runtime) is still the **default boot**; the Three path is a `?scenePlan=<id>`-selected steel thread, not yet the default.
+The codebase is mid-migration via **strangler fig pattern**. The **renderer direction is the "Three fork"**: a three.js (`three@0.184`, TSL) `WebGPURenderer` (`ThreeForkRenderer`) behind the `createWebGPURenderer()` seam, fed by the **pillar compiler** (`src/pillars/`) which lowers an authored patch to a backend-neutral **`ScenePlan`** (`compileScenePlan`). The earlier **Rust/WASM/WebGPU + GPU-IR** renderer and the **`PipelineInstallPayload`** path are **frozen legacy** — operational as a replaceable backend, not extended (the code marks them `FROZEN LEGACY`, e.g. `src/pillars/assembly/payload.ts`). The Three path is now the **default boot**: no URL param opens the native ScenePlan editor. **V1** (backend + JS runtime) is **deprecated**, reachable only via the explicit `?v1=true` opt-in.
 
 > **Source of truth for this migration** (these win over older GPU-IR text and ambiguous ticket prose):
 > `design-docs/three-migration-backend-canon.md` · `design-docs/three-migration-renderer-seam-inventory.md` (keep/freeze/delete map) · `design-docs/three-fork-integration-proposal.md`. Tracker epic: `oscilla-pillars-cleanup-ulu`. [LAW:one-source-of-truth]
 
-### Three lineages (one live, one default-but-legacy, one frozen)
+### Three lineages (one live default, one deprecated opt-in, one frozen)
 
 ```
   authored Patch
        │
-       ├─► V1 backend (LEGACY, DEFAULT BOOT) ─► JS Runtime (ScheduleExecutor) ─► stub
-       │
-       ├─► Pillar compiler ─► ScenePlan ─► Three fork renderer (LIVE) ─► WebGPU Canvas
+       ├─► Pillar compiler ─► ScenePlan ─► Three fork renderer (LIVE, DEFAULT BOOT) ─► WebGPU Canvas
        │     src/pillars/ · compileScenePlan      ScenePlan → TSL scene graph
-       │     (activated by ?scenePlan=<id>)
+       │     (no-param boot opens the native editor)
+       │
+       ├─► V1 backend (DEPRECATED, opt-in ?v1=true) ─► JS Runtime (ScheduleExecutor) ─► stub
        │
        └─► [FROZEN] Pillar/C1 ─► PipelineInstallPayload ─► Rust/WASM Worker (Naga → WGSL → WebGPU)
 ```
@@ -43,9 +43,9 @@ The codebase is mid-migration via **strangler fig pattern**. The **renderer dire
 
 | Area | Status |
 |---|---|
-| `src/render/webgpu/three/` — ThreeForkRenderer, ScenePlan realizer, TSL | **LIVE — current renderer** |
+| `src/render/webgpu/three/` — ThreeForkRenderer, ScenePlan realizer, TSL | **LIVE — current renderer, default boot** |
 | `src/pillars/` + `src/pillars/scene/` (`compileScenePlan`) | **ACTIVE — authored patch → ScenePlan; the open backlog is `pillars-*`** |
-| `compiler/backend/` + `src/blocks/` + `src/runtime/` (V1) | **LEGACY — still the default boot path** |
+| `compiler/backend/` + `src/blocks/` + `src/runtime/` (V1) | **DEPRECATED — opt-in only via `?v1=true`** |
 | `compiler/backend-v2/` + `src/blocks-v2/`; `src/pillars/compile.ts` + `src/pillars/assembly/` (`PipelineInstallPayload`) | **FROZEN LEGACY** |
 | `src/render/wasm/rust/`, `src/render/rust/`, `src/render/gpu-ir/` (Rust renderer + GPU-IR / Boundary DSL) | **FROZEN LEGACY** |
 | `src/render/Canvas2DRenderer.ts`, `src/render/SVGRenderer.ts`, `src/compiler/passes-v2/` | **DELETED** |
@@ -54,7 +54,7 @@ The codebase is mid-migration via **strangler fig pattern**. The **renderer dire
 
 - **Never fix V1 bugs** — V1 (backend/blocks/runtime) is legacy.
 - **Do not extend the frozen stack** — the Rust/WASM/GPU-IR renderer and the `PipelineInstallPayload` path are frozen. New renderer/compiler work follows **pillar → `ScenePlan` → Three**.
-- **No feature flags** — path selection is `?scenePlan=<id>` (steel thread) vs default V1 boot, plus tests; never runtime toggles.
+- **No feature flags** — boot-path selection is the default native editor vs. the `?v1=true` legacy opt-in vs. a `?scenePlan=<id>` demo steel thread, resolved once in `resolveBootSelection()`, plus tests; never runtime toggles.
 - When ticket text or older docs conflict with the canon docs above, the canon docs win. [LAW:one-source-of-truth]
 
 ## Development Commands

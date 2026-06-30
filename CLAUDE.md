@@ -15,14 +15,14 @@ The codebase is mid-migration via strangler fig. The **renderer direction is the
 
 | System | Status | Notes |
 |--------|--------|-------|
-| **Three fork renderer** (`src/render/webgpu/three/`) | **LIVE — the direction** | three.js `WebGPURenderer`; pure `ScenePlan` → TSL scene-graph realizer; constructed at the `createWebGPURenderer` seam, driven from `RuntimeService` |
+| **Three fork renderer** (`src/render/webgpu/three/`) | **LIVE — the default boot** | three.js `WebGPURenderer`; pure `ScenePlan` → TSL scene-graph realizer; constructed at the `createWebGPURenderer` seam, driven from `RuntimeService`; no-param boot opens the native editor |
 | **Pillar compiler → ScenePlan** (`src/pillars/`, `src/pillars/scene/`) | **ACTIVE** | authored patch → `ScenePlan` (`compileScenePlan`); the active backlog lives in the `pillars-*` epics |
-| **V1 backend / blocks / runtime** (`compiler/backend/`, `src/blocks/`, `src/runtime/`) | **LEGACY — still the default boot** | JS frame executor; the app boots this unless `?scenePlan=<id>` selects the Three steel thread |
+| **V1 backend / blocks / runtime** (`compiler/backend/`, `src/blocks/`, `src/runtime/`) | **DEPRECATED — opt-in only (`?v1=true`)** | JS frame executor; no longer the default boot — reachable only via the explicit `?v1=true` escape hatch |
 | **C1 backend / blocks-v2 + pillar `PipelineInstallPayload`** (`compiler/backend-v2/`, `src/blocks-v2/`, `src/pillars/compile.ts`, `src/pillars/assembly/`) | **FROZEN LEGACY** | targeted the Rust renderer; superseded by the ScenePlan path |
 | **Rust renderer + GPU-IR / Boundary DSL** (`src/render/wasm/rust/`, `src/render/rust/`, `src/render/gpu-ir/`) | **FROZEN LEGACY** | operational, not extended — do not add to it |
 | **Canvas2D / SVG renderers** | **DELETED** | |
 
-**Default boot is still V1.** The Three path activates via `?scenePlan=<id>` (a steel thread proven for two demos: Grid of Squares, Textured Tiles); promoting it to the default is remaining migration work (`oscilla-pillars-cleanup-ulu`).
+**Default boot is the Three native editor.** No URL param opens the Three-backed editor with the persisted (or starter) patch, animating immediately. `?v1=true` is the explicit opt-in that boots the deprecated V1 runtime; `?scenePlan=<id>` still selects a fixed demo steel thread (e.g. Grid of Squares, Textured Tiles). Boot-path policy is resolved in one place — `resolveBootSelection()` in `src/testing/test-params.ts`.
 
 **Rules for legacy code**: Never fix bugs in V1 (backend/blocks/runtime). Treat the Rust/WASM/GPU-IR stack and the `PipelineInstallPayload` path (incl. C1 `backend-v2` and `src/pillars/compile.ts` / `src/pillars/assembly/`) as **frozen** — do not extend them. New renderer/compiler work follows **pillar → `ScenePlan` → Three** (see the canon docs above).
 
