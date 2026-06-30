@@ -23,9 +23,11 @@ import {
   konst,
   materialRef,
   sceneObjectRef,
+  textureRef,
   type ScenePlan,
 } from '../../../scene-plan';
-import { createAssetRegistry } from '../../../../assets';
+import { assetId } from '../../../../core/ids';
+import { createAssetRegistry, type AssetMetadata } from '../../../../assets';
 import { createWebGPURenderer } from '../../index';
 import { ThreeForkRenderer } from '../ThreeForkRenderer';
 
@@ -71,6 +73,44 @@ function buildStaticPlan(version: number = SCENE_PLAN_VERSION): ScenePlan {
   } as ScenePlan;
 }
 
+/** A static plan whose single textured object references one texture asset. */
+function buildTexturedPlan(referencedAssetId: string): ScenePlan {
+  const square = geometryRef('o:square');
+  const tex = textureRef('o:tex');
+  const textured = materialRef('o:textured');
+  const object = sceneObjectRef('o:object');
+  return {
+    version: SCENE_PLAN_VERSION,
+    resources: {
+      geometries: { [square]: { kind: 'rectangle', width: 1, height: 1 } },
+      materials: { [textured]: { kind: 'texturedUnlit', texture: tex } },
+      textures: { [tex]: { kind: 'asset', assetId: assetId(referencedAssetId) } },
+      computeResources: {},
+      postChains: {},
+    },
+    objects: {
+      [object]: {
+        geometry: square,
+        material: textured,
+        instancing: { count: 1, transform: { positionX: konst(0), positionY: konst(0), rotation: konst(0) } },
+      },
+    },
+    render: {
+      camera: { kind: 'orthographic', halfExtentX: 1, halfExtentY: 1 },
+      inputs: [],
+      draws: [{ target: 'previewCanvas', object }],
+      postChain: null,
+    },
+  } as ScenePlan;
+}
+
+const modelAsset = (id: string): AssetMetadata => ({
+  id: assetId(id),
+  kind: 'model',
+  label: id,
+  source: { kind: 'url', url: `data:,${id}` },
+});
+
 describe('ThreeForkRenderer — lifecycle and seam', () => {
   it('constructs idle without acquiring a GPU device', () => {
     const renderer = new ThreeForkRenderer(fakeCanvas);
@@ -88,6 +128,21 @@ describe('ThreeForkRenderer — lifecycle and seam', () => {
     await expect(renderer.installScenePlan(buildStaticPlan(2), emptyRegistry)).rejects.toThrow(
       /incompatible ScenePlan version/,
     );
+  });
+
+  it('rejects a plan whose texture references an unregistered asset, before any decode', async () => {
+    const renderer = new ThreeForkRenderer(fakeCanvas);
+    await expect(
+      renderer.installScenePlan(buildTexturedPlan('ghost'), emptyRegistry),
+    ).rejects.toThrow(/cannot install ScenePlan — unresolved asset references[\s\S]*'ghost'[\s\S]*not registered/);
+  });
+
+  it('rejects a plan whose texture asset has an undecodable kind, before any decode', async () => {
+    const renderer = new ThreeForkRenderer(fakeCanvas);
+    const registry = createAssetRegistry([modelAsset('mesh')]);
+    await expect(
+      renderer.installScenePlan(buildTexturedPlan('mesh'), registry),
+    ).rejects.toThrow(/cannot install ScenePlan — unresolved asset references[\s\S]*'mesh'[\s\S]*no texture decoder/);
   });
 
   it('refuses to render before a plan is installed', async () => {

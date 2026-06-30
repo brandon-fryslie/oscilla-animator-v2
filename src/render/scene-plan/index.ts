@@ -72,3 +72,7 @@ export type {
   PostChainDef,
 } from './plan';
 export { SCENE_PLAN_VERSION, defineScenePlan } from './plan';
+
+// Pre-install asset-reference validation.
+export type { PlanAssetIssue } from './asset-validation';
+export { validatePlanAssets, formatPlanAssetIssue, formatPlanAssetIssues } from './asset-validation';
