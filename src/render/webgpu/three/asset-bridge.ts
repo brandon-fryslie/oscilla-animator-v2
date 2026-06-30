@@ -36,7 +36,7 @@ import {
 } from 'three/webgpu';
 
 import type { AssetMetadata, AssetRegistry, AssetVariant } from '../../../assets';
-import { assetCacheKey, DEFAULT_ASSET_VARIANT } from '../../../assets';
+import { assetCacheKey, DEFAULT_ASSET_VARIANT, isTextureDecodable } from '../../../assets';
 import type { ScenePlan, TextureDef, TextureRef } from '../../scene-plan';
 
 /**
@@ -63,7 +63,10 @@ function colorSpaceFor(variant: AssetVariant): typeof SRGBColorSpace | typeof Li
 export function createDefaultTextureDecoder(manager: LoadingManager = new LoadingManager()): TextureDecoder {
   const loader = new TextureLoader(manager);
   return (metadata, variant) => {
-    if (metadata.kind !== 'image' && metadata.kind !== 'texture') {
+    // [LAW:one-source-of-truth] Decode coverage is declared once at the asset
+    //   boundary (isTextureDecodable); this guard enforces it rather than
+    //   repeating the kind literals, so it cannot disagree with the validator.
+    if (!isTextureDecodable(metadata.kind)) {
       return Promise.reject(
         new Error(
           `ThreeLoadingBridge: asset '${metadata.id}' has kind '${metadata.kind}', which has no texture decoder (only image/texture decode to a Texture)`,

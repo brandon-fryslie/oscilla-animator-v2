@@ -11,6 +11,7 @@
  */
 
 export type { AssetKind, AssetSource, AssetMetadata } from './asset';
+export { TEXTURE_DECODABLE_KINDS, isTextureDecodable } from './asset';
 export type { AssetRegistry } from './registry';
 export { createAssetRegistry } from './registry';
 export type { AssetVariant, AssetCacheKey } from './cache-key';

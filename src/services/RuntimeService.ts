@@ -542,9 +542,11 @@ export class RuntimeService {
 
   private async installEditorPlan(plan: ScenePlan): Promise<void> {
     const runtime = this.requireActiveRuntimeResources('installing an editor ScenePlan');
-    // [LAW:one-source-of-truth] Editor patches reference no decoded assets yet
-    //   (asset-backed native blocks are a later ticket); a plan with no textures
-    //   resolves through an empty registry.
+    // [LAW:one-source-of-truth] The editor has no asset-authoring surface yet, so
+    //   its registry is empty. A texture-free patch (the starter) installs; a
+    //   patch that does reference a texture is rejected by installScenePlan's
+    //   pre-install asset validation with a named diagnostic (drainEditorInstalls
+    //   routes it to the diagnostics boundary), never a silent or deep failure.
     await runtime.renderer.installScenePlan(plan, createAssetRegistry([]));
   }
 

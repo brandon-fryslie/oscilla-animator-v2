@@ -38,6 +38,8 @@ import type { AssetId } from '../core/ids';
  *   first texture proof). `geometry`/`model`/`material`/`nodeMaterial` are
  *   nameable references whose decoders land with the ticket that first needs
  *   them — the bridge fails loudly on an unimplemented kind, never silently.
+ *   The canonical machine-readable form of this coverage is
+ *   {@link TEXTURE_DECODABLE_KINDS} below.
  */
 export type AssetKind =
   | 'image'
@@ -46,6 +48,24 @@ export type AssetKind =
   | 'model'
   | 'material'
   | 'nodeMaterial';
+
+/**
+ * The asset kinds the texture loading bridge can decode into a Three `Texture`
+ * today. This is the single declaration of texture-decode coverage: the pure
+ * pre-install plan validator and the effectful Three decoder both consult it, so
+ * "can this asset back a texture handle?" has one answer that cannot drift.
+ *
+ * [LAW:one-source-of-truth] The decodable set lives here, at the asset boundary,
+ *   not duplicated as a literal in the validator and again in the decoder.
+ * [LAW:single-enforcer] Growing texture coverage (e.g. a compressed-texture
+ *   decoder) is a one-line edit here; every consumer follows automatically.
+ */
+export const TEXTURE_DECODABLE_KINDS = ['image', 'texture'] as const satisfies readonly AssetKind[];
+
+/** Whether an asset of this kind can be decoded into a texture (see {@link TEXTURE_DECODABLE_KINDS}). */
+export function isTextureDecodable(kind: AssetKind): boolean {
+  return (TEXTURE_DECODABLE_KINDS as readonly AssetKind[]).includes(kind);
+}
 
 /**
  * Where an asset's bytes come from.
