@@ -70,9 +70,27 @@ export function consumeTestDemoFilename(): string | null {
 const SCENE_PLAN_PARAM = 'scenePlan';
 
 /**
+ * The reserved `?scenePlan=` id that selects the live native editor instead of a
+ * fixed demo fixture: the authored patch is driven from `PillarPatchStore` and
+ * recompiled into the renderer on every edit, rather than compiled once.
+ *
+ * [LAW:no-mode-explosion] One selector (`scenePlan`) chooses the non-V1 render
+ *   path; the editor is a documented reserved value of it, not a parallel param.
+ */
+export const NATIVE_EDITOR_SCENE_PLAN_ID = 'editor';
+
+/**
+ * Whether the current URL selects the live native editor surface.
+ */
+export function isNativeEditorSelection(): boolean {
+  return readScenePlanSelection() === NATIVE_EDITOR_SCENE_PLAN_ID;
+}
+
+/**
  * Read ?scenePlan=<id> — select an authored patch to render through the
  * ScenePlan → Three backend steel thread instead of the V1 editor runtime.
- * Returns the id or null.
+ * Returns the id or null. The reserved id {@link NATIVE_EDITOR_SCENE_PLAN_ID}
+ * selects the live editor; any other id selects a fixed demo fixture.
  *
  * Unlike loadDemoPatch this needs no reload: it touches neither localStorage
  * nor the V1 patch store, so it is read directly at runtime init.

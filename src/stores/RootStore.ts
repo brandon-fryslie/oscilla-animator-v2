@@ -28,6 +28,7 @@ import { CompositeEditorStore } from './CompositeEditorStore';
 import { DemoStore } from './DemoStore';
 import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
+import { PillarPatchStore } from './PillarPatchStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 import {
@@ -145,6 +146,8 @@ export class RootStore {
   readonly demo: DemoStore;
   readonly help: HelpStore;
   readonly expressionEditor: ExpressionEditorStore;
+  // The authored native (ScenePlan-path) patch — SSOT for the native graph editor.
+  readonly pillarPatch: PillarPatchStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -221,6 +224,9 @@ export class RootStore {
 
     // Create ExpressionEditorStore (active block for docked expression workbench)
     this.expressionEditor = new ExpressionEditorStore();
+
+    // Create PillarPatchStore (authored native patch for the ScenePlan editor)
+    this.pillarPatch = new PillarPatchStore();
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
