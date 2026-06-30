@@ -1,0 +1,29 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.23",
+  "chain": "InstanceCount → Scatter → ColorCycle → DrawInstances",
+  "operator": "hash (PlanUnaryOp) realized as TSL hash()",
+  "frames": {
+    "scatter0": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 120441,
+      "checksum": 1909357640
+    },
+    "scatter1": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 120441,
+      "checksum": 3039787171
+    },
+    "grid": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 99891,
+      "checksum": 2521000590
+    }
+  },
+  "scatterAnimated": true,
+  "scatterDiffersFromGrid": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-06-30T23:21:36.544Z"
+}

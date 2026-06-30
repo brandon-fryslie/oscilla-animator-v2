@@ -45,6 +45,8 @@ export {
   sin,
   cos,
   negate,
+  fract,
+  hash,
   add,
   sub,
   mul,
