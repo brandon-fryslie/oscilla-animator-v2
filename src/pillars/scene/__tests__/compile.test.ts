@@ -75,12 +75,12 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(geo.height).toBe(0.08);
   });
 
-  it('references one unlit oklab color material from the SolidColor block', () => {
+  it('references one unlit oklab color material from the ColorCycle block', () => {
     const material = plan.resources.materials[object.material];
     expect(material.kind).toBe('unlitColor');
     if (material.kind !== 'unlitColor') return;
-    // The opaque SolidColor block mints a perceptual OKLab ColorBinding behind
-    // the seam (the opaque authored color enters OKLab at hexColorBinding).
+    // The grid is colored by ColorCycle, which mints a perceptual OKLab binding
+    // whose hue spreads by rank and drifts by time.
     expect(material.color.space).toBe('oklab');
   });
 
@@ -222,6 +222,7 @@ describe('scene block contract — catalog and registration', () => {
       'Wave Offset',
       'Solid Color',
       'Gradient',
+      'Color Cycle',
       'Brightness',
       'Draw Instances',
     ]);
@@ -233,6 +234,8 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // SolidColor output
       'instanceBundle', // Gradient input
       'instanceBundle', // Gradient output
+      'instanceBundle', // ColorCycle input
+      'instanceBundle', // ColorCycle output
       'instanceBundle', // Brightness input
       'instanceBundle', // Brightness output
       'instanceBundle', // DrawInstances input
@@ -250,6 +253,10 @@ describe('scene block contract — catalog and registration', () => {
       'color',
       'colorStart',
       'colorEnd',
+      'spread',
+      'cycleSpeed',
+      'vividness',
+      'brightness',
       'factor',
       'size',
       'cameraHalfExtentX',

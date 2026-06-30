@@ -13,7 +13,9 @@
  *   it does not touch three or the renderer.
  */
 
-import { add, konst, mul, type ColorBinding, type PlanExpr } from '../../render/scene-plan';
+import { add, cos, konst, mul, sin, type ColorBinding, type PlanExpr } from '../../render/scene-plan';
+
+const TAU = 2 * Math.PI;
 
 const CHANNEL_MAX = 255;
 
@@ -79,4 +81,22 @@ export function gradientColorBinding(hexFrom: string, hexTo: string, t: PlanExpr
   const c1 = hexToOklab(hexTo);
   const lerp = (from: number, to: number): PlanExpr => add(konst(from), mul(konst(to - from), t));
   return { space: 'oklab', l: lerp(c0.l, c1.l), a: lerp(c0.a, c1.a), b: lerp(c0.b, c1.b) };
+}
+
+/**
+ * An OKLab color from cylindrical OKLCH coordinates: fixed `lightness` and
+ * `chroma`, with the hue spinning by `hueTurns` (1 turn = a full color wheel,
+ * a `PlanExpr` so it can vary per instance / over time). Hue lives only in the
+ * polar conversion `a = C·cos(H), b = C·sin(H)` — the block never names it.
+ *
+ * [LAW:one-source-of-truth] OKLCH↔OKLab is a color concern; it lives at this
+ *   seam, not in the block. Blocks describe *intent* (spread, cycle), not axes.
+ */
+export function oklchColorBinding(
+  lightness: number,
+  chroma: number,
+  hueTurns: PlanExpr,
+): ColorBinding {
+  const h = mul(konst(TAU), hueTurns);
+  return { space: 'oklab', l: konst(lightness), a: mul(konst(chroma), cos(h)), b: mul(konst(chroma), sin(h)) };
 }
