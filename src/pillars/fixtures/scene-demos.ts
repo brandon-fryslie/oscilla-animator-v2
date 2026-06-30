@@ -25,6 +25,7 @@ import type { AssetMetadata } from '../../assets';
 import type { PillarPatch } from '../types';
 import { makeGridOfSquaresPatch } from './grid-of-squares';
 import { makeInstanceWavePatch } from './instance-wave';
+import { makeInstanceGradientPatch } from './instance-gradient';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from './textured-tiles';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
@@ -41,6 +42,9 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // grid fed through a WaveOffset transform modifier and a Brightness color
   // modifier before the draw. No assets.
   'instance-wave': { makePatch: makeInstanceWavePatch, assets: [] },
+  // Native color-source proof target (oscilla-pillars-scene-nt56.21): the grid
+  // colored by a perceptual OKLab Gradient ramping across rank. No assets.
+  'instance-gradient': { makePatch: makeInstanceGradientPatch, assets: [] },
   // Asset-bridge proof target (oscilla-pillars-cleanup-ulu.4): a grid of
   // texture-mapped tiles resolved through the AssetRegistry + ThreeLoadingBridge.
   'textured-tiles': { makePatch: makeTexturedTilesPatch, assets: TEXTURED_TILES_ASSETS },
