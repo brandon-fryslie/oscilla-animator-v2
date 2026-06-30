@@ -88,6 +88,8 @@ export type SceneConfigFor<TFields extends SceneConfigFields> = {
 };
 
 export interface SceneCatalogMetadata {
+  /** The block type this catalog entry describes — what the palette instantiates. */
+  readonly type: string;
   readonly displayName: string;
   readonly category: SceneBlockCategory;
   readonly ports: readonly ScenePortDeclaration[];
@@ -120,7 +122,8 @@ export interface SceneBlockDeclaration<
 > {
   readonly type: string;
   readonly role: TRole;
-  readonly catalog: Omit<SceneCatalogMetadata, 'configFields'>;
+  // `type` and `configFields` are derived from the declaration, not repeated here.
+  readonly catalog: Omit<SceneCatalogMetadata, 'configFields' | 'type'>;
   readonly config: TFields;
   readonly contribute: (
     config: SceneConfigFor<TFields>,
@@ -142,6 +145,7 @@ export function defineSceneBlock<
     SceneConfigFor<TFields>
   >;
   const catalog: SceneCatalogMetadata = {
+    type: declaration.type,
     ...declaration.catalog,
     configFields: Object.entries(declaration.config).map(([key, field]) => ({
       key,
