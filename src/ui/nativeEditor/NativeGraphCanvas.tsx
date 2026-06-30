@@ -12,8 +12,10 @@
  *   render; the canvas stores only the ELK-resolved positions, never block truth.
  * [LAW:no-ambient-temporal-coupling] Relayout is owned by one effect keyed on the
  *   patch topology; config edits (which never change topology) do not reflow it.
+ *   Selection/dimming is a SECOND, independent derivation that reads positions but
+ *   never writes them — focusing a chain must not reflow the graph.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import ReactFlow, {
   Background,
@@ -22,6 +24,7 @@ import ReactFlow, {
   useReactFlow,
   type Edge,
   type Node,
+  type NodeMouseHandler,
   type NodeTypes,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -30,9 +33,20 @@ import { useStores } from '../../stores';
 import type { SceneRegistry } from '../../pillars/scene';
 import type { PillarPatch } from '../../pillars/types';
 import { layoutGraphLeftToRight } from './graphLayout';
+import { computeChainSet, stepChain, type ChainDirection } from './chainFocus';
 import { SceneBlockNode, computeNodeSize, type SceneBlockNodeData } from './SceneBlockNode';
 
 const nodeTypes: NodeTypes = { sceneBlock: SceneBlockNode };
+
+/** Off-chain elements fade so the focused dataflow stands out (the anti-spaghetti model). */
+const ON_CHAIN_OPACITY = 1;
+const OFF_CHAIN_OPACITY = 0.3;
+
+/** Arrow keys map to a dataflow direction; the graph flows left→right (sources left). */
+const KEY_DIRECTION: Readonly<Record<string, ChainDirection>> = {
+  ArrowLeft: 'upstream',
+  ArrowRight: 'downstream',
+};
 
 /** Build the (unpositioned) reactflow nodes for the authored patch. */
 function buildNodes(patch: PillarPatch, registry: SceneRegistry): Node<SceneBlockNodeData>[] {
@@ -131,23 +145,106 @@ const GraphInner: React.FC = observer(() => {
     };
   }, [base, fitView]);
 
+  // --- Chain focus (view state; deliberately separate from the layout above) ---
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // A selection survives only as long as its block does; a topology change that
+  // removes the focused block clears focus rather than dimming the whole graph.
+  // [LAW:one-source-of-truth] The patch's block set decides what is selectable.
+  useEffect(() => {
+    if (selectedId !== null && !patch.blocks.some((b) => b.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [key, selectedId, patch.blocks]);
+
+  // The focused dataflow chain; `null` when nothing is selected means "dim nothing".
+  const chain = useMemo(
+    () => (selectedId === null ? null : computeChainSet(patch.edges, selectedId)),
+    [selectedId, key, patch.edges],
+  );
+
+  // Dimming is a pure overlay on the laid-out nodes/edges: it adds opacity (and a
+  // ring on the selected node) without touching positions, so it never reflows.
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const onChain = chain === null || chain.has(node.id);
+        const selected = node.id === selectedId;
+        return {
+          ...node,
+          style: {
+            ...node.style,
+            opacity: onChain ? ON_CHAIN_OPACITY : OFF_CHAIN_OPACITY,
+            ...(selected
+              ? { boxShadow: '0 0 0 2px #e6e6ef', borderRadius: 8 }
+              : {}),
+          },
+        };
+      }),
+    [nodes, chain, selectedId],
+  );
+
+  const displayEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const onChain = chain === null || (chain.has(edge.source) && chain.has(edge.target));
+        return {
+          ...edge,
+          style: { ...edge.style, opacity: onChain ? ON_CHAIN_OPACITY : OFF_CHAIN_OPACITY },
+        };
+      }),
+    [edges, chain],
+  );
+
+  const selectNode: NodeMouseHandler = useCallback((_event, node) => {
+    setSelectedId(node.id);
+    wrapperRef.current?.focus();
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  // Arrow keys step the selection along its chain; the key→direction map keeps the
+  // variability in data, so the handler is one lookup, not a branch per key.
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (selectedId === null) return;
+      const direction = KEY_DIRECTION[event.key];
+      if (direction === undefined) return;
+      event.preventDefault();
+      const next = stepChain(patch.edges, selectedId, direction);
+      if (next !== null) setSelectedId(next);
+    },
+    [selectedId, patch.edges],
+  );
+
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      nodesDraggable={false}
-      nodesConnectable={false}
-      elementsSelectable={false}
-      fitView
-      minZoom={0.2}
-      maxZoom={2}
-      proOptions={{ hideAttribution: true }}
-      style={{ background: '#0f0f17' }}
+    <div
+      ref={wrapperRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      data-testid="native-graph-focus"
+      style={{ width: '100%', height: '100%', outline: 'none' }}
     >
-      <Background color="#23233a" gap={20} />
-      <Controls showInteractive={false} />
-    </ReactFlow>
+      <ReactFlow
+        nodes={displayNodes}
+        edges={displayEdges}
+        nodeTypes={nodeTypes}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        onNodeClick={selectNode}
+        onPaneClick={clearSelection}
+        fitView
+        minZoom={0.2}
+        maxZoom={2}
+        proOptions={{ hideAttribution: true }}
+        style={{ background: '#0f0f17' }}
+      >
+        <Background color="#23233a" gap={20} />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
   );
 });
 
