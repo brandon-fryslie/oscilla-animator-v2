@@ -1,0 +1,21 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.7",
+  "mode": "scenePlan=editor (live PillarPatchStore)",
+  "frames": {
+    "frame0": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 99942,
+      "checksum": 3980683467
+    },
+    "frame1": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 99944,
+      "checksum": 888323943
+    }
+  },
+  "framesDiffered": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-06-30T15:52:42.505Z"
+}
