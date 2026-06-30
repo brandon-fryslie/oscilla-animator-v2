@@ -1,18 +1,21 @@
 /**
  * src/ui/nativeEditor/NativeEditorLayout.tsx
  *
- * The native ScenePlan editor surface: the authoring panel on the left, the live
- * Three preview canvas on the right. Selected by `?scenePlan=editor`. The canvas
- * is handed to `RuntimeService` via `onCanvasReady`; the runtime drives it from
- * the authored patch in `PillarPatchStore` (see `startNativeEditorThread`).
+ * The native ScenePlan editor surface: the authoring panel on the left, the
+ * auto-laid-out node-graph canvas in the center, and the live Three preview on
+ * the right. Selected by `?scenePlan=editor`. The preview canvas is handed to
+ * `RuntimeService` via `onCanvasReady`; the runtime drives it from the authored
+ * patch in `PillarPatchStore` (see `startNativeEditorThread`).
  *
- * [LAW:locality-or-seam] This layout owns only DOM composition + canvas sizing.
- *   It does not compile or install anything — that is the runtime's boundary.
+ * [LAW:locality-or-seam] This layout owns only DOM composition + preview-canvas
+ *   sizing. It does not compile or install anything — that is the runtime's
+ *   boundary — and the graph canvas reads the same authored patch independently.
  */
 
 import React, { useEffect, useRef } from 'react';
 
 import { NativeEditorPanel } from './NativeEditorPanel';
+import { NativeGraphCanvas } from './NativeGraphCanvas';
 
 interface NativeEditorLayoutProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -29,8 +32,11 @@ export const NativeEditorLayout: React.FC<NativeEditorLayoutProps> = ({ onCanvas
         background: '#0f0f17',
       }}
     >
-      <div style={{ width: 380, flexShrink: 0, borderRight: '1px solid #2a2a38' }}>
+      <div style={{ width: 360, flexShrink: 0, borderRight: '1px solid #2a2a38' }}>
         <NativeEditorPanel />
+      </div>
+      <div style={{ flex: 1, minWidth: 0, borderRight: '1px solid #2a2a38' }}>
+        <NativeGraphCanvas />
       </div>
       <PreviewCanvas onCanvasReady={onCanvasReady} />
     </div>
