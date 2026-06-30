@@ -26,6 +26,7 @@ import { WebGPURenderer as ThreeWebGPURenderer } from 'three/webgpu';
 
 import type { AssetRegistry } from '../../../assets';
 import type { ScenePlan } from '../../scene-plan';
+import { validatePlanAssets, formatPlanAssetIssues } from '../../scene-plan';
 import { reconcileScenePlan, type RealizedScene } from './scene-plan-realizer';
 import { ThreeLoadingBridge } from './asset-bridge';
 import type {
@@ -63,6 +64,17 @@ export class ThreeForkRenderer implements WebGPURenderer {
 
   async installScenePlan(plan: ScenePlan, registry: AssetRegistry): Promise<void> {
     this.assertNotDisposed('installing a ScenePlan');
+    // [LAW:single-enforcer] Validate the plan's asset references once, here,
+    //   before any decode. A missing or undecodable asset is a complete, named
+    //   pre-install failure rather than a deep loader throw partway through
+    //   decoding — the editor surfaces it as a diagnostic, the steel thread as a
+    //   loud boot failure. [LAW:no-silent-failure]
+    const assetIssues = validatePlanAssets(plan, registry);
+    if (assetIssues.length > 0) {
+      throw new Error(
+        `ThreeForkRenderer: cannot install ScenePlan — unresolved asset references:\n${formatPlanAssetIssues(assetIssues)}`,
+      );
+    }
     // [LAW:effects-at-boundaries] Decode the plan's texture assets here (the
     //   effect), then realize purely from the already-resolved textures.
     const resolvedTextures = await this.bridge.resolveTextures(plan, registry);
