@@ -46,6 +46,8 @@ export function colorChannels(color: ColorBinding): readonly PlanExpr[] {
       return [color.r, color.g, color.b];
     case 'rgba':
       return [color.r, color.g, color.b, color.a];
+    case 'oklab':
+      return [color.l, color.a, color.b];
     default:
       // [LAW:types-are-the-program] A new color space is a compile error here
       //   until its channels are enumerated — never an undefined return.

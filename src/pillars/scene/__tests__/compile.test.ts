@@ -75,12 +75,13 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(geo.height).toBe(0.08);
   });
 
-  it('references one unlit rgb color material from the SolidColor block', () => {
+  it('references one unlit oklab color material from the SolidColor block', () => {
     const material = plan.resources.materials[object.material];
     expect(material.kind).toBe('unlitColor');
     if (material.kind !== 'unlitColor') return;
-    // The opaque SolidColor block mints an rgb ColorBinding behind the seam.
-    expect(material.color.space).toBe('rgb');
+    // The opaque SolidColor block mints a perceptual OKLab ColorBinding behind
+    // the seam (the opaque authored color enters OKLab at hexColorBinding).
+    expect(material.color.space).toBe('oklab');
   });
 
   it('emits one draw item targeting the preview canvas', () => {

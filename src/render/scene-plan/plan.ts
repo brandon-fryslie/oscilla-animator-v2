@@ -57,6 +57,12 @@ export type GeometryDef =
  * A color, expressed in a named color space. Each channel is a PlanExpr, so a
  * channel may be uniform (`const`) or vary per instance / per frame by
  * referencing an intrinsic or input.
+ *
+ * `oklab` is the perceptual interpolation space (Björn Ottosson's OKLab): `l` is
+ * perceived lightness, `a`/`b` the green–red and blue–yellow Cartesian axes.
+ * Authored colors enter this space at the seam (`hexColorBinding`) and the
+ * renderer converts it back to linear sRGB for display. Mixing/animating color
+ * in `oklab` is hue-correct without the muddy midtones of rgb interpolation.
  */
 export type ColorBinding =
   | { readonly space: 'hsl'; readonly h: PlanExpr; readonly s: PlanExpr; readonly l: PlanExpr }
@@ -67,7 +73,8 @@ export type ColorBinding =
       readonly g: PlanExpr;
       readonly b: PlanExpr;
       readonly a: PlanExpr;
-    };
+    }
+  | { readonly space: 'oklab'; readonly l: PlanExpr; readonly a: PlanExpr; readonly b: PlanExpr };
 
 /**
  * A material resource: how an object's surface is shaded.

@@ -28,6 +28,13 @@ const config = {
 function scaleLuminance(color: ColorBinding, factor: number): ColorBinding {
   const k = konst(factor);
   switch (color.space) {
+    case 'oklab':
+      // Darken along the OKLab ray toward black: scale lightness AND the
+      // Cartesian chroma axes together. a/b are absolute chroma, so scaling l
+      // alone holds chroma fixed and over-saturates at lower lightness —
+      // pushing the color out of gamut and clipping its hue. Scaling all three
+      // preserves the hue angle atan2(b,a) and reduces chroma in step.
+      return { space: 'oklab', l: mul(color.l, k), a: mul(color.a, k), b: mul(color.b, k) };
     case 'hsl':
       return { ...color, l: mul(color.l, k) };
     case 'rgb':
