@@ -46,9 +46,6 @@ const GRID: PillarBlock = {
     spacing: 0.1,
     rotationPerIndex: 0.5,
     rotationPerTime: 2.0,
-    huePerTime: 0.2,
-    saturation: 0.8,
-    lightness: 0.6,
   },
 };
 
@@ -125,10 +122,10 @@ describe('modifier chain — multi-modifier (transform then color)', () => {
     expect(JSON.stringify(objectOf(plan).instancing.transform.positionY)).toContain('"sin"');
   });
 
-  it('applies the color modifier: the HSL lightness is scaled, not a bare const', () => {
+  it('applies the color modifier: the SolidColor is scaled by Brightness, not a bare const', () => {
     const color = unlitColorJson(plan);
     const bare = unlitColorJson(compileOk(makeGridOfSquaresPatch()));
-    // The grid's lightness is a const; Brightness wraps it in a mul.
+    // The SolidColor source bakes const channels; Brightness wraps each in a mul.
     expect(color).toContain('"mul"');
     expect(color).not.toBe(bare);
   });

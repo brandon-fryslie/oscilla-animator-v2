@@ -1,3 +1,19 @@
+/**
+ * src/pillars/scene/blocks/instance-grid.ts
+ *
+ * An instance source: a rows×cols grid of instances, each placed by index and
+ * rotating over time. It owns *placement only* — count and per-instance
+ * transform. Color is a separate concern set downstream by a color block
+ * (SolidColor and the richer color ops), so this block's API names no color
+ * channels.
+ *
+ * [LAW:decomposition] Instancing and color are different parts: this block
+ *   decides where instances are and how they turn; what color they are is
+ *   another block's single concern. The base bundle carries a neutral white so a
+ *   grid renders before any color block is wired, and the color block replaces
+ *   it — white is the identity, not a silent fallback.
+ */
+
 import {
   add,
   div,
@@ -16,9 +32,6 @@ const config = {
   spacing: sceneConfig.positiveNumber({ label: 'Spacing', control: 'number' }),
   rotationPerIndex: sceneConfig.finiteNumber({ label: 'Rotation per index', control: 'number' }),
   rotationPerTime: sceneConfig.finiteNumber({ label: 'Rotation per time', control: 'number' }),
-  huePerTime: sceneConfig.finiteNumber({ label: 'Hue per time', control: 'number' }),
-  saturation: sceneConfig.finiteNumber({ label: 'Saturation', control: 'number' }),
-  lightness: sceneConfig.finiteNumber({ label: 'Lightness', control: 'number' }),
 } as const;
 
 export const InstanceGridBlock = defineSceneBlock({
@@ -34,7 +47,6 @@ export const InstanceGridBlock = defineSceneBlock({
   config,
   contribute: (config) => {
     const index = intrinsic('index');
-    const rank = intrinsic('rank');
     const time = input('time');
     const col = mod(index, konst(config.cols));
     const row = floor(div(index, konst(config.cols)));
@@ -51,12 +63,8 @@ export const InstanceGridBlock = defineSceneBlock({
             mul(time, konst(config.rotationPerTime)),
           ),
         },
-        color: {
-          space: 'hsl',
-          h: add(rank, mul(time, konst(config.huePerTime))),
-          s: konst(config.saturation),
-          l: konst(config.lightness),
-        },
+        // Neutral base color; a downstream color block replaces it.
+        color: { space: 'rgb', r: konst(1), g: konst(1), b: konst(1) },
       },
     };
   },

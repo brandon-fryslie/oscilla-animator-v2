@@ -2,8 +2,14 @@
  * src/pillars/fixtures/grid-of-squares.ts
  *
  * The first Three-migration proof patch, authored as Oscilla graph semantics:
- * a 10×10 grid of squares, each rotating over time, colored by an HSL hue that
- * spreads across the grid by rank and cycles with time.
+ * a 10×10 grid of squares, each rotating over time, with a single opaque color
+ * set by a `SolidColor` block.
+ *
+ * The DEMO-PATCHES spec colors this grid by a rank+time HSL hue. That is a
+ * channel-driven, position-varying color the opaque-color slice (nt56.5)
+ * deliberately defers to the follow-on color-by-position block; until it lands,
+ * the grid is a single solid color. Its rotation is still time-driven, so the
+ * first-proof-contract requirement that frames differ over time still holds.
  *
  * Scope source: design-docs/three-migration-first-proof-contract.md
  *   §"Required Compiler Capabilities"; design-docs/DEMO-PATCHES.md
@@ -37,10 +43,13 @@ export function makeGridOfSquaresPatch(): PillarPatch {
           spacing: 0.1,
           rotationPerIndex: 0.5,
           rotationPerTime: 2.0,
-          huePerTime: 0.2,
-          saturation: 0.8,
-          lightness: 0.6,
         },
+      },
+      {
+        id: 'color',
+        kind: 'modifier',
+        type: 'SolidColor',
+        config: { color: '#2e8bff' },
       },
       {
         id: 'draw',
@@ -54,13 +63,8 @@ export function makeGridOfSquaresPatch(): PillarPatch {
       },
     ],
     edges: [
-      {
-        id: 'e0',
-        source: 'grid',
-        target: 'draw',
-        inputSlot: 'primary',
-        role: 'primary',
-      },
+      { id: 'e0', source: 'grid', target: 'color', inputSlot: 'primary', role: 'primary' },
+      { id: 'e1', source: 'color', target: 'draw', inputSlot: 'primary', role: 'primary' },
     ],
   };
 }
