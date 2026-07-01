@@ -84,7 +84,7 @@ for it yet, so a half-built capability cannot be half-represented.
 
 | Port value kind   | ScenePlan data concept | Status |
 |-------------------|-------------------------|--------|
-| `instanceBundle`  | `InstancingPlan` + `ColorBinding` (assembly's `InstanceBundle`) | **Realized** |
+| `instanceBundle`  | `InstancingPlan` + `ColorPlan` (assembly's `InstanceBundle`); assembly lowers the `ColorPlan` to either a `ColorBinding` in an `unlitColor` material or a `data` LUT texture + `unlitColorLut` material | **Realized** |
 | `geometry`        | `GeometryDef` (`rectangle` \| `point`) | **Realized** |
 | `materialShell`   | `MaterialDef` (`unlitColor` \| `texturedUnlit` \| `unlitColorLut`) | **Realized** |
 | `texture`         | `TextureDef` (`asset` \| `data`) behind a `TextureRef` | **Realized** |
