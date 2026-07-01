@@ -84,10 +84,10 @@ for it yet, so a half-built capability cannot be half-represented.
 
 | Port value kind   | ScenePlan data concept | Status |
 |-------------------|-------------------------|--------|
-| `instanceBundle`  | `InstancingPlan` + `ColorBinding` (assembly's `InstanceBundle`) | **Realized** |
+| `instanceBundle`  | `InstancingPlan` + `ColorPlan` (assembly's `InstanceBundle`); assembly lowers the `ColorPlan` to either a `ColorBinding` in an `unlitColor` material or a `data` LUT texture + `unlitColorLut` material | **Realized** |
 | `geometry`        | `GeometryDef` (`rectangle` \| `point`) | **Realized** |
-| `materialShell`   | `MaterialDef` (`unlitColor` \| `texturedUnlit`) | **Realized** |
-| `texture`         | `TextureDef` (`asset`) behind a `TextureRef` | **Realized** |
+| `materialShell`   | `MaterialDef` (`unlitColor` \| `texturedUnlit` \| `unlitColorLut`) | **Realized** |
+| `texture`         | `TextureDef` (`asset` \| `data`) behind a `TextureRef` | **Realized** |
 | `camera`          | `CameraPlan` (`orthographic`) | **Realized** |
 | `color`           | `ColorBinding` (`hsl` \| `rgb` \| `rgba`) | **Realized** |
 | `scalar`          | `PlanExpr` (one backend-neutral scalar value) | **Realized** |
@@ -108,7 +108,7 @@ field or a flag.
 |--------------------|-------------------------|--------|
 | `geometries`       | `GeometryDef`           | **Realized** |
 | `materials`        | `MaterialDef`           | **Realized** |
-| `textures`         | `TextureDef`            | **Realized** (asset-resolved by the bridge) |
+| `textures`         | `TextureDef`            | **Realized** (`asset`-resolved by the bridge; `data` LUTs built in-bridge for palette/gradient color) |
 | `computeResources` | `ComputeResourceDef`    | **Deferred** — empty; TSL compute (three-fork-deltas §4.2) |
 | `postChains`       | `PostChainDef`          | **Deferred** — empty; Three post nodes (three-fork-deltas §3) |
 

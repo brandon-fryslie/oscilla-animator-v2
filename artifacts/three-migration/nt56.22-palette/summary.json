@@ -1,0 +1,23 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.22",
+  "patch": "color-palette",
+  "previewBooted": true,
+  "renderedFrameCount": 75,
+  "frames": {
+    "frame0": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 91062,
+      "checksum": 342607435
+    },
+    "frame1": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 91440,
+      "checksum": 548908460
+    }
+  },
+  "framesDiffered": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-06-30T23:58:15.803Z"
+}

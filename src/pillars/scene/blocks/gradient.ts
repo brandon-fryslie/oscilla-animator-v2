@@ -19,7 +19,7 @@
 
 import { intrinsic } from '../../../render/scene-plan';
 import { defineSceneBlock, sceneConfig } from '../scene-block';
-import { gradientColorBinding } from '../color';
+import { bindingColor, gradientColorBinding } from '../color';
 
 const config = {
   colorStart: sceneConfig.color({ label: 'Start color', control: 'color' }),
@@ -44,7 +44,7 @@ export const GradientBlock = defineSceneBlock({
     // (index/count), so it *is* the gradient parameter — no further scaling.
     apply: (bundle) => ({
       ...bundle,
-      color: gradientColorBinding(config.colorStart, config.colorEnd, intrinsic('rank')),
+      color: bindingColor(gradientColorBinding(config.colorStart, config.colorEnd, intrinsic('rank'))),
     }),
   }),
 });

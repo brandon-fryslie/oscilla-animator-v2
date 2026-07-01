@@ -20,7 +20,7 @@
 
 import { add, input, intrinsic, konst, mul } from '../../../render/scene-plan';
 import { defineSceneBlock, sceneConfig } from '../scene-block';
-import { oklchColorBinding } from '../color';
+import { bindingColor, oklchColorBinding } from '../color';
 
 // OKLab chroma roughly at the sRGB gamut edge; `vividness` is a 0..1 fraction of
 // it, so the most vivid setting sits near the boundary without blowing past it.
@@ -50,10 +50,12 @@ export const ColorCycleBlock = defineSceneBlock({
     // Hue, in turns: a spatial spread across rank plus a time-driven drift.
     apply: (bundle) => ({
       ...bundle,
-      color: oklchColorBinding(
-        config.brightness,
-        config.vividness * MAX_CHROMA,
-        add(mul(intrinsic('rank'), konst(config.spread)), mul(input('time'), konst(config.cycleSpeed))),
+      color: bindingColor(
+        oklchColorBinding(
+          config.brightness,
+          config.vividness * MAX_CHROMA,
+          add(mul(intrinsic('rank'), konst(config.spread)), mul(input('time'), konst(config.cycleSpeed))),
+        ),
       ),
     }),
   }),

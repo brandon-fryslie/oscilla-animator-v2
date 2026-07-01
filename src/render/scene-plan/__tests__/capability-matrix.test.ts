@@ -65,14 +65,18 @@ function buildCapabilityCoveragePlan(): ScenePlan {
   const rect = geometryRef('cap:rect');
   const point = geometryRef('cap:point');
 
-  // Materials: unlitColor over hsl / rgb / rgba / oklab, plus texturedUnlit.
+  // Materials: unlitColor over hsl / rgb / rgba / oklab, texturedUnlit, plus
+  // unlitColorLut (a sampled palette/gradient LUT).
   const matHsl = materialRef('cap:mat-hsl');
   const matRgb = materialRef('cap:mat-rgb');
   const matRgba = materialRef('cap:mat-rgba');
   const matOklab = materialRef('cap:mat-oklab');
   const matTex = materialRef('cap:mat-tex');
+  const matLut = materialRef('cap:mat-lut');
 
+  // Textures: an asset-backed texture and a compiler-baked data LUT.
   const tex = textureRef('cap:tex');
+  const lutTex = textureRef('cap:lut');
   const storage = computeResourceRef('cap:storage');
   const post = postChainRef('cap:post');
 
@@ -81,6 +85,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
   const objRgba = sceneObjectRef('cap:obj-rgba');
   const objOklab = sceneObjectRef('cap:obj-oklab');
   const objTex = sceneObjectRef('cap:obj-tex');
+  const objLut = sceneObjectRef('cap:obj-lut');
 
   const index = intrinsic('index');
   const rank = intrinsic('rank');
@@ -130,9 +135,13 @@ function buildCapabilityCoveragePlan(): ScenePlan {
           color: { space: 'oklab', l: add(konst(0.6), mul(rank, konst(0.1))), a: konst(0.1), b: konst(-0.05) },
         },
         [matTex]: { kind: 'texturedUnlit', texture: tex },
+        // unlitColorLut: sample the data LUT at a per-instance coord.
+        [matLut]: { kind: 'unlitColorLut', texture: lutTex, coord: rank },
       },
       textures: {
         [tex]: { kind: 'asset', assetId: assetId('cap:asset') },
+        // A two-texel OKLab data LUT, linearly filtered (a gradient ramp).
+        [lutTex]: { kind: 'data', width: 2, height: 1, pixels: [0.6, 0.1, -0.05, 1, 0.8, -0.1, 0.05, 1], filter: 'linear' },
       },
       // Deferred capabilities, populated here to prove the table shape round-trips
       // even when non-empty (the steel thread leaves these empty).
@@ -149,6 +158,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
       [objRgba]: { geometry: rect, material: matRgba, instancing: { count: 1, transform: transformB } },
       [objOklab]: { geometry: rect, material: matOklab, instancing: { count: 4, transform: transformB } },
       [objTex]: { geometry: rect, material: matTex, instancing: { count: 1, transform: transformB } },
+      [objLut]: { geometry: rect, material: matLut, instancing: { count: 4, transform: transformB } },
     },
     render: {
       camera: { kind: 'orthographic', halfExtentX: 0.6, halfExtentY: 0.6 },
@@ -159,6 +169,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
         { target: 'previewCanvas', object: objRgba },
         { target: 'previewCanvas', object: objOklab },
         { target: 'previewCanvas', object: objTex },
+        { target: 'previewCanvas', object: objLut },
       ],
       postChain: post,
     },
@@ -244,9 +255,14 @@ describe('ScenePlan capability matrix — representative coverage', () => {
     expect(spaces).toEqual(['hsl', 'oklab', 'rgb', 'rgba']);
   });
 
-  it('covers both material variants', () => {
+  it('covers all three material variants', () => {
     const kinds = new Set(Object.values(plan.resources.materials).map((m) => m.kind));
-    expect(kinds).toEqual(new Set(['unlitColor', 'texturedUnlit']));
+    expect(kinds).toEqual(new Set(['unlitColor', 'texturedUnlit', 'unlitColorLut']));
+  });
+
+  it('covers both texture variants', () => {
+    const kinds = new Set(Object.values(plan.resources.textures).map((t) => t.kind));
+    expect(kinds).toEqual(new Set(['asset', 'data']));
   });
 
   it('populates every resource table, including the deferred compute/post tables', () => {

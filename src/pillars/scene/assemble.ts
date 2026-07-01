@@ -38,6 +38,7 @@ import {
   type TextureRef,
 } from '../../render/scene-plan';
 import type { InstanceBundle, MaterialShell, SceneContribution } from './scene-block';
+import type { ColorPlan } from './color';
 import { collectInputChannels, materialChannels } from './inputs';
 
 export type SceneCompileResult =
@@ -75,7 +76,7 @@ function joinMaterial(
 ): MaterialDef {
   switch (shell.kind) {
     case 'unlitColor':
-      return { kind: 'unlitColor', color: bundle.color };
+      return lowerUnlitColor(drawId, bundle.color, textures);
     case 'texturedUnlit': {
       const texRef = textureRef(`${drawId}:texture`);
       textures[texRef] = { kind: 'asset', assetId: shell.assetId };
@@ -83,6 +84,43 @@ function joinMaterial(
     }
     default:
       return assertNever(shell);
+  }
+}
+
+/**
+ * Lower the bundle's {@link ColorPlan} into the material for an unlit draw. A
+ * per-channel-math `binding` becomes a `unlitColor` material directly; a `lut`
+ * color mints a `{kind:'data'}` texture (the baked OKLab ramp) in the shared
+ * table and becomes a `unlitColorLut` material sampling it by the per-instance
+ * coord — the same normalize-resource-then-refer-by-handle move a textured shell
+ * makes.
+ *
+ * [LAW:single-enforcer] The LUT texture is minted in exactly one place; the
+ *   material references it by the handle minted here, never inlines its pixels.
+ * [LAW:types-are-the-program] Exhaustive over the color-plan union; a new color
+ *   representation is a compile error here until its lowering is declared.
+ */
+function lowerUnlitColor(
+  drawId: string,
+  color: ColorPlan,
+  textures: Record<TextureRef, TextureDef>,
+): MaterialDef {
+  switch (color.kind) {
+    case 'binding':
+      return { kind: 'unlitColor', color: color.binding };
+    case 'lut': {
+      const texRef = textureRef(`${drawId}:lut`);
+      textures[texRef] = {
+        kind: 'data',
+        width: color.lut.width,
+        height: 1,
+        pixels: color.lut.pixels,
+        filter: color.lut.filter,
+      };
+      return { kind: 'unlitColorLut', texture: texRef, coord: color.coord };
+    }
+    default:
+      return assertNever(color);
   }
 }
 

@@ -15,7 +15,7 @@
  */
 
 import { defineSceneBlock, sceneConfig } from '../scene-block';
-import { thresholdVisibilityBinding } from '../color';
+import { bindingColor, thresholdVisibilityBinding } from '../color';
 
 const config = {
   color: sceneConfig.color({ label: 'Color', control: 'color' }),
@@ -40,11 +40,8 @@ export const ThresholdVisibilityBlock = defineSceneBlock({
     role: 'modifier',
     apply: (bundle) => ({
       ...bundle,
-      color: thresholdVisibilityBinding(
-        config.color,
-        config.threshold,
-        config.frequency,
-        config.speed,
+      color: bindingColor(
+        thresholdVisibilityBinding(config.color, config.threshold, config.frequency, config.speed),
       ),
     }),
   }),
