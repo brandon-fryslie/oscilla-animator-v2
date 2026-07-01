@@ -12,10 +12,11 @@
  *   boundary — and the graph canvas reads the same authored patch independently.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { NativeEditorPanel } from './NativeEditorPanel';
 import { NativeGraphCanvas } from './NativeGraphCanvas';
+import { ModulationTablePanel } from './ModulationTablePanel';
 
 interface NativeEditorLayoutProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -35,13 +36,73 @@ export const NativeEditorLayout: React.FC<NativeEditorLayoutProps> = ({ onCanvas
       <div style={{ width: 360, flexShrink: 0, borderRight: '1px solid #2a2a38' }}>
         <NativeEditorPanel />
       </div>
-      <div style={{ flex: 1, minWidth: 0, borderRight: '1px solid #2a2a38' }}>
-        <NativeGraphCanvas />
-      </div>
+      <CenterPane />
       <PreviewCanvas onCanvasReady={onCanvasReady} />
     </div>
   );
 };
+
+/**
+ * The center pane offers the two views onto the authored patch: the node graph
+ * and the modulation table. Both read the same `PillarPatchStore`, so switching
+ * is purely a presentation choice — no patch state moves with the toggle.
+ * [LAW:one-source-of-truth] The graph and table are alternate projections; the
+ *   toggle picks a projection, it does not fork the patch.
+ */
+type CenterView = 'graph' | 'table';
+
+const CenterPane: React.FC = () => {
+  const [view, setView] = useState<CenterView>('graph');
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        borderRight: '1px solid #2a2a38',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          gap: 4,
+          padding: '6px 8px',
+          borderBottom: '1px solid #2a2a38',
+          background: '#16161f',
+        }}
+      >
+        <ViewTab label="Graph" active={view === 'graph'} onSelect={() => setView('graph')} />
+        <ViewTab label="Table" active={view === 'table'} onSelect={() => setView('table')} />
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        {view === 'graph' ? <NativeGraphCanvas /> : <ModulationTablePanel />}
+      </div>
+    </div>
+  );
+};
+
+const ViewTab: React.FC<{ label: string; active: boolean; onSelect: () => void }> = ({
+  label,
+  active,
+  onSelect,
+}) => (
+  <button
+    data-testid={`native-view-${label.toLowerCase()}`}
+    onClick={onSelect}
+    style={{
+      background: active ? '#2a2350' : 'transparent',
+      color: active ? '#d7caff' : '#8a8aa0',
+      border: '1px solid #33334a',
+      borderRadius: 6,
+      padding: '3px 12px',
+      cursor: 'pointer',
+      fontSize: 12,
+    }}
+  >
+    {label}
+  </button>
+);
 
 const PreviewCanvas: React.FC<NativeEditorLayoutProps> = ({ onCanvasReady }) => {
   const containerRef = useRef<HTMLDivElement>(null);
