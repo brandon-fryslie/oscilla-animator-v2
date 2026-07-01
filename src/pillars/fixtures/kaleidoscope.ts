@@ -9,6 +9,8 @@
  * composition is a slowly-drifting pinwheel rosette colored across the ring.
  *
  * Chain: InstanceCount(12) → RingLayout → Kaleidoscope → ColorCycle → DrawInstances.
+ * The copies are non-square bars (`aspect` ≠ 1), so the rosette reads as a
+ * sharper N-fold pinwheel of spokes rather than a ring of squares.
  *
  * [LAW:composability] The symmetry order is the upstream count: the same
  *   `Kaleidoscope` modifier is 6-fold or 12-fold purely by the `InstanceCount`
@@ -38,7 +40,7 @@ export function makeKaleidoscopePatch(): PillarPatch {
         id: 'draw',
         kind: 'intent',
         type: 'DrawInstances',
-        config: { size: 0.14, cameraHalfExtentX: 0.55, cameraHalfExtentY: 0.55 },
+        config: { size: 0.16, aspect: 0.32, cameraHalfExtentX: 0.55, cameraHalfExtentY: 0.55 },
       },
     ],
     edges: [
