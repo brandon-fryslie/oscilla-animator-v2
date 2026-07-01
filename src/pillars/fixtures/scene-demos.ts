@@ -34,6 +34,7 @@ import { makeConditionalVisibilityPatch } from './conditional-visibility';
 import { makeScatterCloudPatch } from './scatter-cloud';
 import { makeColorPalettePatch } from './color-palette';
 import { makePointDotsPatch } from './point-dots';
+import { makeScalarRoutePatch } from './scalar-route';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -75,4 +76,8 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // ring of large, separated round dots proving `GeometryDef.point` realizes as a
   // sized disc, not a placeholder quad or a faked square. No assets.
   'point-dots': { makePatch: makePointDotsPatch, assets: [] },
+  // Scalar-routing proof target (oscilla-pillars-scene-nt56.25): a WaveOffset whose
+  // amplitude knob is routed from a Constant scalar source, so the routed value
+  // (not the config default) drives a visibly taller wave. No assets.
+  'scalar-route': { makePatch: makeScalarRoutePatch, assets: [] },
 };

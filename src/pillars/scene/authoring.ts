@@ -35,6 +35,8 @@ export function pillarKindForRole(role: SceneContributionRole): PillarKind {
   switch (role) {
     case 'instanceSource':
       return 'generator';
+    case 'scalarSource':
+      return 'generator';
     case 'modifier':
       return 'modifier';
     case 'draw':
@@ -71,7 +73,10 @@ export function defaultSceneConfig(
 ): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   for (const field of catalog.configFields) {
-    const value = defaultForControl(field.control);
+    // A field's authored default (a knob's `SceneScalarKnob.default`) is the
+    // single source of that value; only a field with no authored default falls to
+    // the control-generic default. [LAW:one-source-of-truth]
+    const value = field.defaultValue ?? defaultForControl(field.control);
     // An omitted key is the honest default for an optional field.
     if (value !== undefined) config[field.key] = value;
   }

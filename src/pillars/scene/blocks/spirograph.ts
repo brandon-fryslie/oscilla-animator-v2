@@ -35,7 +35,7 @@ export const SpirographBlock = defineSceneBlock({
     displayName: 'Spirograph',
     category: 'modifier',
     ports: [
-      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle' },
+      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle', default: { kind: 'required' } },
       { id: 'instances', label: 'Instances', direction: 'output', value: 'instanceBundle' },
     ],
   },
