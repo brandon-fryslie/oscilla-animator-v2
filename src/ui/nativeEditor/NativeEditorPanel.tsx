@@ -18,7 +18,6 @@ import { observer } from 'mobx-react-lite';
 
 import { useStores } from '../../stores';
 import {
-  compareScenePorts,
   type SceneCatalogConfigField,
   type SceneConfigControl,
   type ScenePortDeclaration,
@@ -26,6 +25,7 @@ import {
 } from '../../pillars/scene';
 import type { PillarBlock } from '../../pillars/types';
 import type { PillarPatchStore } from '../../stores/PillarPatchStore';
+import { kindsConnectable } from './modulationTable';
 
 const styles = {
   panel: {
@@ -186,7 +186,7 @@ const ConnectionRow: React.FC<{
     if (candidate.id === block.id) return false;
     const outputs = registry.get(candidate.type)?.catalog.ports.filter((p) => p.direction === 'output') ?? [];
     if (outputs.length !== 1) return false;
-    return compareScenePorts(outputs[0].value, port.value).kind === 'compatible';
+    return kindsConnectable(outputs[0].value, port.value);
   });
 
   const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
