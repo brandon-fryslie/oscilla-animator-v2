@@ -48,10 +48,19 @@ export const SCENE_PLAN_VERSION = 1 as const;
  * A geometry resource: the per-object shape, in object-local units. Per-object
  * placement (position, rotation) is applied by the instancing transform, not
  * baked here.
+ *
+ * - `rectangle` is an axis-aligned quad; `width !== height` is a non-square bar.
+ * - `point` is a round dot of diameter `size` — a filled disc, not a tiny square.
+ *   It is a distinct primitive precisely because it is round: a square dot is a
+ *   `rectangle`, so the two variants never collapse into one another.
+ *
+ * [LAW:dataflow-not-control-flow] Shape variation lives in the discriminant and
+ *   its fields, so the realizer dispatches once over the union rather than
+ *   branching on booleans; adding a shape adds a variant, not a code path.
  */
 export type GeometryDef =
   | { readonly kind: 'rectangle'; readonly width: number; readonly height: number }
-  | { readonly kind: 'point' };
+  | { readonly kind: 'point'; readonly size: number };
 
 /**
  * A color, expressed in a named color space. Each channel is a PlanExpr, so a

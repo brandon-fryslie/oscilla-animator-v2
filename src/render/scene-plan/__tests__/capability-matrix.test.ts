@@ -114,7 +114,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
     resources: {
       geometries: {
         [rect]: { kind: 'rectangle', width: 0.08, height: 0.08 },
-        [point]: { kind: 'point' },
+        [point]: { kind: 'point', size: 0.05 },
       },
       materials: {
         [matHsl]: {

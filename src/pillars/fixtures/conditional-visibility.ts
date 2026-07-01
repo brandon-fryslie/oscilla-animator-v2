@@ -42,7 +42,7 @@ export function makeConditionalVisibilityPatch(): PillarPatch {
         id: 'draw',
         kind: 'intent',
         type: 'DrawInstances',
-        config: { size: 0.02, cameraHalfExtentX: 0.6, cameraHalfExtentY: 0.6 },
+        config: { shape: 'point', size: 0.02, cameraHalfExtentX: 0.6, cameraHalfExtentY: 0.6 },
       },
     ],
     edges: [

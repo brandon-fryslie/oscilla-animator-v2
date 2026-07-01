@@ -33,6 +33,7 @@ import { makeKaleidoscopePatch } from './kaleidoscope';
 import { makeConditionalVisibilityPatch } from './conditional-visibility';
 import { makeScatterCloudPatch } from './scatter-cloud';
 import { makeColorPalettePatch } from './color-palette';
+import { makePointDotsPatch } from './point-dots';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -70,4 +71,8 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // wrapping across the field. Exercises the texture-backed `{kind:'data'}` LUT
   // and `unlitColorLut` material end-to-end. No assets.
   'color-palette': { makePatch: makeColorPalettePatch, assets: [] },
+  // Size-correct point-primitive proof target (oscilla-pillars-scene-nt56.24): a
+  // ring of large, separated round dots proving `GeometryDef.point` realizes as a
+  // sized disc, not a placeholder quad or a faked square. No assets.
+  'point-dots': { makePatch: makePointDotsPatch, assets: [] },
 };
