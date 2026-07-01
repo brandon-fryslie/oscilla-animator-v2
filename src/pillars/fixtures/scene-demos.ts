@@ -32,6 +32,7 @@ import { makeSpirographPatch } from './spirograph';
 import { makeKaleidoscopePatch } from './kaleidoscope';
 import { makeConditionalVisibilityPatch } from './conditional-visibility';
 import { makeScatterCloudPatch } from './scatter-cloud';
+import { makeColorPalettePatch } from './color-palette';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -64,4 +65,9 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // point cloud placed by hashing each instance index — exercises the new `hash`
   // PlanExpr operator end-to-end. No assets.
   'scatter-cloud': { makePatch: makeScatterCloudPatch, assets: [] },
+  // Native palette proof target (oscilla-pillars-scene-nt56.22): the grid colored
+  // by a ColorByIndex palette LUT — every dot the palette entry at its index,
+  // wrapping across the field. Exercises the texture-backed `{kind:'data'}` LUT
+  // and `unlitColorLut` material end-to-end. No assets.
+  'color-palette': { makePatch: makeColorPalettePatch, assets: [] },
 };

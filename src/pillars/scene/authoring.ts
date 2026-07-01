@@ -87,6 +87,10 @@ function defaultForControl(control: SceneConfigControl): unknown {
       return false;
     case 'color':
       return '#ffffff';
+    case 'colorList':
+      // A two-entry palette/ramp: the minimum the schema accepts, with two
+      // distinct hues so a freshly-added color source renders visibly.
+      return ['#ff2d55', '#2e8bff'];
     case 'select':
     case 'asset':
       // No defensible non-empty default; leave the field unset.

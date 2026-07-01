@@ -41,13 +41,21 @@ export type PlanAssetIssue =
  * `registry`, in the plan's texture-table order. An empty array means the plan's
  * assets are installable.
  *
+ * A `data` texture (a compiler-baked lookup table) resolves to no asset, so
+ * there is nothing in the registry to validate — it is self-contained and always
+ * installable. Only `asset` textures are checked against the registry.
+ *
  * [LAW:dataflow-not-control-flow] Every texture entry is examined the same way;
  *   variability lives in the returned issue list, not in whether a check runs.
+ * [LAW:single-enforcer] The decode-coverage rule stays the one registry check;
+ *   the `data` arm skips it because the rule is about asset-backed decode, not
+ *   because the check is bypassed — a data texture has no decode to validate.
  */
 export function validatePlanAssets(plan: ScenePlan, registry: AssetRegistry): readonly PlanAssetIssue[] {
   const issues: PlanAssetIssue[] = [];
   for (const [refKey, def] of Object.entries(plan.resources.textures)) {
     const ref = refKey as TextureRef;
+    if (def.kind === 'data') continue;
     const { assetId } = def;
     if (!registry.has(assetId)) {
       issues.push({ reason: 'missing', ref, assetId });

@@ -41,6 +41,23 @@ describe('validatePlanAssets', () => {
     expect(validatePlanAssets(plan, createAssetRegistry([]))).toEqual([]);
   });
 
+  it('skips a data (compiler-baked LUT) texture — it resolves to no asset', () => {
+    const plan = planWithTextures({
+      [textureRef('lut')]: { kind: 'data', width: 2, height: 1, pixels: [0, 0, 0, 1, 1, 1, 1, 1], filter: 'nearest' },
+    });
+    // No registry entry exists for it, yet it is installable: there is nothing to resolve.
+    expect(validatePlanAssets(plan, createAssetRegistry([]))).toEqual([]);
+  });
+
+  it('still flags a bad asset reference alongside an always-valid data texture', () => {
+    const plan = planWithTextures({
+      [textureRef('lut')]: { kind: 'data', width: 1, height: 1, pixels: [0.5, 0, 0, 1], filter: 'linear' },
+      [textureRef('gone')]: { kind: 'asset', assetId: assetId('ghost') },
+    });
+    const issues = validatePlanAssets(plan, createAssetRegistry([]));
+    expect(issues).toEqual([{ reason: 'missing', ref: textureRef('gone'), assetId: assetId('ghost') }]);
+  });
+
   it('reports no issues when every texture asset is registered and decodable', () => {
     const plan = planWithTextures({
       [textureRef('a')]: { kind: 'asset', assetId: assetId('img') },

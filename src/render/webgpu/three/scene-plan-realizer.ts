@@ -35,7 +35,7 @@ import {
   type Node,
   type Texture,
 } from 'three/webgpu';
-import { add, cos, max, min, mod, mul, positionLocal, sin, sub, texture as sampleTexture, uniform, uv, vec3, float } from 'three/tsl';
+import { add, cos, max, min, mod, mul, positionLocal, sin, sub, texture as sampleTexture, uniform, uv, vec2, vec3, float } from 'three/tsl';
 
 import {
   SCENE_PLAN_VERSION,
@@ -205,6 +205,18 @@ function materialDefToMaterial(
       material.colorNode = sampleTexture(decoded, uv());
       return material;
     }
+    case 'unlitColorLut': {
+      const material = new MeshBasicNodeMaterial();
+      const lut = requireTexture(resolvedTextures, def.texture);
+      // Sample the 1D color LUT at the per-instance coord (v fixed mid-row). The
+      // texels are OKLab triples, so the sampled value runs through the same
+      // OKLab→linear sRGB map an `oklab` ColorBinding uses; a `linear`-filtered
+      // LUT interpolates *in OKLab* between texels — perceptual, hue-correct.
+      const coord = planExprToTSL(def.coord, ctx);
+      const sampled = sampleTexture(lut, vec2(coord, float(0.5)));
+      material.colorNode = oklabToLinearSrgb(sampled.x, sampled.y, sampled.z);
+      return material;
+    }
     default:
       return assertNever(def);
   }
@@ -300,13 +312,13 @@ function requireResource<T>(table: Readonly<Record<string, T>>, ref: string, kin
 function objectFingerprint(plan: ScenePlan, object: SceneObject): string {
   const geometry = requireResource(plan.resources.geometries, object.geometry, 'geometry');
   const material = requireResource(plan.resources.materials, object.material, 'material');
+  // A texture-referencing material folds its resolved TextureDef into the digest,
+  // so a changed asset or a re-baked LUT busts reuse; an `unlitColor`'s color is
+  // already pure plan data.
   const materialKey =
-    material.kind === 'texturedUnlit'
-      ? {
-          kind: 'texturedUnlit',
-          assetId: requireResource(plan.resources.textures, material.texture, 'texture').assetId,
-        }
-      : material;
+    material.kind === 'unlitColor'
+      ? material
+      : { ...material, texture: requireResource(plan.resources.textures, material.texture, 'texture') };
   return JSON.stringify({ geometry, material: materialKey, instancing: object.instancing });
 }
 

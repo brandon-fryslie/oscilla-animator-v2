@@ -2,11 +2,11 @@ import { z } from 'zod';
 import type { AssetId } from '../../core/ids';
 import type {
   CameraPlan,
-  ColorBinding,
   GeometryDef,
   RenderTarget,
   TransformBinding,
 } from '../../render/scene-plan';
+import type { ColorPlan } from './color';
 
 export interface SceneDiagnostic {
   readonly message: string;
@@ -16,7 +16,7 @@ export interface SceneDiagnostic {
 export interface InstanceBundle {
   readonly count: number;
   readonly transform: TransformBinding;
-  readonly color: ColorBinding;
+  readonly color: ColorPlan;
 }
 
 export type MaterialShell =
@@ -93,6 +93,7 @@ export type SceneConfigControl =
   | 'integer'
   | 'asset'
   | 'color'
+  | 'colorList'
   | 'toggle'
   | 'select';
 
@@ -279,6 +280,16 @@ export const sceneConfig = {
     //   exposed channels. The channel layout is minted only at the seam
     //   (`hexColorBinding`), never on the block API.
     schema: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb hex color'),
+    catalog,
+  }),
+  colorList: (catalog: SceneConfigFieldCatalog): SceneConfigField<readonly string[]> => ({
+    // [LAW:one-source-of-truth] A list of opaque `#rrggbb` values — a palette or
+    //   gradient's stops — with the same per-entry opaqueness as `color`. ≥2 so a
+    //   palette/ramp is meaningful; the channel layout still lives only at the
+    //   seam (`paletteColorPlan` / `gradientLutColorPlan`), never on the API.
+    schema: z
+      .array(z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb hex color'))
+      .min(2, 'needs at least two colors'),
     catalog,
   }),
   optionalAssetId: (

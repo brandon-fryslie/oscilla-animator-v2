@@ -176,6 +176,56 @@ describe('realizeScenePlan — textured material', () => {
   });
 });
 
+/** A single quad shaded by sampling a color LUT at a per-instance coord. */
+function buildLutPlan(): ScenePlan {
+  const quad = geometryRef('lut:quad');
+  const lutMat = materialRef('lut:material');
+  const lutTex = textureRef('lut:texture');
+  const object = sceneObjectRef('lut:object');
+  return defineScenePlan({
+    version: SCENE_PLAN_VERSION,
+    resources: {
+      geometries: { [quad]: { kind: 'rectangle', width: 0.1, height: 0.1 } },
+      materials: { [lutMat]: { kind: 'unlitColorLut', texture: lutTex, coord: intrinsic('rank') } },
+      textures: {
+        [lutTex]: { kind: 'data', width: 2, height: 1, pixels: [0.6, 0.1, -0.05, 1, 0.8, -0.1, 0.05, 1], filter: 'linear' },
+      },
+      computeResources: {},
+      postChains: {},
+    },
+    objects: {
+      [object]: {
+        geometry: quad,
+        material: lutMat,
+        instancing: { count: 4, transform: { positionX: konst(0), positionY: konst(0), rotation: konst(0) } },
+      },
+    },
+    render: {
+      camera: { kind: 'orthographic', halfExtentX: 1, halfExtentY: 1 },
+      inputs: [],
+      draws: [{ target: 'previewCanvas', object }],
+      postChain: null,
+    },
+  });
+}
+
+describe('realizeScenePlan — unlitColorLut material', () => {
+  it('shades by sampling the resolved LUT texture (color node present)', () => {
+    const resolved = new Map([[textureRef('lut:texture'), new Texture()]]);
+    const realized = realizeScenePlan(buildLutPlan(), resolved);
+    const mesh = realized.scene.children.find((c): c is InstancedMesh => c instanceof InstancedMesh)!;
+    const material = mesh.material as MeshBasicNodeMaterial;
+    expect(material.colorNode).not.toBeNull();
+    realized.dispose();
+  });
+
+  it('fails loudly when the LUT texture was not resolved by the bridge', () => {
+    expect(() => realizeScenePlan(buildLutPlan(), new Map())).toThrow(
+      /texture .* was not resolved by the loading bridge/,
+    );
+  });
+});
+
 describe('realizeScenePlan — loud failure on malformed plans', () => {
   it('rejects an incompatible plan version', () => {
     const plan = { ...buildGridPlan(), version: 999 } as unknown as ScenePlan;
