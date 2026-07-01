@@ -49,6 +49,8 @@ function constLeaves(expr: PlanExpr): number[] {
       return constLeaves(expr.arg);
     case 'binary':
       return [...constLeaves(expr.lhs), ...constLeaves(expr.rhs)];
+    default:
+      return assertNever(expr);
   }
 }
 
@@ -64,7 +66,18 @@ function countInput(expr: PlanExpr, channel: string): number {
       return countInput(expr.arg, channel);
     case 'binary':
       return countInput(expr.lhs, channel) + countInput(expr.rhs, channel);
+    default:
+      return assertNever(expr);
   }
+}
+
+/**
+ * Exhaustiveness guard mirroring the production consumers (inputs.ts, assemble.ts):
+ * a new PlanExpr kind is a compile error here, never a silently-empty walk that
+ * lets an assertion pass when it should fail. [LAW:no-silent-failure]
+ */
+function assertNever(value: never): never {
+  throw new Error(`unhandled PlanExpr kind: ${JSON.stringify(value)}`);
 }
 
 /** A grid → WaveOffset → draw patch, with optional scalar sources + knob edges. */
