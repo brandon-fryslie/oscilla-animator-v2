@@ -32,7 +32,9 @@ function port(
   direction: 'input' | 'output',
   value: SceneValueKind,
 ): ScenePortDeclaration {
-  return { id, label: id, direction, value };
+  return direction === 'input'
+    ? { id, label: id, direction, value, default: { kind: 'required' } }
+    : { id, label: id, direction, value };
 }
 
 function catalogOf(

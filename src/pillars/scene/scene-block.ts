@@ -3,6 +3,7 @@ import type { AssetId } from '../../core/ids';
 import type {
   CameraPlan,
   GeometryDef,
+  PlanExpr,
   RenderTarget,
   TransformBinding,
 } from '../../render/scene-plan';
@@ -49,6 +50,9 @@ export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
  * - `modifier` carries a bundle *transform* (a modifier: bundle → bundle); the
  *   concrete bundle is produced only once assembly folds it over its upstream.
  * - `draw` carries the shell assembly joins to the resolved upstream bundle.
+ * - `scalarSource` carries a single scalar `PlanExpr` a routable knob reads in
+ *   place of its config default (a Constant is `konst(value)`, a clock is
+ *   `input('time')`). It never feeds an instance chain — only a knob input port.
  *
  * [LAW:dataflow-not-control-flow] A modifier's behavior is the `apply` *value*,
  *   not a branch in assembly: folding the modifier chain is one generic walk, so
@@ -57,7 +61,8 @@ export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
 export type SceneContribution =
   | { readonly role: 'instanceSource'; readonly bundle: InstanceBundle }
   | { readonly role: 'modifier'; readonly apply: BundleTransform }
-  | { readonly role: 'draw'; readonly shell: DrawShell };
+  | { readonly role: 'draw'; readonly shell: DrawShell }
+  | { readonly role: 'scalarSource'; readonly value: PlanExpr };
 
 export type SceneContributionRole = SceneContribution['role'];
 
@@ -73,12 +78,45 @@ export type SceneValueKind =
 
 export type ScenePortDirection = 'input' | 'output';
 
-export interface ScenePortDeclaration {
+/**
+ * How an input port is fed when the author draws no wire to it — a *typed* port
+ * property, so "defaultable vs required" is representable, not folded into a
+ * codepath.
+ *
+ * - `required`: the port MUST be wired; unwired is a loud error (a draw's primary
+ *   instance bundle has no meaningful default).
+ * - `configScalar`: the port has a canonical default *source* — a Constant
+ *   carrying the value of config field `configKey`. When the port is unwired the
+ *   compiler synthesizes that source, so every knob input has exactly one source
+ *   and resolution never branches on wired/unwired.
+ *
+ * [LAW:no-silent-failure] A required input left unwired is surfaced, never
+ *   silently defaulted. [LAW:one-source-of-truth] The default's constant lives in
+ *   config; the synthesized source is derived from it, never a second copy.
+ */
+export type ScenePortInputDefault =
+  | { readonly kind: 'required' }
+  | { readonly kind: 'configScalar'; readonly configKey: string };
+
+interface ScenePortBase {
   readonly id: string;
   readonly label: string;
-  readonly direction: ScenePortDirection;
   readonly value: SceneValueKind;
 }
+
+/**
+ * A declared port. Discriminated on `direction`: only an input port carries a
+ * `default` policy (an output produces a value, it is never fed).
+ *
+ * [LAW:types-are-the-program] The default policy is unrepresentable on an output
+ *   and mandatory on an input — the shape forbids the illegal combinations.
+ */
+export type ScenePortDeclaration =
+  | (ScenePortBase & { readonly direction: 'output' })
+  | (ScenePortBase & {
+      readonly direction: 'input';
+      readonly default: ScenePortInputDefault;
+    });
 
 export type SceneBlockCategory =
   | 'instance'
@@ -86,7 +124,9 @@ export type SceneBlockCategory =
   | 'draw'
   | 'material'
   | 'asset'
-  | 'color';
+  | 'color'
+  // A scalar signal source (Constant, Time) — produces one routable scalar value.
+  | 'signal';
 
 export type SceneConfigControl =
   | 'number'
@@ -126,6 +166,32 @@ export interface SceneCatalogConfigField extends SceneConfigFieldCatalog {
   readonly key: string;
 }
 
+/**
+ * A routable scalar knob: a numeric parameter that is *both* a persisted config
+ * default AND a scalar input port a wire can override. One declaration projects
+ * to a config field (the default's constant), a scalar input port, and a resolved
+ * `PlanExpr` handed to `contribute`.
+ *
+ * [LAW:one-source-of-truth] A knob is one declaration, not a config field and a
+ *   port and a default kept in sync by hand.
+ */
+export interface SceneScalarKnob {
+  readonly label: string;
+  readonly default: number;
+}
+
+export type SceneKnobFields = Readonly<Record<string, SceneScalarKnob>>;
+
+/** A knob's persisted config value: a finite number (its default source's constant). */
+type KnobConfigFor<TKnobs extends SceneKnobFields> = {
+  readonly [K in keyof TKnobs]: number;
+};
+
+/** The resolved scalar `PlanExpr` feeding each knob input port at compile time. */
+export type KnobInputsFor<TKnobs extends SceneKnobFields> = {
+  readonly [K in keyof TKnobs]: PlanExpr;
+};
+
 export interface SceneBlockDefinition<
   TConfig,
   TRole extends SceneContributionRole = SceneContributionRole,
@@ -139,11 +205,21 @@ export interface SceneBlockDefinition<
     blockId: string,
     diagnostics: SceneDiagnostic[],
   ) => TConfig | null;
-  readonly contribute: (config: TConfig) => Extract<SceneContribution, { readonly role: TRole }>;
+  /**
+   * Produce the block's contribution from its parsed config and its resolved
+   * scalar knob inputs. `inputs` is keyed by knob (= scalar input port) id; the
+   * compiler guarantees every knob is present (a wired source or the synthesized
+   * config default), so a block reads `inputs.x` with no wired/unwired branch.
+   */
+  readonly contribute: (
+    config: TConfig,
+    inputs: Readonly<Record<string, PlanExpr>>,
+  ) => Extract<SceneContribution, { readonly role: TRole }>;
 }
 
 export interface SceneBlockDeclaration<
   TFields extends SceneConfigFields,
+  TKnobs extends SceneKnobFields,
   TRole extends SceneContributionRole,
 > {
   readonly type: string;
@@ -151,8 +227,11 @@ export interface SceneBlockDeclaration<
   // `type` and `configFields` are derived from the declaration, not repeated here.
   readonly catalog: Omit<SceneCatalogMetadata, 'configFields' | 'type'>;
   readonly config: TFields;
+  /** Routable scalar knobs; omit for a block with no routable parameters. */
+  readonly knobs?: TKnobs;
   readonly contribute: (
-    config: SceneConfigFor<TFields>,
+    config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
+    inputs: KnobInputsFor<TKnobs>,
   ) => Extract<SceneContribution, { readonly role: TRole }>;
 }
 
@@ -162,21 +241,46 @@ type SceneConfigShape<TFields extends SceneConfigFields> = {
 
 export function defineSceneBlock<
   const TFields extends SceneConfigFields,
+  const TKnobs extends SceneKnobFields,
   const TRole extends SceneContributionRole,
 >(
-  declaration: SceneBlockDeclaration<TFields, TRole>,
-): SceneBlockDefinition<SceneConfigFor<TFields>, TRole> {
-  // [LAW:one-source-of-truth] One field map derives both parsing and catalog metadata.
-  const configSchema = z.object(configShape(declaration.config)) as z.ZodType<
-    SceneConfigFor<TFields>
-  >;
+  declaration: SceneBlockDeclaration<TFields, TKnobs, TRole>,
+): SceneBlockDefinition<SceneConfigFor<TFields> & KnobConfigFor<TKnobs>, TRole> {
+  const knobs: SceneKnobFields = declaration.knobs ?? {};
+
+  // [LAW:one-source-of-truth] Each knob derives its config field (default
+  //   source's constant), its scalar input port, and its catalog control from one
+  //   declaration — never three hand-synced copies.
+  const knobSchema = Object.fromEntries(
+    Object.entries(knobs).map(([key, knob]) => [key, z.number().finite().default(knob.default)]),
+  );
+  const configSchema = z.object({
+    ...configShape(declaration.config),
+    ...knobSchema,
+  }) as z.ZodType<SceneConfigFor<TFields> & KnobConfigFor<TKnobs>>;
+
+  const knobPorts: ScenePortDeclaration[] = Object.entries(knobs).map(([key, knob]) => ({
+    id: key,
+    label: knob.label,
+    direction: 'input',
+    value: 'scalar',
+    default: { kind: 'configScalar', configKey: key },
+  }));
+
+  const configFields: SceneCatalogConfigField[] = [
+    ...Object.entries(declaration.config).map(([key, field]) => ({ key, ...field.catalog })),
+    ...Object.entries(knobs).map(([key, knob]) => ({
+      key,
+      label: knob.label,
+      control: 'number' as const,
+    })),
+  ];
+
   const catalog: SceneCatalogMetadata = {
     type: declaration.type,
     ...declaration.catalog,
-    configFields: Object.entries(declaration.config).map(([key, field]) => ({
-      key,
-      ...field.catalog,
-    })),
+    ports: [...declaration.catalog.ports, ...knobPorts],
+    configFields,
   };
 
   return {
@@ -195,7 +299,12 @@ export function defineSceneBlock<
       }
       return null;
     },
-    contribute: declaration.contribute,
+    // The declaration's `contribute` reads a knob-typed inputs record; the erased
+    // definition hands it a loose `Record<string, PlanExpr>` the compiler fills.
+    contribute: declaration.contribute as SceneBlockDefinition<
+      SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
+      TRole
+    >['contribute'],
   };
 }
 

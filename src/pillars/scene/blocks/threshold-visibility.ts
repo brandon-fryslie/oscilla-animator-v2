@@ -31,7 +31,7 @@ export const ThresholdVisibilityBlock = defineSceneBlock({
     displayName: 'Threshold Visibility',
     category: 'color',
     ports: [
-      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle' },
+      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle', default: { kind: 'required' } },
       { id: 'instances', label: 'Instances', direction: 'output', value: 'instanceBundle' },
     ],
   },

@@ -150,14 +150,17 @@ export function validateScenePatch(
     }
   }
 
-  // Required inputs: every declared input port must be fed by an edge. (No scene
-  // input is optional today; an optional flag would be added to the contract
-  // before any input could go unwired.)
+  // Required inputs: an input port whose default policy is `required` must be fed
+  // by an edge. A `configScalar` knob is defaultable — unwired it compiles to its
+  // synthesized config default, so an unwired knob is not a missing input.
+  // [LAW:dataflow-not-control-flow] The port's typed default policy decides this,
+  //   not a per-block special case.
   for (const block of patch.blocks) {
     const def = registry.get(block.type);
     if (def === undefined) continue;
     for (const port of def.catalog.ports) {
       if (port.direction !== 'input') continue;
+      if (port.default.kind !== 'required') continue;
       const fed = patch.edges.some((e) => e.target === block.id && e.inputSlot === port.id);
       if (!fed) diagnostics.push({ kind: 'missingRequiredInput', address: addressOf(block, port) });
     }

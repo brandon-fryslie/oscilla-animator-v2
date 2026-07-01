@@ -35,6 +35,8 @@ export function pillarKindForRole(role: SceneContributionRole): PillarKind {
   switch (role) {
     case 'instanceSource':
       return 'generator';
+    case 'scalarSource':
+      return 'generator';
     case 'modifier':
       return 'modifier';
     case 'draw':
