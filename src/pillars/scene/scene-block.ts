@@ -164,6 +164,14 @@ export interface SceneCatalogMetadata {
 
 export interface SceneCatalogConfigField extends SceneConfigFieldCatalog {
   readonly key: string;
+  /**
+   * The field's authored default value, when it has one (a knob carries its
+   * `SceneScalarKnob.default`). A field with no authored default omits this and
+   * falls to the editor's control-generic default. [LAW:one-source-of-truth] For
+   *   a knob this is derived from `SceneScalarKnob.default` alongside the zod
+   *   `.default`, in `defineSceneBlock` — one authored source, two projections.
+   */
+  readonly defaultValue?: number;
 }
 
 /**
@@ -273,6 +281,9 @@ export function defineSceneBlock<
       key,
       label: knob.label,
       control: 'number' as const,
+      // [LAW:one-source-of-truth] The knob's authored default flows to the catalog
+      //   field here, so a freshly-added block seeds this value — not a generic 1.
+      defaultValue: knob.default,
     })),
   ];
 
