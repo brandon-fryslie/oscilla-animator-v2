@@ -23,6 +23,8 @@ export {
   type SceneCatalogMetadata,
   type ScenePortDeclaration,
   type ScenePortDirection,
+  type ScenePortInputDefault,
+  type SceneScalarKnob,
   type SceneValueKind,
   type InstanceBundle,
   type DrawShell,

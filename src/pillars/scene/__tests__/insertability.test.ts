@@ -23,7 +23,9 @@ function port(
   direction: 'input' | 'output',
   value: SceneValueKind,
 ): ScenePortDeclaration {
-  return { id, label: id, direction, value };
+  return direction === 'input'
+    ? { id, label: id, direction, value, default: { kind: 'required' } }
+    : { id, label: id, direction, value };
 }
 
 function catalogOf(
@@ -69,8 +71,21 @@ describe('connectableScenePorts — over the native block set', () => {
     expect(connectableScenePorts(registry, { value: 'materialShell', direction: 'output' })).toEqual([]);
   });
 
-  it('excludes a hard mismatch — a scalar output finds no instanceBundle input', () => {
-    expect(connectableScenePorts(registry, { value: 'scalar', direction: 'output' })).toEqual([]);
+  it('a selected scalar output offers the routable scalar knob inputs, and only those', () => {
+    const matches = connectableScenePorts(registry, { value: 'scalar', direction: 'output' });
+    // A scalar source (Constant/Time) offers every routable knob — here WaveOffset's
+    // amplitude/frequency/speed — and nothing that is not a scalar input.
+    expect(matches.length).toBeGreaterThan(0);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ direction: 'input', value: 'scalar' });
+      expect(match.compatibility).toMatchObject({ kind: 'compatible' });
+    }
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        blockType: 'WaveOffset',
+        port: expect.objectContaining({ id: 'amplitude', value: 'scalar' }),
+      }),
+    );
   });
 });
 

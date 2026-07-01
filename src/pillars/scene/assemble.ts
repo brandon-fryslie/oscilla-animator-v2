@@ -181,6 +181,11 @@ function resolveBundle(
         `[scene] instance chain ends at draw block '${blockId}', which is not an instance source`,
       );
       return null;
+    case 'scalarSource':
+      errors.push(
+        `[scene] instance chain references scalar source '${blockId}', which produces no instance bundle`,
+      );
+      return null;
     default:
       return assertNever(contribution);
   }

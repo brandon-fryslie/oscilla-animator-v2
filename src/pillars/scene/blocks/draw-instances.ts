@@ -49,7 +49,7 @@ export const DrawInstancesBlock = defineSceneBlock({
     displayName: 'Draw Instances',
     category: 'draw',
     ports: [
-      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle' },
+      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle', default: { kind: 'required' } },
       { id: 'draw', label: 'Draw', direction: 'output', value: 'materialShell' },
     ],
   },

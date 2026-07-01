@@ -58,6 +58,7 @@ const CATEGORY_ACCENT: Record<SceneBlockCategory, string> = {
   material: '#2bb3a3',
   asset: '#d9a441',
   color: '#d65db1',
+  signal: '#7dcf5b',
 };
 
 const VALUE_KIND_COLOR: Record<SceneValueKind, string> = {

@@ -218,6 +218,8 @@ describe('scene block contract — catalog and registration', () => {
     const catalog = registry.catalog;
 
     expect(catalog.map((block) => block.displayName)).toEqual([
+      'Constant',
+      'Time',
       'Instance Grid',
       'Instance Count',
       'Ring Layout',
@@ -235,6 +237,8 @@ describe('scene block contract — catalog and registration', () => {
       'Draw Instances',
     ]);
     expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
+      'scalar', // Constant output
+      'scalar', // Time output
       'instanceBundle', // InstanceGrid output
       'instanceBundle', // InstanceCount output
       'instanceBundle', // RingLayout input
@@ -247,6 +251,9 @@ describe('scene block contract — catalog and registration', () => {
       'instanceBundle', // Scatter output
       'instanceBundle', // WaveOffset input
       'instanceBundle', // WaveOffset output
+      'scalar', // WaveOffset amplitude knob
+      'scalar', // WaveOffset frequency knob
+      'scalar', // WaveOffset speed knob
       'instanceBundle', // SolidColor input
       'instanceBundle', // SolidColor output
       'instanceBundle', // Gradient input
@@ -265,6 +272,7 @@ describe('scene block contract — catalog and registration', () => {
       'materialShell', // DrawInstances output
     ]);
     expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
+      'value', // Constant (Time has no config fields)
       'rows',
       'cols',
       'spacing',

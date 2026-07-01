@@ -75,6 +75,37 @@ describe('buildModulationTable', () => {
   });
 });
 
+describe('scalar routing — a scalar source column feeds a knob row', () => {
+  it('shows a connectable scalar row/column pair and connects it', () => {
+    // A bare patch with a Constant scalar source and a WaveOffset (whose amplitude
+    // is a routable scalar knob). The table must offer Constant.value → the knob.
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+
+    const { cell, row, column } = locate(store, waveId, 'amplitude', constId);
+    // The scalar row (a knob input) crosses the scalar column (Constant output) as
+    // a connectable, empty cell.
+    expect(row.value).toBe('scalar');
+    expect(column.value).toBe('scalar');
+    expect(cell.edge).toBeNull();
+    expect(cell.connectable).toBe(true);
+
+    // Clicking it connects the Constant into the knob.
+    const action = cellAction(cell, row, column);
+    expect(action).toEqual({
+      kind: 'connect',
+      source: constId,
+      target: waveId,
+      inputSlot: 'amplitude',
+    });
+    if (action?.kind === 'connect') store.addEdge(action.source, action.target, action.inputSlot);
+
+    // The rebuilt table now shows the connection at that scalar crossing.
+    expect(locate(store, waveId, 'amplitude', constId).cell.edge).not.toBeNull();
+  });
+});
+
 describe('cellAction', () => {
   it('resolves an occupied cell to a disconnect of its edge', () => {
     const store = new PillarPatchStore(makeGridOfSquaresPatch());

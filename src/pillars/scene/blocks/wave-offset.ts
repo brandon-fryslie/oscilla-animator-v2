@@ -10,13 +10,20 @@
  *   a pure bundle transform. Adding it edits no draw block and no assembly code.
  */
 
-import { add, input, intrinsic, konst, mul, sin } from '../../../render/scene-plan';
-import { defineSceneBlock, sceneConfig } from '../scene-block';
+import { add, input, intrinsic, mul, sin } from '../../../render/scene-plan';
+import { defineSceneBlock } from '../scene-block';
 
-const config = {
-  amplitude: sceneConfig.finiteNumber({ label: 'Amplitude', control: 'number' }),
-  frequency: sceneConfig.finiteNumber({ label: 'Frequency', control: 'number' }),
-  speed: sceneConfig.finiteNumber({ label: 'Speed', control: 'number' }),
+/**
+ * `amplitude`, `frequency`, and `speed` are routable scalar *knobs*: each is a
+ * config default AND a scalar input port. Unwired, a knob resolves to its config
+ * constant (the prior behavior); wired to a Constant/Time source it resolves to
+ * that routed scalar — this is the block that proves a scalar drives a modifier's
+ * math. [LAW:one-source-of-truth] One declaration is field + port + default.
+ */
+const knobs = {
+  amplitude: { label: 'Amplitude', default: 0.15 },
+  frequency: { label: 'Frequency', default: 6 },
+  speed: { label: 'Speed', default: 2 },
 } as const;
 
 export const WaveOffsetBlock = defineSceneBlock({
@@ -26,15 +33,18 @@ export const WaveOffsetBlock = defineSceneBlock({
     displayName: 'Wave Offset',
     category: 'modifier',
     ports: [
-      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle' },
+      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle', default: { kind: 'required' } },
       { id: 'instances', label: 'Instances', direction: 'output', value: 'instanceBundle' },
     ],
   },
-  config,
-  contribute: (config) => ({
+  config: {},
+  knobs,
+  contribute: (_config, inputs) => ({
     role: 'modifier',
     // [LAW:dataflow-not-control-flow] The displacement is added onto the upstream
-    //   positionY expression; an amplitude of 0 is the identity, not a branch.
+    //   positionY expression; an amplitude of 0 is the identity, not a branch. The
+    //   knob PlanExprs (`inputs.x`) are the resolved routed scalars — a wired
+    //   Constant/Time or the synthesized config default, uniformly.
     apply: (bundle) => ({
       ...bundle,
       transform: {
@@ -42,11 +52,11 @@ export const WaveOffsetBlock = defineSceneBlock({
         positionY: add(
           bundle.transform.positionY,
           mul(
-            konst(config.amplitude),
+            inputs.amplitude,
             sin(
               add(
-                mul(intrinsic('rank'), konst(config.frequency)),
-                mul(input('time'), konst(config.speed)),
+                mul(intrinsic('rank'), inputs.frequency),
+                mul(input('time'), inputs.speed),
               ),
             ),
           ),

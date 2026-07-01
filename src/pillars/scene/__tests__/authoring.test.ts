@@ -48,4 +48,12 @@ describe('defaultSceneConfig', () => {
     const config = defaultSceneConfig(draw);
     expect('textureAssetId' in config).toBe(false);
   });
+
+  it('seeds a knob with its authored default, not the control-generic 1', () => {
+    // A freshly-added WaveOffset must start with the knob defaults, so a placed
+    // block renders as intended rather than at amplitude 1 (6.7x too tall).
+    const wave = registry.get('WaveOffset')!.catalog;
+    const config = defaultSceneConfig(wave);
+    expect(config).toMatchObject({ amplitude: 0.15, frequency: 6, speed: 2 });
+  });
 });
