@@ -9,8 +9,8 @@
  * geometry comes from the `freqA:freqB` oscillator ratio, not a fused source.
  *
  * Chain: InstanceCount(600) → Spirograph(3:2) → ColorCycle → DrawInstances.
- * The dots are small squares (the renderer's `point` geometry is a placeholder
- * unit quad, so a small rectangle is the size-correct dot today).
+ * The dots are true round points (`shape: 'point'`): a sized disc per instance,
+ * not a faked square.
  *
  * [LAW:dataflow-not-control-flow] The figure is the value of the frequency ratio;
  *   a different ratio is a different curve with no new block.
@@ -38,7 +38,7 @@ export function makeSpirographPatch(): PillarPatch {
         id: 'draw',
         kind: 'intent',
         type: 'DrawInstances',
-        config: { size: 0.014, cameraHalfExtentX: 0.65, cameraHalfExtentY: 0.65 },
+        config: { shape: 'point', size: 0.02, cameraHalfExtentX: 0.65, cameraHalfExtentY: 0.65 },
       },
     ],
     edges: [

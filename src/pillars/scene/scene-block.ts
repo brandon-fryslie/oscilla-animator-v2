@@ -275,6 +275,25 @@ export const sceneConfig = {
     schema: z.number().int().positive(),
     catalog,
   }),
+  // A positive multiplier (e.g. an aspect ratio) that resolves to `fallback` when
+  // omitted, so the default reproduces the canonical value with no `?? default`
+  // branch at the read site. [LAW:dataflow-not-control-flow]
+  ratio: (fallback: number, catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite().positive().default(fallback),
+    catalog,
+  }),
+  // A closed set of string options with a `fallback` default. The schema both
+  // validates the choice and, via the default, hands `contribute` a concrete
+  // discriminant — so an omitted field never widens to a runtime `undefined`
+  // check. [LAW:types-are-the-program]
+  choice: <const TValues extends readonly [string, ...string[]]>(
+    values: TValues,
+    fallback: TValues[number],
+    catalog: SceneConfigFieldCatalog,
+  ): SceneConfigField<TValues[number]> => ({
+    schema: z.enum(values).default(fallback),
+    catalog,
+  }),
   color: (catalog: SceneConfigFieldCatalog): SceneConfigField<string> => ({
     // [LAW:one-source-of-truth] An opaque `#rrggbb` value — one color, no
     //   exposed channels. The channel layout is minted only at the seam

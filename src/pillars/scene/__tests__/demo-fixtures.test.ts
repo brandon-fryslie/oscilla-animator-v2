@@ -114,11 +114,12 @@ describe('spirograph — Lissajous trace from rank-as-phase', () => {
     expect(plan.render.inputs).toContain('time');
   });
 
-  it('draws small dots (sized rectangles, the size-correct point today)', () => {
+  it('draws true round points, sized as dots rather than faked with squares', () => {
     const geo = drawGeometry(plan);
-    expect(geo.kind).toBe('rectangle');
-    if (geo.kind !== 'rectangle') return;
-    expect(geo.width).toBeLessThan(0.05);
+    expect(geo.kind).toBe('point');
+    if (geo.kind !== 'point') return;
+    expect(geo.size).toBeLessThan(0.05);
+    expect(geo.size).toBeGreaterThan(0);
   });
 });
 
@@ -136,6 +137,13 @@ describe('kaleidoscope — N-fold symmetry from index math', () => {
 
   it('arranges the copies on a ring (position varies by rank)', () => {
     expect(JSON.stringify(object.instancing.transform.positionX)).toContain('"rank"');
+  });
+
+  it('draws non-square bars so the rosette reads as spokes, not squares', () => {
+    const geo = drawGeometry(plan);
+    expect(geo.kind).toBe('rectangle');
+    if (geo.kind !== 'rectangle') return;
+    expect(geo.width).not.toBeCloseTo(geo.height);
   });
 });
 

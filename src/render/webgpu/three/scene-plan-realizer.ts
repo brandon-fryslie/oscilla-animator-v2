@@ -24,6 +24,7 @@
  */
 
 import {
+  CircleGeometry,
   InstancedMesh,
   Matrix4,
   MeshBasicNodeMaterial,
@@ -99,20 +100,19 @@ export interface RealizedScene {
   dispose(): void;
 }
 
-// 'point' has no proof-target patch yet (Grid of Squares uses 'rectangle'); it
-// is realized as a unit quad so the instanced-draw path is uniform across both
-// geometry kinds. A true point primitive lands with the first point-based demo
-// (Spirograph), the same way textures/compute/post are deferred.
-const POINT_QUAD_WORLD_SIZE = 1;
+// A 'point' is a round dot: a filled disc tessellated finely enough that it reads
+// as a circle rather than a polygon at demo dot sizes. Its diameter is `size`, so
+// a point and a same-sized square differ only in shape, never in draw path.
+const POINT_DISC_SEGMENTS = 32;
 
 function geometryDefToGeometry(def: GeometryDef): BufferGeometry {
-  // [LAW:dataflow-not-control-flow] Both kinds take the same draw path; only the
-  //   quad dimensions differ as values.
+  // [LAW:dataflow-not-control-flow] Every kind takes the same instanced-draw path;
+  //   only the base primitive differs as a value of the geometry union.
   switch (def.kind) {
     case 'rectangle':
       return new PlaneGeometry(def.width, def.height);
     case 'point':
-      return new PlaneGeometry(POINT_QUAD_WORLD_SIZE, POINT_QUAD_WORLD_SIZE);
+      return new CircleGeometry(def.size / 2, POINT_DISC_SEGMENTS);
     default:
       return assertNever(def);
   }

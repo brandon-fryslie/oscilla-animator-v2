@@ -298,7 +298,9 @@ describe('scene block contract — catalog and registration', () => {
       'threshold',
       'frequency',
       'speed',
+      'shape', // DrawInstances
       'size',
+      'aspect',
       'cameraHalfExtentX',
       'cameraHalfExtentY',
       'textureAssetId',

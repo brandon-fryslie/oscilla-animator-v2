@@ -1,0 +1,43 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.24",
+  "point": {
+    "fixture": "point-dots",
+    "geometry": "GeometryDef.point → CircleGeometry (round disc)",
+    "frames": {
+      "point0": {
+        "width": 720,
+        "height": 720,
+        "nonBlack": 116808,
+        "checksum": 3003592707
+      },
+      "point1": {
+        "width": 720,
+        "height": 720,
+        "nonBlack": 116840,
+        "checksum": 3195568237
+      }
+    }
+  },
+  "nonSquare": {
+    "fixture": "kaleidoscope",
+    "geometry": "GeometryDef.rectangle width!=height (aspect)",
+    "frames": {
+      "nonSquare0": {
+        "width": 720,
+        "height": 720,
+        "nonBlack": 43544,
+        "checksum": 772186663
+      },
+      "nonSquare1": {
+        "width": 720,
+        "height": 720,
+        "nonBlack": 43124,
+        "checksum": 743688775
+      }
+    }
+  },
+  "pointAnimated": true,
+  "nonSquareAnimated": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-07-01T04:34:42.001Z"
+}
