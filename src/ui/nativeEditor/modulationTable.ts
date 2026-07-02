@@ -106,13 +106,17 @@ export interface ModulationRoute {
 /**
  * One crossing of a row (input) and a column (output). `route` is the traced route
  * whose source is this column, or null when no route from this column reaches this
- * input. `connectable` says whether an empty slot would accept a wire (compatible
- * kinds, not the block feeding itself). An existing `route` is shown regardless of
+ * input. `rowRoute` is the route currently feeding this cell's ROW regardless of
+ * column (equal to `route` in the source column, present on every cell of an
+ * occupied row) — so a `connect` here knows the existing chain it replaces.
+ * `connectable` says whether an empty slot would accept a wire (compatible kinds,
+ * not the block feeding itself). An existing `route` is shown regardless of
  * `connectable`: a persisted patch can hold a type-invalid route, and the table
  * must let the user see and delete it.
  */
 export interface ModulationCell {
   readonly route: ModulationRoute | null;
+  readonly rowRoute: ModulationRoute | null;
   readonly connectable: boolean;
 }
 
@@ -131,7 +135,17 @@ export interface ModulationTableModel {
  * purely from the route so the view stays effect-free. [LAW:effects-at-boundaries]
  */
 export type ModulationAction =
-  | { readonly kind: 'connect'; readonly source: string; readonly target: string; readonly inputSlot: string }
+  // Wire a source into an input. `replacedTransformBlockIds` are the transform
+  // blocks of the route this connect replaces (a retarget into an occupied row) —
+  // removed before the new edge is added so the old chain never orphans. Empty when
+  // the row was unwired or its prior route was direct.
+  | {
+      readonly kind: 'connect';
+      readonly source: string;
+      readonly target: string;
+      readonly inputSlot: string;
+      readonly replacedTransformBlockIds: readonly string[];
+    }
   // Tear down a whole route: remove its transform blocks (each cascades its edges)
   // and the edge into the input. A direct route is `transformBlockIds: []`.
   | {
@@ -230,9 +244,10 @@ export function buildModulationTable(
   );
 
   const cells: ModulationCell[][] = rows.map((row, rowIndex) => {
-    const route = routeByRow[rowIndex];
+    const rowRoute = routeByRow[rowIndex];
     return columns.map((column) => ({
-      route: route !== null && route.sourceBlockId === column.blockId ? route : null,
+      route: rowRoute !== null && rowRoute.sourceBlockId === column.blockId ? rowRoute : null,
+      rowRoute,
       connectable:
         column.blockId !== row.blockId && kindsConnectable(column.value, row.value),
     }));
@@ -329,8 +344,11 @@ export function soleInputPortId(registry: SceneRegistry, blockType: string): str
  *
  * Retarget is NOT a third case: connecting into a row that already has a feeder
  * relies on the store replacing the old wire (its one-feeder-per-input-slot
- * invariant), so "move a connection to a different source" is just a connect into
- * an occupied row. [LAW:dataflow-not-control-flow]
+ * invariant). But a retargeted route's transform blocks are NOT edges the feeder
+ * swap removes — so the connect carries `replacedTransformBlockIds` (the old route's
+ * transforms) for the applier to tear down, or the old chain orphans in the patch.
+ * [LAW:dataflow-not-control-flow] the teardown is a value on the action, not a
+ *   branch; [LAW:no-silent-failure] a retarget leaves no dangling blocks behind.
  */
 export function cellAction(
   cell: ModulationCell,
@@ -345,7 +363,16 @@ export function cellAction(
     };
   }
   if (cell.connectable) {
-    return { kind: 'connect', source: column.blockId, target: row.blockId, inputSlot: row.portId };
+    // This column is not the row's current source (else `route` would be non-null),
+    // so any existing `rowRoute` is the route this connect replaces — its transforms
+    // must be removed. A direct or absent prior route contributes an empty set.
+    return {
+      kind: 'connect',
+      source: column.blockId,
+      target: row.blockId,
+      inputSlot: row.portId,
+      replacedTransformBlockIds: cell.rowRoute?.transforms.map((t) => t.blockId) ?? [],
+    };
   }
   return null;
 }

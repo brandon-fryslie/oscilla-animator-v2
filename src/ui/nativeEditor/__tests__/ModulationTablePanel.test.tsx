@@ -171,6 +171,38 @@ describe('ModulationTablePanel — in-cell transform chain editor', () => {
     expect(edges.some((e) => e.source === constId && e.target === waveId && e.inputSlot === 'amplitude')).toBe(true);
   });
 
+  it('retargeting a transform-laden route to a new source removes the orphaned chain', () => {
+    // grid → wave → draw, Constant → Scale → wave.amplitude, plus a Time source.
+    localStorageMock.clear();
+    store = new RootStore();
+    const p = store.pillarPatch;
+    for (const e of [...p.patch.edges]) p.removeEdge(e.id);
+    for (const b of [...p.patch.blocks]) p.removeBlock(b.id);
+    const gridId = p.addBlock('InstanceGrid');
+    const waveId = p.addBlock('WaveOffset');
+    const drawId = p.addBlock('DrawInstances');
+    const constId = p.addBlock('Constant');
+    const scaleId = p.addBlock('Scale');
+    const timeId = p.addBlock('Time');
+    p.addEdge(gridId, waveId, 'primary');
+    p.addEdge(waveId, drawId, 'primary');
+    p.addEdge(constId, scaleId, 'in');
+    p.addEdge(scaleId, waveId, 'amplitude');
+    renderTable();
+
+    // Retarget the amplitude knob to Time by clicking that empty cell.
+    fireEvent.click(screen.getByTestId(`mod-cell-${waveId}:amplitude--${timeId}`));
+
+    const blocks = readComputed(() => store.pillarPatch.patch.blocks);
+    const edges = readComputed(() => store.pillarPatch.patch.edges);
+    // The old Scale chain is gone — no orphaned block, no dangling Constant→Scale edge.
+    expect(blocks.some((b) => b.id === scaleId)).toBe(false);
+    expect(edges.some((e) => e.source === scaleId || e.target === scaleId)).toBe(false);
+    // Amplitude is now fed directly by Time, and the patch compiles clean.
+    expect(edges.some((e) => e.source === timeId && e.target === waveId && e.inputSlot === 'amplitude')).toBe(true);
+    expect(readComputed(() => store.pillarPatch.compiled.kind)).toBe('ok');
+  });
+
   it('editing a transform field writes the block config (persisted with the patch)', () => {
     const { constId, waveId } = seedScalarRoute();
     renderTable();

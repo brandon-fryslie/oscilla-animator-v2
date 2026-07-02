@@ -106,6 +106,7 @@ describe('scalar routing — a scalar source column feeds a knob row', () => {
       source: constId,
       target: waveId,
       inputSlot: 'amplitude',
+      replacedTransformBlockIds: [], // the knob was unwired — nothing to replace
     });
     if (action?.kind === 'connect') store.addEdge(action.source, action.target, action.inputSlot);
 
@@ -164,6 +165,24 @@ describe('transform blocks are route-internal, not grid rows/columns', () => {
       kind: 'disconnect',
       inputEdgeId: store.patch.edges.find((e) => e.target === waveId && e.inputSlot === 'amplitude')?.id,
       transformBlockIds: [scaleId],
+    });
+  });
+
+  it('retargeting a transform route to a new source carries the old chain for teardown', () => {
+    const { store, waveId, scaleId } = transformRoutePatch();
+    const timeId = store.addBlock('Time'); // a second scalar source column
+
+    // The (amplitude × Time) cell is empty+connectable; the row's route (through
+    // Scale) is surfaced as rowRoute so the connect can replace the whole chain.
+    const { cell, row, column } = locate(store, waveId, 'amplitude', timeId);
+    expect(cell.route).toBeNull();
+    const action = cellAction(cell, row, column);
+    expect(action).toEqual({
+      kind: 'connect',
+      source: timeId,
+      target: waveId,
+      inputSlot: 'amplitude',
+      replacedTransformBlockIds: [scaleId], // the orphaned-otherwise Scale block
     });
   });
 });
@@ -264,6 +283,7 @@ describe('cellAction', () => {
       source: 'grid',
       target: 'draw',
       inputSlot: 'primary',
+      replacedTransformBlockIds: [],
     });
   });
 

@@ -196,6 +196,9 @@ const styles = {
 function applyAction(store: PillarPatchStore, action: ModulationAction): void {
   switch (action.kind) {
     case 'connect':
+      // Tear down the route this connect replaces (its transforms + their edges)
+      // before wiring the new source, so a retarget leaves no orphaned chain.
+      for (const id of action.replacedTransformBlockIds) store.removeBlock(id);
       store.addEdge(action.source, action.target, action.inputSlot);
       return;
     case 'disconnect':
