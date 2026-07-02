@@ -53,18 +53,45 @@ export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
  * - `scalarSource` carries a single scalar `PlanExpr` a routable knob reads in
  *   place of its config default (a Constant is `konst(value)`, a clock is
  *   `input('time')`). It never feeds an instance chain — only a knob input port.
+ * - `scalarModifier` carries a scalar *transform* (`PlanExpr → PlanExpr`) and the
+ *   id of the scalar input port it reads. It is to a scalar route what `modifier`
+ *   is to an instance bundle: `scale`/`offset`/`clamp` fold onto the routed scalar
+ *   the same way `WaveOffset` folds onto a bundle — resolution walks the chain
+ *   back to its `scalarSource`, applying each transform (see `resolveScalar`).
  *
  * [LAW:dataflow-not-control-flow] A modifier's behavior is the `apply` *value*,
  *   not a branch in assembly: folding the modifier chain is one generic walk, so
  *   adding a modifier adds no assembly code path.
+ * [LAW:one-type-per-behavior] A scalar transform (scale/offset/clamp) is a
+ *   scalar→scalar function, i.e. a block — not a bag of ops on the edge. It is the
+ *   scalar sibling of `modifier`, resolved by the same kind of fold.
  */
 export type SceneContribution =
   | { readonly role: 'instanceSource'; readonly bundle: InstanceBundle }
   | { readonly role: 'modifier'; readonly apply: BundleTransform }
   | { readonly role: 'draw'; readonly shell: DrawShell }
-  | { readonly role: 'scalarSource'; readonly value: PlanExpr };
+  | { readonly role: 'scalarSource'; readonly value: PlanExpr }
+  | {
+      readonly role: 'scalarModifier';
+      /** The scalar input port whose upstream route this modifier transforms. */
+      readonly input: string;
+      /** Fold this modifier's transform onto the resolved upstream scalar. */
+      readonly apply: (value: PlanExpr) => PlanExpr;
+    };
 
 export type SceneContributionRole = SceneContribution['role'];
+
+/**
+ * A contribution that yields a scalar `PlanExpr` — the only kinds a scalar route
+ * can be folded through. Naming this subset lets the fold's producer map hold
+ * exactly these two roles, so `resolveScalar` never has to defend against an
+ * instance/draw contribution appearing where a scalar is expected.
+ * [LAW:types-are-the-program]
+ */
+export type ScalarContribution = Extract<
+  SceneContribution,
+  { readonly role: 'scalarSource' | 'scalarModifier' }
+>;
 
 export type SceneValueKind =
   | 'instanceBundle'
@@ -126,7 +153,11 @@ export type SceneBlockCategory =
   | 'asset'
   | 'color'
   // A scalar signal source (Constant, Time) — produces one routable scalar value.
-  | 'signal';
+  | 'signal'
+  // A scalar→scalar transform (Scale, Offset, Clamp) that lives *on a route*
+  // between a signal source and a knob. The Modulation Table reads this category
+  // to keep transforms out of its grid (route-internal), never a name heuristic.
+  | 'transform';
 
 export type SceneConfigControl =
   | 'number'
@@ -237,6 +268,15 @@ export interface SceneBlockDeclaration<
   readonly config: TFields;
   /** Routable scalar knobs; omit for a block with no routable parameters. */
   readonly knobs?: TKnobs;
+  /**
+   * A cross-field invariant on the parsed config, returning a diagnostic message
+   * when violated or `null` when valid. Per-field constraints belong on the field
+   * schemas; this is for relationships between fields (e.g. Clamp's `lo <= hi`) that
+   * no single field can express. It runs as part of config parsing, so a violation
+   * surfaces as a loud config diagnostic — never a value silently compiled into a
+   * degenerate result. [LAW:no-silent-failure] [LAW:types-are-the-program]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>) => string | null;
   readonly contribute: (
     config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
     inputs: KnobInputsFor<TKnobs>,
@@ -262,10 +302,23 @@ export function defineSceneBlock<
   const knobSchema = Object.fromEntries(
     Object.entries(knobs).map(([key, knob]) => [key, z.number().finite().default(knob.default)]),
   );
-  const configSchema = z.object({
+  const baseSchema = z.object({
     ...configShape(declaration.config),
     ...knobSchema,
-  }) as z.ZodType<SceneConfigFor<TFields> & KnobConfigFor<TKnobs>>;
+  });
+  const { validateConfig } = declaration;
+  // A cross-field invariant runs as a refinement, so its violation is one more
+  // config issue on the same parse path — surfaced, not silently compiled through.
+  // [LAW:single-enforcer] config validity has one gate (readConfig's parse).
+  const refinedSchema = validateConfig
+    ? baseSchema.superRefine((val, ctx) => {
+        const message = validateConfig(val as SceneConfigFor<TFields> & KnobConfigFor<TKnobs>);
+        if (message !== null) ctx.addIssue({ code: 'custom', message });
+      })
+    : baseSchema;
+  const configSchema = refinedSchema as unknown as z.ZodType<
+    SceneConfigFor<TFields> & KnobConfigFor<TKnobs>
+  >;
 
   const knobPorts: ScenePortDeclaration[] = Object.entries(knobs).map(([key, knob]) => ({
     id: key,
@@ -317,6 +370,81 @@ export function defineSceneBlock<
       TRole
     >['contribute'],
   };
+}
+
+/**
+ * The scalar input / output port ids every scalar modifier shares. Owned here so
+ * `defineScalarModifier` and the route fold (`resolveScalar` reads the port id off
+ * the contribution) agree on one name, never a string repeated per block.
+ * [LAW:one-source-of-truth]
+ */
+export const SCALAR_MODIFIER_INPUT = 'in';
+export const SCALAR_MODIFIER_OUTPUT = 'out';
+
+/**
+ * A scalar→scalar transform block: one scalar `in`, one scalar `out`, and config
+ * for its parameters (`scale`'s factor, `clamp`'s bounds). It declares the whole
+ * block from just its math — the standard in/out ports and the `transform`
+ * category are supplied here, so a new transform is a `transform:` function and a
+ * config shape, nothing else.
+ *
+ * The parameters are plain config, NOT knobs: a scalar modifier has exactly one
+ * scalar input (the value it transforms), mirroring a bundle modifier's single
+ * `primary`. That keeps the route fold unambiguous — one upstream edge to follow.
+ *
+ * [LAW:one-type-per-behavior] scale/offset/clamp differ only by their `transform`;
+ *   they are instances of one block shape, not three bespoke definitions.
+ * [LAW:effects-at-boundaries] `transform` composes `PlanExpr` trees (a
+ *   description), it never evaluates them.
+ */
+export interface ScalarModifierDeclaration<TFields extends SceneConfigFields> {
+  readonly type: string;
+  readonly displayName: string;
+  readonly config: TFields;
+  /**
+   * A cross-field invariant on the parsed config (e.g. Clamp's `lo <= hi`),
+   * returning a diagnostic message when violated. Surfaces through the same config
+   * parse gate as any other config error. [LAW:no-silent-failure]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields>) => string | null;
+  readonly transform: (config: SceneConfigFor<TFields>, value: PlanExpr) => PlanExpr;
+}
+
+export function defineScalarModifier<const TFields extends SceneConfigFields>(
+  declaration: ScalarModifierDeclaration<TFields>,
+): SceneBlockDefinition<SceneConfigFor<TFields>, 'scalarModifier'> {
+  // Pin the knobs generic to the empty shape: a scalar modifier never has knobs, and
+  // the `validateConfig` parameter would otherwise widen `TKnobs` by contravariant
+  // inference. With no knobs, `SceneConfigFor<TFields> & KnobConfigFor<{}>` reduces
+  // to `SceneConfigFor<TFields>`, matching the declared return type.
+  return defineSceneBlock<TFields, Record<never, never>, 'scalarModifier'>({
+    type: declaration.type,
+    role: 'scalarModifier',
+    catalog: {
+      displayName: declaration.displayName,
+      category: 'transform',
+      ports: [
+        {
+          id: SCALAR_MODIFIER_INPUT,
+          label: 'In',
+          direction: 'input',
+          value: 'scalar',
+          default: { kind: 'required' },
+        },
+        { id: SCALAR_MODIFIER_OUTPUT, label: 'Out', direction: 'output', value: 'scalar' },
+      ],
+    },
+    config: declaration.config,
+    // No knobs: the transform's parameters are plain config, so the block has one
+    // scalar input (the value chain) and the route fold has one edge to follow.
+    knobs: {},
+    validateConfig: declaration.validateConfig,
+    contribute: (config) => ({
+      role: 'scalarModifier',
+      input: SCALAR_MODIFIER_INPUT,
+      apply: (value) => declaration.transform(config, value),
+    }),
+  });
 }
 
 function configShape<TFields extends SceneConfigFields>(

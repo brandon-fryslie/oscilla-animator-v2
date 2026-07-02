@@ -53,6 +53,9 @@ export {
   div,
   mod,
   step,
+  min,
+  max,
+  clamp,
 } from './expr';
 
 // Plan structure.
