@@ -24,7 +24,7 @@ import { ThreeLoadingBridge, type TextureDecoder } from '../asset-bridge';
 function planWithTextures(textures: Record<TextureRef, TextureDef>): ScenePlan {
   return {
     version: SCENE_PLAN_VERSION,
-    resources: { geometries: {}, materials: {}, textures, computeResources: {}, postChains: {} },
+    resources: { geometries: {}, materials: {}, textures, computeResources: {}, postChains: {}, states: {} },
     objects: {},
     render: { camera: { kind: 'orthographic', halfExtentX: 1, halfExtentY: 1 }, inputs: [], draws: [], postChain: null },
   } as ScenePlan;

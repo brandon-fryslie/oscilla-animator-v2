@@ -58,6 +58,14 @@ export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
  *   is to an instance bundle: `scale`/`offset`/`clamp` fold onto the routed scalar
  *   the same way `WaveOffset` folds onto a bundle — resolution walks the chain
  *   back to its `scalarSource`, applying each transform (see `resolveScalar`).
+ * - `statefulScalar` carries a scalar value whose current frame depends on prior
+ *   frames: it owns a renderer cell (seeded by `init`) and an `update` recurrence
+ *   `next = f(state(self), knobs)`. Its *output* is that cell — an ordinary scalar
+ *   route reads it — so the compiler registers `state(self)` as the block's scalar
+ *   producer; only the recurrence needs the resolved knobs. `update` is left as a
+ *   function of `self` so the assembler (which mints the cell handle from the
+ *   block id) closes it: `update(state(ref))`. [LAW:effects-at-boundaries] the
+ *   contribution is a *description* of a recurrence; the renderer runs it.
  *
  * [LAW:dataflow-not-control-flow] A modifier's behavior is the `apply` *value*,
  *   not a branch in assembly: folding the modifier chain is one generic walk, so
@@ -77,6 +85,16 @@ export type SceneContribution =
       readonly input: string;
       /** Fold this modifier's transform onto the resolved upstream scalar. */
       readonly apply: (value: PlanExpr) => PlanExpr;
+    }
+  | {
+      readonly role: 'statefulScalar';
+      /** Seed for the cell on first install and on an explicit reseed. */
+      readonly init: number;
+      /**
+       * The recurrence, as a function of this block's own cell leaf: given
+       * `state(ref)`, produce `next`. The assembler mints `ref` and closes it.
+       */
+      readonly update: (self: PlanExpr) => PlanExpr;
     };
 
 export type SceneContributionRole = SceneContribution['role'];

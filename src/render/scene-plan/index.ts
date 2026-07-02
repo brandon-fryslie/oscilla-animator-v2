@@ -19,6 +19,7 @@ export type {
   SceneObjectRef,
   ComputeResourceRef,
   PostChainRef,
+  StateRef,
 } from './refs';
 export {
   geometryRef,
@@ -27,6 +28,7 @@ export {
   sceneObjectRef,
   computeResourceRef,
   postChainRef,
+  stateRef,
 } from './refs';
 
 // Per-value expressions.
@@ -40,6 +42,7 @@ export type {
 export {
   konst,
   input,
+  state,
   intrinsic,
   floor,
   sin,
@@ -57,6 +60,10 @@ export {
   max,
   clamp,
 } from './expr';
+
+// Backend-neutral CPU interpreter of a PlanExpr (advances renderer-owned state).
+export type { PlanEvalContext } from './eval-plan-expr';
+export { evalPlanExpr } from './eval-plan-expr';
 
 // Plan structure.
 export type {
@@ -76,6 +83,8 @@ export type {
   TextureFilter,
   ComputeResourceDef,
   PostChainDef,
+  StateDef,
+  StateCardinality,
 } from './plan';
 export { SCENE_PLAN_VERSION, defineScenePlan } from './plan';
 

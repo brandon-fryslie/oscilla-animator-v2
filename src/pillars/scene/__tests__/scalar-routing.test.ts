@@ -43,6 +43,7 @@ function constLeaves(expr: PlanExpr): number[] {
     case 'const':
       return [expr.value];
     case 'input':
+    case 'state':
     case 'intrinsic':
       return [];
     case 'unary':
@@ -60,6 +61,7 @@ function countInput(expr: PlanExpr, channel: string): number {
     case 'input':
       return expr.channel === channel ? 1 : 0;
     case 'const':
+    case 'state':
     case 'intrinsic':
       return 0;
     case 'unary':
@@ -76,6 +78,7 @@ function binaryOps(expr: PlanExpr): string[] {
   switch (expr.kind) {
     case 'const':
     case 'input':
+    case 'state':
     case 'intrinsic':
       return [];
     case 'unary':

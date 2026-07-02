@@ -56,6 +56,7 @@ function buildStaticPlan(version: number = SCENE_PLAN_VERSION): ScenePlan {
       textures: {},
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [object]: {
@@ -87,6 +88,7 @@ function buildTexturedPlan(referencedAssetId: string): ScenePlan {
       textures: { [tex]: { kind: 'asset', assetId: assetId(referencedAssetId) } },
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [object]: {

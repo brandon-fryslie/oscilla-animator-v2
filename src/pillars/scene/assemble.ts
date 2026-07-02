@@ -24,6 +24,8 @@ import {
   geometryRef,
   materialRef,
   sceneObjectRef,
+  state,
+  stateRef,
   textureRef,
   type CameraPlan,
   type DrawItem,
@@ -34,6 +36,8 @@ import {
   type ScenePlan,
   type SceneObject,
   type SceneObjectRef,
+  type StateDef,
+  type StateRef,
   type TextureDef,
   type TextureRef,
 } from '../../render/scene-plan';
@@ -191,9 +195,41 @@ function resolveBundle(
         `[scene] instance chain references scalar modifier '${blockId}', which produces no instance bundle`,
       );
       return null;
+    case 'statefulScalar':
+      errors.push(
+        `[scene] instance chain references stateful scalar '${blockId}', which produces no instance bundle`,
+      );
+      return null;
     default:
       return assertNever(contribution);
   }
+}
+
+/**
+ * Mint the renderer-owned storage cells from the patch's stateful contributions.
+ * Mirrors texture minting: the assembler is the one place a block's contribution
+ * becomes a ref-keyed resource. The cell's handle is minted from the block id
+ * (its authored identity, the continuity key), and the block's recurrence — left
+ * as a function of `state(self)` — is closed against that handle here.
+ *
+ * [LAW:one-source-of-truth] The running value lives in exactly one place (the
+ *   minted cell); a `state(ref)` leaf a downstream route folded in reads it by the
+ *   same handle. [LAW:single-enforcer] Cells are minted only here.
+ */
+function mintStates(contributions: ReadonlyMap<string, SceneContribution>): Record<StateRef, StateDef> {
+  const states: Record<StateRef, StateDef> = {};
+  for (const [blockId, contribution] of contributions) {
+    if (contribution.role !== 'statefulScalar') continue;
+    const ref = stateRef(blockId);
+    states[ref] = {
+      // Scalar is the only cardinality this slice ships; per-instance state (a
+      // per-dot integrator) is a follow-up that adds a variant, not a code path.
+      cardinality: { kind: 'scalar' },
+      init: contribution.init,
+      update: contribution.update(state(ref)),
+    };
+  }
+  return states;
 }
 
 /**
@@ -270,7 +306,11 @@ export function assembleScenePlan(
     return { kind: 'error', errors };
   }
 
-  // Inputs are derived from every per-instance expression the plan contains.
+  const states = mintStates(contributions);
+
+  // Inputs are derived from every expression the plan evaluates: per-instance
+  // transform/color, and each state's update rule (the renderer evaluates it every
+  // frame to advance the cell, so a channel it reads must be fed too).
   const exprs = [
     ...Object.values(objects).flatMap((o) => [
       o.instancing.transform.positionX,
@@ -278,11 +318,12 @@ export function assembleScenePlan(
       o.instancing.transform.rotation,
     ]),
     ...Object.values(materials).flatMap((m) => materialChannels(m)),
+    ...Object.values(states).map((s) => s.update),
   ];
 
   const plan = defineScenePlan({
     version: SCENE_PLAN_VERSION,
-    resources: { geometries, materials, textures, ...emptyDeferredResources() },
+    resources: { geometries, materials, textures, states, ...emptyDeferredResources() },
     objects,
     render: {
       camera,
