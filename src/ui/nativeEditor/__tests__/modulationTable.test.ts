@@ -13,7 +13,13 @@ import { describe, it, expect } from 'vitest';
 import { PillarPatchStore } from '../../../stores/PillarPatchStore';
 import { makeGridOfSquaresPatch } from '../../../pillars/fixtures/grid-of-squares';
 import type { PillarEdge } from '../../../pillars/types';
-import { buildModulationTable, cellAction } from '../modulationTable';
+import {
+  appendTransformAction,
+  buildModulationTable,
+  cellAction,
+  removeTransformAction,
+  setTransformConfigAction,
+} from '../modulationTable';
 
 /** Locate a cell by its row (target input) and column (source output) block ids. */
 function locate(
@@ -58,9 +64,11 @@ describe('buildModulationTable', () => {
     const store = new PillarPatchStore(makeGridOfSquaresPatch());
     const model = buildModulationTable(store.patch, store.registry);
 
-    const connectedCells = model.cells.flat().filter((cell) => cell.edge !== null);
+    const connectedCells = model.cells.flat().filter((cell) => cell.route !== null);
     expect(connectedCells).toHaveLength(store.patch.edges.length);
-    expect(connectedCells.map((c) => c.edge?.id).sort()).toEqual(['e0', 'e1']);
+    // Both seed routes are direct (no transforms); their input edges are e0, e1.
+    expect(connectedCells.map((c) => c.route?.inputEdgeId).sort()).toEqual(['e0', 'e1']);
+    expect(connectedCells.every((c) => c.route?.transforms.length === 0)).toBe(true);
   });
 
   it('marks a block feeding itself and type-incompatible crossings as not connectable', () => {
@@ -88,7 +96,7 @@ describe('scalar routing — a scalar source column feeds a knob row', () => {
     // a connectable, empty cell.
     expect(row.value).toBe('scalar');
     expect(column.value).toBe('scalar');
-    expect(cell.edge).toBeNull();
+    expect(cell.route).toBeNull();
     expect(cell.connectable).toBe(true);
 
     // Clicking it connects the Constant into the knob.
@@ -102,15 +110,125 @@ describe('scalar routing — a scalar source column feeds a knob row', () => {
     if (action?.kind === 'connect') store.addEdge(action.source, action.target, action.inputSlot);
 
     // The rebuilt table now shows the connection at that scalar crossing.
-    expect(locate(store, waveId, 'amplitude', constId).cell.edge).not.toBeNull();
+    expect(locate(store, waveId, 'amplitude', constId).cell.route).not.toBeNull();
+  });
+});
+
+describe('transform blocks are route-internal, not grid rows/columns', () => {
+  /** Constant → Scale → WaveOffset.amplitude — a scalar route through one transform. */
+  function transformRoutePatch() {
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+    const scaleId = store.addBlock('Scale');
+    store.addEdge(constId, scaleId, 'in'); // Constant → Scale.in
+    store.addEdge(scaleId, waveId, 'amplitude'); // Scale.out → amplitude
+    return { store, constId, waveId, scaleId };
+  }
+
+  it('a transform block is absent from both rows and columns', () => {
+    const { store, scaleId } = transformRoutePatch();
+    const model = buildModulationTable(store.patch, store.registry);
+    expect(model.rows.some((r) => r.blockId === scaleId)).toBe(false);
+    expect(model.columns.some((c) => c.blockId === scaleId)).toBe(false);
+  });
+
+  it('a route through a transform shows as an occupied cell carrying the chain', () => {
+    const { store, constId, waveId, scaleId } = transformRoutePatch();
+    const { cell } = locate(store, waveId, 'amplitude', constId);
+    expect(cell.route).not.toBeNull();
+    expect(cell.route?.sourceBlockId).toBe(constId);
+    expect(cell.route?.transforms.map((t) => t.blockId)).toEqual([scaleId]);
+    expect(cell.route?.transforms.map((t) => t.displayName)).toEqual(['Scale']);
+    // The transform's factor is read from its block config, not copied onto the route.
+    const factor = cell.route?.transforms[0].fields.find((f) => f.key === 'factor');
+    expect(factor?.value).toBe(store.patch.blocks.find((b) => b.id === scaleId)?.config.factor);
+  });
+
+  it('the route still compiles: the transform-bearing patch is a valid ScenePlan input', () => {
+    const { store } = transformRoutePatch();
+    // A DrawInstances is needed for a full plan; the point here is the scalar route
+    // through Scale does not itself break compilation (loud errors would surface).
+    expect(store.compiled.kind === 'ok' || store.compiled.kind === 'error').toBe(true);
+    if (store.compiled.kind === 'error') {
+      // Any errors must be about the missing draw, never the scalar transform route.
+      expect(store.compiled.errors.join('\n')).not.toMatch(/scalar|transform|Scale/i);
+    }
+  });
+
+  it('disconnecting a transform route tears down the transform block too', () => {
+    const { store, constId, waveId, scaleId } = transformRoutePatch();
+    const { cell, row, column } = locate(store, waveId, 'amplitude', constId);
+    const action = cellAction(cell, row, column);
+    expect(action).toEqual({
+      kind: 'disconnect',
+      inputEdgeId: store.patch.edges.find((e) => e.target === waveId && e.inputSlot === 'amplitude')?.id,
+      transformBlockIds: [scaleId],
+    });
+  });
+});
+
+describe('in-cell chain edit actions', () => {
+  function directRoutePatch() {
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+    store.addEdge(constId, waveId, 'amplitude'); // direct Constant → amplitude
+    return { store, constId, waveId };
+  }
+
+  it('appendTransformAction inserts a transform at the input end of a route', () => {
+    const { store, constId, waveId } = directRoutePatch();
+    const { cell, row } = locate(store, waveId, 'amplitude', constId);
+    expect(cell.route).not.toBeNull();
+    const action = appendTransformAction(cell.route!, row, 'Scale');
+    expect(action).toEqual({
+      kind: 'appendTransform',
+      transformType: 'Scale',
+      upstreamBlockId: constId, // a direct route's upstream is the source
+      target: waveId,
+      inputSlot: 'amplitude',
+    });
+  });
+
+  it('removeTransformAction bridges upstream to the input for the last transform', () => {
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+    const scaleId = store.addBlock('Scale');
+    store.addEdge(constId, scaleId, 'in');
+    store.addEdge(scaleId, waveId, 'amplitude');
+
+    const { cell, row } = locate(store, waveId, 'amplitude', constId);
+    const action = removeTransformAction(cell.route!, row, store.registry, 0);
+    expect(action).toEqual({
+      kind: 'removeTransform',
+      blockId: scaleId,
+      upstreamBlockId: constId,
+      downstreamTarget: waveId,
+      downstreamInputSlot: 'amplitude',
+    });
+  });
+
+  it('setTransformConfigAction targets one field of one transform block', () => {
+    expect(setTransformConfigAction('sc-1', 'factor', 2.5)).toEqual({
+      kind: 'setTransformConfig',
+      blockId: 'sc-1',
+      key: 'factor',
+      value: 2.5,
+    });
   });
 });
 
 describe('cellAction', () => {
-  it('resolves an occupied cell to a disconnect of its edge', () => {
+  it('resolves an occupied direct route to a disconnect of its input edge', () => {
     const store = new PillarPatchStore(makeGridOfSquaresPatch());
     const { cell, row, column } = locate(store, 'color', 'primary', 'grid');
-    expect(cellAction(cell, row, column)).toEqual({ kind: 'disconnect', edgeId: 'e0' });
+    expect(cellAction(cell, row, column)).toEqual({
+      kind: 'disconnect',
+      inputEdgeId: 'e0',
+      transformBlockIds: [],
+    });
   });
 
   it('resolves an empty compatible cell to a connect', () => {
@@ -140,8 +258,8 @@ describe('table edits mutate the same patch the graph edits', () => {
     // Table path: click the connected (color.primary × grid) cell.
     const { cell, row, column } = locate(viaTable, 'color', 'primary', 'grid');
     const action = cellAction(cell, row, column);
-    expect(action).toEqual({ kind: 'disconnect', edgeId: 'e0' });
-    if (action?.kind === 'disconnect') viaTable.removeEdge(action.edgeId);
+    expect(action).toEqual({ kind: 'disconnect', inputEdgeId: 'e0', transformBlockIds: [] });
+    if (action?.kind === 'disconnect') viaTable.removeEdge(action.inputEdgeId);
 
     // Graph path: the same intent expressed as the store call the graph makes.
     viaGraph.removeEdge('e0');
@@ -192,7 +310,7 @@ describe('table edits mutate the same patch the graph edits', () => {
 
     // The table, rebuilt from the same patch, reflects it: grid→draw is now
     // connected and color→draw is empty.
-    expect(locate(store, 'draw', 'primary', 'grid').cell.edge).not.toBeNull();
-    expect(locate(store, 'draw', 'primary', 'color').cell.edge).toBeNull();
+    expect(locate(store, 'draw', 'primary', 'grid').cell.route).not.toBeNull();
+    expect(locate(store, 'draw', 'primary', 'color').cell.route).toBeNull();
   });
 });

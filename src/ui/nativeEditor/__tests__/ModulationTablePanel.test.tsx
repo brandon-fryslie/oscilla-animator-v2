@@ -98,3 +98,95 @@ describe('ModulationTablePanel', () => {
     expect(readComputed(() => store.pillarPatch.patch.edges.length)).toBe(before);
   });
 });
+
+describe('ModulationTablePanel — in-cell transform chain editor', () => {
+  /**
+   * Seed a COMPLETE renderable patch (grid → WaveOffset → draw) plus a direct
+   * Constant → WaveOffset.amplitude scalar route — so compilation is `ok` and
+   * inserting a transform on the route is a real round-trip, not a plan with a
+   * missing draw.
+   */
+  function seedScalarRoute() {
+    localStorageMock.clear();
+    store = new RootStore();
+    const patch = store.pillarPatch;
+    for (const edge of [...patch.patch.edges]) patch.removeEdge(edge.id);
+    for (const block of [...patch.patch.blocks]) patch.removeBlock(block.id);
+    const gridId = patch.addBlock('InstanceGrid');
+    const waveId = patch.addBlock('WaveOffset');
+    const drawId = patch.addBlock('DrawInstances');
+    const constId = patch.addBlock('Constant');
+    patch.addEdge(gridId, waveId, 'primary');
+    patch.addEdge(waveId, drawId, 'primary');
+    patch.addEdge(constId, waveId, 'amplitude');
+    return { constId, waveId };
+  }
+
+  it('inserts a Scale transform along the route via the ƒ editor, and it round-trips', () => {
+    const { constId, waveId } = seedScalarRoute();
+    renderTable();
+
+    // Open the chain editor on the connected (amplitude × Constant) cell.
+    fireEvent.click(screen.getByTestId(`mod-fx-${waveId}:amplitude--${constId}`));
+    // Append a Scale transform.
+    fireEvent.click(screen.getByTestId('mod-add-Scale'));
+
+    // The store now routes Constant → Scale → amplitude, with exactly one transform.
+    const edges = readComputed(() => store.pillarPatch.patch.edges);
+    const scaleBlock = readComputed(() =>
+      store.pillarPatch.patch.blocks.find((b) => b.type === 'Scale'),
+    );
+    expect(scaleBlock).toBeDefined();
+    const scaleId = scaleBlock!.id;
+    expect(edges.some((e) => e.source === constId && e.target === scaleId)).toBe(true);
+    expect(edges.some((e) => e.source === scaleId && e.target === waveId && e.inputSlot === 'amplitude')).toBe(true);
+    // No direct Constant → amplitude edge remains (the feeder was replaced).
+    expect(edges.some((e) => e.source === constId && e.target === waveId)).toBe(false);
+
+    // The route compiles (the scalar transform folds cleanly into the plan).
+    expect(readComputed(() => store.pillarPatch.compiled.kind)).toBe('ok');
+    // The cell now advertises a one-transform chain.
+    expect(screen.getByTestId(`mod-cell-${waveId}:amplitude--${constId}`)).toHaveAttribute(
+      'data-chain-length',
+      '1',
+    );
+  });
+
+  it('removing the transform restores the direct route', () => {
+    const { constId, waveId } = seedScalarRoute();
+    renderTable();
+    fireEvent.click(screen.getByTestId(`mod-fx-${waveId}:amplitude--${constId}`));
+    fireEvent.click(screen.getByTestId('mod-add-Scale'));
+
+    const scaleId = readComputed(
+      () => store.pillarPatch.patch.blocks.find((b) => b.type === 'Scale')!.id,
+    );
+    // Remove it via the × control (editor is still open on the same cell).
+    fireEvent.click(screen.getByTestId(`mod-remove-${scaleId}`));
+
+    const blocks = readComputed(() => store.pillarPatch.patch.blocks);
+    const edges = readComputed(() => store.pillarPatch.patch.edges);
+    expect(blocks.some((b) => b.type === 'Scale')).toBe(false);
+    // The direct Constant → amplitude route is back.
+    expect(edges.some((e) => e.source === constId && e.target === waveId && e.inputSlot === 'amplitude')).toBe(true);
+  });
+
+  it('editing a transform field writes the block config (persisted with the patch)', () => {
+    const { constId, waveId } = seedScalarRoute();
+    renderTable();
+    fireEvent.click(screen.getByTestId(`mod-fx-${waveId}:amplitude--${constId}`));
+    fireEvent.click(screen.getByTestId('mod-add-Scale'));
+
+    const scaleId = readComputed(
+      () => store.pillarPatch.patch.blocks.find((b) => b.type === 'Scale')!.id,
+    );
+    fireEvent.change(screen.getByTestId(`mod-field-${scaleId}-factor`), {
+      target: { value: '4' },
+    });
+
+    const config = readComputed(
+      () => store.pillarPatch.patch.blocks.find((b) => b.id === scaleId)!.config,
+    );
+    expect(config.factor).toBe(4);
+  });
+});
