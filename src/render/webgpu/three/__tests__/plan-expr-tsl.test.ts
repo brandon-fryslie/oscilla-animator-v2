@@ -12,18 +12,21 @@
 import { uniform } from 'three/tsl';
 import { describe, it, expect } from 'vitest';
 
-import { add, cos, fract, hash, intrinsic, konst, input, mod, mul } from '../../../scene-plan';
+import { add, cos, fract, hash, intrinsic, konst, input, mod, mul, state, stateRef } from '../../../scene-plan';
 import { planExprToTSL, type PlanExprContext, type TSLNode } from '../plan-expr-tsl';
 
+const acc = stateRef('s:acc');
 const ctx: PlanExprContext = {
   instanceCount: 16,
   inputs: { time: uniform(0, 'float') as unknown as TSLNode },
+  states: { [acc]: uniform(0, 'float') as unknown as TSLNode },
 };
 
 describe('planExprToTSL', () => {
   it('produces a node for every PlanExpr kind', () => {
     expect(planExprToTSL(konst(1), ctx)).toBeDefined(); // const
     expect(planExprToTSL(input('time'), ctx)).toBeDefined(); // input
+    expect(planExprToTSL(state(acc), ctx)).toBeDefined(); // state
     expect(planExprToTSL(intrinsic('index'), ctx)).toBeDefined(); // intrinsic index
     expect(planExprToTSL(intrinsic('rank'), ctx)).toBeDefined(); // intrinsic rank
     expect(planExprToTSL(cos(konst(0.5)), ctx)).toBeDefined(); // unary
@@ -38,5 +41,11 @@ describe('planExprToTSL', () => {
     // [LAW:no-silent-failure] An undeclared channel is a contract break, not a
     //   zero default.
     expect(() => planExprToTSL(input('mouseX'), ctx)).toThrow(/input channel 'mouseX'/);
+  });
+
+  it('throws when an expression reads a state cell the context did not declare', () => {
+    // [LAW:no-silent-failure] A `state` leaf naming an undeclared cell is a
+    //   contract break, not a zero default.
+    expect(() => planExprToTSL(state(stateRef('s:missing')), ctx)).toThrow(/state cell 's:missing'/);
   });
 });

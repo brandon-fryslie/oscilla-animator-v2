@@ -32,8 +32,10 @@ import {
   sceneObjectRef,
   computeResourceRef,
   postChainRef,
+  stateRef,
   konst,
   input,
+  state,
   intrinsic,
   floor,
   sin,
@@ -80,6 +82,7 @@ function buildCapabilityCoveragePlan(): ScenePlan {
   const lutTex = textureRef('cap:lut');
   const storage = computeResourceRef('cap:storage');
   const post = postChainRef('cap:post');
+  const acc = stateRef('cap:acc');
 
   const objHsl = sceneObjectRef('cap:obj-hsl');
   const objRgb = sceneObjectRef('cap:obj-rgb');
@@ -153,6 +156,12 @@ function buildCapabilityCoveragePlan(): ScenePlan {
       postChains: {
         [post]: { kind: 'passes', passes: ['bloom', 'vignette'] },
       },
+      // A stateful cell: a scalar accumulator whose update reads its own prior
+      // value (`state(self)`). Proves the states table and the `state` leaf are
+      // pure serializable data alongside every other capability.
+      states: {
+        [acc]: { cardinality: { kind: 'scalar' }, init: 0, update: add(state(acc), konst(0.01)) },
+      },
     },
     objects: {
       [objHsl]: { geometry: rect, material: matHsl, instancing: { count: 16, transform: transformA } },
@@ -193,6 +202,7 @@ function collectExprVocabulary(plan: ScenePlan): {
     switch (expr.kind) {
       case 'const':
       case 'input':
+      case 'state':
       case 'intrinsic':
         return;
       case 'unary':
@@ -211,6 +221,9 @@ function collectExprVocabulary(plan: ScenePlan): {
     visit(object.instancing.transform.positionX);
     visit(object.instancing.transform.positionY);
     visit(object.instancing.transform.rotation);
+  }
+  for (const stateDef of Object.values(plan.resources.states)) {
+    visit(stateDef.update);
   }
   for (const material of Object.values(plan.resources.materials)) {
     if (material.kind !== 'unlitColor') continue;
@@ -273,11 +286,12 @@ describe('ScenePlan capability matrix — representative coverage', () => {
     expect(Object.keys(plan.resources.textures).length).toBeGreaterThan(0);
     expect(Object.keys(plan.resources.computeResources).length).toBeGreaterThan(0);
     expect(Object.keys(plan.resources.postChains).length).toBeGreaterThan(0);
+    expect(Object.keys(plan.resources.states).length).toBeGreaterThan(0);
   });
 
   it('exercises the entire PlanExpr vocabulary', () => {
     const { kinds, unary, binary } = collectExprVocabulary(plan);
-    expect(kinds).toEqual(new Set(['const', 'input', 'intrinsic', 'unary', 'binary']));
+    expect(kinds).toEqual(new Set(['const', 'input', 'state', 'intrinsic', 'unary', 'binary']));
     expect(unary).toEqual(new Set<PlanUnaryOp>(['floor', 'sin', 'cos', 'negate', 'fract', 'hash']));
     expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod', 'step', 'min', 'max']));
   });

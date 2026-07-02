@@ -40,18 +40,23 @@ import { add, cos, max, min, mod, mul, positionLocal, sin, sub, texture as sampl
 
 import {
   SCENE_PLAN_VERSION,
+  evalPlanExpr,
   type CameraPlan,
   type ColorBinding,
   type GeometryDef,
   type InstancingPlan,
   type MaterialDef,
+  type PlanExpr,
   type PlanInputChannel,
   type ScenePlan,
   type SceneObject,
   type SceneObjectRef,
+  type StateDef,
+  type StateRef,
   type TextureRef,
 } from '../../scene-plan';
 import { planExprToTSL, type PlanExprContext, type TSLNode } from './plan-expr-tsl';
+import type { RuntimeInputChannelValues } from './renderer-contract';
 
 /** Textures the loading bridge has already decoded, keyed by plan handle. */
 export type ResolvedTextures = ReadonlyMap<TextureRef, Texture>;
@@ -79,6 +84,22 @@ export interface RealizedObject {
 }
 
 /**
+ * One realized stateful cell: the live storage uniform a `state` PlanExpr leaf
+ * reads, plus the structural `fingerprint` a reinstall compares to decide carry
+ * vs. reseed, and this install's `update` recurrence (refreshed every reinstall —
+ * a tweaked increment takes effect without resetting the running value).
+ *
+ * [LAW:one-source-of-truth] Authored identity (the `StateRef`) is the only
+ *   continuity key; the fingerprint is a derived structural digest, not a second
+ *   identity. The running value lives in exactly one place: `uniform.value`.
+ */
+export interface RealizedState {
+  readonly uniform: InputUniform;
+  readonly fingerprint: string;
+  readonly update: PlanExpr;
+}
+
+/**
  * A realized scene: everything the renderer needs to draw and to drive the
  * declared runtime inputs each frame, plus the per-object map a reinstall
  * reconciles against.
@@ -96,6 +117,17 @@ export interface RealizedScene {
   readonly objects: ReadonlyMap<SceneObjectRef, RealizedObject>;
   /** Uniform node per declared input channel; the renderer writes `.value`. */
   readonly inputs: ReadonlyMap<PlanInputChannel, InputUniform>;
+  /** Realized stateful cell per authored `StateRef`, carried across reinstall. */
+  readonly states: ReadonlyMap<StateRef, RealizedState>;
+  /**
+   * Advance every stateful cell one frame: evaluate each cell's `update` rule from
+   * a single snapshot of the current cell values and this frame's input channels,
+   * then write the results back. The snapshot-then-write ordering makes all cells
+   * step from one consistent prior frame, so cells that read each other never see a
+   * half-updated frame. [LAW:no-ambient-temporal-coupling] The frame boundary is
+   * the recurrence's owner; this is the one place it advances.
+   */
+  advanceStates(values: RuntimeInputChannelValues): void;
   /** Releases every GPU-backed resource this scene allocated. */
   dispose(): void;
 }
@@ -322,6 +354,85 @@ function objectFingerprint(plan: ScenePlan, object: SceneObject): string {
   return JSON.stringify({ geometry, material: materialKey, instancing: object.instancing });
 }
 
+/**
+ * The structural digest of a stateful cell — the "payload/cardinality/count" a
+ * reinstall compares to decide whether the running value can be carried. Only the
+ * storage's structural class is folded in: the value carries across a changed
+ * `init` (which only seeds) or a tweaked `update` (a live rate change), but a
+ * changed cardinality/count is different storage, so it must reseed.
+ *
+ * [LAW:one-source-of-truth] Continuity is decided by this derived digest under the
+ *   authored `StateRef`, not by a second stored identity.
+ */
+function stateFingerprint(def: StateDef): string {
+  return JSON.stringify(def.cardinality);
+}
+
+/** Allocate a fresh storage cell seeded from the state's init. */
+function buildStateCell(def: StateDef): InputUniform {
+  switch (def.cardinality.kind) {
+    case 'scalar':
+      return uniform(def.init);
+    case 'perInstance':
+      // Per-instance state (a per-dot integrator) rides an instance buffer, not a
+      // scalar uniform; its realization is the deferred follow-up. Reject it loudly
+      // rather than silently realizing it as one shared scalar. [LAW:no-silent-failure]
+      throw new Error(
+        'scene-plan-realizer: per-instance state storage is not yet realized (this slice ships scalar state only)',
+      );
+    default:
+      return assertNever(def.cardinality);
+  }
+}
+
+/** A cell whose running value could not be carried across a structural edit. */
+interface StateReseed {
+  readonly ref: StateRef;
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Reconcile the plan's stateful cells against the previous install's live cells.
+ * The reuse rule mirrors object reuse: same authored `StateRef` AND identical
+ * structural fingerprint → carry the live cell (its running value survives); a new
+ * ref seeds from init; a same-ref fingerprint change is a structure-changing edit
+ * that cannot carry the old value, so it reseeds and is reported as a loud
+ * {@link StateReseed} rather than silently resetting.
+ *
+ * [LAW:dataflow-not-control-flow] Carry-vs-reseed is a derivation from fingerprint
+ *   equality, not a toggle or mode. [LAW:no-silent-failure] A forced reseed is
+ *   surfaced, never a silent reset that looks like continuity.
+ */
+function reconcileStates(
+  prev: ReadonlyMap<StateRef, RealizedState> | undefined,
+  plan: ScenePlan,
+): { states: Map<StateRef, RealizedState>; reseeds: readonly StateReseed[] } {
+  const states = new Map<StateRef, RealizedState>();
+  const reseeds: StateReseed[] = [];
+  for (const [ref, def] of Object.entries(plan.resources.states) as [StateRef, StateDef][]) {
+    const fingerprint = stateFingerprint(def);
+    const existing = prev?.get(ref);
+    if (existing && existing.fingerprint === fingerprint) {
+      // Carry: keep the running value; refresh the update rule so a tweaked
+      // increment (a live edit that is not structural) takes effect immediately.
+      states.set(ref, { uniform: existing.uniform, fingerprint, update: def.update });
+      continue;
+    }
+    if (existing) {
+      reseeds.push({ ref, from: existing.fingerprint, to: fingerprint });
+    }
+    // A reseed replaces the cell with a fresh uniform node. An object that reads
+    // this cell must therefore rebuild to capture the new node — for scalar state
+    // the fingerprint is constant, so a reseed never co-occurs with object reuse.
+    // The per-instance follow-up (where the fingerprint carries a count) must fold
+    // a referenced cell's fingerprint into objectFingerprint so a reseed forces
+    // that object's rebuild. [LAW:one-source-of-truth]
+    states.set(ref, { uniform: buildStateCell(def), fingerprint, update: def.update });
+  }
+  return { states, reseeds };
+}
+
 /** Release every GPU-backed resource a realized object allocated. */
 function disposeObject(object: RealizedObject): void {
   object.mesh.geometry.dispose();
@@ -340,6 +451,7 @@ function buildObject(
   plan: ScenePlan,
   object: SceneObject,
   inputNodes: Partial<Record<PlanInputChannel, TSLNode>>,
+  stateNodes: Partial<Record<StateRef, TSLNode>>,
   resolvedTextures: ResolvedTextures,
 ): RealizedObject {
   // [LAW:no-silent-failure] A zero/negative count would build a draw that
@@ -349,7 +461,11 @@ function buildObject(
       `scene-plan-realizer: scene object '${ref}' declares non-positive instance count ${object.instancing.count}`,
     );
   }
-  const ctx: PlanExprContext = { instanceCount: object.instancing.count, inputs: inputNodes };
+  const ctx: PlanExprContext = {
+    instanceCount: object.instancing.count,
+    inputs: inputNodes,
+    states: stateNodes,
+  };
   const geometry = geometryDefToGeometry(requireResource(plan.resources.geometries, object.geometry, 'geometry'));
   const material = materialDefToMaterial(
     requireResource(plan.resources.materials, object.material, 'material'),
@@ -386,21 +502,20 @@ function drawnObjectRefs(plan: ScenePlan): readonly SceneObjectRef[] {
  * (keyed by plan handle); this function reads them but loads nothing — it stays
  * pure aside from owning the Three object lifecycle it is explicitly given.
  *
- * [LAW:one-source-of-truth] Input-uniform nodes are preserved across installs by
- *   channel, so a reused object's captured uniform is the same node the renderer
- *   writes each frame — there is one uniform per live channel, not a fresh set
- *   per install that would orphan reused graphs.
+ * [LAW:one-source-of-truth] Input-uniform nodes AND stateful cells are preserved
+ *   across installs by handle, so a reused object's captured uniform/cell is the
+ *   same node the renderer writes each frame — one live node per channel/cell, not
+ *   a fresh set per install that would orphan reused graphs.
  * [LAW:no-silent-failure] An incompatible version, dangling handle, or
- *   non-positive count fails loudly during reconciliation.
+ *   non-positive count fails loudly during reconciliation; a stateful cell whose
+ *   structure changed under a live edit reseeds loudly rather than silently.
  *
- * Stateful-continuity extension path (deferred, oscilla-pillars-scene-nt56.9
- *   follow-up): every `PlanExpr` today is a pure function of time/index/input,
- *   so reusing an object's live mesh is sufficient for continuity — there is no
- *   renderer-owned state to migrate. When ScenePlan gains a stateful value
- *   (an accumulator/integrator/feedback buffer that owns renderer-side storage),
- *   that storage attaches to the `RealizedObject` and is carried across the diff
- *   exactly where the live mesh is reused here; a fingerprint change that forces
- *   a rebuild is then also the explicit point a migration/seed decision is made.
+ * Stateful continuity: a stateful cell (an accumulator's running value) is carried
+ *   across the diff exactly like an input uniform — same authored `StateRef` and
+ *   identical structural fingerprint keeps the live cell, so a hot edit that leaves
+ *   the state's structure unchanged never resets the accumulation. A fingerprint
+ *   change (different storage cardinality/count) is the explicit point the cell
+ *   reseeds from init; that decision is surfaced (`console.warn`), never silent.
  *
  * @throws if the plan version is incompatible, a referenced resource (including
  *   an unresolved texture) is missing, or an object declares a non-positive
@@ -430,6 +545,20 @@ export function reconcileScenePlan(
     inputNodes[channel] = node;
   }
 
+  // Carry stateful cells across the diff; a structure-changing edit reseeds loudly.
+  const { states, reseeds } = reconcileStates(prev?.states, plan);
+  for (const reseed of reseeds) {
+    // [LAW:no-silent-failure] A running value reset by a structural edit is a
+    //   notable continuity event, surfaced — not a silent restart.
+    console.warn(
+      `scene-plan-realizer: stateful cell '${reseed.ref}' reseeded from init — its storage structure changed (${reseed.from} → ${reseed.to}), so the running value could not be carried across the edit`,
+    );
+  }
+  const stateNodes: Partial<Record<StateRef, TSLNode>> = {};
+  for (const [ref, cell] of states) {
+    stateNodes[ref] = cell.uniform;
+  }
+
   const scene = prev?.scene ?? new Scene();
   const objects = new Map<SceneObjectRef, RealizedObject>();
 
@@ -442,7 +571,7 @@ export function reconcileScenePlan(
       objects.set(ref, existing);
       continue;
     }
-    const built = buildObject(ref, plan, object, inputNodes, resolvedTextures);
+    const built = buildObject(ref, plan, object, inputNodes, stateNodes, resolvedTextures);
     if (existing) {
       scene.remove(existing.mesh);
       disposeObject(existing);
@@ -472,6 +601,23 @@ export function reconcileScenePlan(
     cameraFingerprint,
     objects,
     inputs,
+    states,
+    advanceStates(values: RuntimeInputChannelValues): void {
+      if (states.size === 0) return;
+      // Snapshot every cell's current value first, so all updates read one
+      // consistent prior frame even when a cell's rule reads a sibling cell.
+      const snapshot: Record<StateRef, number> = {};
+      for (const [ref, cell] of states) {
+        snapshot[ref] = cell.uniform.value;
+      }
+      const nexts: Array<[RealizedState, number]> = [];
+      for (const cell of states.values()) {
+        nexts.push([cell, evalPlanExpr(cell.update, { channels: values, states: snapshot })]);
+      }
+      for (const [cell, value] of nexts) {
+        cell.uniform.value = value;
+      }
+    },
     dispose() {
       for (const object of objects.values()) {
         disposeObject(object);

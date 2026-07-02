@@ -8,6 +8,7 @@
 import type { SceneBlockDefinition } from '../scene-block';
 import { ConstantBlock } from './constant';
 import { TimeBlock } from './time';
+import { AccumulatorBlock } from './accumulator';
 import { ScaleBlock } from './scale';
 import { OffsetBlock } from './offset';
 import { ClampBlock } from './clamp';
@@ -30,6 +31,7 @@ import { DrawInstancesBlock } from './draw-instances';
 export const ALL_SCENE_BLOCKS: readonly SceneBlockDefinition<unknown>[] = [
   ConstantBlock as SceneBlockDefinition<unknown>,
   TimeBlock as SceneBlockDefinition<unknown>,
+  AccumulatorBlock as SceneBlockDefinition<unknown>,
   ScaleBlock as SceneBlockDefinition<unknown>,
   OffsetBlock as SceneBlockDefinition<unknown>,
   ClampBlock as SceneBlockDefinition<unknown>,

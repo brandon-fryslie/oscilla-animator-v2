@@ -33,6 +33,7 @@ import type {
   PlanInputChannel,
   PlanIntrinsic,
   PlanUnaryOp,
+  StateRef,
 } from '../../scene-plan';
 
 /**
@@ -48,10 +49,12 @@ export type TSLNode = Node<'float'>;
  *
  * - `input` leaves resolve to a runtime-updated uniform node, supplied per
  *   declared channel by the realizer.
+ * - `state` leaves resolve to a stateful cell's storage uniform node, supplied
+ *   per declared state by the realizer — read exactly as an input channel is.
  * - `rank` is normalized against the instance count, so the count is needed to
  *   build `index / count`.
  *
- * [LAW:no-shared-mutable-globals] Both come in as explicit parameters; the
+ * [LAW:no-shared-mutable-globals] All come in as explicit parameters; the
  *   translator reads no ambient renderer state.
  */
 export interface PlanExprContext {
@@ -59,6 +62,8 @@ export interface PlanExprContext {
   readonly instanceCount: number;
   /** TSL uniform node per runtime input channel the render plan declared. */
   readonly inputs: Readonly<Partial<Record<PlanInputChannel, TSLNode>>>;
+  /** TSL storage uniform node per stateful cell the plan declared. */
+  readonly states: Readonly<Partial<Record<StateRef, TSLNode>>>;
 }
 
 // [LAW:dataflow-not-control-flow] Total op tables. `Record<…Op, …>` makes every
@@ -110,6 +115,18 @@ function resolveInput(channel: PlanInputChannel, ctx: PlanExprContext): TSLNode 
   return node;
 }
 
+function resolveState(ref: StateRef, ctx: PlanExprContext): TSLNode {
+  const node = ctx.states[ref];
+  // [LAW:no-silent-failure] A `state` leaf naming a cell the plan never declared
+  // in `resources.states` is a contract break, surfaced loudly — never a silent 0.
+  if (!node) {
+    throw new Error(
+      `plan-expr-tsl: PlanExpr reads state cell '${ref}', but it was not provided in the expression context (the plan must declare it in resources.states)`,
+    );
+  }
+  return node;
+}
+
 /**
  * Translate one backend-neutral `PlanExpr` into a scalar TSL node.
  *
@@ -123,6 +140,8 @@ export function planExprToTSL(expr: PlanExpr, ctx: PlanExprContext): TSLNode {
       return float(expr.value);
     case 'input':
       return resolveInput(expr.channel, ctx);
+    case 'state':
+      return resolveState(expr.ref, ctx);
     case 'intrinsic':
       return intrinsicToTSL(expr.name, ctx);
     case 'unary':

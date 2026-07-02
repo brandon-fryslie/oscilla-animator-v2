@@ -1,0 +1,28 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.18",
+  "chain": "InstanceGrid → WaveOffset(amplitude ← Accumulator, speed ← Constant 0) → SolidColor → DrawInstances",
+  "capability": "renderer-owned stateful cell (Accumulator) advanced each frame, driving the wave amplitude",
+  "frames": {
+    "f0": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 35534,
+      "checksum": 3476336475
+    },
+    "f1": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 8858,
+      "checksum": 3518173263
+    },
+    "f2": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 5240,
+      "checksum": 923439696
+    }
+  },
+  "animatedFromState": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-07-02T11:06:47.669Z"
+}

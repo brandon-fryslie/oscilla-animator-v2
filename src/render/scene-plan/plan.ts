@@ -29,6 +29,7 @@ import type {
   SceneObjectRef,
   ComputeResourceRef,
   PostChainRef,
+  StateRef,
 } from './refs';
 import type { PlanExpr, PlanInputChannel } from './expr';
 
@@ -161,6 +162,49 @@ export type ComputeResourceDef = { readonly kind: 'storage'; readonly byteLength
 export type PostChainDef = { readonly kind: 'passes'; readonly passes: readonly string[] };
 
 /**
+ * The structural class of a stateful value's storage — the part of a {@link
+ * StateDef} that a live reinstall must match to carry the running value. It is the
+ * "payload/cardinality/count" the continuity fingerprint is built from: two states
+ * with the same authored identity but different cardinality are structurally
+ * different storage, so carrying one into the other would be wrong.
+ *
+ * - `scalar` is one running float (an accumulator feeding a knob).
+ * - `perInstance` is one running float per instance (a per-dot integrator);
+ *   `count` is part of the fingerprint, so changing the instance count is the
+ *   structure-changing edit that forces an explicit reseed.
+ *
+ * [LAW:dataflow-not-control-flow] The storage class is a discriminated value the
+ *   fingerprint and the realizer dispatch over, not a boolean flag.
+ */
+export type StateCardinality =
+  | { readonly kind: 'scalar' }
+  | { readonly kind: 'perInstance'; readonly count: number };
+
+/**
+ * A stateful value's renderer-owned storage and its recurrence, keyed in the
+ * plan by a {@link StateRef}. This is the block's *normalized projection*: the
+ * assembler mints it from a stateful block's contribution the same way it mints a
+ * texture from a textured material.
+ *
+ * - `cardinality` is the storage's structural class (the reseed fingerprint).
+ * - `init` seeds the storage on first install and on an explicit reseed.
+ * - `update` is the pure PlanExpr computing the next value from the current one:
+ *   `next = f(state(self), inputs)`. The renderer evaluates it each frame and
+ *   writes the result back to the cell, closing the recurrence at the frame
+ *   boundary. It reads `state(self)` (the prior value) and any runtime channel;
+ *   it is combinational, never a graph cycle. [LAW:no-ambient-temporal-coupling]
+ *
+ * [LAW:one-source-of-truth] The running value lives in exactly one place — the
+ *   renderer-owned cell this names. A `state` PlanExpr leaf elsewhere reads it by
+ *   handle; nothing copies it.
+ */
+export interface StateDef {
+  readonly cardinality: StateCardinality;
+  readonly init: number;
+  readonly update: PlanExpr;
+}
+
+/**
  * The normalized resource tables. Each resource is defined exactly once here,
  * keyed by its ref; everything else references it by handle.
  */
@@ -170,6 +214,13 @@ export interface ScenePlanResources {
   readonly textures: Readonly<Record<TextureRef, TextureDef>>;
   readonly computeResources: Readonly<Record<ComputeResourceRef, ComputeResourceDef>>;
   readonly postChains: Readonly<Record<PostChainRef, PostChainDef>>;
+  /**
+   * Renderer-owned stateful storage, keyed by handle. Empty for a purely
+   * time-pure plan (every value a function of time/index/input); a stateful block
+   * (accumulator/integrator) mints one entry the renderer allocates, advances, and
+   * carries across a live reinstall.
+   */
+  readonly states: Readonly<Record<StateRef, StateDef>>;
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ import { makeScatterCloudPatch } from './scatter-cloud';
 import { makeColorPalettePatch } from './color-palette';
 import { makePointDotsPatch } from './point-dots';
 import { makeScalarRoutePatch } from './scalar-route';
+import { makeAccumulatorPatch } from './accumulator-demo';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -80,4 +81,9 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // amplitude knob is routed from a Constant scalar source, so the routed value
   // (not the config default) drives a visibly taller wave. No assets.
   'scalar-route': { makePatch: makeScalarRoutePatch, assets: [] },
+  // Stateful-value proof target (oscilla-pillars-scene-nt56.18): a grid whose wave
+  // amplitude is driven only by an Accumulator (time neutralized), so the motion
+  // exists solely because the accumulator's renderer-owned cell advances each frame
+  // and is carried across live reinstalls. No assets.
+  'accumulator': { makePatch: makeAccumulatorPatch, assets: [] },
 };
