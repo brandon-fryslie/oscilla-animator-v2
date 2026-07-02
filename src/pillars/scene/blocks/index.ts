@@ -8,6 +8,9 @@
 import type { SceneBlockDefinition } from '../scene-block';
 import { ConstantBlock } from './constant';
 import { TimeBlock } from './time';
+import { ScaleBlock } from './scale';
+import { OffsetBlock } from './offset';
+import { ClampBlock } from './clamp';
 import { InstanceGridBlock } from './instance-grid';
 import { InstanceCountBlock } from './instance-count';
 import { RingLayoutBlock } from './ring-layout';
@@ -27,6 +30,9 @@ import { DrawInstancesBlock } from './draw-instances';
 export const ALL_SCENE_BLOCKS: readonly SceneBlockDefinition<unknown>[] = [
   ConstantBlock as SceneBlockDefinition<unknown>,
   TimeBlock as SceneBlockDefinition<unknown>,
+  ScaleBlock as SceneBlockDefinition<unknown>,
+  OffsetBlock as SceneBlockDefinition<unknown>,
+  ClampBlock as SceneBlockDefinition<unknown>,
   InstanceGridBlock as SceneBlockDefinition<unknown>,
   InstanceCountBlock as SceneBlockDefinition<unknown>,
   RingLayoutBlock as SceneBlockDefinition<unknown>,

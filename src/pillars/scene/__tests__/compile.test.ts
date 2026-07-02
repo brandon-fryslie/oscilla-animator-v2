@@ -220,6 +220,9 @@ describe('scene block contract — catalog and registration', () => {
     expect(catalog.map((block) => block.displayName)).toEqual([
       'Constant',
       'Time',
+      'Scale',
+      'Offset',
+      'Clamp',
       'Instance Grid',
       'Instance Count',
       'Ring Layout',
@@ -239,6 +242,12 @@ describe('scene block contract — catalog and registration', () => {
     expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
       'scalar', // Constant output
       'scalar', // Time output
+      'scalar', // Scale in
+      'scalar', // Scale out
+      'scalar', // Offset in
+      'scalar', // Offset out
+      'scalar', // Clamp in
+      'scalar', // Clamp out
       'instanceBundle', // InstanceGrid output
       'instanceBundle', // InstanceCount output
       'instanceBundle', // RingLayout input
@@ -273,6 +282,10 @@ describe('scene block contract — catalog and registration', () => {
     ]);
     expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
       'value', // Constant (Time has no config fields)
+      'factor', // Scale
+      'amount', // Offset
+      'lo', // Clamp
+      'hi',
       'rows',
       'cols',
       'spacing',
