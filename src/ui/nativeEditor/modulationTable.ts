@@ -80,6 +80,14 @@ export interface RouteTransform {
   readonly blockId: string;
   readonly type: string;
   readonly displayName: string;
+  /**
+   * The transform's sole scalar input port id — the slot its upstream feeds. It is
+   * resolved once during tracing (a transform with no sole input aborts the trace),
+   * so a `RouteTransform` always carries a real slot. Splicing a transform out reads
+   * this rather than re-deriving it, keeping a malformed empty slot unrepresentable.
+   * [LAW:types-are-the-program]
+   */
+  readonly inputPortId: string;
   readonly fields: readonly RouteTransformField[];
 }
 
@@ -277,17 +285,21 @@ function traceRoute(
     // A transform on the route. Guard against a cycle before recursing upstream.
     if (seen.has(source.id)) return null;
     seen.add(source.id);
-    transforms.unshift(routeTransform(registry, source));
 
     const upstreamSlot = soleInputPortId(registry, source.type);
     if (upstreamSlot === null) return null; // not a linear transform — cannot trace
+    transforms.unshift(routeTransform(registry, source, upstreamSlot));
     target = source.id;
     slot = upstreamSlot;
   }
 }
 
 /** Build the editor-facing view of a transform block from its config + catalog. */
-function routeTransform(registry: SceneRegistry, block: PillarBlock): RouteTransform {
+function routeTransform(
+  registry: SceneRegistry,
+  block: PillarBlock,
+  inputPortId: string,
+): RouteTransform {
   const catalog = registry.get(block.type)?.catalog;
   const displayName = catalog?.displayName ?? block.type;
   const fields: RouteTransformField[] = (catalog?.configFields ?? []).map(
@@ -298,7 +310,7 @@ function routeTransform(registry: SceneRegistry, block: PillarBlock): RouteTrans
       value: block.config[field.key],
     }),
   );
-  return { blockId: block.id, type: block.type, displayName, fields };
+  return { blockId: block.id, type: block.type, displayName, inputPortId, fields };
 }
 
 /** The id of a block type's sole input port, or null if it does not have exactly one. */
@@ -371,16 +383,16 @@ export function appendTransformAction(
 export function removeTransformAction(
   route: ModulationRoute,
   row: ModulationPortRef,
-  registry: SceneRegistry,
   index: number,
 ): ModulationAction {
   const transform = route.transforms[index];
   const upstreamBlockId =
     index === 0 ? route.sourceBlockId : route.transforms[index - 1].blockId;
   const next = route.transforms[index + 1];
+  // The downstream is the next transform's own input slot (carried on the route) or
+  // the row's input for the last transform — never a re-derived, possibly-empty slot.
   const downstreamTarget = next === undefined ? row.blockId : next.blockId;
-  const downstreamInputSlot =
-    next === undefined ? row.portId : (soleInputPortId(registry, next.type) ?? '');
+  const downstreamInputSlot = next === undefined ? row.portId : next.inputPortId;
   return {
     kind: 'removeTransform',
     blockId: transform.blockId,

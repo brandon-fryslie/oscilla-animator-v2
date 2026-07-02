@@ -300,6 +300,20 @@ describe('scalar routing — a scalar modifier folds onto the route', () => {
     );
   });
 
+  it('Clamp rejects an inverted range (lo > hi) with a loud diagnostic, not a dead constant', () => {
+    const errors = compileErr(
+      routedKnobPatch(
+        [{ id: 'cl', kind: 'modifier', type: 'Clamp', config: { lo: 0.9, hi: 0.1 } }],
+        [
+          { id: 'a', source: 'amp', target: 'cl', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'cl', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    // Surfaced at config-parse time — never silently compiled to `max(0.9, …) = 0.9`.
+    expect(errors.join('\n')).toMatch(/Min .* must be .* Max/);
+  });
+
   it('a scalar modifier with no input edge is a surfaced error, not a silent drop', () => {
     const errors = compileErr(
       routedKnobPatch(

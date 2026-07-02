@@ -268,6 +268,15 @@ export interface SceneBlockDeclaration<
   readonly config: TFields;
   /** Routable scalar knobs; omit for a block with no routable parameters. */
   readonly knobs?: TKnobs;
+  /**
+   * A cross-field invariant on the parsed config, returning a diagnostic message
+   * when violated or `null` when valid. Per-field constraints belong on the field
+   * schemas; this is for relationships between fields (e.g. Clamp's `lo <= hi`) that
+   * no single field can express. It runs as part of config parsing, so a violation
+   * surfaces as a loud config diagnostic — never a value silently compiled into a
+   * degenerate result. [LAW:no-silent-failure] [LAW:types-are-the-program]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>) => string | null;
   readonly contribute: (
     config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
     inputs: KnobInputsFor<TKnobs>,
@@ -293,10 +302,23 @@ export function defineSceneBlock<
   const knobSchema = Object.fromEntries(
     Object.entries(knobs).map(([key, knob]) => [key, z.number().finite().default(knob.default)]),
   );
-  const configSchema = z.object({
+  const baseSchema = z.object({
     ...configShape(declaration.config),
     ...knobSchema,
-  }) as z.ZodType<SceneConfigFor<TFields> & KnobConfigFor<TKnobs>>;
+  });
+  const { validateConfig } = declaration;
+  // A cross-field invariant runs as a refinement, so its violation is one more
+  // config issue on the same parse path — surfaced, not silently compiled through.
+  // [LAW:single-enforcer] config validity has one gate (readConfig's parse).
+  const refinedSchema = validateConfig
+    ? baseSchema.superRefine((val, ctx) => {
+        const message = validateConfig(val as SceneConfigFor<TFields> & KnobConfigFor<TKnobs>);
+        if (message !== null) ctx.addIssue({ code: 'custom', message });
+      })
+    : baseSchema;
+  const configSchema = refinedSchema as unknown as z.ZodType<
+    SceneConfigFor<TFields> & KnobConfigFor<TKnobs>
+  >;
 
   const knobPorts: ScenePortDeclaration[] = Object.entries(knobs).map(([key, knob]) => ({
     id: key,
@@ -379,13 +401,23 @@ export interface ScalarModifierDeclaration<TFields extends SceneConfigFields> {
   readonly type: string;
   readonly displayName: string;
   readonly config: TFields;
+  /**
+   * A cross-field invariant on the parsed config (e.g. Clamp's `lo <= hi`),
+   * returning a diagnostic message when violated. Surfaces through the same config
+   * parse gate as any other config error. [LAW:no-silent-failure]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields>) => string | null;
   readonly transform: (config: SceneConfigFor<TFields>, value: PlanExpr) => PlanExpr;
 }
 
 export function defineScalarModifier<const TFields extends SceneConfigFields>(
   declaration: ScalarModifierDeclaration<TFields>,
 ): SceneBlockDefinition<SceneConfigFor<TFields>, 'scalarModifier'> {
-  return defineSceneBlock({
+  // Pin the knobs generic to the empty shape: a scalar modifier never has knobs, and
+  // the `validateConfig` parameter would otherwise widen `TKnobs` by contravariant
+  // inference. With no knobs, `SceneConfigFor<TFields> & KnobConfigFor<{}>` reduces
+  // to `SceneConfigFor<TFields>`, matching the declared return type.
+  return defineSceneBlock<TFields, Record<never, never>, 'scalarModifier'>({
     type: declaration.type,
     role: 'scalarModifier',
     catalog: {
@@ -406,6 +438,7 @@ export function defineScalarModifier<const TFields extends SceneConfigFields>(
     // No knobs: the transform's parameters are plain config, so the block has one
     // scalar input (the value chain) and the route fold has one edge to follow.
     knobs: {},
+    validateConfig: declaration.validateConfig,
     contribute: (config) => ({
       role: 'scalarModifier',
       input: SCALAR_MODIFIER_INPUT,

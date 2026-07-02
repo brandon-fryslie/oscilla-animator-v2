@@ -408,9 +408,7 @@ const ChainEditor: React.FC<{
             style={styles.removeBtn as React.CSSProperties}
             title="Remove this transform"
             data-testid={`mod-remove-${transform.blockId}`}
-            onClick={() =>
-              applyAction(store, removeTransformAction(route, row, store.registry, index))
-            }
+            onClick={() => applyAction(store, removeTransformAction(route, row, index))}
           >
             ×
           </button>

@@ -17,5 +17,12 @@ export const ClampBlock = defineScalarModifier({
     lo: sceneConfig.finiteNumber({ label: 'Min', control: 'number' }),
     hi: sceneConfig.finiteNumber({ label: 'Max', control: 'number' }),
   },
+  // [LAW:no-silent-failure] With `lo > hi`, `max(lo, min(hi, x))` collapses to `lo`
+  //   for every input — the clamp silently destroys the signal. Reject the inverted
+  //   range at parse time so it surfaces as a diagnostic, never a dead constant.
+  validateConfig: (config) =>
+    config.lo <= config.hi
+      ? null
+      : `Min (${config.lo}) must be ≤ Max (${config.hi})`,
   transform: (config, value) => clamp(value, konst(config.lo), konst(config.hi)),
 });

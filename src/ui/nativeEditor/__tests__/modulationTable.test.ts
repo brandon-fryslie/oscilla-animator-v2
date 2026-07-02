@@ -200,13 +200,37 @@ describe('in-cell chain edit actions', () => {
     store.addEdge(scaleId, waveId, 'amplitude');
 
     const { cell, row } = locate(store, waveId, 'amplitude', constId);
-    const action = removeTransformAction(cell.route!, row, store.registry, 0);
+    const action = removeTransformAction(cell.route!, row, 0);
     expect(action).toEqual({
       kind: 'removeTransform',
       blockId: scaleId,
       upstreamBlockId: constId,
       downstreamTarget: waveId,
       downstreamInputSlot: 'amplitude',
+    });
+  });
+
+  it('removeTransformAction bridges to the next transform\'s own input slot mid-chain', () => {
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+    const scaleId = store.addBlock('Scale');
+    const offsetId = store.addBlock('Offset');
+    // Constant → Scale → Offset → amplitude
+    store.addEdge(constId, scaleId, 'in');
+    store.addEdge(scaleId, offsetId, 'in');
+    store.addEdge(offsetId, waveId, 'amplitude');
+
+    const { cell, row } = locate(store, waveId, 'amplitude', constId);
+    // Remove the first transform (Scale): its downstream is Offset's own input slot,
+    // read from the route (carried at trace time), never re-derived to an empty string.
+    const action = removeTransformAction(cell.route!, row, 0);
+    expect(action).toEqual({
+      kind: 'removeTransform',
+      blockId: scaleId,
+      upstreamBlockId: constId,
+      downstreamTarget: offsetId,
+      downstreamInputSlot: 'in',
     });
   });
 
