@@ -393,7 +393,11 @@ const ChainEditor: React.FC<{
               <input
                 style={styles.numberInput as React.CSSProperties}
                 type="number"
-                value={typeof field.value === 'number' ? field.value : ''}
+                // A cleared/partial number input yields NaN (which is `typeof
+                // 'number'`); Number.isFinite keeps the field blank rather than
+                // rendering NaN, matching the field's `.finite()` schema. The
+                // transient invalid value is still caught loudly by zod at compile.
+                value={typeof field.value === 'number' && Number.isFinite(field.value) ? field.value : ''}
                 data-testid={`mod-field-${transform.blockId}-${field.key}`}
                 onChange={(e) =>
                   applyAction(
