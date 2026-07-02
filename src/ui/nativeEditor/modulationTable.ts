@@ -281,6 +281,12 @@ function traceRoute(
   const seen = new Set<string>();
 
   for (;;) {
+    // `find` (not `filter`) relies on the one-feeder-per-input-slot invariant that
+    // the store's `addEdge` singly enforces — the same invariant every edge-reader
+    // trusts (resolveScalar, resolveBundle, the compiler's own lookups). Re-checking
+    // it here would duplicate enforcement across readers and drift; if a corrupt
+    // persisted patch is a concern, it belongs to one validator at the deserialize
+    // boundary, not per reader. [LAW:single-enforcer] [LAW:no-defensive-null-guards]
     const edge = patch.edges.find((e) => e.target === target && e.inputSlot === slot);
     if (edge === undefined) {
       // Unwired: no route into the row, or a dangling transform chain (which the
