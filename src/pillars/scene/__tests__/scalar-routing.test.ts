@@ -71,6 +71,22 @@ function countInput(expr: PlanExpr, channel: string): number {
   }
 }
 
+/** Every binary operator used anywhere in an expression tree. */
+function binaryOps(expr: PlanExpr): string[] {
+  switch (expr.kind) {
+    case 'const':
+    case 'input':
+    case 'intrinsic':
+      return [];
+    case 'unary':
+      return binaryOps(expr.arg);
+    case 'binary':
+      return [expr.op, ...binaryOps(expr.lhs), ...binaryOps(expr.rhs)];
+    default:
+      return assertNever(expr);
+  }
+}
+
 /**
  * Exhaustiveness guard mirroring the production consumers (inputs.ts, assemble.ts):
  * a new PlanExpr kind is a compile error here, never a silently-empty walk that
@@ -176,5 +192,136 @@ describe('scalar routing — a knob wired to a non-scalar source is loud', () =>
       ),
     );
     expect(errors.join('\n')).toMatch(/not a scalar source/);
+  });
+});
+
+/**
+ * A scalar modifier (Scale/Offset/Clamp) on the route between a source and a knob.
+ * The route `Constant → <transform> → knob` must FOLD: resolution walks the chain
+ * back to the source and applies each transform, exactly as `resolveBundle` folds
+ * an instance-modifier chain. These pin the transform math into the compiled plan.
+ *
+ * The transform block's ports are `in` (scalar) / `out` (scalar); the edge from
+ * the source feeds `in`, and the edge into the knob comes from the block (its sole
+ * output). Both are scalar edges → role 'secondary'.
+ */
+function routedKnobPatch(chain: PillarPatch['blocks'], chainEdges: PillarPatch['edges']): PillarPatch {
+  return wavePatch(
+    [{ id: 'amp', kind: 'generator', type: 'Constant', config: { value: 0.5 } }, ...chain],
+    chainEdges,
+  );
+}
+
+describe('scalar routing — a scalar modifier folds onto the route', () => {
+  it('Constant → Scale → knob multiplies the routed value by the factor', () => {
+    // 0.5 (Constant) scaled by 3 → the plan reads 0.5 and 3 as leaves of a `mul`.
+    const plan = compileOk(
+      routedKnobPatch(
+        [{ id: 'sc', kind: 'modifier', type: 'Scale', config: { factor: 3 } }],
+        [
+          { id: 'a', source: 'amp', target: 'sc', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'sc', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    const leaves = constLeaves(positionY(plan));
+    expect(leaves).toContain(0.5); // the source value
+    expect(leaves).toContain(3); // the scale factor
+    expect(leaves).not.toContain(0.15); // the knob default is overridden by the route
+  });
+
+  it('Constant → Offset → knob adds the amount to the routed value', () => {
+    const plan = compileOk(
+      routedKnobPatch(
+        [{ id: 'of', kind: 'modifier', type: 'Offset', config: { amount: 0.25 } }],
+        [
+          { id: 'a', source: 'amp', target: 'of', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'of', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    const leaves = constLeaves(positionY(plan));
+    expect(leaves).toContain(0.5);
+    expect(leaves).toContain(0.25);
+  });
+
+  it('Constant → Clamp → knob composes into min/max bounds on the routed value', () => {
+    const plan = compileOk(
+      routedKnobPatch(
+        [{ id: 'cl', kind: 'modifier', type: 'Clamp', config: { lo: 0.1, hi: 0.9 } }],
+        [
+          { id: 'a', source: 'amp', target: 'cl', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'cl', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    const leaves = constLeaves(positionY(plan));
+    // clamp(x, lo, hi) === max(lo, min(hi, x)) — both bounds appear as leaves.
+    expect(leaves).toContain(0.1);
+    expect(leaves).toContain(0.9);
+    expect(binaryOps(positionY(plan))).toEqual(expect.arrayContaining(['min', 'max']));
+  });
+
+  it('chains fold in order: Constant → Scale → Offset → knob is offset(scale(value))', () => {
+    const plan = compileOk(
+      routedKnobPatch(
+        [
+          { id: 'sc', kind: 'modifier', type: 'Scale', config: { factor: 2 } },
+          { id: 'of', kind: 'modifier', type: 'Offset', config: { amount: 0.1 } },
+        ],
+        [
+          { id: 'a', source: 'amp', target: 'sc', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'sc', target: 'of', inputSlot: 'in', role: 'secondary' },
+          { id: 'c', source: 'of', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    const leaves = constLeaves(positionY(plan));
+    expect(leaves).toEqual(expect.arrayContaining([0.5, 2, 0.1]));
+  });
+
+  it('a live Time source folds through a Scale: the scaled clock still reads time', () => {
+    const defaulted = compileOk(wavePatch([], []));
+    const routed = compileOk(
+      wavePatch(
+        [
+          { id: 'clock', kind: 'generator', type: 'Time', config: {} },
+          { id: 'sc', kind: 'modifier', type: 'Scale', config: { factor: 4 } },
+        ],
+        [
+          { id: 'a', source: 'clock', target: 'sc', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'sc', target: 'wave', inputSlot: 'speed', role: 'secondary' },
+        ],
+      ),
+    );
+    // The transform preserves the live input: the folded expr still reads `time`.
+    expect(countInput(positionY(routed), 'time')).toBe(
+      countInput(positionY(defaulted), 'time') + 1,
+    );
+  });
+
+  it('Clamp rejects an inverted range (lo > hi) with a loud diagnostic, not a dead constant', () => {
+    const errors = compileErr(
+      routedKnobPatch(
+        [{ id: 'cl', kind: 'modifier', type: 'Clamp', config: { lo: 0.9, hi: 0.1 } }],
+        [
+          { id: 'a', source: 'amp', target: 'cl', inputSlot: 'in', role: 'secondary' },
+          { id: 'b', source: 'cl', target: 'wave', inputSlot: 'amplitude', role: 'secondary' },
+        ],
+      ),
+    );
+    // Surfaced at config-parse time — never silently compiled to `max(0.9, …) = 0.9`.
+    expect(errors.join('\n')).toMatch(/Min .* must be .* Max/);
+  });
+
+  it('a scalar modifier with no input edge is a surfaced error, not a silent drop', () => {
+    const errors = compileErr(
+      routedKnobPatch(
+        [{ id: 'sc', kind: 'modifier', type: 'Scale', config: { factor: 3 } }],
+        // `sc.in` is left unwired; only the output edge into the knob exists.
+        [{ id: 'b', source: 'sc', target: 'wave', inputSlot: 'amplitude', role: 'secondary' }],
+      ),
+    );
+    expect(errors.join('\n')).toMatch(/no input edge/);
   });
 });

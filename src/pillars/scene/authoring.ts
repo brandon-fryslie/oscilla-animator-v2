@@ -39,6 +39,9 @@ export function pillarKindForRole(role: SceneContributionRole): PillarKind {
       return 'generator';
     case 'modifier':
       return 'modifier';
+    case 'scalarModifier':
+      // A scalar transform on a route is a modifier, like a bundle modifier.
+      return 'modifier';
     case 'draw':
       return 'intent';
     default:

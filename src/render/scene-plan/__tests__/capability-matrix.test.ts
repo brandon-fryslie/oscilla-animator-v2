@@ -47,6 +47,7 @@ import {
   div,
   mod,
   step,
+  clamp,
   type PlanExpr,
   type PlanUnaryOp,
   type PlanBinaryOp,
@@ -105,8 +106,9 @@ function buildCapabilityCoveragePlan(): ScenePlan {
     // unary: sin, cos
     positionX: sin(rank),
     positionY: cos(rank),
-    // unary: fract (fractional part of a ramp), hash (pseudo-random from the index)
-    rotation: add(fract(mul(rank, konst(3))), hash(index)),
+    // unary: fract (fractional part of a ramp), hash (pseudo-random from the index);
+    // binary: min, max via clamp (the ramp confined to [0.2, 0.8]).
+    rotation: clamp(add(fract(mul(rank, konst(3))), hash(index)), konst(0.2), konst(0.8)),
   };
 
   return defineScenePlan({
@@ -277,7 +279,7 @@ describe('ScenePlan capability matrix — representative coverage', () => {
     const { kinds, unary, binary } = collectExprVocabulary(plan);
     expect(kinds).toEqual(new Set(['const', 'input', 'intrinsic', 'unary', 'binary']));
     expect(unary).toEqual(new Set<PlanUnaryOp>(['floor', 'sin', 'cos', 'negate', 'fract', 'hash']));
-    expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod', 'step']));
+    expect(binary).toEqual(new Set<PlanBinaryOp>(['add', 'sub', 'mul', 'div', 'mod', 'step', 'min', 'max']));
   });
 
   it('frames with an orthographic camera and draws to the preview canvas', () => {

@@ -75,8 +75,13 @@ export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate' | 'fract' | 'hash';
  * binding" claim is unrepresentable without it, and a smooth fade would be a
  * dishonest stand-in. [LAW:no-mode-explosion] One operator, every consumer kept
  * exhaustive; no flag selects "threshold mode".
+ *
+ * `min`/`max` are the range primitives: they are what a `clamp` scalar modifier
+ * lowers to — `clamp(x, lo, hi)` is `max(lo, min(hi, x))`. A clamp is not a new
+ * operator; it composes from these two, so the vocabulary gains the primitives,
+ * not the convenience. [LAW:no-mode-explosion]
  */
-export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'step';
+export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'step' | 'min' | 'max';
 
 /**
  * A backend-neutral scalar expression.
@@ -127,3 +132,15 @@ export const div = binary('div');
 export const mod = binary('mod');
 /** `step(edge, x)` → `1` when `x >= edge`, else `0`. */
 export const step = binary('step');
+/** `min(a, b)` → the lesser of the two operands. */
+export const min = binary('min');
+/** `max(a, b)` → the greater of the two operands. */
+export const max = binary('max');
+
+/**
+ * `clamp(x, lo, hi)` → `x` confined to `[lo, hi]`, composed from `min`/`max` so
+ * it adds no operator to {@link PlanBinaryOp}. This is the exact expression a
+ * `Clamp` scalar modifier lowers to; keeping it a builder means both the block
+ * and any hand-written plan denote the clamp one way. [LAW:one-source-of-truth]
+ */
+export const clamp = (x: PlanExpr, lo: PlanExpr, hi: PlanExpr): PlanExpr => max(lo, min(hi, x));

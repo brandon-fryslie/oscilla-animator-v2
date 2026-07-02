@@ -15,11 +15,11 @@
  *   swallowed.
  */
 
-import type { PlanExpr } from '../../render/scene-plan';
 import type { PillarPatch } from '../types';
 import { ALL_SCENE_BLOCKS } from './blocks';
 import {
   buildSceneRegistry,
+  type ScalarContribution,
   type SceneBlockDefinition,
   type SceneContribution,
   type SceneDiagnostic,
@@ -34,16 +34,27 @@ interface ParsedBlock {
 }
 
 /**
+ * A block that produces a scalar (a source or a scalar modifier). Both contribute
+ * without reading any resolved knob input, so both belong in pass 1 — before any
+ * consumer folds a scalar route. [LAW:one-type-per-behavior] the two roles get the
+ * same pass-1 treatment: contribute from config alone.
+ */
+function producesScalar(role: SceneBlockDefinition<unknown>['role']): boolean {
+  return role === 'scalarSource' || role === 'scalarModifier';
+}
+
+/**
  * Compile an authored patch to a ScenePlan. Contribution happens in two ordered
- * passes so a routable knob can read a live upstream scalar:
+ * passes so a routable knob can read a live upstream scalar route:
  *
- *  1. Scalar sources (Constant, Time) contribute first — they are leaves, so
- *     their `PlanExpr` values are known before anything reads them.
- *  2. Every other block resolves its knob inputs (a wired source's scalar, or the
- *     synthesized config default) and contributes with them.
+ *  1. Scalar blocks (Constant, Time, and scalar modifiers like Scale/Offset/
+ *     Clamp) contribute first — none reads a knob input, so each is complete
+ *     before anything folds a route through it.
+ *  2. Every other block resolves its knob inputs (a wired route's folded scalar,
+ *     or the synthesized config default) and contributes with them.
  *
- * [LAW:dataflow-not-control-flow] The two passes are the data dependency (sources
- *   before consumers), not a branch on block type at each step.
+ * [LAW:dataflow-not-control-flow] The two passes are the data dependency (scalar
+ *   producers before consumers), not a branch on block type at each step.
  */
 export function compileScenePlan(patch: PillarPatch): SceneCompileResult {
   const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
@@ -69,27 +80,37 @@ export function compileScenePlan(patch: PillarPatch): SceneCompileResult {
   }
 
   const contributions = new Map<string, SceneContribution>();
-  const scalarValues = new Map<string, PlanExpr>();
+  // The scalar route fold reads this map, fully populated by pass 1 and never
+  // mutated in pass 2 — a stable view so a knob's diagnostic never depends on
+  // block iteration order. [LAW:no-ambient-temporal-coupling]
+  const scalarProducers = new Map<string, ScalarContribution>();
+  const knownBlockIds = new Set(parsed.map((p) => p.blockId));
 
-  // Pass 1: scalar sources. They have no knob inputs, so an empty resolved-inputs
-  // record is complete; their value becomes available to every consumer below.
+  // Pass 1: scalar producers (sources + modifiers). None reads a knob input, so
+  // each contributes from config alone; the fold in pass 2 walks these to resolve
+  // any scalar route back to its source.
   for (const { blockId, def, config } of parsed) {
-    if (def.role !== 'scalarSource') continue;
+    if (!producesScalar(def.role)) continue;
     const contribution = def.contribute(config, {});
     contributions.set(blockId, contribution);
-    if (contribution.role === 'scalarSource') scalarValues.set(blockId, contribution.value);
+    // `producesScalar` guarantees the role, but only the runtime discriminant
+    // narrows the union to `ScalarContribution` for the typed producer map.
+    if (contribution.role === 'scalarSource' || contribution.role === 'scalarModifier') {
+      scalarProducers.set(blockId, contribution);
+    }
   }
 
-  // Pass 2: everything else, with knob inputs resolved against the scalar sources.
+  // Pass 2: everything else, with knob inputs resolved against the scalar routes.
   const errors: string[] = [];
   for (const { blockId, def, config } of parsed) {
-    if (def.role === 'scalarSource') continue;
+    if (producesScalar(def.role)) continue;
     const inputs = resolveKnobInputs(
       blockId,
       def.catalog.ports,
       config,
       patch.edges,
-      scalarValues,
+      scalarProducers,
+      knownBlockIds,
       errors,
     );
     contributions.set(blockId, def.contribute(config, inputs));

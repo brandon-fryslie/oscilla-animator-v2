@@ -186,6 +186,11 @@ function resolveBundle(
         `[scene] instance chain references scalar source '${blockId}', which produces no instance bundle`,
       );
       return null;
+    case 'scalarModifier':
+      errors.push(
+        `[scene] instance chain references scalar modifier '${blockId}', which produces no instance bundle`,
+      );
+      return null;
     default:
       return assertNever(contribution);
   }

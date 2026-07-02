@@ -59,6 +59,9 @@ const CATEGORY_ACCENT: Record<SceneBlockCategory, string> = {
   asset: '#d9a441',
   color: '#d65db1',
   signal: '#7dcf5b',
+  // A scalar→scalar transform on a route (Scale/Offset/Clamp) — a scalar sibling
+  // of `modifier`, so it takes a related-but-distinct teal from modifier's blue.
+  transform: '#5bc0be',
 };
 
 const VALUE_KIND_COLOR: Record<SceneValueKind, string> = {
