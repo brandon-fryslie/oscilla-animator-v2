@@ -16,6 +16,7 @@
  */
 
 import type { PillarPatch } from '../types';
+import { state, stateRef } from '../../render/scene-plan';
 import { ALL_SCENE_BLOCKS } from './blocks';
 import {
   buildSceneRegistry,
@@ -90,6 +91,15 @@ export function compileScenePlan(patch: PillarPatch): SceneCompileResult {
   // each contributes from config alone; the fold in pass 2 walks these to resolve
   // any scalar route back to its source.
   for (const { blockId, def, config } of parsed) {
+    // A stateful block's *output* is its own storage cell — identity-only, so it is
+    // known before its knobs resolve. Register it as a scalar producer here so a
+    // downstream route folds through it exactly as through a Constant; its cell and
+    // recurrence (which need the resolved knobs) are contributed in pass 2. The
+    // `state(self)` leaf is a pure producer value — no `contribute` call needed.
+    if (def.role === 'statefulScalar') {
+      scalarProducers.set(blockId, { role: 'scalarSource', value: state(stateRef(blockId)) });
+      continue;
+    }
     if (!producesScalar(def.role)) continue;
     const contribution = def.contribute(config, {});
     contributions.set(blockId, contribution);

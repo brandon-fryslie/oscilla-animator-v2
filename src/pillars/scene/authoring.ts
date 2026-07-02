@@ -37,6 +37,10 @@ export function pillarKindForRole(role: SceneContributionRole): PillarKind {
       return 'generator';
     case 'scalarSource':
       return 'generator';
+    case 'statefulScalar':
+      // A stateful scalar produces a value that fans out to knobs, like any
+      // scalar source; its output being state-backed is behind the seam.
+      return 'generator';
     case 'modifier':
       return 'modifier';
     case 'scalarModifier':

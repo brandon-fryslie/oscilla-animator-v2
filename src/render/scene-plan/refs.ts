@@ -40,6 +40,15 @@ export type ComputeResourceRef = Brand<string, 'ComputeResourceRef'>;
 /** Handle for a post-processing chain. */
 export type PostChainRef = Brand<string, 'PostChainRef'>;
 
+/**
+ * Handle for a stateful value's renderer-owned storage (an accumulator's running
+ * value). The plan names the storage; the renderer allocates a live cell for it,
+ * seeds it from the state's `init`, advances it each frame by the state's update
+ * rule, and carries it across a live reinstall. A `state` PlanExpr leaf reads this
+ * cell exactly as an `input` leaf reads a runtime channel.
+ */
+export type StateRef = Brand<string, 'StateRef'>;
+
 // ---------------------------------------------------------------------------
 // Factory functions — zero-cost casts.
 // ---------------------------------------------------------------------------
@@ -54,3 +63,4 @@ export const textureRef = (id: string): TextureRef => id as TextureRef;
 export const sceneObjectRef = (id: string): SceneObjectRef => id as SceneObjectRef;
 export const computeResourceRef = (id: string): ComputeResourceRef => id as ComputeResourceRef;
 export const postChainRef = (id: string): PostChainRef => id as PostChainRef;
+export const stateRef = (id: string): StateRef => id as StateRef;

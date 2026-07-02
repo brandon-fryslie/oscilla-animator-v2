@@ -18,6 +18,10 @@ function collectFromExpr(expr: PlanExpr, into: Set<PlanInputChannel>): void {
   switch (expr.kind) {
     case 'const':
     case 'intrinsic':
+    // A `state` leaf reads a renderer-owned cell, not a runtime channel, so it
+    // contributes none itself. Any channels its *update* rule reads are collected
+    // by walking that rule directly (the assembler passes state updates in too).
+    case 'state':
       return;
     case 'input':
       into.add(expr.channel);

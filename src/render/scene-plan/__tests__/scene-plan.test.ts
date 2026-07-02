@@ -70,6 +70,7 @@ function buildGridOfSquares(): ScenePlan {
       textures: {},
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [grid]: {

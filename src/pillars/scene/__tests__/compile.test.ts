@@ -220,6 +220,7 @@ describe('scene block contract — catalog and registration', () => {
     expect(catalog.map((block) => block.displayName)).toEqual([
       'Constant',
       'Time',
+      'Accumulator',
       'Scale',
       'Offset',
       'Clamp',
@@ -242,6 +243,8 @@ describe('scene block contract — catalog and registration', () => {
     expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
       'scalar', // Constant output
       'scalar', // Time output
+      'scalar', // Accumulator output (value)
+      'scalar', // Accumulator increment knob
       'scalar', // Scale in
       'scalar', // Scale out
       'scalar', // Offset in
@@ -282,6 +285,8 @@ describe('scene block contract — catalog and registration', () => {
     ]);
     expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
       'value', // Constant (Time has no config fields)
+      'init', // Accumulator config
+      'increment', // Accumulator increment knob
       'factor', // Scale
       'amount', // Offset
       'lo', // Clamp

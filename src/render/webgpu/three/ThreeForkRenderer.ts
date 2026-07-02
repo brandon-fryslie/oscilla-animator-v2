@@ -114,6 +114,13 @@ export class ThreeForkRenderer implements WebGPURenderer {
     }
 
     await device.renderAsync(realized.scene, realized.camera);
+
+    // Advance renderer-owned state for the next frame. The draw above read each
+    // cell's current value; stepping the recurrence after the draw makes the first
+    // frame show the seeded value and each later frame the accumulated one.
+    // [LAW:no-ambient-temporal-coupling] The renderer is the frame boundary that
+    //   closes every stateful recurrence; it does so here, in one place.
+    realized.advanceStates(values);
   }
 
   private async ensureDevice(): Promise<ThreeWebGPURenderer> {

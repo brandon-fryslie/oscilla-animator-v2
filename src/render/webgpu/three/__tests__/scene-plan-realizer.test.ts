@@ -58,6 +58,7 @@ function buildGridPlan(overrides?: { count?: number }): ScenePlan {
       textures: {},
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [grid]: {
@@ -142,6 +143,7 @@ function buildTexturedPlan(): ScenePlan {
       textures: { [tex]: { kind: 'asset', assetId: assetId('checker') } },
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [object]: {
@@ -192,6 +194,7 @@ function buildLutPlan(): ScenePlan {
       },
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: {
       [object]: {
@@ -293,6 +296,7 @@ function buildScenePlan(specs: Record<string, { count: number; hue: number }>): 
       textures: {},
       computeResources: {},
       postChains: {},
+      states: {},
     },
     objects: objects as ScenePlan['objects'],
     render: {

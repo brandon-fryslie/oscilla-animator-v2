@@ -23,6 +23,8 @@
  *   New operators are added to these unions; consumers stay exhaustive.
  */
 
+import type { StateRef } from './refs';
+
 /**
  * A runtime-updated scalar input channel the plan may read.
  *
@@ -90,10 +92,18 @@ export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'step' | 'min
  * requirement that time is "a runtime-updated input channel, not a
  * compile-time constant": a runtime value is `input`, a baked value is `const`,
  * and they are different shapes rather than a flag on one shape.
+ *
+ * `state` is the fourth leaf: it reads a stateful value's renderer-owned storage
+ * (an accumulator's running value) by handle, exactly as `input` reads a runtime
+ * channel. It keeps the grammar pure-combinational — the recurrence
+ * `next = f(state(self), …)` is closed by the renderer at the frame boundary, not
+ * by a cycle in the expression. [LAW:effects-at-boundaries] The plan reads the
+ * cell; who advances it (the frame owner) is behind the renderer seam.
  */
 export type PlanExpr =
   | { readonly kind: 'const'; readonly value: number }
   | { readonly kind: 'input'; readonly channel: PlanInputChannel }
+  | { readonly kind: 'state'; readonly ref: StateRef }
   | { readonly kind: 'intrinsic'; readonly name: PlanIntrinsic }
   | { readonly kind: 'unary'; readonly op: PlanUnaryOp; readonly arg: PlanExpr }
   | {
@@ -109,6 +119,8 @@ export type PlanExpr =
 
 export const konst = (value: number): PlanExpr => ({ kind: 'const', value });
 export const input = (channel: PlanInputChannel): PlanExpr => ({ kind: 'input', channel });
+/** `state(ref)` → the current value of a stateful block's renderer-owned storage. */
+export const state = (ref: StateRef): PlanExpr => ({ kind: 'state', ref });
 export const intrinsic = (name: PlanIntrinsic): PlanExpr => ({ kind: 'intrinsic', name });
 
 const unary = (op: PlanUnaryOp) => (arg: PlanExpr): PlanExpr => ({ kind: 'unary', op, arg });
