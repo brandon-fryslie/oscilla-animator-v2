@@ -207,11 +207,15 @@ function applyAction(store: PillarPatchStore, action: ModulationAction): void {
       store.removeEdge(action.inputEdgeId);
       return;
     case 'appendTransform': {
-      const newId = store.addBlock(action.transformType);
+      // Resolve the precondition before any mutation: a null sole-input slot (an
+      // impossible state defineScalarModifier prevents) must throw before addBlock,
+      // never after — a failed precondition leaves the store untouched.
+      // [LAW:effects-at-boundaries]
       const inSlot = soleInputPortId(store.registry, action.transformType);
       if (inSlot === null) {
         throw new Error(`[modulation-table] transform '${action.transformType}' has no sole input port`);
       }
+      const newId = store.addBlock(action.transformType);
       store.addEdge(action.upstreamBlockId, newId, inSlot); // upstream → newTransform.in
       store.addEdge(newId, action.target, action.inputSlot); // newTransform.out → input (replaces feeder)
       return;
