@@ -21,13 +21,14 @@
  */
 
 import type { DefinedBlock } from '../../block-api';
-import type { CardinalityVarId, PayloadVarId, UnitVarId, ZBlockContract, ZInferenceCanonicalType, ZInferenceCardinality, ZPayloadType, ZUnitType } from '../schemas';
+import type { CardinalityVarId, PayloadVarId, UnitVarId, ZInferenceCanonicalType, ZInferenceCardinality, ZPayloadType, ZUnitType } from '../schemas';
 import type { ConstraintOrigin, PortKey } from './shared';
 import type { EdgeVerification, PayloadUnitSolveInput, PortVarInfo } from './payload-unit';
 import type { CardinalitySolveInput, ZCardinalityConstraint } from './cardinality';
 import type { ZPayloadUnitConstraint } from './payload-unit';
-import type { DraftPortKey, MutableBlock, MutableEdge, MutableGraph } from './typed-graph';
+import type { DraftPortKey, MutableGraph } from './typed-graph';
 import { draftPortKey } from './typed-graph';
+import { getContract } from './contract-lookup';
 
 // ---------------------------------------------------------------------------
 // Output bundle
@@ -74,15 +75,6 @@ function alphaRename(type: ZInferenceCanonicalType, blockId: string): ZInference
 }
 
 // ---------------------------------------------------------------------------
-// Contract lookup
-// ---------------------------------------------------------------------------
-
-function getContract(block: MutableBlock, catalog: readonly DefinedBlock[]): ZBlockContract | undefined {
-  if (block.syntheticContract !== undefined) return block.syntheticContract;
-  return catalog.find((d) => d.type === block.type)?.contract;
-}
-
-// ---------------------------------------------------------------------------
 // Main extraction
 // ---------------------------------------------------------------------------
 
@@ -108,14 +100,17 @@ export function extractConstraints(
       ...Object.entries(contract.outputs).map(([slot, binding]) => ({ slot, binding, dir: 'out' as const })),
     ];
 
+    // Track vars seen across ALL slots of this block to emit intra-block
+    // equality constraints — block-scoped because variable identity is
+    // block-scoped: a var shared between an input and an output slot (the
+    // modifier-polymorphism pattern) must link the two ports.
+    // vars are ALREADY alpha-renamed; we group by the renamed var id.
+    const renamedPayloadVarToFirstKey = new Map<PayloadVarId, DraftPortKey>();
+    const renamedUnitVarToFirstKey = new Map<UnitVarId, DraftPortKey>();
+    const renamedCardVarToFirstKey = new Map<CardinalityVarId, DraftPortKey>();
+
     for (const { slot, binding, dir } of allSlots) {
       const origin: ConstraintOrigin = { kind: 'portDef', blockId: block.id, port: slot, dir };
-
-      // Track vars seen per-field within this block to emit intra-block equality constraints.
-      // vars are ALREADY alpha-renamed; we group by the renamed var id.
-      const renamedPayloadVarToFirstKey = new Map<PayloadVarId, DraftPortKey>();
-      const renamedUnitVarToFirstKey = new Map<UnitVarId, DraftPortKey>();
-      const renamedCardVarToFirstKey = new Map<CardinalityVarId, DraftPortKey>();
 
       for (const [fieldName, rawType] of Object.entries(binding.type)) {
         const type = alphaRename(rawType, block.id);
@@ -209,8 +204,14 @@ export function extractConstraints(
       const srcKey = draftPortKey(edge.source, edge.outputSlot, fieldName, 'out');
       const tgtKey = draftPortKey(edge.target, edge.inputSlot, fieldName, 'in');
 
-      // Ensure both keys are registered in puPorts (they should be from Phase A, but guard)
-      if (!puPorts.has(srcKey) || !puPorts.has(tgtKey)) continue;
+      // Phase B derives keys from the same contracts Phase A registered, so a
+      // missing key is corruption, not a legitimate state. [LAW:no-silent-failure]
+      if (!puPorts.has(srcKey) || !puPorts.has(tgtKey)) {
+        throw new Error(
+          `[extractConstraints] Edge ${edge.id} field ${fieldName} references port keys ` +
+          `absent from Phase A registration (src: ${srcKey}, tgt: ${tgtKey})`,
+        );
+      }
 
       payloadUnitConstraints.push({ kind: 'payloadEq', a: srcKey, b: tgtKey, origin: edgeOrigin });
       payloadUnitConstraints.push({ kind: 'unitEq', a: srcKey, b: tgtKey, origin: edgeOrigin });
