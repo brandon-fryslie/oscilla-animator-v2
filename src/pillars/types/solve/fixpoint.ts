@@ -52,7 +52,7 @@ import type {
 import type { ZCanonicalType } from '../schemas';
 import { isOpen } from './typed-graph';
 import type { PolicyContext } from './policies/policy-types';
-import { validateAxes } from '../validate/axis-validate';
+import { validateAxes } from './axis-validate';
 
 const DEFAULT_MAX_ITERATIONS = 20;
 
@@ -95,7 +95,18 @@ export function resolveTypes(
       }
     }
 
-    lastSolveDiagnostics = terminalCardDiags;
+    // The sub-solvers emit informational diagnostics (defaulted units/
+    // cardinalities, post-solve edge mismatches) precisely so defaulting is
+    // never silent magic; fold them in so convergence surfaces the final
+    // iteration's signals alongside terminal conflicts. [LAW:no-silent-failure]
+    const solverInfoDiags: FixpointDiagnostic[] = [...puResult.diagnostics, ...cardResult.diagnostics].map((d) => ({
+      code: d.code,
+      message: d.message,
+      stableKey: d.stableKey,
+      ports: d.ports as DraftPortKey[],
+    }));
+
+    lastSolveDiagnostics = [...terminalCardDiags, ...solverInfoDiags];
 
     // ------------------------------------------------------------------ (2) Create obligations
     const adapterObs = createAdapterObligations(g, facts, catalog);

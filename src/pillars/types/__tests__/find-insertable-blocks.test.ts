@@ -275,6 +275,56 @@ describe('findInsertableBlocks — context-side query', () => {
     expect(results[0].matchingSlotId).toBe('second');
   });
 
+  it('a direct match on a later slot wins over an earlier via-adapter slot', () => {
+    // First slot needs an adapter (radians), second matches directly (degrees).
+    const catalog: DefinedBlock[] = [
+      dualSink('MixedSink', radians(), degrees()),
+      adapterDef('DegToRad', degrees(), radians()),
+    ];
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: degreesConcrete() }));
+
+    const results = findInsertableBlocks(key, graph, catalog);
+
+    const mixed = results.find((r) => r.blockType === 'MixedSink');
+    expect(mixed?.confidence).toBe('direct');
+    expect(mixed?.matchingSlotId).toBe('second');
+    expect(mixed?.adapter).toBeNull();
+  });
+
+  it('multi-field bundles: matches the field with the queried port name', () => {
+    const multiFieldSink: DefinedBlock = {
+      type: 'MultiFieldSink',
+      contract: {
+        inputs: { input: { id: 'input', dir: 'in', type: { value: zFloat(), meta: zVec2() } } },
+        outputs: {},
+      },
+    };
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: floatConcrete() }));
+
+    const results = findInsertableBlocks(key, graph, [multiFieldSink]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].confidence).toBe('direct');
+  });
+
+  it('no match when the candidate slot lacks the queried field name', () => {
+    // Edge wiring matches fields by name; a disjoint field name means no
+    // constraints and no data flow, so the block is not insertable.
+    const mismatchedSink: DefinedBlock = {
+      type: 'MismatchedSink',
+      contract: {
+        inputs: { input: { id: 'input', dir: 'in', type: { other: zFloat() } } },
+        outputs: {},
+      },
+    };
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: floatConcrete() }));
+
+    expect(findInsertableBlocks(key, graph, [mismatchedSink])).toHaveLength(0);
+  });
+
   it('ranking: direct matches appear before via-adapter matches', () => {
     const catalog: DefinedBlock[] = [
       // RadiansSink needs an adapter bridge (degrees → radians)

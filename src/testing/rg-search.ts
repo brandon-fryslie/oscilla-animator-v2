@@ -36,6 +36,12 @@ function resolveScopedFiles(scope: readonly string[]): string[] {
  * [LAW:single-enforcer] [LAW:no-silent-failure]
  */
 function globToRegExp(glob: string): RegExp {
+  if (/[[\]{}]/.test(glob)) {
+    throw new Error(
+      `[rg-search] Unsupported glob construct in '${glob}': character classes and brace expansion ` +
+      `are not translated by the JS fallback — matching them as literals would silently diverge from rg.`,
+    );
+  }
   const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   const body = escaped
     .replaceAll('**/', '\u0000')
@@ -53,20 +59,20 @@ function globMatches(glob: string, relativePath: string): boolean {
   return globToRegExp(glob).test(subject);
 }
 
+/** rg semantics: the LAST matching glob decides; an unmatched file is included only when no include glob exists. */
 function matchesGlob(relativePath: string, globs: readonly string[]): boolean {
   let hasInclude = false;
-  let included = false;
+  let verdict: boolean | null = null;
 
   for (const glob of globs) {
-    if (glob.startsWith('!')) {
-      if (globMatches(glob.slice(1), relativePath)) return false;
-      continue;
+    const negated = glob.startsWith('!');
+    if (!negated) hasInclude = true;
+    if (globMatches(negated ? glob.slice(1) : glob, relativePath)) {
+      verdict = !negated;
     }
-    hasInclude = true;
-    included = included || globMatches(glob, relativePath);
   }
 
-  return hasInclude ? included : true;
+  return verdict ?? !hasInclude;
 }
 
 /** The pure-JS fallback for `rgLines`. Exported so parity with rg is testable. */

@@ -1,5 +1,5 @@
 /**
- * src/pillars/types/validate/axis-validate.ts
+ * src/pillars/types/solve/axis-validate.ts
  *
  * `validateAxes` — the single axis-invariant enforcement gate.
  * [LAW:single-enforcer] [LAW:no-silent-failure]
@@ -21,9 +21,9 @@
 
 import type { DefinedBlock } from '../../block-api';
 import type { ZCanonicalType, ZInferenceCanonicalType } from '../schemas';
-import type { DraftPortKey, FixpointDiagnostic, StrictTypedGraph } from '../solve/typed-graph';
-import { draftPortKey } from '../solve/typed-graph';
-import { getContract } from '../solve/contract-lookup';
+import type { DraftPortKey, FixpointDiagnostic, StrictTypedGraph } from './typed-graph';
+import { draftPortKey } from './typed-graph';
+import { getContract } from './contract-lookup';
 
 export function validateAxes(
   strict: StrictTypedGraph,

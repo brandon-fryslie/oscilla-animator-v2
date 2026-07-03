@@ -31,7 +31,7 @@ import {
 import type { DefinedBlock } from '../../block-api';
 import type { DraftPortKey, MutableGraph, StrictTypedGraph } from '../solve/typed-graph';
 import { draftPortKey } from '../solve/typed-graph';
-import { validateAxes } from '../validate/axis-validate';
+import { validateAxes } from '../solve/axis-validate';
 
 // ---------------------------------------------------------------------------
 // Helpers

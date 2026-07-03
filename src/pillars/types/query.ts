@@ -87,7 +87,7 @@ export function findInsertableBlocks(
 ): readonly InsertableBlock[] {
   const resolvedType = typedGraph.portTypes.get(portRef);
   if (!resolvedType) return [];
-  const { dir } = parseDraftPortKey(portRef);
+  const { dir, fieldName } = parseDraftPortKey(portRef);
 
   const results: InsertableBlock[] = [];
 
@@ -96,25 +96,33 @@ export function findInsertableBlocks(
 
     const candidateSlots = block.contract[candidateSlotsByQueriedPort[dir]];
 
-    for (const [slotName, binding] of Object.entries(candidateSlots)) {
-      const fieldEntries = Object.entries(binding.type);
-      if (fieldEntries.length === 0) continue;
+    // A direct match on ANY slot wins the block; the first adapter match is
+    // kept only as fallback so an early via-adapter slot can't shadow a later
+    // direct slot in the ranking.
+    let best: InsertableBlock | null = null;
 
-      // Use the first field for matching (single-field bundles are the common case).
-      const [, slotFieldType] = fieldEntries[0];
+    for (const [slotName, binding] of Object.entries(candidateSlots)) {
+      // Edges match fields BY NAME (extract Phase B): a slot without the
+      // queried field name carries no constraints and no data flow, so it is
+      // not a match — the field-level portRef decides which field to compare.
+      const slotFieldType = binding.type[fieldName];
+      if (slotFieldType === undefined) continue;
 
       if (typesDirectlyCompatible(resolvedType, slotFieldType)) {
-        results.push({ blockType: block.type, matchingSlotId: slotName, adapter: null, confidence: 'direct' });
-        break; // first matching slot per block is enough
-      }
-
-      const endpoints = adapterEndpointsByQueriedPort[dir](resolvedType, slotFieldType);
-      const adapters = findAdapterCandidates(endpoints.source, endpoints.target, catalog);
-      if (adapters.length > 0) {
-        results.push({ blockType: block.type, matchingSlotId: slotName, adapter: adapters[0], confidence: 'via-adapter' });
+        best = { blockType: block.type, matchingSlotId: slotName, adapter: null, confidence: 'direct' };
         break;
       }
+
+      if (best === null) {
+        const endpoints = adapterEndpointsByQueriedPort[dir](resolvedType, slotFieldType);
+        const adapters = findAdapterCandidates(endpoints.source, endpoints.target, catalog);
+        if (adapters.length > 0) {
+          best = { blockType: block.type, matchingSlotId: slotName, adapter: adapters[0], confidence: 'via-adapter' };
+        }
+      }
     }
+
+    if (best !== null) results.push(best);
   }
 
   return results.sort(rankInsertable);

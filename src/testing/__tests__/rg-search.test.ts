@@ -32,6 +32,22 @@ describe('jsRegexLines glob handling', () => {
     expect(jsRegexLines('globToRegExp', ['src/testing'], ['*.ts', '!**/__tests__/**']).length).toBeGreaterThan(0);
   });
 
+  it('last matching glob wins: an include after an exclusion re-includes', () => {
+    const globs = ['*.ts', '!rg-search.ts', 'rg-search.ts'];
+    const matches = jsRegexLines('function globToRegExp', ['src/testing'], globs);
+    expect(matches.some((m) => m.startsWith('src/testing/rg-search.ts:'))).toBe(true);
+  });
+
+  it('last matching glob wins: an exclusion after an include excludes', () => {
+    const globs = ['*.ts', 'rg-search.ts', '!rg-search.ts'];
+    const matches = jsRegexLines('function globToRegExp', ['src/testing'], globs);
+    expect(matches.filter((m) => m.startsWith('src/testing/rg-search.ts:'))).toEqual([]);
+  });
+
+  it('throws on glob constructs the translator does not support', () => {
+    expect(() => jsRegexLines('x', ['src/testing'], ['*.[jt]s'])).toThrow(/Unsupported glob construct/);
+  });
+
   it('replicates the no-legacy-types deriveKind gate under the fallback path', () => {
     const matches = jsRegexLines('\\bderiveKind\\(', ['src'], [
       ...GATE_GLOBS,

@@ -266,6 +266,10 @@ export type FixpointDiagnosticCode =
   | 'UnresolvedPort'
   | 'CheaterAdapterUsed'
   | 'TypeConflict'
+  // sub-solver informational codes, surfaced at convergence
+  | 'UnitDefaultedToNone'
+  | 'PostSolveEdgeTypeMismatch'
+  | 'CardinalityDefaultedToOne'
   // validateAxes codes
   | 'EventInvariantBroken'
   | 'NoInstance'
