@@ -32,6 +32,17 @@ describe('jsRegexLines glob handling', () => {
     expect(jsRegexLines('globToRegExp', ['src/testing'], ['*.ts', '!**/__tests__/**']).length).toBeGreaterThan(0);
   });
 
+  it('excludes *.test.* files by basename glob regardless of directory', () => {
+    const matches = jsRegexLines('describe', ['src/testing'], ['*.ts', '!**/*.test.*']);
+    expect(matches.filter((m) => m.includes('.test.'))).toEqual([]);
+  });
+
+  it('include glob *.test.* matches test files by basename', () => {
+    const matches = jsRegexLines('describe', ['src/testing'], ['*.test.*']);
+    expect(matches.length).toBeGreaterThan(0);
+    expect(matches.every((m) => m.split(':')[0].includes('.test.'))).toBe(true);
+  });
+
   it('last matching glob wins: an include after an exclusion re-includes', () => {
     const globs = ['*.ts', '!rg-search.ts', 'rg-search.ts'];
     const matches = jsRegexLines('function globToRegExp', ['src/testing'], globs);

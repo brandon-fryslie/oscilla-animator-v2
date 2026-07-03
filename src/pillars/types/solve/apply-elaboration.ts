@@ -33,7 +33,19 @@ export function applyElaborationPlan(graph: MutableGraph, plan: ElaborationPlan)
   const presentEdges = addEdges.filter((e) => existingEdgeIds.has(e.id)).length;
 
   if (presentBlocks === addBlocks.length && presentEdges === addEdges.length && replaceEdges.length === 0 && removeBlockIds.size === 0) {
-    return graph; // complete no-op
+    // Structurally a no-op — but the obligation lifecycle stays monotone: the
+    // plan's artifacts all exist, so the obligation is discharged either way.
+    // [LAW:no-silent-failure]
+    const target = graph.obligations.find((o) => o.id === plan.obligationId);
+    if (!target || !isOpen(target)) return graph;
+    const obligations = sortByObId(
+      graph.obligations.map((o) =>
+        o.id === plan.obligationId && isOpen(o)
+          ? discharged(o, addBlocks.map((b) => b.id), addEdges.map((e) => e.id))
+          : o,
+      ),
+    );
+    return { ...graph, obligations, revision: graph.revision + 1 };
   }
   if (presentBlocks > 0 || presentEdges > 0) {
     // Partial presence → corruption; surface loudly. [LAW:no-silent-failure]

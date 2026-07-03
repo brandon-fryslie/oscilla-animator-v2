@@ -46,6 +46,7 @@ import type {
   FixpointResult,
   MutableGraph,
   Obligation,
+  ObligationId,
   StrictTypedGraph,
   TypeFacts,
 } from './typed-graph';
@@ -121,7 +122,7 @@ export function resolveTypes(
     g = merged.graph;
 
     // ------------------------------------------------------------------ (3) Plan discharge
-    const plans = planDischarge(g, facts, catalog);
+    const { plans, blockedReasons } = planDischarge(g, facts, catalog);
 
     // ------------------------------------------------------------------ (4) Convergence check
     // Note: an open obligation whose deps are satisfied but whose policy
@@ -132,9 +133,13 @@ export function resolveTypes(
       accumulatedDiagnostics.push(...lastSolveDiagnostics);
       for (const ob of g.obligations) {
         if (!isOpen(ob)) continue;
+        // The final iteration's policy-blocked reason is the actionable part
+        // of an OpenObligation — surface it, not just the fact of openness.
+        // [LAW:no-silent-failure]
+        const reason = blockedReasons.get(ob.id);
         accumulatedDiagnostics.push({
           code: 'OpenObligation',
-          message: `Obligation ${ob.kind} for ${ob.anchor.kind === 'edge' ? `edge ${ob.anchor.edgeId}` : `port ${ob.anchor.blockId}:${ob.anchor.slotName}`} could not be discharged`,
+          message: `Obligation ${ob.kind} for ${ob.anchor.kind === 'edge' ? `edge ${ob.anchor.edgeId}` : `port ${ob.anchor.blockId}:${ob.anchor.slotName}`} could not be discharged${reason !== undefined ? ` (${reason})` : ''}`,
           stableKey: `OpenObligation:${ob.id}`,
           obligationId: ob.id,
         });
@@ -201,8 +206,9 @@ function planDischarge(
   graph: MutableGraph,
   facts: TypeFacts,
   catalog: readonly DefinedBlock[],
-): ElaborationPlan[] {
+): { readonly plans: ElaborationPlan[]; readonly blockedReasons: ReadonlyMap<ObligationId, string> } {
   const plans: ElaborationPlan[] = [];
+  const blockedReasons = new Map<ObligationId, string>();
 
   for (const obligation of graph.obligations) {
     if (!isOpen(obligation)) continue;
@@ -212,11 +218,15 @@ function planDischarge(
     const result = callPolicy(obligation, ctx);
     if (result?.kind === 'plan') {
       plans.push(result.plan);
+    } else if (result?.kind === 'blocked') {
+      // Blocked obligations stay open for retry next iteration; the reason is
+      // carried to the convergence surfacing rather than persisted on status
+      // (a persisted 'blocked' status would end the retry loop).
+      blockedReasons.set(obligation.id, result.reason);
     }
-    // 'blocked' results: obligation stays open, will surface as OpenObligation at convergence
   }
 
-  return plans;
+  return { plans, blockedReasons };
 }
 
 function callPolicy(obligation: Obligation, ctx: PolicyContext) {
