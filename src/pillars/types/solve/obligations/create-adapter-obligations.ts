@@ -13,23 +13,10 @@
 import type { Obligation, MutableGraph, TypeFacts, FactDependency } from '../typed-graph';
 import { obligationId, draftPortKey } from '../typed-graph';
 import type { DefinedBlock } from '../../../block-api';
-import type { ZCanonicalType } from '../../schemas';
 import { getContract } from '../contract-lookup';
-import { payloadEquals, unitMerge } from '../payload-unit';
-
-// ---------------------------------------------------------------------------
-// Type compatibility check
-// ---------------------------------------------------------------------------
-
-/**
- * Delegates to the solver's own payload/unit merge rules so needsAdapter
- * detection can never diverge from what the solver actually merges.
- * Cardinality is deliberately absent — createCardinalityAdapterObligations
- * owns that axis. [LAW:single-enforcer]
- */
-function typesCompatible(a: ZCanonicalType, b: ZCanonicalType): boolean {
-  return payloadEquals(a.payload, b.payload) && unitMerge(a.unit, b.unit) !== null;
-}
+// Cardinality is deliberately absent from the compatibility check —
+// createCardinalityAdapterObligations owns that axis. [LAW:single-enforcer]
+import { typesCompatible } from '../payload-unit';
 
 // ---------------------------------------------------------------------------
 // needsAdapter obligations

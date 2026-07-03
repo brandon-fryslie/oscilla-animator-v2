@@ -20,6 +20,7 @@ import type { PolicyContext, PolicyResult } from './policy-types';
 import { applySubstitution } from '../substitution';
 import type { Substitution } from '../substitution';
 import { getContract } from '../contract-lookup';
+import { typesCompatible } from '../payload-unit';
 
 export function adapterPolicy(ctx: PolicyContext): PolicyResult {
   const { graph, facts, catalog, obligation } = ctx;
@@ -43,7 +44,9 @@ export function adapterPolicy(ctx: PolicyContext): PolicyResult {
   const tgtSlot = tgtContract.inputs[edge.inputSlot];
   if (!srcSlot || !tgtSlot) return { kind: 'blocked', reason: 'slot not found' };
 
-  // Find the first mismatched field pair where both endpoints are 'ok'.
+  // Find the first field pair that is both resolved AND actually mismatched —
+  // the obligation fired because SOME field is incompatible, and the adapter
+  // must target that field, not whichever pair happened to resolve first.
   let srcFieldType: ZInferenceCanonicalType | undefined;
   let tgtFieldType: ZInferenceCanonicalType | undefined;
 
@@ -53,7 +56,10 @@ export function adapterPolicy(ctx: PolicyContext): PolicyResult {
     const tgtKey = draftPortKey(edge.target, edge.inputSlot, fieldName, 'in');
     const srcHint = facts.ports.get(srcKey);
     const tgtHint = facts.ports.get(tgtKey);
-    if (srcHint?.status === 'ok' && tgtHint?.status === 'ok') {
+    if (
+      srcHint?.status === 'ok' && tgtHint?.status === 'ok'
+      && !typesCompatible(srcHint.canonical!, tgtHint.canonical!)
+    ) {
       srcFieldType = srcHint.canonical!;
       tgtFieldType = tgtHint.canonical!;
       break;

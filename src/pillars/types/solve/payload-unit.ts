@@ -20,6 +20,7 @@
 import type {
   PayloadVarId,
   UnitVarId,
+  ZCanonicalType,
   ZInferenceCanonicalType,
   ZPayloadType,
   ZUnitType,
@@ -261,6 +262,14 @@ export const unitMerge = (a: ZUnitType, b: ZUnitType): ZUnitType | null => {
   if (b.kind === 'none') return a;
   return null;
 };
+
+/**
+ * Would the solver merge these two concrete types without conflict?
+ * A composite of the merge rules above — obligation creation and adapter
+ * policy both consume this one definition. [LAW:single-enforcer]
+ */
+export const typesCompatible = (a: ZCanonicalType, b: ZCanonicalType): boolean =>
+  payloadEquals(a.payload, b.payload) && unitMerge(a.unit, b.unit) !== null;
 
 const intersectAllowed = (
   current: readonly ZPayloadType[],

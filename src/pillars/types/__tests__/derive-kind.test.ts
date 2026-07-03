@@ -42,9 +42,25 @@ const event = (): ZCanonicalType =>
 // Tests
 // ---------------------------------------------------------------------------
 
+const zeroExtent = (temporality: 'continuous' | 'discrete') => ({
+  cardinality: { kind: 'zero' as const },
+  temporality: { kind: temporality },
+  binding: { kind: 'unbound' as const },
+  perspective: { kind: 'default' as const },
+  branch: { kind: 'default' as const },
+});
+
 describe('deriveKind', () => {
   it('continuous + cardinality:one → signal', () => {
     expect(deriveKind(signal())).toBe('signal');
+  });
+
+  it('continuous + cardinality:zero → signal', () => {
+    expect(deriveKind(asConcrete(canonical({ kind: 'float' }, { extent: zeroExtent('continuous') })))).toBe('signal');
+  });
+
+  it('discrete + cardinality:zero → event', () => {
+    expect(deriveKind(asConcrete(canonical({ kind: 'bool' }, { extent: zeroExtent('discrete') })))).toBe('event');
   });
 
   it('continuous + cardinality:many → field', () => {
