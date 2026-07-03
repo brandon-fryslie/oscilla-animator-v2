@@ -14,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
-import { compileScenePlan } from '../index';
+import { buildSceneRegistry, compileScenePlan } from '../index';
+import { ALL_SCENE_BLOCKS } from '../blocks';
 import { makeGridOfSquaresPatch } from '../../fixtures/grid-of-squares';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from '../../fixtures/textured-tiles';
 import { sceneObjectRef } from '../../../render/scene-plan';
@@ -44,14 +45,10 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(object.instancing.count).toBe(100);
   });
 
-  it('exposes index and rank as per-instance intrinsics', () => {
+  it('exposes index as a per-instance intrinsic in the transform', () => {
     const transform = JSON.stringify(object.instancing.transform);
     expect(transform).toContain('"intrinsic"');
     expect(transform).toContain('"index"');
-    const material = plan.resources.materials[object.material];
-    expect(material.kind).toBe('unlitColor');
-    if (material.kind !== 'unlitColor') return;
-    expect(JSON.stringify(material.color)).toContain('"rank"');
   });
 
   it('binds time as a derived runtime input channel, not a compile-time constant', () => {
@@ -78,11 +75,13 @@ describe('compileScenePlan — Grid of Squares proof target', () => {
     expect(geo.height).toBe(0.08);
   });
 
-  it('references one unlit HSL color material with a per-instance color payload', () => {
+  it('references one unlit oklab color material from the ColorCycle block', () => {
     const material = plan.resources.materials[object.material];
     expect(material.kind).toBe('unlitColor');
     if (material.kind !== 'unlitColor') return;
-    expect(material.color.space).toBe('hsl');
+    // The grid is colored by ColorCycle, which mints a perceptual OKLab binding
+    // whose hue spreads by rank and drifts by time.
+    expect(material.color.space).toBe('oklab');
   });
 
   it('emits one draw item targeting the preview canvas', () => {
@@ -195,6 +194,7 @@ describe('compileScenePlan — loud failures', () => {
     expect(message).toContain("'cols'");
     expect(message).toContain("'spacing'");
     expect(message).toContain("'rotationPerIndex'");
+    expect(message).toContain('(InstanceGrid)');
   });
 
   it('reports a patch with no draw block', () => {
@@ -202,13 +202,154 @@ describe('compileScenePlan — loud failures', () => {
       blocks: [
         { id: 'grid', kind: 'generator', type: 'InstanceGrid',
           config: { rows: 10, cols: 10, spacing: 0.1, rotationPerIndex: 0.5,
-            rotationPerTime: 2, huePerTime: 0.2, saturation: 0.8, lightness: 0.6 } },
+            rotationPerTime: 2 } },
       ],
       edges: [],
     });
     expect(result.kind).toBe('error');
     if (result.kind !== 'error') return;
     expect(result.errors.join('\n')).toMatch(/renders nothing/);
+  });
+});
+
+describe('scene block contract — catalog and registration', () => {
+  it('publishes catalog metadata for palette ports and config fields', () => {
+    const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
+    const catalog = registry.catalog;
+
+    expect(catalog.map((block) => block.displayName)).toEqual([
+      'Constant',
+      'Time',
+      'Accumulator',
+      'Scale',
+      'Offset',
+      'Clamp',
+      'Instance Grid',
+      'Instance Count',
+      'Ring Layout',
+      'Spirograph',
+      'Kaleidoscope',
+      'Scatter',
+      'Wave Offset',
+      'Solid Color',
+      'Gradient',
+      'Color By Index',
+      'Color From Gradient',
+      'Color Cycle',
+      'Brightness',
+      'Threshold Visibility',
+      'Draw Instances',
+    ]);
+    expect(catalog.flatMap((block) => block.ports.map((port) => port.value))).toEqual([
+      'scalar', // Constant output
+      'scalar', // Time output
+      'scalar', // Accumulator output (value)
+      'scalar', // Accumulator increment knob
+      'scalar', // Scale in
+      'scalar', // Scale out
+      'scalar', // Offset in
+      'scalar', // Offset out
+      'scalar', // Clamp in
+      'scalar', // Clamp out
+      'instanceBundle', // InstanceGrid output
+      'instanceBundle', // InstanceCount output
+      'instanceBundle', // RingLayout input
+      'instanceBundle', // RingLayout output
+      'instanceBundle', // Spirograph input
+      'instanceBundle', // Spirograph output
+      'instanceBundle', // Kaleidoscope input
+      'instanceBundle', // Kaleidoscope output
+      'instanceBundle', // Scatter input
+      'instanceBundle', // Scatter output
+      'instanceBundle', // WaveOffset input
+      'instanceBundle', // WaveOffset output
+      'scalar', // WaveOffset amplitude knob
+      'scalar', // WaveOffset frequency knob
+      'scalar', // WaveOffset speed knob
+      'instanceBundle', // SolidColor input
+      'instanceBundle', // SolidColor output
+      'instanceBundle', // Gradient input
+      'instanceBundle', // Gradient output
+      'instanceBundle', // ColorByIndex input
+      'instanceBundle', // ColorByIndex output
+      'instanceBundle', // ColorFromGradient input
+      'instanceBundle', // ColorFromGradient output
+      'instanceBundle', // ColorCycle input
+      'instanceBundle', // ColorCycle output
+      'instanceBundle', // Brightness input
+      'instanceBundle', // Brightness output
+      'instanceBundle', // ThresholdVisibility input
+      'instanceBundle', // ThresholdVisibility output
+      'instanceBundle', // DrawInstances input
+      'materialShell', // DrawInstances output
+    ]);
+    expect(catalog.flatMap((block) => block.configFields.map((field) => field.key))).toEqual([
+      'value', // Constant (Time has no config fields)
+      'init', // Accumulator config
+      'increment', // Accumulator increment knob
+      'factor', // Scale
+      'amount', // Offset
+      'lo', // Clamp
+      'hi',
+      'rows',
+      'cols',
+      'spacing',
+      'rotationPerIndex',
+      'rotationPerTime',
+      'count', // InstanceCount
+      'radius', // RingLayout
+      'angularSpeed',
+      'radius', // Spirograph
+      'freqA',
+      'freqB',
+      'speed',
+      // Kaleidoscope has no config fields — N-fold order is the upstream count.
+      'width', // Scatter
+      'height',
+      'seed',
+      'amplitude',
+      'frequency',
+      'speed',
+      'color',
+      'colorStart',
+      'colorEnd',
+      'palette', // ColorByIndex
+      'stops', // ColorFromGradient
+      'spread',
+      'cycleSpeed',
+      'vividness',
+      'brightness',
+      'factor',
+      'color', // ThresholdVisibility
+      'threshold',
+      'frequency',
+      'speed',
+      'shape', // DrawInstances
+      'size',
+      'aspect',
+      'cameraHalfExtentX',
+      'cameraHalfExtentY',
+      'textureAssetId',
+    ]);
+  });
+
+  it('rejects registration without the required scene block contract metadata', () => {
+    const malformed = {
+      type: 'MalformedSceneBlock',
+      role: 'draw',
+      catalog: {
+        displayName: '',
+        category: 'draw',
+        ports: [],
+      },
+      configSchema: undefined,
+      readConfig: () => null,
+      contribute: () => ({ role: 'draw', shell: {} }),
+    };
+
+    expect(() =>
+      buildSceneRegistry([malformed as unknown as (typeof ALL_SCENE_BLOCKS)[number]]),
+    ).toThrow(/catalog\.displayName.*catalog\.ports.*configSchema/);
   });
 });
 
@@ -231,6 +372,8 @@ describe('compileScenePlan — backend neutrality (source-level)', () => {
       // concepts ([LAW:behavior-not-structure] — test the dependency, not prose).
       // [LAW:one-source-of-truth] No dependency on the frozen Rust payload.
       expect(src).not.toMatch(/from ['"][^'"]*boundary-contract/);
+      expect(src).not.toMatch(/from ['"][^'"]*block-api/);
+      expect(src).not.toMatch(/import\s+[^;]*(ExprIR|SourceBundle|RosterEntry)[^;]*from/);
       // [LAW:locality-or-seam] No Three / WASM coupling in the compiler output.
       expect(src).not.toMatch(/from ['"]three/);
       expect(src).not.toMatch(/from ['"][^'"]*render\/wasm/);

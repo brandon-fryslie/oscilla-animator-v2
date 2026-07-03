@@ -23,6 +23,8 @@
  *   New operators are added to these unions; consumers stay exhaustive.
  */
 
+import type { StateRef } from './refs';
+
 /**
  * A runtime-updated scalar input channel the plan may read.
  *
@@ -50,11 +52,38 @@ export type PlanInputChannel =
  */
 export type PlanIntrinsic = 'index' | 'rank';
 
-/** Single-operand math operators. */
-export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate';
+/**
+ * Single-operand math operators.
+ *
+ * `fract` is the fractional part: `fract(x)` is `x - floor(x)`, always in
+ * `[0, 1)`. `hash` is a pseudo-random map: `hash(seed)` is a deterministic value
+ * in `[0, 1)` whose output decorrelates from the seed. `hash` is the one operator
+ * here that is *not* expressible by composing the others — a quality hash needs
+ * integer bit-mixing the float-only leaf vocabulary (`const`/`input`/`intrinsic`)
+ * cannot denote, so it is a named primitive the backend realizes. Together they
+ * are the minimal vocabulary for value noise and Halton-style scatter: faking
+ * pseudo-randomness with a smooth function would be a dishonest stand-in.
+ * [LAW:no-mode-explosion] Two operators, every consumer kept exhaustive; no flag
+ * selects "noise mode".
+ */
+export type PlanUnaryOp = 'floor' | 'sin' | 'cos' | 'negate' | 'fract' | 'hash';
 
-/** Two-operand math operators. */
-export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod';
+/**
+ * Two-operand math operators.
+ *
+ * `step` is the threshold primitive: `step(edge, x)` is `1` when `x >= edge`,
+ * else `0`. It is what turns a smooth per-instance field into a boolean
+ * show/hide decision — the Conditional Visibility demo's "opacity is a material
+ * binding" claim is unrepresentable without it, and a smooth fade would be a
+ * dishonest stand-in. [LAW:no-mode-explosion] One operator, every consumer kept
+ * exhaustive; no flag selects "threshold mode".
+ *
+ * `min`/`max` are the range primitives: they are what a `clamp` scalar modifier
+ * lowers to — `clamp(x, lo, hi)` is `max(lo, min(hi, x))`. A clamp is not a new
+ * operator; it composes from these two, so the vocabulary gains the primitives,
+ * not the convenience. [LAW:no-mode-explosion]
+ */
+export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod' | 'step' | 'min' | 'max';
 
 /**
  * A backend-neutral scalar expression.
@@ -63,10 +92,18 @@ export type PlanBinaryOp = 'add' | 'sub' | 'mul' | 'div' | 'mod';
  * requirement that time is "a runtime-updated input channel, not a
  * compile-time constant": a runtime value is `input`, a baked value is `const`,
  * and they are different shapes rather than a flag on one shape.
+ *
+ * `state` is the fourth leaf: it reads a stateful value's renderer-owned storage
+ * (an accumulator's running value) by handle, exactly as `input` reads a runtime
+ * channel. It keeps the grammar pure-combinational — the recurrence
+ * `next = f(state(self), …)` is closed by the renderer at the frame boundary, not
+ * by a cycle in the expression. [LAW:effects-at-boundaries] The plan reads the
+ * cell; who advances it (the frame owner) is behind the renderer seam.
  */
 export type PlanExpr =
   | { readonly kind: 'const'; readonly value: number }
   | { readonly kind: 'input'; readonly channel: PlanInputChannel }
+  | { readonly kind: 'state'; readonly ref: StateRef }
   | { readonly kind: 'intrinsic'; readonly name: PlanIntrinsic }
   | { readonly kind: 'unary'; readonly op: PlanUnaryOp; readonly arg: PlanExpr }
   | {
@@ -82,6 +119,8 @@ export type PlanExpr =
 
 export const konst = (value: number): PlanExpr => ({ kind: 'const', value });
 export const input = (channel: PlanInputChannel): PlanExpr => ({ kind: 'input', channel });
+/** `state(ref)` → the current value of a stateful block's renderer-owned storage. */
+export const state = (ref: StateRef): PlanExpr => ({ kind: 'state', ref });
 export const intrinsic = (name: PlanIntrinsic): PlanExpr => ({ kind: 'intrinsic', name });
 
 const unary = (op: PlanUnaryOp) => (arg: PlanExpr): PlanExpr => ({ kind: 'unary', op, arg });
@@ -93,9 +132,27 @@ export const floor = unary('floor');
 export const sin = unary('sin');
 export const cos = unary('cos');
 export const negate = unary('negate');
+/** `fract(x)` → the fractional part of `x`, always in `[0, 1)`. */
+export const fract = unary('fract');
+/** `hash(seed)` → a deterministic pseudo-random value in `[0, 1)`. */
+export const hash = unary('hash');
 
 export const add = binary('add');
 export const sub = binary('sub');
 export const mul = binary('mul');
 export const div = binary('div');
 export const mod = binary('mod');
+/** `step(edge, x)` → `1` when `x >= edge`, else `0`. */
+export const step = binary('step');
+/** `min(a, b)` → the lesser of the two operands. */
+export const min = binary('min');
+/** `max(a, b)` → the greater of the two operands. */
+export const max = binary('max');
+
+/**
+ * `clamp(x, lo, hi)` → `x` confined to `[lo, hi]`, composed from `min`/`max` so
+ * it adds no operator to {@link PlanBinaryOp}. This is the exact expression a
+ * `Clamp` scalar modifier lowers to; keeping it a builder means both the block
+ * and any hand-written plan denote the clamp one way. [LAW:one-source-of-truth]
+ */
+export const clamp = (x: PlanExpr, lo: PlanExpr, hi: PlanExpr): PlanExpr => max(lo, min(hi, x));

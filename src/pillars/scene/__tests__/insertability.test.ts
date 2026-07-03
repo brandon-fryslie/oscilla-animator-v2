@@ -1,0 +1,108 @@
+/**
+ * Tests for the palette insertability query (nt56.3): "given the port I selected,
+ * which blocks can connect here?" — answered from declared catalog ports, never a
+ * compile.
+ */
+
+import { describe, it, expect } from 'vitest';
+
+import { buildSceneRegistry } from '../scene-block';
+import { ALL_SCENE_BLOCKS } from '../blocks';
+import { connectableScenePorts } from '../insertability';
+import type {
+  SceneBlockCategory,
+  SceneBlockDefinition,
+  SceneCatalogMetadata,
+  ScenePortDeclaration,
+  SceneRegistry,
+  SceneValueKind,
+} from '../scene-block';
+
+function port(
+  id: string,
+  direction: 'input' | 'output',
+  value: SceneValueKind,
+): ScenePortDeclaration {
+  return direction === 'input'
+    ? { id, label: id, direction, value, default: { kind: 'required' } }
+    : { id, label: id, direction, value };
+}
+
+function catalogOf(
+  type: string,
+  ports: readonly ScenePortDeclaration[],
+  category: SceneBlockCategory = 'instance',
+): SceneCatalogMetadata {
+  return { type, displayName: type, category, ports, configFields: [] };
+}
+
+function metadataRegistry(catalogs: readonly SceneCatalogMetadata[]): SceneRegistry {
+  const byType = new Map<string, SceneBlockDefinition<unknown>>(
+    catalogs.map((c) => [c.type, { catalog: c } as unknown as SceneBlockDefinition<unknown>]),
+  );
+  return { get: (t) => byType.get(t), catalog: catalogs };
+}
+
+describe('connectableScenePorts — over the native block set', () => {
+  const registry = buildSceneRegistry(ALL_SCENE_BLOCKS);
+
+  it('a selected instanceBundle output offers every instanceBundle input — the modifiers and the draw', () => {
+    const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'output' });
+    // A modifier consumes a bundle and a draw consumes a bundle, so every
+    // modifier and the draw are valid sinks for a bundle output.
+    expect(matches.map((m) => m.blockType)).toEqual(['RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorByIndex', 'ColorFromGradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility', 'DrawInstances']);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ id: 'primary', direction: 'input', value: 'instanceBundle' });
+      expect(match.compatibility).toMatchObject({ kind: 'compatible' });
+    }
+  });
+
+  it('a selected instanceBundle input offers the instance sources and the modifiers as bundle outputs', () => {
+    const matches = connectableScenePorts(registry, { value: 'instanceBundle', direction: 'input' });
+    // Instance sources and modifiers both *produce* a bundle, so each is offerable
+    // as a source — the draw is excluded since its only output is a materialShell.
+    expect(matches.map((m) => m.blockType)).toEqual(['InstanceGrid', 'InstanceCount', 'RingLayout', 'Spirograph', 'Kaleidoscope', 'Scatter', 'WaveOffset', 'SolidColor', 'Gradient', 'ColorByIndex', 'ColorFromGradient', 'ColorCycle', 'Brightness', 'ThresholdVisibility']);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ id: 'instances', direction: 'output', value: 'instanceBundle' });
+    }
+  });
+
+  it('offers nothing for a value no port consumes (materialShell input)', () => {
+    expect(connectableScenePorts(registry, { value: 'materialShell', direction: 'output' })).toEqual([]);
+  });
+
+  it('a selected scalar output offers the routable scalar knob inputs, and only those', () => {
+    const matches = connectableScenePorts(registry, { value: 'scalar', direction: 'output' });
+    // A scalar source (Constant/Time) offers every routable knob — here WaveOffset's
+    // amplitude/frequency/speed — and nothing that is not a scalar input.
+    expect(matches.length).toBeGreaterThan(0);
+    for (const match of matches) {
+      expect(match.port).toMatchObject({ direction: 'input', value: 'scalar' });
+      expect(match.compatibility).toMatchObject({ kind: 'compatible' });
+    }
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        blockType: 'WaveOffset',
+        port: expect.objectContaining({ id: 'amplitude', value: 'scalar' }),
+      }),
+    );
+  });
+});
+
+describe('connectableScenePorts — adaptation and deferred kinds', () => {
+  it('offers an adapter-bridged candidate when a route declares one', () => {
+    const registry = metadataRegistry([catalogOf('ColorSink', [port('in', 'input', 'color')], 'color')]);
+    const matches = connectableScenePorts(
+      registry,
+      { value: 'scalar', direction: 'output' },
+      [{ from: 'scalar', to: 'color', via: 'ScalarToColor' }],
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].compatibility).toMatchObject({ kind: 'adaptationNeeded', via: 'ScalarToColor' });
+  });
+
+  it('never offers a deferred (mask) port — it has no lowering target', () => {
+    const registry = metadataRegistry([catalogOf('MaskSink', [port('in', 'input', 'mask')], 'draw')]);
+    expect(connectableScenePorts(registry, { value: 'mask', direction: 'output' })).toEqual([]);
+  });
+});

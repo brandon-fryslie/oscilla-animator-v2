@@ -1,94 +1,29 @@
-/**
- * src/pillars/scene/scene-block.ts
- *
- * The ABI between scene-block authors and the ScenePlan lowering.
- *
- * Scope source: design-docs/three-fork-integration-proposal.md §2.1, §2.2, §3.
- * Ownership/seam canon: design-docs/three-migration-backend-canon.md
- *   (Oscilla owns "compile/lower stages from authored graph to backend-neutral
- *   execution data"; ScenePlan is that data).
- * Replacement narrative: design-docs/three-migration-scene-plan.md §"Concept
- *   Mapping".
- *
- * This is the NEW lowering ABI for the Three migration. It is deliberately NOT
- * the GPU-IR `BlockDefinition` (src/pillars/block-api.ts): that ABI's `lower`
- * produces `ExprIR`/`RosterEntry` for the frozen Rust-boundary payload (canon
- * §"Dead Concepts"). A scene block instead `contribute`s backend-neutral
- * ScenePlan fragments.
- *
- * [LAW:decomposition] A scene block is a genuinely different part from a GPU-IR
- *   block — different target representation, different seam — so it gets its own
- *   ABI rather than being forced through the GPU-IR contract.
- * [LAW:effects-at-boundaries] `contribute` is pure: declarative config in,
- *   ScenePlan-fragment description out. Nothing here touches a renderer.
- * [LAW:types-are-the-program] The contribution is a discriminated union on
- *   `role`; the lowering joins the parts by role without re-deriving block kind.
- */
-
+import { z } from 'zod';
 import type { AssetId } from '../../core/ids';
 import type {
   CameraPlan,
-  ColorBinding,
   GeometryDef,
+  PlanExpr,
   RenderTarget,
   TransformBinding,
 } from '../../render/scene-plan';
+import type { ColorPlan } from './color';
 
-// ---------------------------------------------------------------------------
-// Diagnostics — the loud-failure channel for config validation.
-// ---------------------------------------------------------------------------
-
-/**
- * A config-validation failure. There is no `warning`/`info` severity here: a
- * scene block either has a usable config or it does not.
- *
- * [LAW:no-silent-failure] An invalid config is a collected, surfaced error, not
- *   a silently-defaulted value that renders the wrong scene.
- */
 export interface SceneDiagnostic {
   readonly message: string;
   readonly blockId: string;
 }
 
-// ---------------------------------------------------------------------------
-// Contributions — what a block hands the lowering, before parts are joined.
-// ---------------------------------------------------------------------------
-
-/**
- * The per-instance field bundle an instance-source block emits: how many
- * instances exist and the fields that vary across them. Each field is a
- * `PlanExpr` (carried inside `TransformBinding` / `ColorBinding`), so it may
- * reference `index`/`rank` intrinsics and runtime inputs.
- *
- * [LAW:one-source-of-truth] The bundle is the canonical per-instance data; the
- *   draw block wraps it (geometry, material shell, camera) without re-deriving
- *   any of these fields.
- */
 export interface InstanceBundle {
   readonly count: number;
   readonly transform: TransformBinding;
-  readonly color: ColorBinding;
+  readonly color: ColorPlan;
 }
 
-/**
- * The surface a draw block wraps around its instance bundle.
- *
- * - `unlitColor` takes its per-instance color from the upstream `InstanceBundle`;
- *   the shell carries no color of its own.
- * - `texturedUnlit` samples a texture asset (named by {@link AssetId}); the
- *   lowering mints the plan's `TextureRef` and the textures-table entry from it.
- *
- * [LAW:no-mode-explosion] Material kinds are variants of this union; the
- *   lowering's join stays a total switch as kinds are added.
- */
 export type MaterialShell =
   | { readonly kind: 'unlitColor' }
   | { readonly kind: 'texturedUnlit'; readonly assetId: AssetId };
 
-/**
- * What a draw (sink) block contributes before it is joined to its instance
- * bundle: the rendering shell around the per-instance data.
- */
 export interface DrawShell {
   readonly geometry: GeometryDef;
   readonly material: MaterialShell;
@@ -97,41 +32,455 @@ export interface DrawShell {
 }
 
 /**
- * The discriminated contribution every scene block produces. The lowering
- * joins an `instanceSource` to the `draw` that reads it (via the primary edge).
+ * A pure transform from one instance bundle to another. A modifier rewrites the
+ * `TransformBinding` / `ColorBinding` `PlanExpr` trees of its upstream bundle —
+ * count and the bundle's shape are preserved; only the per-instance value
+ * expressions change.
+ *
+ * [LAW:effects-at-boundaries] This is a pure description-rewriting function: it
+ *   composes `PlanExpr` trees, it does not evaluate them. Evaluation happens in
+ *   TSL behind the renderer seam.
+ */
+export type BundleTransform = (input: InstanceBundle) => InstanceBundle;
+
+/**
+ * What a scene block hands to assembly.
+ *
+ * - `instanceSource` carries a concrete bundle (a source: config → bundle).
+ * - `modifier` carries a bundle *transform* (a modifier: bundle → bundle); the
+ *   concrete bundle is produced only once assembly folds it over its upstream.
+ * - `draw` carries the shell assembly joins to the resolved upstream bundle.
+ * - `scalarSource` carries a single scalar `PlanExpr` a routable knob reads in
+ *   place of its config default (a Constant is `konst(value)`, a clock is
+ *   `input('time')`). It never feeds an instance chain — only a knob input port.
+ * - `scalarModifier` carries a scalar *transform* (`PlanExpr → PlanExpr`) and the
+ *   id of the scalar input port it reads. It is to a scalar route what `modifier`
+ *   is to an instance bundle: `scale`/`offset`/`clamp` fold onto the routed scalar
+ *   the same way `WaveOffset` folds onto a bundle — resolution walks the chain
+ *   back to its `scalarSource`, applying each transform (see `resolveScalar`).
+ * - `statefulScalar` carries a scalar value whose current frame depends on prior
+ *   frames: it owns a renderer cell (seeded by `init`) and an `update` recurrence
+ *   `next = f(state(self), knobs)`. Its *output* is that cell — an ordinary scalar
+ *   route reads it — so the compiler registers `state(self)` as the block's scalar
+ *   producer; only the recurrence needs the resolved knobs. `update` is left as a
+ *   function of `self` so the assembler (which mints the cell handle from the
+ *   block id) closes it: `update(state(ref))`. [LAW:effects-at-boundaries] the
+ *   contribution is a *description* of a recurrence; the renderer runs it.
+ *
+ * [LAW:dataflow-not-control-flow] A modifier's behavior is the `apply` *value*,
+ *   not a branch in assembly: folding the modifier chain is one generic walk, so
+ *   adding a modifier adds no assembly code path.
+ * [LAW:one-type-per-behavior] A scalar transform (scale/offset/clamp) is a
+ *   scalar→scalar function, i.e. a block — not a bag of ops on the edge. It is the
+ *   scalar sibling of `modifier`, resolved by the same kind of fold.
  */
 export type SceneContribution =
   | { readonly role: 'instanceSource'; readonly bundle: InstanceBundle }
-  | { readonly role: 'draw'; readonly shell: DrawShell };
+  | { readonly role: 'modifier'; readonly apply: BundleTransform }
+  | { readonly role: 'draw'; readonly shell: DrawShell }
+  | { readonly role: 'scalarSource'; readonly value: PlanExpr }
+  | {
+      readonly role: 'scalarModifier';
+      /** The scalar input port whose upstream route this modifier transforms. */
+      readonly input: string;
+      /** Fold this modifier's transform onto the resolved upstream scalar. */
+      readonly apply: (value: PlanExpr) => PlanExpr;
+    }
+  | {
+      readonly role: 'statefulScalar';
+      /** Seed for the cell on first install and on an explicit reseed. */
+      readonly init: number;
+      /**
+       * The recurrence, as a function of this block's own cell leaf: given
+       * `state(ref)`, produce `next`. The assembler mints `ref` and closes it.
+       */
+      readonly update: (self: PlanExpr) => PlanExpr;
+    };
 
-// ---------------------------------------------------------------------------
-// Block definition — the contract every scene block file exports.
-// ---------------------------------------------------------------------------
+export type SceneContributionRole = SceneContribution['role'];
 
 /**
- * The shape every scene-block file exports as a named constant.
- *
- * `readConfig` validates/narrows raw authored config (loud diagnostics on bad
- * input, never throws on user input). `contribute` is the pure mapping from the
- * narrowed config to a backend-neutral ScenePlan fragment.
+ * A contribution that yields a scalar `PlanExpr` — the only kinds a scalar route
+ * can be folded through. Naming this subset lets the fold's producer map hold
+ * exactly these two roles, so `resolveScalar` never has to defend against an
+ * instance/draw contribution appearing where a scalar is expected.
+ * [LAW:types-are-the-program]
  */
-export interface SceneBlockDefinition<TConfig> {
+export type ScalarContribution = Extract<
+  SceneContribution,
+  { readonly role: 'scalarSource' | 'scalarModifier' }
+>;
+
+export type SceneValueKind =
+  | 'instanceBundle'
+  | 'geometry'
+  | 'materialShell'
+  | 'texture'
+  | 'camera'
+  | 'color'
+  | 'scalar'
+  | 'mask';
+
+export type ScenePortDirection = 'input' | 'output';
+
+/**
+ * How an input port is fed when the author draws no wire to it — a *typed* port
+ * property, so "defaultable vs required" is representable, not folded into a
+ * codepath.
+ *
+ * - `required`: the port MUST be wired; unwired is a loud error (a draw's primary
+ *   instance bundle has no meaningful default).
+ * - `configScalar`: the port has a canonical default *source* — a Constant
+ *   carrying the value of config field `configKey`. When the port is unwired the
+ *   compiler synthesizes that source, so every knob input has exactly one source
+ *   and resolution never branches on wired/unwired.
+ *
+ * [LAW:no-silent-failure] A required input left unwired is surfaced, never
+ *   silently defaulted. [LAW:one-source-of-truth] The default's constant lives in
+ *   config; the synthesized source is derived from it, never a second copy.
+ */
+export type ScenePortInputDefault =
+  | { readonly kind: 'required' }
+  | { readonly kind: 'configScalar'; readonly configKey: string };
+
+interface ScenePortBase {
+  readonly id: string;
+  readonly label: string;
+  readonly value: SceneValueKind;
+}
+
+/**
+ * A declared port. Discriminated on `direction`: only an input port carries a
+ * `default` policy (an output produces a value, it is never fed).
+ *
+ * [LAW:types-are-the-program] The default policy is unrepresentable on an output
+ *   and mandatory on an input — the shape forbids the illegal combinations.
+ */
+export type ScenePortDeclaration =
+  | (ScenePortBase & { readonly direction: 'output' })
+  | (ScenePortBase & {
+      readonly direction: 'input';
+      readonly default: ScenePortInputDefault;
+    });
+
+export type SceneBlockCategory =
+  | 'instance'
+  | 'modifier'
+  | 'draw'
+  | 'material'
+  | 'asset'
+  | 'color'
+  // A scalar signal source (Constant, Time) — produces one routable scalar value.
+  | 'signal'
+  // A scalar→scalar transform (Scale, Offset, Clamp) that lives *on a route*
+  // between a signal source and a knob. The Modulation Table reads this category
+  // to keep transforms out of its grid (route-internal), never a name heuristic.
+  | 'transform';
+
+export type SceneConfigControl =
+  | 'number'
+  | 'integer'
+  | 'asset'
+  | 'color'
+  | 'colorList'
+  | 'toggle'
+  | 'select';
+
+export interface SceneConfigFieldCatalog {
+  readonly label: string;
+  readonly control: SceneConfigControl;
+}
+
+export interface SceneConfigField<TValue> {
+  readonly schema: z.ZodType<TValue>;
+  readonly catalog: SceneConfigFieldCatalog;
+}
+
+export type SceneConfigFields = Readonly<Record<string, SceneConfigField<unknown>>>;
+
+export type SceneConfigFor<TFields extends SceneConfigFields> = {
+  readonly [K in keyof TFields]: z.infer<TFields[K]['schema']>;
+};
+
+export interface SceneCatalogMetadata {
+  /** The block type this catalog entry describes — what the palette instantiates. */
   readonly type: string;
-  readonly role: SceneContribution['role'];
+  readonly displayName: string;
+  readonly category: SceneBlockCategory;
+  readonly ports: readonly ScenePortDeclaration[];
+  readonly configFields: readonly SceneCatalogConfigField[];
+}
+
+export interface SceneCatalogConfigField extends SceneConfigFieldCatalog {
+  readonly key: string;
+  /**
+   * The field's authored default value, when it has one (a knob carries its
+   * `SceneScalarKnob.default`). A field with no authored default omits this and
+   * falls to the editor's control-generic default. [LAW:one-source-of-truth] For
+   *   a knob this is derived from `SceneScalarKnob.default` alongside the zod
+   *   `.default`, in `defineSceneBlock` — one authored source, two projections.
+   */
+  readonly defaultValue?: number;
+}
+
+/**
+ * A routable scalar knob: a numeric parameter that is *both* a persisted config
+ * default AND a scalar input port a wire can override. One declaration projects
+ * to a config field (the default's constant), a scalar input port, and a resolved
+ * `PlanExpr` handed to `contribute`.
+ *
+ * [LAW:one-source-of-truth] A knob is one declaration, not a config field and a
+ *   port and a default kept in sync by hand.
+ */
+export interface SceneScalarKnob {
+  readonly label: string;
+  readonly default: number;
+}
+
+export type SceneKnobFields = Readonly<Record<string, SceneScalarKnob>>;
+
+/** A knob's persisted config value: a finite number (its default source's constant). */
+type KnobConfigFor<TKnobs extends SceneKnobFields> = {
+  readonly [K in keyof TKnobs]: number;
+};
+
+/** The resolved scalar `PlanExpr` feeding each knob input port at compile time. */
+export type KnobInputsFor<TKnobs extends SceneKnobFields> = {
+  readonly [K in keyof TKnobs]: PlanExpr;
+};
+
+export interface SceneBlockDefinition<
+  TConfig,
+  TRole extends SceneContributionRole = SceneContributionRole,
+> {
+  readonly type: string;
+  readonly role: TRole;
+  readonly catalog: SceneCatalogMetadata;
+  readonly configSchema: z.ZodType<TConfig>;
   readonly readConfig: (
     raw: Readonly<Record<string, unknown>>,
     blockId: string,
     diagnostics: SceneDiagnostic[],
   ) => TConfig | null;
-  readonly contribute: (config: TConfig) => SceneContribution;
+  /**
+   * Produce the block's contribution from its parsed config and its resolved
+   * scalar knob inputs. `inputs` is keyed by knob (= scalar input port) id; the
+   * compiler guarantees every knob is present (a wired source or the synthesized
+   * config default), so a block reads `inputs.x` with no wired/unwired branch.
+   */
+  readonly contribute: (
+    config: TConfig,
+    inputs: Readonly<Record<string, PlanExpr>>,
+  ) => Extract<SceneContribution, { readonly role: TRole }>;
 }
 
-// ---------------------------------------------------------------------------
-// Registry — value-constructor, no module-level singleton (mirrors frontend).
-// ---------------------------------------------------------------------------
+export interface SceneBlockDeclaration<
+  TFields extends SceneConfigFields,
+  TKnobs extends SceneKnobFields,
+  TRole extends SceneContributionRole,
+> {
+  readonly type: string;
+  readonly role: TRole;
+  // `type` and `configFields` are derived from the declaration, not repeated here.
+  readonly catalog: Omit<SceneCatalogMetadata, 'configFields' | 'type'>;
+  readonly config: TFields;
+  /** Routable scalar knobs; omit for a block with no routable parameters. */
+  readonly knobs?: TKnobs;
+  /**
+   * A cross-field invariant on the parsed config, returning a diagnostic message
+   * when violated or `null` when valid. Per-field constraints belong on the field
+   * schemas; this is for relationships between fields (e.g. Clamp's `lo <= hi`) that
+   * no single field can express. It runs as part of config parsing, so a violation
+   * surfaces as a loud config diagnostic — never a value silently compiled into a
+   * degenerate result. [LAW:no-silent-failure] [LAW:types-are-the-program]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>) => string | null;
+  readonly contribute: (
+    config: SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
+    inputs: KnobInputsFor<TKnobs>,
+  ) => Extract<SceneContribution, { readonly role: TRole }>;
+}
+
+type SceneConfigShape<TFields extends SceneConfigFields> = {
+  readonly [K in keyof TFields]: TFields[K]['schema'];
+};
+
+export function defineSceneBlock<
+  const TFields extends SceneConfigFields,
+  const TKnobs extends SceneKnobFields,
+  const TRole extends SceneContributionRole,
+>(
+  declaration: SceneBlockDeclaration<TFields, TKnobs, TRole>,
+): SceneBlockDefinition<SceneConfigFor<TFields> & KnobConfigFor<TKnobs>, TRole> {
+  const knobs: SceneKnobFields = declaration.knobs ?? {};
+
+  // [LAW:one-source-of-truth] Each knob derives its config field (default
+  //   source's constant), its scalar input port, and its catalog control from one
+  //   declaration — never three hand-synced copies.
+  const knobSchema = Object.fromEntries(
+    Object.entries(knobs).map(([key, knob]) => [key, z.number().finite().default(knob.default)]),
+  );
+  const baseSchema = z.object({
+    ...configShape(declaration.config),
+    ...knobSchema,
+  });
+  const { validateConfig } = declaration;
+  // A cross-field invariant runs as a refinement, so its violation is one more
+  // config issue on the same parse path — surfaced, not silently compiled through.
+  // [LAW:single-enforcer] config validity has one gate (readConfig's parse).
+  const refinedSchema = validateConfig
+    ? baseSchema.superRefine((val, ctx) => {
+        const message = validateConfig(val as SceneConfigFor<TFields> & KnobConfigFor<TKnobs>);
+        if (message !== null) ctx.addIssue({ code: 'custom', message });
+      })
+    : baseSchema;
+  const configSchema = refinedSchema as unknown as z.ZodType<
+    SceneConfigFor<TFields> & KnobConfigFor<TKnobs>
+  >;
+
+  const knobPorts: ScenePortDeclaration[] = Object.entries(knobs).map(([key, knob]) => ({
+    id: key,
+    label: knob.label,
+    direction: 'input',
+    value: 'scalar',
+    default: { kind: 'configScalar', configKey: key },
+  }));
+
+  const configFields: SceneCatalogConfigField[] = [
+    ...Object.entries(declaration.config).map(([key, field]) => ({ key, ...field.catalog })),
+    ...Object.entries(knobs).map(([key, knob]) => ({
+      key,
+      label: knob.label,
+      control: 'number' as const,
+      // [LAW:one-source-of-truth] The knob's authored default flows to the catalog
+      //   field here, so a freshly-added block seeds this value — not a generic 1.
+      defaultValue: knob.default,
+    })),
+  ];
+
+  const catalog: SceneCatalogMetadata = {
+    type: declaration.type,
+    ...declaration.catalog,
+    ports: [...declaration.catalog.ports, ...knobPorts],
+    configFields,
+  };
+
+  return {
+    type: declaration.type,
+    role: declaration.role,
+    catalog,
+    configSchema,
+    readConfig: (raw, blockId, diagnostics) => {
+      const result = configSchema.safeParse(raw);
+      if (result.success) return result.data;
+      for (const issue of result.error.issues) {
+        diagnostics.push({
+          blockId,
+          message: formatConfigIssue(blockId, declaration.type, issue),
+        });
+      }
+      return null;
+    },
+    // The declaration's `contribute` reads a knob-typed inputs record; the erased
+    // definition hands it a loose `Record<string, PlanExpr>` the compiler fills.
+    contribute: declaration.contribute as SceneBlockDefinition<
+      SceneConfigFor<TFields> & KnobConfigFor<TKnobs>,
+      TRole
+    >['contribute'],
+  };
+}
+
+/**
+ * The scalar input / output port ids every scalar modifier shares. Owned here so
+ * `defineScalarModifier` and the route fold (`resolveScalar` reads the port id off
+ * the contribution) agree on one name, never a string repeated per block.
+ * [LAW:one-source-of-truth]
+ */
+export const SCALAR_MODIFIER_INPUT = 'in';
+export const SCALAR_MODIFIER_OUTPUT = 'out';
+
+/**
+ * A scalar→scalar transform block: one scalar `in`, one scalar `out`, and config
+ * for its parameters (`scale`'s factor, `clamp`'s bounds). It declares the whole
+ * block from just its math — the standard in/out ports and the `transform`
+ * category are supplied here, so a new transform is a `transform:` function and a
+ * config shape, nothing else.
+ *
+ * The parameters are plain config, NOT knobs: a scalar modifier has exactly one
+ * scalar input (the value it transforms), mirroring a bundle modifier's single
+ * `primary`. That keeps the route fold unambiguous — one upstream edge to follow.
+ *
+ * [LAW:one-type-per-behavior] scale/offset/clamp differ only by their `transform`;
+ *   they are instances of one block shape, not three bespoke definitions.
+ * [LAW:effects-at-boundaries] `transform` composes `PlanExpr` trees (a
+ *   description), it never evaluates them.
+ */
+export interface ScalarModifierDeclaration<TFields extends SceneConfigFields> {
+  readonly type: string;
+  readonly displayName: string;
+  readonly config: TFields;
+  /**
+   * A cross-field invariant on the parsed config (e.g. Clamp's `lo <= hi`),
+   * returning a diagnostic message when violated. Surfaces through the same config
+   * parse gate as any other config error. [LAW:no-silent-failure]
+   */
+  readonly validateConfig?: (config: SceneConfigFor<TFields>) => string | null;
+  readonly transform: (config: SceneConfigFor<TFields>, value: PlanExpr) => PlanExpr;
+}
+
+export function defineScalarModifier<const TFields extends SceneConfigFields>(
+  declaration: ScalarModifierDeclaration<TFields>,
+): SceneBlockDefinition<SceneConfigFor<TFields>, 'scalarModifier'> {
+  // Pin the knobs generic to the empty shape: a scalar modifier never has knobs, and
+  // the `validateConfig` parameter would otherwise widen `TKnobs` by contravariant
+  // inference. With no knobs, `SceneConfigFor<TFields> & KnobConfigFor<{}>` reduces
+  // to `SceneConfigFor<TFields>`, matching the declared return type.
+  return defineSceneBlock<TFields, Record<never, never>, 'scalarModifier'>({
+    type: declaration.type,
+    role: 'scalarModifier',
+    catalog: {
+      displayName: declaration.displayName,
+      category: 'transform',
+      ports: [
+        {
+          id: SCALAR_MODIFIER_INPUT,
+          label: 'In',
+          direction: 'input',
+          value: 'scalar',
+          default: { kind: 'required' },
+        },
+        { id: SCALAR_MODIFIER_OUTPUT, label: 'Out', direction: 'output', value: 'scalar' },
+      ],
+    },
+    config: declaration.config,
+    // No knobs: the transform's parameters are plain config, so the block has one
+    // scalar input (the value chain) and the route fold has one edge to follow.
+    knobs: {},
+    validateConfig: declaration.validateConfig,
+    contribute: (config) => ({
+      role: 'scalarModifier',
+      input: SCALAR_MODIFIER_INPUT,
+      apply: (value) => declaration.transform(config, value),
+    }),
+  });
+}
+
+function configShape<TFields extends SceneConfigFields>(
+  fields: TFields,
+): SceneConfigShape<TFields> {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [key, field.schema]),
+  ) as SceneConfigShape<TFields>;
+}
+
+function formatConfigIssue(blockId: string, blockType: string, issue: z.core.$ZodIssue): string {
+  const path = issue.path.length === 0 ? '<root>' : issue.path.join('.');
+  return `[scene] block '${blockId}' (${blockType}): config '${path}' ${issue.message}`;
+}
 
 export interface SceneRegistry {
   readonly get: (type: string) => SceneBlockDefinition<unknown> | undefined;
+  readonly catalog: readonly SceneCatalogMetadata[];
 }
 
 export function buildSceneRegistry(
@@ -139,101 +488,100 @@ export function buildSceneRegistry(
 ): SceneRegistry {
   const byType = new Map<string, SceneBlockDefinition<unknown>>();
   for (const block of blocks) {
+    validateSceneBlockDefinition(block);
     if (byType.has(block.type)) {
       throw new Error(`[scene] Duplicate scene block type in registry: '${block.type}'`);
     }
     byType.set(block.type, block);
   }
-  return { get: (type) => byType.get(type) };
+  return {
+    get: (type) => byType.get(type),
+    catalog: Array.from(byType.values(), (block) => block.catalog),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Config-reading helpers — one loud, validated read per primitive.
-// ---------------------------------------------------------------------------
+function validateSceneBlockDefinition(block: SceneBlockDefinition<unknown>): void {
+  const catalog = block.catalog;
+  const missing = [
+    requiredText(block.type, 'type'),
+    requiredValue(catalog, 'catalog'),
+    catalog === undefined ? null : requiredText(catalog.displayName, 'catalog.displayName'),
+    catalog === undefined ? null : requiredText(catalog.category, 'catalog.category'),
+    catalog === undefined ? null : requiredItems(catalog.ports, 'catalog.ports'),
+    requiredValue(block.configSchema, 'configSchema'),
+  ].filter((entry): entry is string => entry !== null);
 
-/**
- * Read a finite number from raw config, pushing a diagnostic if absent or not a
- * finite number. Returns null on failure so the caller can keep collecting
- * other field errors before bailing.
- */
-export function readFiniteNumber(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = raw[key];
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a finite number`,
-    });
-    return null;
+  if (missing.length > 0) {
+    throw new Error(`[scene] invalid scene block contract '${block.type || '<unknown>'}': ${missing.join(', ')}`);
   }
-  return value;
 }
 
-/** Read a number that must be strictly positive (e.g. a spacing or size). */
-export function readPositiveNumber(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = readFiniteNumber(raw, key, blockId, diagnostics);
-  if (value === null) return null;
-  if (value <= 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be > 0 (got ${value})`,
-    });
-    return null;
-  }
-  return value;
+function requiredText(value: string, label: string): string | null {
+  return value.length === 0 ? label : null;
 }
 
-/**
- * Read an optional non-empty string (e.g. an asset id reference). Absent config
- * returns `undefined` (a legitimate "not set"); a present-but-non-string or
- * empty value is a loud diagnostic and returns `null`.
- *
- * [LAW:dataflow-not-control-flow] The three outcomes are distinct values
- *   (`undefined` set-absent, `null` invalid, the string when valid), so the
- *   caller selects a material shell from the value rather than guessing.
- */
-export function readOptionalString(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): string | null | undefined {
-  const value = raw[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a non-empty string when present`,
-    });
-    return null;
-  }
-  return value;
+function requiredItems(value: readonly unknown[], label: string): string | null {
+  return value.length === 0 ? label : null;
 }
 
-/** Read a positive integer (e.g. a grid row/column count). */
-export function readPositiveInt(
-  raw: Readonly<Record<string, unknown>>,
-  key: string,
-  blockId: string,
-  diagnostics: SceneDiagnostic[],
-): number | null {
-  const value = readFiniteNumber(raw, key, blockId, diagnostics);
-  if (value === null) return null;
-  if (!Number.isInteger(value) || value <= 0) {
-    diagnostics.push({
-      blockId,
-      message: `[scene] block '${blockId}': config '${key}' must be a positive integer (got ${value})`,
-    });
-    return null;
-  }
-  return value;
+function requiredValue(value: unknown, label: string): string | null {
+  return value === undefined || value === null ? label : null;
 }
+
+export const sceneConfig = {
+  finiteNumber: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite(),
+    catalog,
+  }),
+  positiveNumber: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite().positive(),
+    catalog,
+  }),
+  positiveInt: (catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().int().positive(),
+    catalog,
+  }),
+  // A positive multiplier (e.g. an aspect ratio) that resolves to `fallback` when
+  // omitted, so the default reproduces the canonical value with no `?? default`
+  // branch at the read site. [LAW:dataflow-not-control-flow]
+  ratio: (fallback: number, catalog: SceneConfigFieldCatalog): SceneConfigField<number> => ({
+    schema: z.number().finite().positive().default(fallback),
+    catalog,
+  }),
+  // A closed set of string options with a `fallback` default. The schema both
+  // validates the choice and, via the default, hands `contribute` a concrete
+  // discriminant — so an omitted field never widens to a runtime `undefined`
+  // check. [LAW:types-are-the-program]
+  choice: <const TValues extends readonly [string, ...string[]]>(
+    values: TValues,
+    fallback: TValues[number],
+    catalog: SceneConfigFieldCatalog,
+  ): SceneConfigField<TValues[number]> => ({
+    schema: z.enum(values).default(fallback),
+    catalog,
+  }),
+  color: (catalog: SceneConfigFieldCatalog): SceneConfigField<string> => ({
+    // [LAW:one-source-of-truth] An opaque `#rrggbb` value — one color, no
+    //   exposed channels. The channel layout is minted only at the seam
+    //   (`hexColorBinding`), never on the block API.
+    schema: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb hex color'),
+    catalog,
+  }),
+  colorList: (catalog: SceneConfigFieldCatalog): SceneConfigField<readonly string[]> => ({
+    // [LAW:one-source-of-truth] A list of opaque `#rrggbb` values — a palette or
+    //   gradient's stops — with the same per-entry opaqueness as `color`. ≥2 so a
+    //   palette/ramp is meaningful; the channel layout still lives only at the
+    //   seam (`paletteColorPlan` / `gradientLutColorPlan`), never on the API.
+    schema: z
+      .array(z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a #rrggbb hex color'))
+      .min(2, 'needs at least two colors'),
+    catalog,
+  }),
+  optionalAssetId: (
+    catalog: SceneConfigFieldCatalog,
+  ): SceneConfigField<string | undefined> => ({
+    // [LAW:types-are-the-program] Empty strings are not asset identities.
+    schema: z.string().min(1).optional(),
+    catalog,
+  }),
+} as const;

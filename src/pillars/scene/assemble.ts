@@ -3,10 +3,12 @@
  *
  * Joins resolved block contributions into a normalized `ScenePlan`.
  *
- * Each draw block is joined to the instance source on its primary edge: the
- * draw's shell (geometry, material kind, camera) plus the source's bundle
- * (count, transform, color) become one `SceneObject` + `DrawItem`. Resources
- * are normalized into ref-keyed tables.
+ * Each draw block is joined to the instance bundle feeding its primary edge: the
+ * draw's shell (geometry, material kind, camera) plus the resolved bundle
+ * (count, transform, color) become one `SceneObject` + `DrawItem`. The bundle is
+ * resolved by folding any modifier chain back to its instance source, so a
+ * source→modifier→…→draw chain and a direct source→draw wire assemble the same
+ * way. Resources are normalized into ref-keyed tables.
  *
  * [LAW:one-source-of-truth] Each geometry/material is defined exactly once in
  *   its table and referenced by handle from the scene object — no inline
@@ -22,6 +24,8 @@ import {
   geometryRef,
   materialRef,
   sceneObjectRef,
+  state,
+  stateRef,
   textureRef,
   type CameraPlan,
   type DrawItem,
@@ -32,10 +36,13 @@ import {
   type ScenePlan,
   type SceneObject,
   type SceneObjectRef,
+  type StateDef,
+  type StateRef,
   type TextureDef,
   type TextureRef,
 } from '../../render/scene-plan';
 import type { InstanceBundle, MaterialShell, SceneContribution } from './scene-block';
+import type { ColorPlan } from './color';
 import { collectInputChannels, materialChannels } from './inputs';
 
 export type SceneCompileResult =
@@ -73,7 +80,7 @@ function joinMaterial(
 ): MaterialDef {
   switch (shell.kind) {
     case 'unlitColor':
-      return { kind: 'unlitColor', color: bundle.color };
+      return lowerUnlitColor(drawId, bundle.color, textures);
     case 'texturedUnlit': {
       const texRef = textureRef(`${drawId}:texture`);
       textures[texRef] = { kind: 'asset', assetId: shell.assetId };
@@ -84,8 +91,145 @@ function joinMaterial(
   }
 }
 
+/**
+ * Lower the bundle's {@link ColorPlan} into the material for an unlit draw. A
+ * per-channel-math `binding` becomes a `unlitColor` material directly; a `lut`
+ * color mints a `{kind:'data'}` texture (the baked OKLab ramp) in the shared
+ * table and becomes a `unlitColorLut` material sampling it by the per-instance
+ * coord — the same normalize-resource-then-refer-by-handle move a textured shell
+ * makes.
+ *
+ * [LAW:single-enforcer] The LUT texture is minted in exactly one place; the
+ *   material references it by the handle minted here, never inlines its pixels.
+ * [LAW:types-are-the-program] Exhaustive over the color-plan union; a new color
+ *   representation is a compile error here until its lowering is declared.
+ */
+function lowerUnlitColor(
+  drawId: string,
+  color: ColorPlan,
+  textures: Record<TextureRef, TextureDef>,
+): MaterialDef {
+  switch (color.kind) {
+    case 'binding':
+      return { kind: 'unlitColor', color: color.binding };
+    case 'lut': {
+      const texRef = textureRef(`${drawId}:lut`);
+      textures[texRef] = {
+        kind: 'data',
+        width: color.lut.width,
+        height: 1,
+        pixels: color.lut.pixels,
+        filter: color.lut.filter,
+      };
+      return { kind: 'unlitColorLut', texture: texRef, coord: color.coord };
+    }
+    default:
+      return assertNever(color);
+  }
+}
+
 function assertNever(value: never): never {
   throw new Error(`[scene] unhandled material shell: ${JSON.stringify(value)}`);
+}
+
+/**
+ * Resolve the instance bundle a block feeds downstream by folding the modifier
+ * chain back to its instance source. A source is the base case (its bundle); a
+ * modifier resolves its own `primary` upstream and applies its transform to it.
+ *
+ * [LAW:dataflow-not-control-flow] One generic fold over the chain: a modifier is
+ *   a value carrying `apply`, not a per-type branch here — adding a modifier
+ *   block adds no code path to this walk.
+ * [LAW:no-silent-failure] A chain that dangles, cycles, or bottoms out at a draw
+ *   (which produces no bundle) is a surfaced error, never a silently-dropped or
+ *   default bundle.
+ */
+function resolveBundle(
+  blockId: string,
+  edges: readonly PillarEdge[],
+  contributions: ReadonlyMap<string, SceneContribution>,
+  errors: string[],
+  visiting: ReadonlySet<string>,
+): InstanceBundle | null {
+  if (visiting.has(blockId)) {
+    errors.push(`[scene] instance chain has a cycle through block '${blockId}'`);
+    return null;
+  }
+  const contribution = contributions.get(blockId);
+  if (contribution === undefined) {
+    errors.push(`[scene] instance chain references unknown block '${blockId}'`);
+    return null;
+  }
+
+  switch (contribution.role) {
+    case 'instanceSource':
+      return contribution.bundle;
+    case 'modifier': {
+      const primaryEdge = edges.find((e) => e.target === blockId && e.role === 'primary');
+      if (!primaryEdge) {
+        errors.push(`[scene] modifier block '${blockId}' has no primary input edge`);
+        return null;
+      }
+      const upstream = resolveBundle(
+        primaryEdge.source,
+        edges,
+        contributions,
+        errors,
+        new Set(visiting).add(blockId),
+      );
+      if (upstream === null) return null;
+      return contribution.apply(upstream);
+    }
+    case 'draw':
+      errors.push(
+        `[scene] instance chain ends at draw block '${blockId}', which is not an instance source`,
+      );
+      return null;
+    case 'scalarSource':
+      errors.push(
+        `[scene] instance chain references scalar source '${blockId}', which produces no instance bundle`,
+      );
+      return null;
+    case 'scalarModifier':
+      errors.push(
+        `[scene] instance chain references scalar modifier '${blockId}', which produces no instance bundle`,
+      );
+      return null;
+    case 'statefulScalar':
+      errors.push(
+        `[scene] instance chain references stateful scalar '${blockId}', which produces no instance bundle`,
+      );
+      return null;
+    default:
+      return assertNever(contribution);
+  }
+}
+
+/**
+ * Mint the renderer-owned storage cells from the patch's stateful contributions.
+ * Mirrors texture minting: the assembler is the one place a block's contribution
+ * becomes a ref-keyed resource. The cell's handle is minted from the block id
+ * (its authored identity, the continuity key), and the block's recurrence — left
+ * as a function of `state(self)` — is closed against that handle here.
+ *
+ * [LAW:one-source-of-truth] The running value lives in exactly one place (the
+ *   minted cell); a `state(ref)` leaf a downstream route folded in reads it by the
+ *   same handle. [LAW:single-enforcer] Cells are minted only here.
+ */
+function mintStates(contributions: ReadonlyMap<string, SceneContribution>): Record<StateRef, StateDef> {
+  const states: Record<StateRef, StateDef> = {};
+  for (const [blockId, contribution] of contributions) {
+    if (contribution.role !== 'statefulScalar') continue;
+    const ref = stateRef(blockId);
+    states[ref] = {
+      // Scalar is the only cardinality this slice ships; per-instance state (a
+      // per-dot integrator) is a follow-up that adds a variant, not a code path.
+      cardinality: { kind: 'scalar' },
+      init: contribution.init,
+      update: contribution.update(state(ref)),
+    };
+  }
+  return states;
 }
 
 /**
@@ -133,16 +277,12 @@ export function assembleScenePlan(
       errors.push(`[scene] draw block '${drawId}' has no primary input edge`);
       continue;
     }
-    const source = contributions.get(primaryEdge.source);
-    if (!source || source.role !== 'instanceSource') {
-      errors.push(
-        `[scene] draw block '${drawId}' primary source '${primaryEdge.source}' is not an instance source`,
-      );
-      continue;
-    }
+    // Resolve the bundle feeding this draw by folding any modifier chain back to
+    // its instance source. A direct source→draw wire is the zero-modifier case.
+    const bundle = resolveBundle(primaryEdge.source, edges, contributions, errors, new Set());
+    if (bundle === null) continue;
 
     const { shell } = contribution;
-    const { bundle } = source;
 
     const geoRef = geometryRef(`${drawId}:geometry`);
     const matRef = materialRef(`${drawId}:material`);
@@ -166,7 +306,11 @@ export function assembleScenePlan(
     return { kind: 'error', errors };
   }
 
-  // Inputs are derived from every per-instance expression the plan contains.
+  const states = mintStates(contributions);
+
+  // Inputs are derived from every expression the plan evaluates: per-instance
+  // transform/color, and each state's update rule (the renderer evaluates it every
+  // frame to advance the cell, so a channel it reads must be fed too).
   const exprs = [
     ...Object.values(objects).flatMap((o) => [
       o.instancing.transform.positionX,
@@ -174,11 +318,12 @@ export function assembleScenePlan(
       o.instancing.transform.rotation,
     ]),
     ...Object.values(materials).flatMap((m) => materialChannels(m)),
+    ...Object.values(states).map((s) => s.update),
   ];
 
   const plan = defineScenePlan({
     version: SCENE_PLAN_VERSION,
-    resources: { geometries, materials, textures, ...emptyDeferredResources() },
+    resources: { geometries, materials, textures, states, ...emptyDeferredResources() },
     objects,
     render: {
       camera,

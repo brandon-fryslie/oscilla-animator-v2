@@ -1,76 +1,77 @@
-/**
- * src/pillars/scene/blocks/draw-instances.ts
- *
- * Draw (sink) block: wraps an upstream instance bundle in a rendering shell —
- * a rectangle geometry, an unlit color material, an orthographic camera — and
- * draws it to the preview canvas.
- *
- * The optional `textureAssetId` selects the material: present → a `texturedUnlit`
- * material that samples that texture asset; absent → an `unlitColor` material
- * that takes its per-instance color from the upstream bundle. The texture
- * presence is config *data*; the lowering mints the texture handle.
- *
- * [LAW:decomposition] This block owns *how the instances are drawn* (geometry,
- *   material kind, framing, target); the instance-source block owns *what
- *   varies per instance*. The lowering joins the two at the primary edge.
- * [LAW:locality-or-seam] The shell names a geometry/material by shape only; the
- *   handles that turn it into resource-table entries are minted by the lowering,
- *   and the Three classes that realize them live behind the renderer seam.
- */
-
+import type { GeometryDef } from '../../../render/scene-plan';
 import { assetId as makeAssetId } from '../../../core/ids';
-import type { MaterialShell, SceneBlockDefinition, SceneContribution } from '../scene-block';
-import { readOptionalString, readPositiveNumber } from '../scene-block';
+import { defineSceneBlock, sceneConfig, type MaterialShell } from '../scene-block';
 
-interface DrawInstancesConfig {
-  readonly size: number;
-  readonly cameraHalfExtentX: number;
-  readonly cameraHalfExtentY: number;
-  /** When set, the draw samples this texture asset instead of bundle color. */
-  readonly textureAssetId: string | undefined;
+const SHAPES = ['rectangle', 'point'] as const;
+type Shape = (typeof SHAPES)[number];
+
+const config = {
+  // A `rectangle` is sized `size` wide by `size * aspect` tall (aspect 1 is a
+  // square, ≠ 1 a bar); a `point` is a round dot of diameter `size`, aspect
+  // unused. [LAW:dataflow-not-control-flow]
+  shape: sceneConfig.choice(SHAPES, 'rectangle', { label: 'Shape', control: 'select' }),
+  size: sceneConfig.positiveNumber({ label: 'Size', control: 'number' }),
+  aspect: sceneConfig.ratio(1, { label: 'Aspect (H/W)', control: 'number' }),
+  cameraHalfExtentX: sceneConfig.positiveNumber({
+    label: 'Camera half extent X',
+    control: 'number',
+  }),
+  cameraHalfExtentY: sceneConfig.positiveNumber({
+    label: 'Camera half extent Y',
+    control: 'number',
+  }),
+  textureAssetId: sceneConfig.optionalAssetId({ label: 'Texture asset', control: 'asset' }),
+} as const;
+
+// [LAW:types-are-the-program] Total over the shape discriminant: adding a shape
+//   forces a new arm here, and each arm builds exactly the GeometryDef variant
+//   its fields describe. The authoring seam is where a picked option becomes a
+//   typed geometry value; downstream never re-decides the shape.
+function geometryForShape(shape: Shape, size: number, aspect: number): GeometryDef {
+  switch (shape) {
+    case 'point':
+      return { kind: 'point', size };
+    case 'rectangle':
+      return { kind: 'rectangle', width: size, height: size * aspect };
+    default:
+      return assertNever(shape);
+  }
 }
 
-export const DrawInstancesBlock: SceneBlockDefinition<DrawInstancesConfig> = {
+function assertNever(value: never): never {
+  throw new Error(`[scene] DrawInstances: unhandled shape: ${JSON.stringify(value)}`);
+}
+
+export const DrawInstancesBlock = defineSceneBlock({
   type: 'DrawInstances',
   role: 'draw',
-
-  readConfig: (raw, blockId, diagnostics) => {
-    const size = readPositiveNumber(raw, 'size', blockId, diagnostics);
-    const cameraHalfExtentX = readPositiveNumber(raw, 'cameraHalfExtentX', blockId, diagnostics);
-    const cameraHalfExtentY = readPositiveNumber(raw, 'cameraHalfExtentY', blockId, diagnostics);
-    const textureAssetId = readOptionalString(raw, 'textureAssetId', blockId, diagnostics);
-
-    if (
-      size === null ||
-      cameraHalfExtentX === null ||
-      cameraHalfExtentY === null ||
-      textureAssetId === null
-    ) {
-      return null;
-    }
-    return { size, cameraHalfExtentX, cameraHalfExtentY, textureAssetId };
+  catalog: {
+    displayName: 'Draw Instances',
+    category: 'draw',
+    ports: [
+      { id: 'primary', label: 'Instances', direction: 'input', value: 'instanceBundle', default: { kind: 'required' } },
+      { id: 'draw', label: 'Draw', direction: 'output', value: 'materialShell' },
+    ],
   },
-
-  contribute: (config): SceneContribution => {
-    // [LAW:dataflow-not-control-flow] The material shell is selected from the
-    //   texture-asset value, not from a mode flag on the block.
+  config,
+  contribute: (config) => {
     const material: MaterialShell =
       config.textureAssetId === undefined
         ? { kind: 'unlitColor' }
         : { kind: 'texturedUnlit', assetId: makeAssetId(config.textureAssetId) };
+
     return {
       role: 'draw',
       shell: {
-        geometry: { kind: 'rectangle', width: config.size, height: config.size },
+        geometry: geometryForShape(config.shape, config.size, config.aspect),
         material,
         camera: {
           kind: 'orthographic',
           halfExtentX: config.cameraHalfExtentX,
           halfExtentY: config.cameraHalfExtentY,
         },
-        // One render target exists today; the type pins it as a value, not a flag.
         target: 'previewCanvas',
       },
     };
   },
-};
+});

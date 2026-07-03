@@ -18,6 +18,10 @@ function collectFromExpr(expr: PlanExpr, into: Set<PlanInputChannel>): void {
   switch (expr.kind) {
     case 'const':
     case 'intrinsic':
+    // A `state` leaf reads a renderer-owned cell, not a runtime channel, so it
+    // contributes none itself. Any channels its *update* rule reads are collected
+    // by walking that rule directly (the assembler passes state updates in too).
+    case 'state':
       return;
     case 'input':
       into.add(expr.channel);
@@ -46,6 +50,8 @@ export function colorChannels(color: ColorBinding): readonly PlanExpr[] {
       return [color.r, color.g, color.b];
     case 'rgba':
       return [color.r, color.g, color.b, color.a];
+    case 'oklab':
+      return [color.l, color.a, color.b];
     default:
       // [LAW:types-are-the-program] A new color space is a compile error here
       //   until its channels are enumerated — never an undefined return.
@@ -66,6 +72,10 @@ export function materialChannels(material: MaterialDef): readonly PlanExpr[] {
       return colorChannels(material.color);
     case 'texturedUnlit':
       return [];
+    case 'unlitColorLut':
+      // The LUT itself is baked data, but its sample coord may read an input
+      // (e.g. a mouse-driven heatmap), so the coord contributes its channels.
+      return [material.coord];
     default:
       return assertNever(material);
   }

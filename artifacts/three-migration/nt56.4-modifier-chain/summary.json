@@ -1,0 +1,28 @@
+{
+  "ticket": "oscilla-pillars-scene-nt56.4",
+  "chain": "InstanceGrid → WaveOffset → SolidColor → Brightness → DrawInstances",
+  "frames": {
+    "wave0": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 77804,
+      "checksum": 979086438
+    },
+    "wave1": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 85740,
+      "checksum": 178009475
+    },
+    "grid": {
+      "width": 720,
+      "height": 720,
+      "nonBlack": 99926,
+      "checksum": 1157036116
+    }
+  },
+  "waveAnimated": true,
+  "modifierChangedOutput": true,
+  "consoleErrors": [],
+  "generatedAt": "2026-06-30T19:30:57.637Z"
+}

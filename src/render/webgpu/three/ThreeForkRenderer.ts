@@ -26,7 +26,8 @@ import { WebGPURenderer as ThreeWebGPURenderer } from 'three/webgpu';
 
 import type { AssetRegistry } from '../../../assets';
 import type { ScenePlan } from '../../scene-plan';
-import { realizeScenePlan, type RealizedScene } from './scene-plan-realizer';
+import { validatePlanAssets, formatPlanAssetIssues } from '../../scene-plan';
+import { reconcileScenePlan, type RealizedScene } from './scene-plan-realizer';
 import { ThreeLoadingBridge } from './asset-bridge';
 import type {
   GpuFault,
@@ -63,16 +64,30 @@ export class ThreeForkRenderer implements WebGPURenderer {
 
   async installScenePlan(plan: ScenePlan, registry: AssetRegistry): Promise<void> {
     this.assertNotDisposed('installing a ScenePlan');
+    // [LAW:single-enforcer] Validate the plan's asset references once, here,
+    //   before any decode. A missing or undecodable asset is a complete, named
+    //   pre-install failure rather than a deep loader throw partway through
+    //   decoding — the editor surfaces it as a diagnostic, the steel thread as a
+    //   loud boot failure. [LAW:no-silent-failure]
+    const assetIssues = validatePlanAssets(plan, registry);
+    if (assetIssues.length > 0) {
+      throw new Error(
+        `ThreeForkRenderer: cannot install ScenePlan — unresolved asset references:\n${formatPlanAssetIssues(assetIssues)}`,
+      );
+    }
     // [LAW:effects-at-boundaries] Decode the plan's texture assets here (the
     //   effect), then realize purely from the already-resolved textures.
     const resolvedTextures = await this.bridge.resolveTextures(plan, registry);
     this.assertNotDisposed('installing a ScenePlan');
-    // [LAW:one-source-of-truth] A renderer holds exactly one realized scene; a
-    //   new plan replaces the old one and releases its resources.
-    this.realized?.dispose();
-    // realizeScenePlan throws on an incompatible version or dangling handle
+    // [LAW:one-source-of-truth] A renderer holds exactly one realized scene.
+    //   Reconcile the new plan against it: objects whose authored identity and
+    //   structure are unchanged are reused untouched (so time-pure animation
+    //   does not restart across a live edit), changed/added objects are rebuilt,
+    //   and removed objects are released. The previous RealizedScene's surviving
+    //   objects are transplanted into the returned one, so it is not disposed.
+    // reconcileScenePlan throws on an incompatible version or dangling handle
     // ([LAW:no-silent-failure]); the throw propagates to the installer.
-    this.realized = realizeScenePlan(plan, resolvedTextures);
+    this.realized = reconcileScenePlan(this.realized, plan, resolvedTextures);
   }
 
   async renderFrame(values: RuntimeInputChannelValues): Promise<void> {
@@ -99,6 +114,13 @@ export class ThreeForkRenderer implements WebGPURenderer {
     }
 
     await device.renderAsync(realized.scene, realized.camera);
+
+    // Advance renderer-owned state for the next frame. The draw above read each
+    // cell's current value; stepping the recurrence after the draw makes the first
+    // frame show the seeded value and each later frame the accumulated one.
+    // [LAW:no-ambient-temporal-coupling] The renderer is the frame boundary that
+    //   closes every stateful recurrence; it does so here, in one place.
+    realized.advanceStates(values);
   }
 
   private async ensureDevice(): Promise<ThreeWebGPURenderer> {

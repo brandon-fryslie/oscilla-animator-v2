@@ -1,20 +1,17 @@
 /**
  * src/pillars/scene/blocks/instance-grid.ts
  *
- * Instance-source block: lays a `rows × cols` grid of animated instances and
- * emits the per-instance field bundle (position, rotation, color) as PlanExprs.
+ * An instance source: a rows×cols grid of instances, each placed by index and
+ * rotating over time. It owns *placement only* — count and per-instance
+ * transform. Color is a separate concern set downstream by a color block
+ * (SolidColor and the richer color ops), so this block's API names no color
+ * channels.
  *
- * This is where authored *parameters* become backend-neutral *expressions* —
- * the "Oscilla fields/expressions → TSL expressions" mapping of the migration
- * (design-docs/three-fork-integration-proposal.md §3). The block stores scalar
- * grid/animation parameters; the lowering synthesizes the index/rank math.
- *
- * [LAW:one-source-of-truth] `rows`/`cols`/`spacing`/animation coefficients are
- *   the canonical authored intent; the `PlanExpr` trees below are derived from
- *   them, never stored alongside them.
- * [LAW:dataflow-not-control-flow] Per-instance variation lives in the *values*
- *   (the `index`/`rank` intrinsics flowing through the expressions), not in any
- *   per-instance branch.
+ * [LAW:decomposition] Instancing and color are different parts: this block
+ *   decides where instances are and how they turn; what color they are is
+ *   another block's single concern. The base bundle carries a neutral white so a
+ *   grid renders before any color block is wired, and the color block replaces
+ *   it — white is the identity, not a silent fallback.
  */
 
 import {
@@ -27,60 +24,31 @@ import {
   mod,
   mul,
 } from '../../../render/scene-plan';
-import {
-  readFiniteNumber,
-  readPositiveInt,
-  readPositiveNumber,
-  type SceneBlockDefinition,
-  type SceneContribution,
-} from '../scene-block';
+import { defineSceneBlock, sceneConfig } from '../scene-block';
+import { neutralColorPlan } from '../color';
 
-interface InstanceGridConfig {
-  readonly rows: number;
-  readonly cols: number;
-  readonly spacing: number;
-  readonly rotationPerIndex: number;
-  readonly rotationPerTime: number;
-  readonly huePerTime: number;
-  readonly saturation: number;
-  readonly lightness: number;
-}
+const config = {
+  rows: sceneConfig.positiveInt({ label: 'Rows', control: 'integer' }),
+  cols: sceneConfig.positiveInt({ label: 'Columns', control: 'integer' }),
+  spacing: sceneConfig.positiveNumber({ label: 'Spacing', control: 'number' }),
+  rotationPerIndex: sceneConfig.finiteNumber({ label: 'Rotation per index', control: 'number' }),
+  rotationPerTime: sceneConfig.finiteNumber({ label: 'Rotation per time', control: 'number' }),
+} as const;
 
-export const InstanceGridBlock: SceneBlockDefinition<InstanceGridConfig> = {
+export const InstanceGridBlock = defineSceneBlock({
   type: 'InstanceGrid',
   role: 'instanceSource',
-
-  readConfig: (raw, blockId, diagnostics) => {
-    const rows = readPositiveInt(raw, 'rows', blockId, diagnostics);
-    const cols = readPositiveInt(raw, 'cols', blockId, diagnostics);
-    const spacing = readPositiveNumber(raw, 'spacing', blockId, diagnostics);
-    const rotationPerIndex = readFiniteNumber(raw, 'rotationPerIndex', blockId, diagnostics);
-    const rotationPerTime = readFiniteNumber(raw, 'rotationPerTime', blockId, diagnostics);
-    const huePerTime = readFiniteNumber(raw, 'huePerTime', blockId, diagnostics);
-    const saturation = readFiniteNumber(raw, 'saturation', blockId, diagnostics);
-    const lightness = readFiniteNumber(raw, 'lightness', blockId, diagnostics);
-
-    if (
-      rows === null ||
-      cols === null ||
-      spacing === null ||
-      rotationPerIndex === null ||
-      rotationPerTime === null ||
-      huePerTime === null ||
-      saturation === null ||
-      lightness === null
-    ) {
-      return null;
-    }
-    return { rows, cols, spacing, rotationPerIndex, rotationPerTime, huePerTime, saturation, lightness };
+  catalog: {
+    displayName: 'Instance Grid',
+    category: 'instance',
+    ports: [
+      { id: 'instances', label: 'Instances', direction: 'output', value: 'instanceBundle' },
+    ],
   },
-
-  contribute: (config): SceneContribution => {
+  config,
+  contribute: (config) => {
     const index = intrinsic('index');
-    const rank = intrinsic('rank');
     const time = input('time');
-
-    // Grid placement: row-major. col = index % cols; row = floor(index / cols).
     const col = mod(index, konst(config.cols));
     const row = floor(div(index, konst(config.cols)));
 
@@ -91,20 +59,14 @@ export const InstanceGridBlock: SceneBlockDefinition<InstanceGridConfig> = {
         transform: {
           positionX: mul(col, konst(config.spacing)),
           positionY: mul(row, konst(config.spacing)),
-          // rotation = index * rotationPerIndex + time * rotationPerTime
           rotation: add(
             mul(index, konst(config.rotationPerIndex)),
             mul(time, konst(config.rotationPerTime)),
           ),
         },
-        color: {
-          space: 'hsl',
-          // hue spreads across the grid by normalized rank and cycles over time.
-          h: add(rank, mul(time, konst(config.huePerTime))),
-          s: konst(config.saturation),
-          l: konst(config.lightness),
-        },
+        // Neutral base color; a downstream color block replaces it.
+        color: neutralColorPlan(),
       },
     };
   },
-};
+});

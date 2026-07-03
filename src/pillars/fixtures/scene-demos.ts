@@ -24,7 +24,18 @@
 import type { AssetMetadata } from '../../assets';
 import type { PillarPatch } from '../types';
 import { makeGridOfSquaresPatch } from './grid-of-squares';
+import { makeInstanceWavePatch } from './instance-wave';
+import { makeInstanceGradientPatch } from './instance-gradient';
 import { makeTexturedTilesPatch, TEXTURED_TILES_ASSETS } from './textured-tiles';
+import { makeRingOrbitPatch } from './ring-orbit';
+import { makeSpirographPatch } from './spirograph';
+import { makeKaleidoscopePatch } from './kaleidoscope';
+import { makeConditionalVisibilityPatch } from './conditional-visibility';
+import { makeScatterCloudPatch } from './scatter-cloud';
+import { makeColorPalettePatch } from './color-palette';
+import { makePointDotsPatch } from './point-dots';
+import { makeScalarRoutePatch } from './scalar-route';
+import { makeAccumulatorPatch } from './accumulator-demo';
 
 /** An authored ScenePlan proof target plus the assets its patch references. */
 export interface ScenePlanDemo {
@@ -36,7 +47,43 @@ export const SCENE_PLAN_DEMOS: Readonly<Record<string, ScenePlanDemo>> = {
   // Three-migration first proof target
   // (design-docs/three-migration-first-proof-contract.md). No assets.
   'grid-of-squares': { makePatch: makeGridOfSquaresPatch, assets: [] },
+  // Native modifier-foundation proof target (oscilla-pillars-scene-nt56.4): the
+  // grid fed through a WaveOffset transform modifier and a Brightness color
+  // modifier before the draw. No assets.
+  'instance-wave': { makePatch: makeInstanceWavePatch, assets: [] },
+  // Native color-source proof target (oscilla-pillars-scene-nt56.21): the grid
+  // colored by a perceptual OKLab Gradient ramping across rank. No assets.
+  'instance-gradient': { makePatch: makeInstanceGradientPatch, assets: [] },
   // Asset-bridge proof target (oscilla-pillars-cleanup-ulu.4): a grid of
   // texture-mapped tiles resolved through the AssetRegistry + ThreeLoadingBridge.
   'textured-tiles': { makePatch: makeTexturedTilesPatch, assets: TEXTURED_TILES_ASSETS },
+  // Target-animation fixtures (oscilla-pillars-scene-nt56.8): each recreates a
+  // legacy demo behavior from native blocks only, with layouts authored as
+  // composable modifiers over a bare InstanceCount source. No assets.
+  'ring-orbit': { makePatch: makeRingOrbitPatch, assets: [] },
+  'spirograph': { makePatch: makeSpirographPatch, assets: [] },
+  'kaleidoscope': { makePatch: makeKaleidoscopePatch, assets: [] },
+  'conditional-visibility': { makePatch: makeConditionalVisibilityPatch, assets: [] },
+  // Scatter-modifier proof target (oscilla-pillars-scene-nt56.23): a pseudo-random
+  // point cloud placed by hashing each instance index — exercises the new `hash`
+  // PlanExpr operator end-to-end. No assets.
+  'scatter-cloud': { makePatch: makeScatterCloudPatch, assets: [] },
+  // Native palette proof target (oscilla-pillars-scene-nt56.22): the grid colored
+  // by a ColorByIndex palette LUT — every dot the palette entry at its index,
+  // wrapping across the field. Exercises the texture-backed `{kind:'data'}` LUT
+  // and `unlitColorLut` material end-to-end. No assets.
+  'color-palette': { makePatch: makeColorPalettePatch, assets: [] },
+  // Size-correct point-primitive proof target (oscilla-pillars-scene-nt56.24): a
+  // ring of large, separated round dots proving `GeometryDef.point` realizes as a
+  // sized disc, not a placeholder quad or a faked square. No assets.
+  'point-dots': { makePatch: makePointDotsPatch, assets: [] },
+  // Scalar-routing proof target (oscilla-pillars-scene-nt56.25): a WaveOffset whose
+  // amplitude knob is routed from a Constant scalar source, so the routed value
+  // (not the config default) drives a visibly taller wave. No assets.
+  'scalar-route': { makePatch: makeScalarRoutePatch, assets: [] },
+  // Stateful-value proof target (oscilla-pillars-scene-nt56.18): a grid whose wave
+  // amplitude is driven only by an Accumulator (time neutralized), so the motion
+  // exists solely because the accumulator's renderer-owned cell advances each frame
+  // and is carried across live reinstalls. No assets.
+  'accumulator': { makePatch: makeAccumulatorPatch, assets: [] },
 };

@@ -27,8 +27,12 @@ import {
   loadPatchFromStorage,
   savePatchToStorage,
 } from './PatchPersistence';
-import { consumeTestDemoFilename, readScenePlanSelection } from '../testing/test-params';
+import {
+  consumeTestDemoFilename,
+  resolveBootSelection,
+} from '../testing/test-params';
 import { compileScenePlan } from '../pillars/scene';
+import type { ScenePlan } from '../render/scene-plan';
 import { SCENE_PLAN_DEMOS } from '../pillars/fixtures/scene-demos';
 import { createAssetRegistry } from '../assets';
 import {
@@ -209,6 +213,12 @@ export class RuntimeService {
   //   path is set once at init and read by the animation loop to decide which
   //   render source drives each frame.
   private scenePlanInstalled = false;
+  // Native-editor mode: the MobX reaction that recompiles+reinstalls the
+  // authored PillarPatch on every edit, plus the install serialization state
+  // (latest-wins) so overlapping installs cannot race the renderer's scene swap.
+  private editorRecompileDisposer: (() => void) | null = null;
+  private editorInstallInFlight = false;
+  private editorPendingPlan: ScenePlan | null = null;
 
   constructor(
     private readonly store: RootStore,
@@ -432,6 +442,112 @@ export class RuntimeService {
       this.animationState,
       this.handleAnimationLoopError,
     );
+  }
+
+  /**
+   * Start the live native editor: drive the renderer from the authored
+   * `PillarPatch` in `PillarPatchStore`, recompiling and reinstalling on every
+   * edit. This is the editor-facing generalization of the fixed-demo steel
+   * thread — same Three backend, same single loop, but the plan is live data
+   * instead of a one-shot fixture.
+   *
+   * [LAW:no-ambient-temporal-coupling] The seed plan is installed before the
+   *   loop starts, so the first frame always has a realized scene. A recompile
+   *   is only a new `installScenePlan`: the renderer is never disposed and the
+   *   rAF time source never restarts, preserving the runtime time input and the
+   *   renderer lifecycle boundary across edits.
+   * [LAW:no-silent-failure] A seed patch that cannot compile is a loud boot
+   *   failure; the seed is ours and is expected to render.
+   */
+  private async startNativeEditorThread(): Promise<void> {
+    const { store } = this;
+
+    const initial = store.pillarPatch.compiled;
+    if (initial.kind === 'error') {
+      throw new Error(
+        `RuntimeService: native editor seed patch failed to compile:\n${initial.errors.join('\n')}`,
+      );
+    }
+    await this.installEditorPlan(initial.plan);
+    this.scenePlanInstalled = true;
+
+    // [LAW:single-enforcer] The native editor thread is where the authored patch
+    //   becomes live and user-editable, so it is where its persistence begins.
+    //   Save failures route to the diagnostics boundary this service owns.
+    store.pillarPatch.startPersistence((message) => {
+      store.diagnostics.log({ level: 'warn', message: `PillarPatchPersistence(save): ${message}` });
+    });
+
+    // [LAW:effects-at-boundaries] The store computes the plan (pure); this
+    //   reaction is the single effect boundary that installs it.
+    // [LAW:dataflow-not-control-flow] An edit that fails to compile skips the
+    //   install — the previously installed plan keeps rendering — and the
+    //   editor surfaces `pillarPatch.diagnostics`; there is no teardown branch.
+    this.editorRecompileDisposer = reaction(
+      () => store.pillarPatch.compiled,
+      (result) => {
+        if (result.kind === 'ok') this.scheduleEditorInstall(result.plan);
+      },
+    );
+
+    // Re-render App so the preview canvas is live before the loop draws.
+    this.runtimeReadySink();
+
+    this.animationState = createAnimationLoopState();
+    this.animationLoop = startAnimationLoop(
+      this.animationLoopDeps(),
+      this.animationState,
+      this.handleAnimationLoopError,
+    );
+  }
+
+  /**
+   * Queue a plan for install, keeping only the latest: while one install is in
+   * flight (asset decode + scene realization are async) further edits overwrite
+   * the pending plan, so the renderer never races two scene swaps and always
+   * converges on the most recent authored state.
+   *
+   * [LAW:no-ambient-temporal-coupling] Installs are serialized through one
+   *   drain loop; ordering is owned here, not left to overlapping promises.
+   */
+  private scheduleEditorInstall(plan: ScenePlan): void {
+    this.editorPendingPlan = plan;
+    if (this.editorInstallInFlight) return;
+    void this.drainEditorInstalls();
+  }
+
+  private async drainEditorInstalls(): Promise<void> {
+    this.editorInstallInFlight = true;
+    try {
+      while (this.editorPendingPlan !== null) {
+        const plan = this.editorPendingPlan;
+        this.editorPendingPlan = null;
+        try {
+          await this.installEditorPlan(plan);
+        } catch (err) {
+          // [LAW:no-silent-failure] An install rejection (e.g. an unresolved
+          //   asset handle) is a real fault surfaced through diagnostics; the
+          //   loop keeps the last good plan on screen.
+          const message = err instanceof Error ? err.message : String(err);
+          this.store.diagnostics.log({
+            level: 'error',
+            message: `Native editor install failed: ${message}`,
+          });
+        }
+      }
+    } finally {
+      this.editorInstallInFlight = false;
+    }
+  }
+
+  private async installEditorPlan(plan: ScenePlan): Promise<void> {
+    const runtime = this.requireActiveRuntimeResources('installing an editor ScenePlan');
+    // [LAW:one-source-of-truth] The editor has no asset-authoring surface yet, so
+    //   its registry is empty. A texture-free patch (the starter) installs; a
+    //   patch that does reference a texture is rejected by installScenePlan's
+    //   pre-install asset validation with a named diagnostic (drainEditorInstalls
+    //   routes it to the diagnostics boundary), never a silent or deep failure.
+    await runtime.renderer.installScenePlan(plan, createAssetRegistry([]));
   }
 
   private handleAnimationLoopError = (err: unknown): void => {
@@ -818,13 +934,20 @@ export class RuntimeService {
         throw new Error(`RuntimeService: WebGPU renderer initialization failed: ${message}`);
       }
 
-      // [LAW:dataflow-not-control-flow] Startup selects one render source. The
-      //   ScenePlan steel thread (Three backend) is self-contained: it needs no
-      //   V1 compile worker, persistence, or live recompile, so it installs its
-      //   plan and starts the loop here, then returns before any V1 setup.
-      const scenePlanId = readScenePlanSelection();
-      if (scenePlanId !== null) {
-        await this.startScenePlanSteelThread(scenePlanId);
+      // [LAW:dataflow-not-control-flow] Startup selects one render source from a
+      //   resolved discriminated value, not scattered "is the param present?"
+      //   checks. The native editor is the default; V1 is the explicit opt-in.
+      //   Both Three paths are self-contained — they need no V1 compile worker,
+      //   persistence, or live recompile — so they install their plan, start the
+      //   loop, and return before any V1 setup. Only `v1-legacy` falls through.
+      const boot = resolveBootSelection();
+      if (boot.kind === 'native-editor') {
+        await this.startNativeEditorThread();
+        markRuntimeBootstrapSucceeded();
+        return;
+      }
+      if (boot.kind === 'scene-plan-demo') {
+        await this.startScenePlanSteelThread(boot.planId);
         markRuntimeBootstrapSucceeded();
         return;
       }
@@ -944,6 +1067,9 @@ export class RuntimeService {
     const runtime = this.readActiveRuntimeResources();
     runtime?.renderer.setGpuFaultCallback(null);
     this.disarmStartupStorageResetGuard();
+    this.editorRecompileDisposer?.();
+    this.editorRecompileDisposer = null;
+    this.editorPendingPlan = null;
     this.animationLoop?.stop();
     this.animationLoop = null;
     this.stopSpyReadbackLoop();

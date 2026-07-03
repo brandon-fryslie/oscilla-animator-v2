@@ -29,6 +29,7 @@ import type {
   SceneObjectRef,
   ComputeResourceRef,
   PostChainRef,
+  StateRef,
 } from './refs';
 import type { PlanExpr, PlanInputChannel } from './expr';
 
@@ -48,15 +49,30 @@ export const SCENE_PLAN_VERSION = 1 as const;
  * A geometry resource: the per-object shape, in object-local units. Per-object
  * placement (position, rotation) is applied by the instancing transform, not
  * baked here.
+ *
+ * - `rectangle` is an axis-aligned quad; `width !== height` is a non-square bar.
+ * - `point` is a round dot of diameter `size` — a filled disc, not a tiny square.
+ *   It is a distinct primitive precisely because it is round: a square dot is a
+ *   `rectangle`, so the two variants never collapse into one another.
+ *
+ * [LAW:dataflow-not-control-flow] Shape variation lives in the discriminant and
+ *   its fields, so the realizer dispatches once over the union rather than
+ *   branching on booleans; adding a shape adds a variant, not a code path.
  */
 export type GeometryDef =
   | { readonly kind: 'rectangle'; readonly width: number; readonly height: number }
-  | { readonly kind: 'point' };
+  | { readonly kind: 'point'; readonly size: number };
 
 /**
  * A color, expressed in a named color space. Each channel is a PlanExpr, so a
  * channel may be uniform (`const`) or vary per instance / per frame by
  * referencing an intrinsic or input.
+ *
+ * `oklab` is the perceptual interpolation space (Björn Ottosson's OKLab): `l` is
+ * perceived lightness, `a`/`b` the green–red and blue–yellow Cartesian axes.
+ * Authored colors enter this space at the seam (`hexColorBinding`) and the
+ * renderer converts it back to linear sRGB for display. Mixing/animating color
+ * in `oklab` is hue-correct without the muddy midtones of rgb interpolation.
  */
 export type ColorBinding =
   | { readonly space: 'hsl'; readonly h: PlanExpr; readonly s: PlanExpr; readonly l: PlanExpr }
@@ -67,7 +83,8 @@ export type ColorBinding =
       readonly g: PlanExpr;
       readonly b: PlanExpr;
       readonly a: PlanExpr;
-    };
+    }
+  | { readonly space: 'oklab'; readonly l: PlanExpr; readonly a: PlanExpr; readonly b: PlanExpr };
 
 /**
  * A material resource: how an object's surface is shaded.
@@ -75,6 +92,13 @@ export type ColorBinding =
  * - `unlitColor` shades by a per-instance {@link ColorBinding} (no texture).
  * - `texturedUnlit` samples a texture resource (by handle) across the object's
  *   UVs. The texture is resolved from an Oscilla asset by the loading bridge.
+ * - `unlitColorLut` shades by *sampling a color lookup table* at a per-instance
+ *   `coord`: the LUT is a `{kind:'data'}` texture whose texels are OKLab triples,
+ *   and the renderer maps the sampled triple back to linear sRGB (the same
+ *   OKLab→display step `unlitColor`'s `oklab` binding uses). This is how a
+ *   palette/index/gradient color source ("every dot a different color", a heatmap
+ *   ramp) is expressed without a per-channel-math `ColorBinding`: the lookup that
+ *   the pure-math expression vocabulary lacks is the texture sample itself.
  *
  * [LAW:dataflow-not-control-flow] The shading model is a discriminated value;
  *   each variant carries exactly the resources it needs, so a textured material
@@ -82,17 +106,42 @@ export type ColorBinding =
  */
 export type MaterialDef =
   | { readonly kind: 'unlitColor'; readonly color: ColorBinding }
-  | { readonly kind: 'texturedUnlit'; readonly texture: TextureRef };
+  | { readonly kind: 'texturedUnlit'; readonly texture: TextureRef }
+  | { readonly kind: 'unlitColorLut'; readonly texture: TextureRef; readonly coord: PlanExpr };
+
+/** Texture minification/magnification filter for a {@link TextureDef}. */
+export type TextureFilter = 'nearest' | 'linear';
 
 /**
- * A texture resource, resolved from an Oscilla asset by the loading bridge.
+ * A texture resource. Two origins:
  *
- * `assetId` is the branded {@link AssetId} the {@link AssetRegistry} resolves to
- * canonical metadata; the bridge (src/render/webgpu/three/asset-bridge.ts)
- * decodes that into a Three `Texture`. The texture table is empty for plans that
- * use no textures (e.g. the Grid of Squares steel thread).
+ * - `asset` — resolved from an Oscilla asset by the loading bridge. `assetId` is
+ *   the branded {@link AssetId} the {@link AssetRegistry} resolves to canonical
+ *   metadata; the bridge (src/render/webgpu/three/asset-bridge.ts) decodes that
+ *   into a Three `Texture`.
+ * - `data` — a CPU-built lookup table the compiler bakes inline (e.g. a palette
+ *   ramp): `pixels` is a flat `width × height × 4` array of float RGBA channel
+ *   values in declaration order. It resolves to no asset, so it is never looked
+ *   up in the registry; the bridge builds a `DataTexture` directly from it. The
+ *   sampling `filter` (a palette wants `nearest`, a gradient `linear`) is a
+ *   property of the resource, applied when the bridge realizes it.
+ *
+ * The texture table is empty for plans that use no textures (e.g. the Grid of
+ * Squares steel thread).
+ *
+ * [LAW:dataflow-not-control-flow] Texture origin is a discriminated value; an
+ *   `asset` texture cannot carry inline pixels and a `data` texture cannot carry
+ *   an assetId. The "where does this texture come from" branch lives in the type.
  */
-export type TextureDef = { readonly kind: 'asset'; readonly assetId: AssetId };
+export type TextureDef =
+  | { readonly kind: 'asset'; readonly assetId: AssetId }
+  | {
+      readonly kind: 'data';
+      readonly width: number;
+      readonly height: number;
+      readonly pixels: readonly number[];
+      readonly filter: TextureFilter;
+    };
 
 /**
  * A compute resource (storage buffer / compute job).
@@ -113,6 +162,49 @@ export type ComputeResourceDef = { readonly kind: 'storage'; readonly byteLength
 export type PostChainDef = { readonly kind: 'passes'; readonly passes: readonly string[] };
 
 /**
+ * The structural class of a stateful value's storage — the part of a {@link
+ * StateDef} that a live reinstall must match to carry the running value. It is the
+ * "payload/cardinality/count" the continuity fingerprint is built from: two states
+ * with the same authored identity but different cardinality are structurally
+ * different storage, so carrying one into the other would be wrong.
+ *
+ * - `scalar` is one running float (an accumulator feeding a knob).
+ * - `perInstance` is one running float per instance (a per-dot integrator);
+ *   `count` is part of the fingerprint, so changing the instance count is the
+ *   structure-changing edit that forces an explicit reseed.
+ *
+ * [LAW:dataflow-not-control-flow] The storage class is a discriminated value the
+ *   fingerprint and the realizer dispatch over, not a boolean flag.
+ */
+export type StateCardinality =
+  | { readonly kind: 'scalar' }
+  | { readonly kind: 'perInstance'; readonly count: number };
+
+/**
+ * A stateful value's renderer-owned storage and its recurrence, keyed in the
+ * plan by a {@link StateRef}. This is the block's *normalized projection*: the
+ * assembler mints it from a stateful block's contribution the same way it mints a
+ * texture from a textured material.
+ *
+ * - `cardinality` is the storage's structural class (the reseed fingerprint).
+ * - `init` seeds the storage on first install and on an explicit reseed.
+ * - `update` is the pure PlanExpr computing the next value from the current one:
+ *   `next = f(state(self), inputs)`. The renderer evaluates it each frame and
+ *   writes the result back to the cell, closing the recurrence at the frame
+ *   boundary. It reads `state(self)` (the prior value) and any runtime channel;
+ *   it is combinational, never a graph cycle. [LAW:no-ambient-temporal-coupling]
+ *
+ * [LAW:one-source-of-truth] The running value lives in exactly one place — the
+ *   renderer-owned cell this names. A `state` PlanExpr leaf elsewhere reads it by
+ *   handle; nothing copies it.
+ */
+export interface StateDef {
+  readonly cardinality: StateCardinality;
+  readonly init: number;
+  readonly update: PlanExpr;
+}
+
+/**
  * The normalized resource tables. Each resource is defined exactly once here,
  * keyed by its ref; everything else references it by handle.
  */
@@ -122,6 +214,13 @@ export interface ScenePlanResources {
   readonly textures: Readonly<Record<TextureRef, TextureDef>>;
   readonly computeResources: Readonly<Record<ComputeResourceRef, ComputeResourceDef>>;
   readonly postChains: Readonly<Record<PostChainRef, PostChainDef>>;
+  /**
+   * Renderer-owned stateful storage, keyed by handle. Empty for a purely
+   * time-pure plan (every value a function of time/index/input); a stateful block
+   * (accumulator/integrator) mints one entry the renderer allocates, advances, and
+   * carries across a live reinstall.
+   */
+  readonly states: Readonly<Record<StateRef, StateDef>>;
 }
 
 // ---------------------------------------------------------------------------

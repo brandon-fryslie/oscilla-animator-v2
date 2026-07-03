@@ -28,6 +28,7 @@ import { CompositeEditorStore } from './CompositeEditorStore';
 import { DemoStore } from './DemoStore';
 import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
+import { PillarPatchStore } from './PillarPatchStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 import {
@@ -36,6 +37,7 @@ import {
   clearPatchPersistenceIssues,
 } from '../services/PatchPersistence';
 import { debugService } from '../services/DebugService';
+import { loadPillarPatchFromStorage } from '../services/PillarPatchPersistence';
 import type { Edge } from '../graph/Patch';
 
 type PatchSnapshot = ImmutablePatch;
@@ -145,6 +147,8 @@ export class RootStore {
   readonly demo: DemoStore;
   readonly help: HelpStore;
   readonly expressionEditor: ExpressionEditorStore;
+  // The authored native (ScenePlan-path) patch — SSOT for the native graph editor.
+  readonly pillarPatch: PillarPatchStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -221,6 +225,25 @@ export class RootStore {
 
     // Create ExpressionEditorStore (active block for docked expression workbench)
     this.expressionEditor = new ExpressionEditorStore();
+
+    // Create PillarPatchStore (authored native patch for the ScenePlan editor),
+    // seeded from storage. [LAW:effects-at-boundaries] The load is performed once
+    // at the composition root; the store itself stays seeded by pure data and
+    // owns only its save reaction.
+    // [LAW:no-silent-failure] A stored-but-unreadable patch is logged as an error
+    //   before falling back to the default starter — never silently discarded.
+    const loadedPillarPatch = loadPillarPatchFromStorage();
+    if (loadedPillarPatch.kind === 'failed') {
+      this.diagnostics.log({
+        level: 'error',
+        message: `PillarPatchPersistence(load): ${loadedPillarPatch.error}`,
+      });
+    }
+    // `undefined` triggers the store's default starter patch (the single source
+    // of the first-visit fallback). [LAW:one-source-of-truth]
+    this.pillarPatch = new PillarPatchStore(
+      loadedPillarPatch.kind === 'loaded' ? loadedPillarPatch.patch : undefined,
+    );
 
     // Wire up callback for MobX reactivity
     this.diagnosticHub.setOnRevisionChange(() => this.diagnostics.incrementRevision());
@@ -340,6 +363,9 @@ export class RootStore {
 
     // Dispose PatchStore persistence
     this.patch.stopPersistence();
+
+    // Dispose PillarPatchStore persistence
+    this.pillarPatch.stopPersistence();
 
     // Dispose DiagnosticHub
     this.diagnosticHub.dispose();
