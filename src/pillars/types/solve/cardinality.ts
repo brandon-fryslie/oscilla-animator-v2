@@ -442,6 +442,23 @@ export function solveCardinality(input: CardinalitySolveInput): CardinalitySolve
     const final = finalizeResolution(facts.resolved, members, resolvedVars, inheritInstanceVars, errors);
     if (final === null) continue;
 
+    // A member that declares concrete 'one' contributes no evidence, so a
+    // group resolving many silently overrides its declaration — surface the
+    // promotion instead of leaving it as magic. [LAW:no-silent-failure]
+    if (final.kind === 'many') {
+      for (const port of members) {
+        if (ports.get(port)?.kind === 'one') {
+          diagnostics.push({
+            code: 'CardinalityPromotedToMany',
+            message: `Port ${port} declares cardinality one but its group resolved to many`,
+            ports: [port],
+            origins: [],
+            stableKey: `CardinalityPromotedToMany:${port}`,
+          });
+        }
+      }
+    }
+
     for (const port of members) {
       const axis = ports.get(port);
       if (axis?.kind !== 'var') continue;

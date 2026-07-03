@@ -270,6 +270,7 @@ export type FixpointDiagnosticCode =
   | 'UnitDefaultedToNone'
   | 'PostSolveEdgeTypeMismatch'
   | 'CardinalityDefaultedToOne'
+  | 'CardinalityPromotedToMany'
   // validateAxes codes
   | 'EventInvariantBroken'
   | 'NoInstance'

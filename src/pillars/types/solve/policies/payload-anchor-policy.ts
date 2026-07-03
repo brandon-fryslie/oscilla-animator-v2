@@ -35,13 +35,19 @@ export function payloadAnchorPolicy(ctx: PolicyContext): PolicyResult {
   const portKey = dep.port;
   const { blockId, slotName, fieldName, dir } = parseDraftPortKey(portKey);
 
+  // Only user edges are anchor sites — anchoring an elaboration edge would
+  // fight the elaborating policy's own contract. Among user edges the
+  // sorted-by-id first is deterministic, and the monotone one-anchor-per-
+  // iteration loop anchors any remaining unresolved groups in later
+  // iterations, so fan-in/fan-out needs no ambiguity block.
   const targetEdge = graph.edges.find((e) => {
+    if (e.origin.kind === 'elaboration') return false;
     if (dir === 'out') return e.source === blockId && e.outputSlot === slotName;
     return e.target === blockId && e.inputSlot === slotName;
   });
 
   if (!targetEdge) {
-    return { kind: 'blocked', reason: `no edge found for port ${portKey}` };
+    return { kind: 'blocked', reason: `no user edge found for port ${portKey}` };
   }
 
   const anchorId = `_sys/PayloadAnchorFloat:${obligation.id}`;

@@ -31,6 +31,11 @@ describe('no-legacy-types gate', () => {
   it('enforces numeric-only runtime storage contract and SoA packing', () => {
     const program = compileScalarProgram();
 
+    // every() is vacuously true on an empty array — the contract is only
+    // tested if the fixture actually emitted slots. [LAW:verifiable-goals]
+    expect(program.runtimeSlots.length).toBeGreaterThan(0);
+    expect(program.slotMeta.length).toBeGreaterThan(0);
+
     // [LAW:one-source-of-truth] Runtime slot ABI is numeric-only for the
     // compiler/runtime contract; no legacy object-shaped storage classes.
     expect(program.runtimeSlots.every((slot) => slot.storage === 'f32' || slot.storage === 'i32' || slot.storage === 'u32')).toBe(true);

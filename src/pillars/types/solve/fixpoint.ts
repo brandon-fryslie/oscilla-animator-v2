@@ -124,6 +124,9 @@ export function resolveTypes(
     const plans = planDischarge(g, facts, catalog);
 
     // ------------------------------------------------------------------ (4) Convergence check
+    // Note: an open obligation whose deps are satisfied but whose policy
+    // returns 'blocked' does not prevent convergence — it is deliberately
+    // left open and surfaces below as an OpenObligation diagnostic.
     if (plans.length === 0 && !didMutateObligations) {
       // Converged. Surface final diagnostics.
       accumulatedDiagnostics.push(...lastSolveDiagnostics);
@@ -138,6 +141,13 @@ export function resolveTypes(
       }
 
       let strict = tryFinalizeStrict(g, facts, accumulatedDiagnostics);
+
+      // Terminal cardinality conflicts (e.g. two concrete lane sets) can leave
+      // every port individually canonicalizable, so port status alone cannot
+      // catch them: strict must MEAN conflict-free. [LAW:types-are-the-program]
+      if (terminalCardDiags.length > 0) {
+        strict = null;
+      }
 
       // [LAW:single-enforcer] — axis invariants validated once, here, after convergence.
       if (strict !== null) {
