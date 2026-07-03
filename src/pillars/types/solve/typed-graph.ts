@@ -24,6 +24,7 @@ import type {
   ZCanonicalType,
   ZInferenceCanonicalType,
 } from '../schemas';
+import type { SolveDiagnosticCode } from './shared';
 
 // ---------------------------------------------------------------------------
 // Branded identifiers
@@ -61,11 +62,16 @@ export const draftPortKey = (
 export const parseDraftPortKey = (key: DraftPortKey): DraftPortParts => {
   // Keep the key format owned beside its constructor; callers receive fields,
   // never permission to duplicate the encoding. [LAW:one-source-of-truth]
+  // Parse from the RIGHT: block IDs may contain ':' (system blocks embed
+  // obligation ids), while slotName, fieldName, and dir never do.
   const parts = key.split(':');
-  if (parts.length !== 4) {
+  if (parts.length < 4) {
     throw new Error(`Invalid DraftPortKey '${key}'`);
   }
-  const [blockId, slotName, fieldName, dir] = parts as [string, string, string, string];
+  const dir = parts[parts.length - 1];
+  const fieldName = parts[parts.length - 2];
+  const slotName = parts[parts.length - 3];
+  const blockId = parts.slice(0, parts.length - 3).join(':');
   if (dir !== 'in' && dir !== 'out') {
     throw new Error(`Invalid DraftPortKey direction '${dir}' in '${key}'`);
   }
@@ -261,16 +267,14 @@ export interface StrictTypedGraph {
 // ---------------------------------------------------------------------------
 
 export type FixpointDiagnosticCode =
+  // sub-solver informational codes, surfaced at convergence — one authority
+  // for their names lives in shared.ts. [LAW:one-source-of-truth]
+  | SolveDiagnosticCode
   | 'NonConvergence'
   | 'OpenObligation'
   | 'UnresolvedPort'
   | 'CheaterAdapterUsed'
   | 'TypeConflict'
-  // sub-solver informational codes, surfaced at convergence
-  | 'UnitDefaultedToNone'
-  | 'PostSolveEdgeTypeMismatch'
-  | 'CardinalityDefaultedToOne'
-  | 'CardinalityPromotedToMany'
   // validateAxes codes
   | 'EventInvariantBroken'
   | 'NoInstance'
