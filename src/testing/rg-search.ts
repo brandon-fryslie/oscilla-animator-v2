@@ -29,39 +29,53 @@ function resolveScopedFiles(scope: readonly string[]): string[] {
   return files;
 }
 
-function matchesGlob(filePath: string, globs: readonly string[]): boolean {
-  const normalizedPath = filePath.replaceAll('\\', '/');
+/**
+ * Translate one rg-style glob into an anchored RegExp. Handles every glob
+ * uniformly — no per-pattern special cases — so an exclusion the translator
+ * can't express is impossible rather than silently skipped.
+ * [LAW:single-enforcer] [LAW:no-silent-failure]
+ */
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const body = escaped
+    .replaceAll('**/', '\u0000')
+    .replaceAll('**', '\u0001')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('?', '[^/]')
+    .replaceAll('\u0000', '(?:.*/)?')
+    .replaceAll('\u0001', '.*');
+  return new RegExp(`^${body}$`);
+}
+
+/** rg semantics: a glob without '/' matches the basename; with '/' the relative path. */
+function globMatches(glob: string, relativePath: string): boolean {
+  const subject = glob.includes('/') ? relativePath : path.posix.basename(relativePath);
+  return globToRegExp(glob).test(subject);
+}
+
+function matchesGlob(relativePath: string, globs: readonly string[]): boolean {
   let hasInclude = false;
   let included = false;
 
   for (const glob of globs) {
     if (glob.startsWith('!')) {
-      const exclude = glob.slice(1);
-      if (exclude === '**/__tests__/**' && normalizedPath.includes('/__tests__/')) {
-        return false;
-      }
-      if (exclude === '**/*.test.*' && normalizedPath.includes('.test.')) {
-        return false;
-      }
+      if (globMatches(glob.slice(1), relativePath)) return false;
       continue;
     }
-
     hasInclude = true;
-    if (glob === '*.ts' && normalizedPath.endsWith('.ts')) {
-      included = true;
-    }
-    if (glob === '*.tsx' && normalizedPath.endsWith('.tsx')) {
-      included = true;
-    }
+    included = included || globMatches(glob, relativePath);
   }
 
   return hasInclude ? included : true;
 }
 
-function jsRegexLines(pattern: string, scope: readonly string[], globs: readonly string[]): string[] {
+/** The pure-JS fallback for `rgLines`. Exported so parity with rg is testable. */
+export function jsRegexLines(pattern: string, scope: readonly string[], globs: readonly string[]): string[] {
   const matcher = new RegExp(pattern);
   const lines: string[] = [];
-  const files = resolveScopedFiles(scope).filter((filePath) => matchesGlob(filePath, globs));
+  const files = resolveScopedFiles(scope).filter((absolutePath) =>
+    matchesGlob(path.relative(process.cwd(), absolutePath).replaceAll('\\', '/'), globs),
+  );
 
   for (const absolutePath of files) {
     const relativePath = path.relative(process.cwd(), absolutePath).replaceAll('\\', '/');
