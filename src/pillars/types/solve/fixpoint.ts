@@ -209,6 +209,12 @@ function planDischarge(
 ): { readonly plans: ElaborationPlan[]; readonly blockedReasons: ReadonlyMap<ObligationId, string> } {
   const plans: ElaborationPlan[] = [];
   const blockedReasons = new Map<ObligationId, string>();
+  // Per-iteration mutual exclusion on replaced edges: the first plan claims
+  // an edge; a second plan targeting the same edge this iteration is skipped
+  // (its obligation stays open and re-plans against the rewired graph next
+  // iteration). Two plans replacing one edge would otherwise leave parallel
+  // adapter chains. [LAW:no-ambient-temporal-coupling]
+  const claimedEdges = new Set<string>();
 
   for (const obligation of graph.obligations) {
     if (!isOpen(obligation)) continue;
@@ -217,6 +223,12 @@ function planDischarge(
     const ctx: PolicyContext = { graph, facts, catalog, obligation };
     const result = callPolicy(obligation, ctx);
     if (result?.kind === 'plan') {
+      const removes = (result.plan.replaceEdges ?? []).map((r) => r.remove);
+      if (removes.some((id) => claimedEdges.has(id))) {
+        blockedReasons.set(obligation.id, 'edge already claimed by another plan this iteration');
+        continue;
+      }
+      for (const id of removes) claimedEdges.add(id);
       plans.push(result.plan);
     } else if (result?.kind === 'blocked') {
       // Blocked obligations stay open for retry next iteration; the reason is

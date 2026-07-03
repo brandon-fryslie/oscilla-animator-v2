@@ -12,8 +12,8 @@
 
 import type { CardinalitySolveError } from '../cardinality';
 import { isStructuralCardinalityConflict } from '../cardinality';
-import type { MutableGraph, Obligation } from '../typed-graph';
-import { obligationId } from '../typed-graph';
+import type { DraftPortKey, MutableGraph, Obligation } from '../typed-graph';
+import { obligationId, parseDraftPortKey } from '../typed-graph';
 
 export function createCardinalityObligations(
   graph: MutableGraph,
@@ -29,16 +29,19 @@ export function createCardinalityObligations(
   const portList = [...conflict.ports].sort().join(',');
   const id = obligationId(`needsCardinalityAdapter:${portList}`);
 
-  // Find an edge whose endpoints match the conflict ports.
-  // The anchor is the first edge we can find that involves these ports.
+  // Find an edge whose endpoints match the conflict ports. Decode each port
+  // key with the canonical parser and compare parts exactly — prefix matching
+  // is ambiguous once block ids contain colons (every _sys block does).
+  // [LAW:one-source-of-truth]
   let anchorEdgeId: string | undefined;
   for (const edge of graph.edges) {
-    // Check if this edge's source or target fields are in the conflict
-    const srcPattern = `${edge.source}:${edge.outputSlot}:`;
-    const tgtPattern = `${edge.target}:${edge.inputSlot}:`;
-    const involves = conflict.ports.some(
-      (p) => p.startsWith(srcPattern) || p.startsWith(tgtPattern),
-    );
+    const involves = conflict.ports.some((p) => {
+      const { blockId, slotName, dir } = parseDraftPortKey(p as DraftPortKey);
+      return (
+        (dir === 'out' && blockId === edge.source && slotName === edge.outputSlot)
+        || (dir === 'in' && blockId === edge.target && slotName === edge.inputSlot)
+      );
+    });
     if (involves && edge.origin.kind !== 'elaboration') {
       anchorEdgeId = edge.id;
       break;

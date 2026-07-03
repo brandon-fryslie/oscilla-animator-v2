@@ -51,3 +51,7 @@ export { draftPortKey, parseDraftPortKey, mutableBlockId, obligationId, isOpen, 
 
 // Fixpoint driver
 export { resolveTypes, makeMutableGraph } from './fixpoint';
+
+// Post-convergence axis gate (also re-exported by ../validate for the public
+// pillars/types surface; this index is the canonical source's own)
+export { validateAxes } from './axis-validate';

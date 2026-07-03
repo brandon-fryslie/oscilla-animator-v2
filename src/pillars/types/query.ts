@@ -10,9 +10,10 @@
  * intermediary); an adapter-match calls `findAdapterCandidates` directly. No
  * new matching dialect, no extra abstraction. [LAW:one-type-per-behavior]
  *
- * Performance contract: a ~100-block catalog queried 1000× completes in < 1 s
- * (each query is O(catalog × slots × adapters) with small constants). Enforced
- * by a co-located benchmark. [LAW:verifiable-goals]
+ * Performance contract: a ~100-block catalog queried 1000× completes in < 5 s
+ * — the bound the co-located benchmark enforces; typical runtime is well
+ * under 1 s, and the headroom absorbs slow CI runners while still catching
+ * O(n²) regressions. [LAW:verifiable-goals]
  */
 
 import type { DefinedBlock } from '../block-api';

@@ -43,20 +43,24 @@ export function cardinalityAdapterPolicy(ctx: PolicyContext): PolicyResult {
   const tgtSlot = tgtContract.inputs[edge.inputSlot];
   if (!tgtSlot) return { kind: 'blocked', reason: 'target slot not found' };
 
-  // Find the target field's cardinality
-  const firstField = Object.keys(tgtSlot.type)[0];
-  if (!firstField) return { kind: 'blocked', reason: 'target slot has no fields' };
+  // The obligation fired for a one→many mismatch, so the instance ref must
+  // come from the field that actually resolved to 'many' — not whichever
+  // field happens to be first in the bundle.
+  const fieldNames = Object.keys(tgtSlot.type);
+  if (fieldNames.length === 0) return { kind: 'blocked', reason: 'target slot has no fields' };
 
-  const tgtKey = draftPortKey(edge.target, edge.inputSlot, firstField, 'in');
-  const tgtHint = facts.ports.get(tgtKey);
-
-  let manyInstance: InstanceRef;
-  if (tgtHint?.status === 'ok' && tgtHint.canonical!.extent.cardinality.kind === 'many') {
-    manyInstance = tgtHint.canonical!.extent.cardinality.instance;
-  } else {
-    // Use a deterministic synthetic instance ref based on the obligation id
-    manyInstance = instanceRef(`broadcast:${obligation.id}`);
+  let manyInstance: InstanceRef | undefined;
+  for (const fieldName of fieldNames) {
+    const tgtKey = draftPortKey(edge.target, edge.inputSlot, fieldName, 'in');
+    const tgtHint = facts.ports.get(tgtKey);
+    const card = tgtHint?.status === 'ok' ? tgtHint.canonical!.extent.cardinality : undefined;
+    if (card?.kind === 'many') {
+      manyInstance = card.instance;
+      break;
+    }
   }
+  // No field resolved to many yet — use a deterministic synthetic instance ref
+  manyInstance ??= instanceRef(`broadcast:${obligation.id}`);
 
   const broadcastId = `_sys/Broadcast:${obligation.id}`;
 

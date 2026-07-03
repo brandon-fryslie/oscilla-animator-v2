@@ -68,10 +68,19 @@ export function applyElaborationPlan(graph: MutableGraph, plan: ElaborationPlan)
     }
   }
 
-  // Process replaceEdges: collect edge ids to remove and new edges to add
+  // Process replaceEdges: collect edge ids to remove and new edges to add.
+  // A remove id absent from the graph means two plans raced for the same edge
+  // (or a stale replan) — silently skipping the removal would leave parallel
+  // adapter chains, so it fails loudly instead. [LAW:no-silent-failure]
   const replaceRemoveIds = new Set<string>();
   const replaceAddEdges: MutableEdge[] = [];
   for (const rep of replaceEdges) {
+    if (!existingEdgeIds.has(rep.remove)) {
+      throw new Error(
+        `[applyElaborationPlan] Plan for obligation ${plan.obligationId} replaces ` +
+        `edge '${rep.remove}' which is not in the graph.`,
+      );
+    }
     replaceRemoveIds.add(rep.remove);
     replaceAddEdges.push(...rep.add);
   }
