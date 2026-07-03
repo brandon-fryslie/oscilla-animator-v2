@@ -20,6 +20,8 @@
 import type {
   PayloadVarId,
   UnitVarId,
+  ZCanonicalType,
+  ZInferenceCanonicalType,
   ZPayloadType,
   ZUnitType,
 } from '../schemas';
@@ -54,6 +56,15 @@ export interface PortVarInfo {
   readonly payloadVar?: PayloadVarId;
   readonly unitVar?: UnitVarId;
 }
+
+/**
+ * The solver owns this projection so absent variables stay absent keys under
+ * exact-optional typing. [LAW:one-source-of-truth]
+ */
+export const portVarInfoOf = (t: ZInferenceCanonicalType): PortVarInfo => ({
+  ...(t.payload.kind === 'var' ? { payloadVar: t.payload.var } : {}),
+  ...(t.unit.kind === 'var' ? { unitVar: t.unit.var } : {}),
+});
 
 /**
  * A post-solve safety net: after union-find settles, re-check that the two ends
@@ -221,7 +232,7 @@ export class UnionFind<T> {
 // ---------------------------------------------------------------------------
 
 /** Every payload member is discriminated solely by `kind`, so kind equality is full equality. */
-const payloadEquals = (a: ZPayloadType, b: ZPayloadType): boolean => a.kind === b.kind;
+export const payloadEquals = (a: ZPayloadType, b: ZPayloadType): boolean => a.kind === b.kind;
 
 const unitEquals = (a: ZUnitType, b: ZUnitType): boolean => {
   if (a.kind !== b.kind) return false;
@@ -245,12 +256,20 @@ const payloadMerge = (a: ZPayloadType, b: ZPayloadType): ZPayloadType | null =>
   payloadEquals(a, b) ? a : null;
 
 /** `none` is the unit bottom: it merges into any concrete unit. Two distinct concretes conflict. */
-const unitMerge = (a: ZUnitType, b: ZUnitType): ZUnitType | null => {
+export const unitMerge = (a: ZUnitType, b: ZUnitType): ZUnitType | null => {
   if (unitEquals(a, b)) return a;
   if (a.kind === 'none') return b;
   if (b.kind === 'none') return a;
   return null;
 };
+
+/**
+ * Would the solver merge these two concrete types without conflict?
+ * A composite of the merge rules above — obligation creation and adapter
+ * policy both consume this one definition. [LAW:single-enforcer]
+ */
+export const typesCompatible = (a: ZCanonicalType, b: ZCanonicalType): boolean =>
+  payloadEquals(a.payload, b.payload) && unitMerge(a.unit, b.unit) !== null;
 
 const intersectAllowed = (
   current: readonly ZPayloadType[],

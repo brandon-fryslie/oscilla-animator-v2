@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildPatch } from '../../graph';
 import { compile } from '../compile';
-import { rgLines } from '../../testing/rg-search';
 
 function compileScalarProgram() {
   const patch = buildPatch((b) => {
@@ -25,29 +24,17 @@ function compileScalarProgram() {
   return result.program;
 }
 
+// Legacy-alias and deriveKind source gates live in the canonical guardrail
+// suite (architecture-guardrails.test.ts) — one enforcement point per
+// invariant. [LAW:single-enforcer]
 describe('no-legacy-types gate', () => {
-  it('forbids production references to legacy expression aliases', () => {
-    const matches = rgLines('\\b(SigExpr|FieldExpr|EventExpr|SigExprId|FieldExprId|EventExprId)\\b', ['src'], [
-      '*.ts',
-      '*.tsx',
-      '!**/*.test.*',
-      '!**/__tests__/**',
-    ]);
-    expect(matches).toEqual([]);
-  });
-
-  it('forbids production deriveKind() dispatch remnants', () => {
-    const matches = rgLines('\\bderiveKind\\(', ['src'], [
-      '*.ts',
-      '*.tsx',
-      '!**/*.test.*',
-      '!**/__tests__/**',
-    ]);
-    expect(matches).toEqual([]);
-  });
-
   it('enforces numeric-only runtime storage contract and SoA packing', () => {
     const program = compileScalarProgram();
+
+    // every() is vacuously true on an empty array — the contract is only
+    // tested if the fixture actually emitted slots. [LAW:verifiable-goals]
+    expect(program.runtimeSlots.length).toBeGreaterThan(0);
+    expect(program.slotMeta.length).toBeGreaterThan(0);
 
     // [LAW:one-source-of-truth] Runtime slot ABI is numeric-only for the
     // compiler/runtime contract; no legacy object-shaped storage classes.

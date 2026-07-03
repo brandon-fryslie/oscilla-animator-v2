@@ -47,7 +47,8 @@ export type ConstraintOrigin =
 export type SolveDiagnosticCode =
   | 'UnitDefaultedToNone'
   | 'PostSolveEdgeTypeMismatch'
-  | 'CardinalityDefaultedToOne';
+  | 'CardinalityDefaultedToOne'
+  | 'CardinalityPromotedToMany';
 
 export interface SolveDiagnostic {
   readonly code: SolveDiagnosticCode;

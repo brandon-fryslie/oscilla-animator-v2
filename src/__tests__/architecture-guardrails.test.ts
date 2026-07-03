@@ -173,7 +173,12 @@ function registerLegacyValueExprTypeRemovalOwnershipSuite(): void {
 
     it('no production deriveKind() calls', () => {
       const matches = rgLines('\\bderiveKind\\(', ['src'], NON_TEST_SRC_GLOBS);
-      const filtered = filterAllowlist(stripCommentOnly(matches), [/architecture-guardrails\.test\.ts/]);
+      // derive-kind.ts is the canonical definition site — its export function signature contains
+      // the token but is not a dispatch call. [LAW:single-enforcer]
+      const filtered = filterAllowlist(stripCommentOnly(matches), [
+        /architecture-guardrails\.test\.ts/,
+        /validate\/derive-kind\.ts/,
+      ]);
       expect(filtered).toEqual([]);
     });
   });
