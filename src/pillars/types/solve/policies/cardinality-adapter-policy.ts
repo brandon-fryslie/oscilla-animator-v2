@@ -20,6 +20,7 @@ import { draftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
 import type { ZInferenceBundleType } from '../../schemas';
 import { canonical } from '../../schemas';
+import { getContract } from '../contract-lookup';
 
 export function cardinalityAdapterPolicy(ctx: PolicyContext): PolicyResult {
   const { graph, facts, obligation } = ctx;
@@ -35,7 +36,7 @@ export function cardinalityAdapterPolicy(ctx: PolicyContext): PolicyResult {
   const tgtBlock = graph.blocks.find((b) => b.id === edge.target);
   if (!tgtBlock) return { kind: 'blocked', reason: 'target block not found' };
 
-  const tgtContract = tgtBlock.syntheticContract ?? ctx.catalog.find((d) => d.type === tgtBlock.type)?.contract;
+  const tgtContract = getContract(tgtBlock, ctx.catalog);
   if (!tgtContract) return { kind: 'blocked', reason: 'no contract for target block' };
 
   const tgtSlot = tgtContract.inputs[edge.inputSlot];

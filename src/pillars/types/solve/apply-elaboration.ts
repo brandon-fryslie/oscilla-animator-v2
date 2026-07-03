@@ -72,9 +72,6 @@ export function applyElaborationPlan(graph: MutableGraph, plan: ElaborationPlan)
   edges = sortById([...edges, ...addEdges, ...replaceAddEdges]);
 
   // Discharge the obligation
-  const dischargedBlockIds = [...addBlocks.map((b) => b.id), ...replaceAddEdges.map((e) => e.id)];
-  const dischargedEdgeIds = [...addEdges.map((e) => e.id), ...replaceAddEdges.map((e) => e.id)];
-
   const obligations = sortByObId(
     graph.obligations.map((o) =>
       o.id === plan.obligationId && isOpen(o)
@@ -82,8 +79,6 @@ export function applyElaborationPlan(graph: MutableGraph, plan: ElaborationPlan)
         : o,
     ),
   );
-
-  void dischargedBlockIds; // used indirectly above
 
   return { blocks, edges, obligations, revision: graph.revision + 1 };
 }

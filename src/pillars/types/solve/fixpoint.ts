@@ -25,7 +25,9 @@ import type { CardinalitySolveError } from './cardinality';
 import { assembleSubstitution, computeTypeFacts, areDependenciesSatisfied, buildConflictPorts } from './type-facts';
 import {
   createMissingInputObligations,
-  createDerivedObligations,
+  createAdapterObligations,
+  createCardinalityAdapterObligations,
+  createPayloadAnchorObligations,
   createCardinalityObligations,
   createCycleBreakObligations,
 } from './obligations';
@@ -96,12 +98,14 @@ export function resolveTypes(
     lastSolveDiagnostics = terminalCardDiags;
 
     // ------------------------------------------------------------------ (2) Create obligations
-    const derived = createDerivedObligations(g, facts, catalog);
+    const adapterObs = createAdapterObligations(g, facts, catalog);
+    const cardAdapterObs = createCardinalityAdapterObligations(g, facts, catalog);
+    const anchorObs = createPayloadAnchorObligations(facts);
     const cardObs = createCardinalityObligations(g, structuralCardErrors);
     const cycleObs = createCycleBreakObligations(g);
     const missingObs = createMissingInputObligations(g, catalog);
 
-    const merged = addObligationsIfMissing(g, [...derived, ...cardObs, ...cycleObs, ...missingObs]);
+    const merged = addObligationsIfMissing(g, [...adapterObs, ...cardAdapterObs, ...anchorObs, ...cardObs, ...cycleObs, ...missingObs]);
     const didMutateObligations = merged.added > 0;
     g = merged.graph;
 
@@ -120,11 +124,6 @@ export function resolveTypes(
           stableKey: `OpenObligation:${ob.id}`,
           obligationId: ob.id,
         });
-      }
-
-      // Also add plan diagnostics from discharged plans (e.g. CheaterAdapterUsed)
-      for (const ob of g.obligations) {
-        if (ob.status.kind !== 'discharged') continue;
       }
 
       let strict = tryFinalizeStrict(g, facts, accumulatedDiagnostics);

@@ -21,6 +21,7 @@ import { canonical } from '../../schemas';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
 import { draftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
+import { getContract } from '../contract-lookup';
 
 const SYS_DEFAULT = '_sys/DefaultSource';
 
@@ -42,8 +43,7 @@ export function defaultSourcePolicy(ctx: PolicyContext): PolicyResult {
 
   // Build the output bundle type for the synthesized default-source block.
   // We need to know what fields the target input slot has.
-  const tgtContract =
-    tgtBlock.syntheticContract ?? ctx.catalog.find((d) => d.type === tgtBlock.type)?.contract;
+  const tgtContract = getContract(tgtBlock, ctx.catalog);
   if (!tgtContract) return { kind: 'blocked', reason: `no contract for block ${blockId}` };
 
   const tgtSlot = tgtContract.inputs[slotName];

@@ -19,6 +19,7 @@ import type { ZBlockContract, ZInferenceCanonicalType } from '../../schemas';
 import type { PolicyContext, PolicyResult } from './policy-types';
 import { applySubstitution } from '../substitution';
 import type { Substitution } from '../substitution';
+import { getContract } from '../contract-lookup';
 
 export function adapterPolicy(ctx: PolicyContext): PolicyResult {
   const { graph, facts, catalog, obligation } = ctx;
@@ -34,8 +35,8 @@ export function adapterPolicy(ctx: PolicyContext): PolicyResult {
   const tgtBlock = graph.blocks.find((b) => b.id === edge.target);
   if (!srcBlock || !tgtBlock) return { kind: 'blocked', reason: 'source or target block not found' };
 
-  const srcContract = srcBlock.syntheticContract ?? catalog.find((d) => d.type === srcBlock.type)?.contract;
-  const tgtContract = tgtBlock.syntheticContract ?? catalog.find((d) => d.type === tgtBlock.type)?.contract;
+  const srcContract = getContract(srcBlock, catalog);
+  const tgtContract = getContract(tgtBlock, catalog);
   if (!srcContract || !tgtContract) return { kind: 'blocked', reason: 'missing contract' };
 
   const srcSlot = srcContract.outputs[edge.outputSlot];

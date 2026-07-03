@@ -13,12 +13,8 @@
 import type { DefinedBlock } from '../../../block-api';
 import type { Obligation } from '../typed-graph';
 import { obligationId } from '../typed-graph';
-import type { MutableBlock, MutableGraph } from '../typed-graph';
-
-function getContract(block: MutableBlock, catalog: readonly DefinedBlock[]) {
-  if (block.syntheticContract !== undefined) return block.syntheticContract;
-  return catalog.find((d) => d.type === block.type)?.contract;
-}
+import type { MutableGraph } from '../typed-graph';
+import { getContract } from '../contract-lookup';
 
 export function createMissingInputObligations(
   graph: MutableGraph,
