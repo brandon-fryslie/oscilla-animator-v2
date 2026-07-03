@@ -46,7 +46,7 @@ import type {
 } from '../schemas';
 import type { DefinedBlock } from '../../block-api';
 import type { Substitution } from './substitution';
-import { solvePayloadUnit, type PortVarInfo, type ZPayloadUnitConstraint } from './payload-unit';
+import { portVarInfoOf, solvePayloadUnit, type PortVarInfo, type ZPayloadUnitConstraint } from './payload-unit';
 import { solveCardinality, type ZCardinalityConstraint } from './cardinality';
 import type { ConstraintOrigin, PortKey } from './shared';
 
@@ -126,7 +126,7 @@ function tryUnify(
   const puPorts = new Map<PortKey, PortVarInfo>();
   const puConstraints: ZPayloadUnitConstraint[] = [];
   const register = (port: PortKey, t: ZInferenceCanonicalType): void => {
-    puPorts.set(port, varInfo(t));
+    puPorts.set(port, portVarInfoOf(t));
     if (t.payload.kind !== 'var') {
       const value: ZPayloadType = t.payload;
       puConstraints.push({ kind: 'concretePayload', port, value, origin });
@@ -165,17 +165,6 @@ function tryUnify(
 
   return { payloads: pu.payloads, units: pu.units, cardinalities: card.cardinalities };
 }
-
-/**
- * A port's variable identities for the payload/unit solver, built so an absent
- * variable is an absent key (never `{ payloadVar: undefined }`) to satisfy
- * exact-optional typing. A non-variable axis contributes no key here; its
- * concrete value is pinned by a separate `concrete*` constraint.
- */
-const varInfo = (t: ZInferenceCanonicalType): PortVarInfo => ({
-  ...(t.payload.kind === 'var' ? { payloadVar: t.payload.var } : {}),
-  ...(t.unit.kind === 'var' ? { unitVar: t.unit.var } : {}),
-});
 
 interface LonePorts {
   readonly inputSlot: string;
