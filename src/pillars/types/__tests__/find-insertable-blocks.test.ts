@@ -15,8 +15,9 @@
  *   7. Ranking — direct before via-adapter
  *   8. In-port direction — in port queries candidate output slots
  *   9. Benchmark — 1000 queries on 100-block catalog complete in < 5 s
- *  10. Cardinality — one→many is never 'direct' (the driver would insert a
- *      Broadcast there); many→many with equal groups stays direct
+ *  10. Cardinality — a one-cardinality SOURCE into a many target is never
+ *      'direct' (the driver inserts a Broadcast there); many→many and
+ *      many-source→one-target (silent promotion, no adapter) stay direct
  */
 
 import { describe, it, expect } from 'vitest';
@@ -244,6 +245,31 @@ describe('findInsertableBlocks — context-side query', () => {
     const catalog: DefinedBlock[] = [sink('ManySink', manyInput)];
     const key = draftPortKey('srcBlock', 'output', 'value', 'out');
     const graph = makeTypedGraph(portTypes({ [key]: floatConcrete() }));
+
+    const results = findInsertableBlocks(key, graph, catalog);
+
+    expect(results.filter((r) => r.confidence === 'direct')).toHaveLength(0);
+  });
+
+  it('cardinality: many out port → one-input block stays direct (driver promotes silently)', () => {
+    const many = canonical({ kind: 'float' }, { extent: manyExtent(instanceRef('inst:q')) });
+    const catalog: DefinedBlock[] = [sink('OneSink', zFloat())];
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: asConcrete(many) }));
+
+    const results = findInsertableBlocks(key, graph, catalog);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].confidence).toBe('direct');
+  });
+
+  it('cardinality: querying a many IN port excludes one-output source blocks from direct', () => {
+    // dir='in': the candidate block's output is the edge SOURCE. A one-output
+    // source into this many target is the driver's Broadcast case.
+    const many = canonical({ kind: 'float' }, { extent: manyExtent(instanceRef('inst:q')) });
+    const catalog: DefinedBlock[] = [source('OneSource', zFloat())];
+    const key = draftPortKey('tgtBlock', 'input', 'value', 'in');
+    const graph = makeTypedGraph(portTypes({ [key]: asConcrete(many) }));
 
     const results = findInsertableBlocks(key, graph, catalog);
 

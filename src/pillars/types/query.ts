@@ -108,7 +108,7 @@ export function findInsertableBlocks(
       const slotFieldType = binding.type[fieldName];
       if (slotFieldType === undefined) continue;
 
-      if (typesDirectlyCompatible(resolvedType, slotFieldType)) {
+      if (typesDirectlyCompatible(resolvedType, slotFieldType, sourcePortByQueriedPort[dir])) {
         best = { blockType: block.type, matchingSlotId: slotName, adapter: null, confidence: 'direct' };
         break;
       }
@@ -144,6 +144,12 @@ const adapterEndpointsByQueriedPort: Record<
   in: (resolvedType, slotFieldType) => ({ source: slotFieldType, target: resolvedType }),
 };
 
+/** Which mini-unification port ('r' = resolved, 'c' = candidate) is the edge's source side. */
+const sourcePortByQueriedPort: Record<DraftPortDirection, 'r' | 'c'> = {
+  out: 'r',
+  in: 'c',
+};
+
 // ---------------------------------------------------------------------------
 // Direct compatibility check — the matching primitive for zero-adapter cases
 // ---------------------------------------------------------------------------
@@ -158,6 +164,7 @@ const adapterEndpointsByQueriedPort: Record<
 function typesDirectlyCompatible(
   resolved: ZCanonicalType,
   candidate: ZInferenceCanonicalType,
+  sourcePort: 'r' | 'c',
 ): boolean {
   const origin: ConstraintOrigin = { kind: 'blockRule', blockId: '__query__', rule: 'direct-check' };
 
@@ -185,18 +192,19 @@ function typesDirectlyCompatible(
   const pu = solvePayloadUnit({ ports: puPorts, constraints: puConstraints });
   if (pu.errors.length > 0) return false;
 
-  // Cardinality — equal group check. A concrete 'one' endpoint gets clampOne:
-  // without it the solver silently promotes a one↔many merge to many (the
-  // fixpoint driver would insert a Broadcast there), and reporting that pair
-  // as 'direct' would contradict the documented no-adapter semantics.
-  // [LAW:single-enforcer] — the solver, not a parallel check, decides compatibility.
+  // Cardinality — equal group check, mirroring the driver's elaboration rule:
+  // only a concrete-one SOURCE feeding a many group triggers a Broadcast
+  // (createCardinalityAdapterObligations checks src=one && tgt=many), so only
+  // the source side gets clampOne. A many source into a one target promotes
+  // silently with no adapter — the driver's behavior is the authority on what
+  // 'direct' means. [LAW:one-source-of-truth] [LAW:single-enforcer]
   const cardPorts = new Map<PortKey, ZInferenceCardinality>([
     ['r', resolved.extent.cardinality],
     ['c', candidate.extent.cardinality],
   ]);
   const cardConstraints: ZCardinalityConstraint[] = [{ kind: 'equal', a: 'r', b: 'c', origin }];
-  for (const [port, card] of cardPorts) {
-    if (card.kind === 'one') cardConstraints.push({ kind: 'clampOne', port, origin });
+  if (cardPorts.get(sourcePort)!.kind === 'one') {
+    cardConstraints.push({ kind: 'clampOne', port: sourcePort, origin });
   }
   const card = solveCardinality({ ports: cardPorts, constraints: cardConstraints });
   return card.errors.length === 0;
