@@ -15,39 +15,20 @@ import { obligationId, draftPortKey } from '../typed-graph';
 import type { DefinedBlock } from '../../../block-api';
 import type { ZCanonicalType } from '../../schemas';
 import { getContract } from '../contract-lookup';
+import { payloadEquals, unitMerge } from '../payload-unit';
 
 // ---------------------------------------------------------------------------
 // Type compatibility check
 // ---------------------------------------------------------------------------
 
+/**
+ * Delegates to the solver's own payload/unit merge rules so needsAdapter
+ * detection can never diverge from what the solver actually merges.
+ * Cardinality is deliberately absent — createCardinalityAdapterObligations
+ * owns that axis. [LAW:single-enforcer]
+ */
 function typesCompatible(a: ZCanonicalType, b: ZCanonicalType): boolean {
-  if (a.payload.kind !== b.payload.kind) return false;
-  // Unit compatibility: none is bottom (compatible with anything); otherwise must match
-  const ua = a.unit;
-  const ub = b.unit;
-  if (ua.kind !== ub.kind) {
-    if (ua.kind !== 'none' && ub.kind !== 'none') return false;
-  } else {
-    // Same kind — check sub-properties
-    if (ua.kind === 'angle') {
-      const va = ua as Extract<typeof ua, { kind: 'angle' }>;
-      const vb = ub as Extract<typeof ub, { kind: 'angle' }>;
-      if (va.unit !== vb.unit) return false;
-    } else if (ua.kind === 'time') {
-      const va = ua as Extract<typeof ua, { kind: 'time' }>;
-      const vb = ub as Extract<typeof ub, { kind: 'time' }>;
-      if (va.unit !== vb.unit) return false;
-    } else if (ua.kind === 'color') {
-      const va = ua as Extract<typeof ua, { kind: 'color' }>;
-      const vb = ub as Extract<typeof ub, { kind: 'color' }>;
-      if (va.unit !== vb.unit) return false;
-    } else if (ua.kind === 'space') {
-      const va = ua as Extract<typeof ua, { kind: 'space' }>;
-      const vb = ub as Extract<typeof ub, { kind: 'space' }>;
-      if (va.space !== vb.space || va.dims !== vb.dims) return false;
-    }
-  }
-  return true;
+  return payloadEquals(a.payload, b.payload) && unitMerge(a.unit, b.unit) !== null;
 }
 
 // ---------------------------------------------------------------------------

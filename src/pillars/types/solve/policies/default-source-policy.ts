@@ -17,7 +17,6 @@
  */
 
 import type { ZBlockContract, ZInferenceBundleType } from '../../schemas';
-import { canonical } from '../../schemas';
 import type { MutableBlock, MutableEdge } from '../typed-graph';
 import { draftPortKey } from '../typed-graph';
 import type { PolicyContext, PolicyResult } from './policy-types';
@@ -58,9 +57,16 @@ export function defaultSourcePolicy(ctx: PolicyContext): PolicyResult {
     if (hint?.status === 'ok') {
       outputBundle[fieldName] = hint.canonical!;
     } else {
-      // Default to float with none unit, one cardinality
+      // Mirror the declared type, substituting only genuine vars with defaults
+      // (payload→float, unit→none, cardinality→one). Declared concrete axes —
+      // unit, temporality, binding, perspective, branch — carry forward, so the
+      // synthesized source cannot contradict the target's contract (e.g. wiring
+      // a continuous source into a discrete event port).
       const payload = fieldType.payload.kind !== 'var' ? fieldType.payload : { kind: 'float' as const };
-      outputBundle[fieldName] = canonical(payload);
+      const unit = fieldType.unit.kind !== 'var' ? fieldType.unit : { kind: 'none' as const };
+      const cardinality =
+        fieldType.extent.cardinality.kind !== 'var' ? fieldType.extent.cardinality : { kind: 'one' as const };
+      outputBundle[fieldName] = { payload, unit, extent: { ...fieldType.extent, cardinality } };
     }
   }
 

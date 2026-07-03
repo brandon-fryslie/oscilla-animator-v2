@@ -23,6 +23,7 @@ import type { DefinedBlock } from '../../block-api';
 import type { ZCanonicalType, ZInferenceCanonicalType } from '../schemas';
 import type { DraftPortKey, FixpointDiagnostic, StrictTypedGraph } from '../solve/typed-graph';
 import { draftPortKey } from '../solve/typed-graph';
+import { getContract } from '../solve/contract-lookup';
 
 export function validateAxes(
   strict: StrictTypedGraph,
@@ -162,8 +163,7 @@ function validateCombineModes(
   out: FixpointDiagnostic[],
 ): void {
   for (const graphBlock of strict.graph.blocks) {
-    const contract =
-      graphBlock.syntheticContract ?? catalog.find((b) => b.type === graphBlock.type)?.contract;
+    const contract = getContract(graphBlock, catalog);
     if (!contract) continue;
 
     for (const [slotName, binding] of Object.entries(contract.inputs)) {

@@ -177,12 +177,19 @@ function typesDirectlyCompatible(
   const pu = solvePayloadUnit({ ports: puPorts, constraints: puConstraints });
   if (pu.errors.length > 0) return false;
 
-  // Cardinality — equal group check
+  // Cardinality — equal group check. A concrete 'one' endpoint gets clampOne:
+  // without it the solver silently promotes a one↔many merge to many (the
+  // fixpoint driver would insert a Broadcast there), and reporting that pair
+  // as 'direct' would contradict the documented no-adapter semantics.
+  // [LAW:single-enforcer] — the solver, not a parallel check, decides compatibility.
   const cardPorts = new Map<PortKey, ZInferenceCardinality>([
     ['r', resolved.extent.cardinality],
     ['c', candidate.extent.cardinality],
   ]);
   const cardConstraints: ZCardinalityConstraint[] = [{ kind: 'equal', a: 'r', b: 'c', origin }];
+  for (const [port, card] of cardPorts) {
+    if (card.kind === 'one') cardConstraints.push({ kind: 'clampOne', port, origin });
+  }
   const card = solveCardinality({ ports: cardPorts, constraints: cardConstraints });
   return card.errors.length === 0;
 }

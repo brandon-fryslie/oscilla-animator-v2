@@ -6,10 +6,11 @@
  * and one output (many cardinality), forwarding payload and unit unchanged via
  * shared type variables. [LAW:composability]
  *
- * Two cases, following V1:
- *   1. Source block is a synthesized DefaultSource → replace it with a
- *      many-default source (a DefaultSource with many cardinality).
- *   2. Otherwise → insert a Broadcast block. [LAW:effects-at-boundaries]
+ * Always inserts a Broadcast — including when the source is a synthesized
+ * DefaultSource, where the result is DefaultSource(one) → Broadcast → target
+ * (mechanically correct, one extra hop). Replacing the DefaultSource with a
+ * many-cardinality variant instead would need a block-replacement plan op;
+ * that optimization is deliberately not implemented. [LAW:effects-at-boundaries]
  */
 
 import type { InstanceRef, ZBlockContract } from '../../schemas';

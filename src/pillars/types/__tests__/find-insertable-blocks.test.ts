@@ -15,6 +15,8 @@
  *   7. Ranking — direct before via-adapter
  *   8. In-port direction — in port queries candidate output slots
  *   9. Benchmark — 1000 queries on 100-block catalog complete in < 5 s
+ *  10. Cardinality — one→many is never 'direct' (the driver would insert a
+ *      Broadcast there); many→many with equal groups stays direct
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,6 +26,8 @@ import {
   zVec2,
   payloadVar,
   unitVar,
+  manyExtent,
+  instanceRef,
   type ZAdapterSpec,
   type ZInferenceCanonicalType,
   type ZCanonicalType,
@@ -231,6 +235,31 @@ describe('findInsertableBlocks — context-side query', () => {
     expect(results).toHaveLength(1);
     expect(results[0].confidence).toBe('direct');
     expect(results[0].adapter).toBeNull();
+  });
+
+  it('cardinality: one out port → many-input block is not a direct match', () => {
+    // The solver would auto-insert a Broadcast here; claiming 'direct'
+    // (no adapter block needed) would misrepresent the insertion.
+    const manyInput = canonical({ kind: 'float' }, { extent: manyExtent(instanceRef('inst:q')) });
+    const catalog: DefinedBlock[] = [sink('ManySink', manyInput)];
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: floatConcrete() }));
+
+    const results = findInsertableBlocks(key, graph, catalog);
+
+    expect(results.filter((r) => r.confidence === 'direct')).toHaveLength(0);
+  });
+
+  it('cardinality: many out port → many-input block stays direct', () => {
+    const many = canonical({ kind: 'float' }, { extent: manyExtent(instanceRef('inst:q')) });
+    const catalog: DefinedBlock[] = [sink('ManySink', many)];
+    const key = draftPortKey('srcBlock', 'output', 'value', 'out');
+    const graph = makeTypedGraph(portTypes({ [key]: asConcrete(many) }));
+
+    const results = findInsertableBlocks(key, graph, catalog);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].confidence).toBe('direct');
   });
 
   it('multi-slot: reports the matching slot id', () => {
