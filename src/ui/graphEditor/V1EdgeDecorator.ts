@@ -12,7 +12,7 @@
  */
 
 import type { PatchStore } from '../../stores/PatchStore';
-import { requireAnyBlockDef } from '../../blocks/registry';
+import { getAnyBlockDefinition } from '../../blocks/registry';
 import type { BlockId } from '../../types';
 import { getLensLabel, lensTargetsConnection } from '../reactFlowEditor/lensUtils';
 import type { EdgeDecoration, EdgeDecorator, EdgeRef, DecorationParam } from './edge-decorations';
@@ -58,7 +58,13 @@ function lensParams(
   lensType: string,
   params: Record<string, unknown> | undefined,
 ): readonly DecorationParam[] {
-  const def = requireAnyBlockDef(lensType);
+  // Non-throwing lookup: `decorations()` runs for every edge on every render, so an
+  // orphaned lens type (a def unregistered since the patch was authored) must not
+  // crash the edge renderer. The chip still renders — `getLensLabel` falls back to a
+  // derived label — so the broken lens stays visible; it just carries no editable
+  // params. Honest degradation, not a silent drop or a crash. [LAW:no-silent-failure]
+  const def = getAnyBlockDefinition(lensType);
+  if (!def) return [];
   return Object.entries(def.inputs)
     .filter(([inputId]) => inputId !== 'in')
     .map(([paramId, inputDef]) => ({

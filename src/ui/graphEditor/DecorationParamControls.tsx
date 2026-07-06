@@ -132,7 +132,13 @@ export function DecorationParamControls({
           );
         }
 
-        if (kind === 'text' || (kind === undefined && typeof value === 'string')) {
+        // Free-text editing requires an EXPLICIT text hint. An un-hinted string is
+        // ambiguous about its constraint — it may back a select/asset the seam could
+        // not represent (its hint flattened to `undefined`) — so it renders read-only
+        // rather than a TextInput that would let the popover write an off-constraint
+        // value the authoritative editor (e.g. the Modulation Table) would reject.
+        // [LAW:no-silent-failure]
+        if (kind === 'text') {
           return (
             <TextInput
               key={id}
