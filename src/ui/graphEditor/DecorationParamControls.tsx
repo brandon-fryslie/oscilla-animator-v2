@@ -78,17 +78,24 @@ export function DecorationParamControls({
         const { id, label, value, hint } = param;
         const kind = hint?.kind;
 
-        // Hint is the authoritative widget signal; the value's runtime type only
-        // decides when NO hint is declared. So a numeric value under a boolean or
-        // select hint renders the hinted widget, never a slider by accident.
-        // [LAW:types-are-the-program]
-        if (kind === 'slider' || kind === 'int' || kind === 'float' || (kind === undefined && typeof value === 'number')) {
+        // The hint selects the widget, but a widget renders ONLY when `value` is the
+        // type it can faithfully edit. A hint/value type mismatch (a numeric hint over
+        // a string, a color hint over a non-string) or an absent value is a data
+        // problem surfaced by the read-only fallback below — never hidden behind a
+        // fabricated default (`0`, `#ffffff`) that would let the widget lie about, or
+        // silently overwrite, the stored value. Free-text likewise requires an explicit
+        // `text` hint: an un-hinted string is ambiguous about its constraint (it may
+        // back a select/asset whose hint the seam flattened to `undefined`), so it is
+        // shown read-only rather than made freely editable in this lightweight popover.
+        // [LAW:types-are-the-program] [LAW:no-silent-failure]
+        const numeric = kind === 'slider' || kind === 'int' || kind === 'float';
+        if (typeof value === 'number' && (numeric || kind === undefined)) {
           const range = numericRangeFromHint(id, hint);
           return (
             <SliderWithInput
               key={id}
               label={label}
-              value={typeof value === 'number' ? value : 0}
+              value={value}
               onChange={(next) => onChange(id, next)}
               min={range.min}
               max={range.max}
@@ -98,61 +105,55 @@ export function DecorationParamControls({
           );
         }
 
-        if (kind === 'boolean' || (kind === undefined && typeof value === 'boolean')) {
+        if (typeof value === 'boolean' && (kind === 'boolean' || kind === undefined)) {
           return (
             <CheckboxInput
               key={id}
               label={label}
-              checked={Boolean(value)}
+              checked={value}
               onChange={(next) => onChange(id, next)}
             />
           );
         }
 
-        if (hint?.kind === 'select') {
+        if (hint?.kind === 'select' && typeof value === 'string') {
           return (
             <SelectInput
               key={id}
               label={label}
-              value={String(value ?? '')}
+              value={value}
               options={hint.options}
               onChange={(next) => onChange(id, next)}
             />
           );
         }
 
-        if (kind === 'color') {
+        if (kind === 'color' && typeof value === 'string') {
           return (
             <ColorInput
               key={id}
               label={label}
-              value={typeof value === 'string' ? value : '#ffffff'}
+              value={value}
               onChange={(next) => onChange(id, next)}
             />
           );
         }
 
-        // Free-text editing requires an EXPLICIT text hint. An un-hinted string is
-        // ambiguous about its constraint — it may back a select/asset the seam could
-        // not represent (its hint flattened to `undefined`) — so it renders read-only
-        // rather than a TextInput that would let the popover write an off-constraint
-        // value the authoritative editor (e.g. the Modulation Table) would reject.
-        // [LAW:no-silent-failure]
-        if (kind === 'text') {
+        if (kind === 'text' && typeof value === 'string') {
           return (
             <TextInput
               key={id}
               label={label}
-              value={String(value ?? '')}
+              value={value}
               onChange={(next) => onChange(id, next)}
             />
           );
         }
 
-        // Read-only fallback for a param with no dedicated inline widget (e.g. a
-        // `kind:'xy'` hint, or an object value). `formatValue` keeps it honest —
-        // an object renders as readable JSON, never `[object Object]`. When a real
-        // xy param appears in the domain, its editor is added above. [LAW:composability]
+        // Read-only fallback: a param whose value doesn't match an editable widget
+        // (mismatched type, unset, a `kind:'xy'` hint, or an object). `formatValue`
+        // renders the ACTUAL value readably (objects as JSON, absent as '—'), never a
+        // fabricated stand-in. [LAW:no-silent-failure] [LAW:composability]
         return (
           <div key={id} style={{ fontSize: 12, opacity: 0.8 }}>
             {label}: {formatValue(value)}
