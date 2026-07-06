@@ -118,28 +118,29 @@ export function assertKnownTypePresent(c: CatalogConformanceCase): void {
  */
 export function assertDerivedViewsCohere(c: CatalogConformanceCase): void {
   const catalog = c.setup();
-  const insertable = insertableEntries(catalog);
-  const allTypes = new Set(catalog.entries.map((e) => e.type));
+  const entries = catalog.entries;
+  const insertable = insertableEntries(entries);
+  const allTypes = new Set(entries.map((e) => e.type));
   for (const entry of insertable) {
     expect(allTypes.has(entry.type), `${c.name}: insertable entry ${entry.type} is a real entry`).toBe(true);
     expect(entry.insertable, `${c.name}: insertableEntries yields only insertable entries`).toBe(true);
   }
 
-  for (const category of catalogCategories(catalog)) {
+  for (const category of catalogCategories(entries)) {
     expect(
-      catalogEntriesInCategory(catalog, category).length,
+      catalogEntriesInCategory(entries, category).length,
       `${c.name}: category ${category} has entries`,
     ).toBeGreaterThan(0);
   }
 
   expect(
-    searchEntries(catalog.entries, '').length,
+    searchEntries(entries, '').length,
     `${c.name}: empty search returns every entry`,
-  ).toBe(catalog.entries.length);
+  ).toBe(entries.length);
 
   const sample = insertable[0];
   if (sample) {
-    const hits = searchEntries(catalog.entries, sample.label);
+    const hits = searchEntries(entries, sample.label);
     expect(
       hits.some((e) => e.type === sample.type),
       `${c.name}: searching an entry's own label finds it`,

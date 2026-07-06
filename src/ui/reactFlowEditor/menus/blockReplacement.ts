@@ -63,6 +63,10 @@ function buildReplacementPlanForType(
   if (!block) return null;
   if (block.type === nextType) return null;
   const candidate = requireCatalogEntry(catalog, nextType);
+  // The `insertable` check is load-bearing for the public `isCompatibleBlockReplacement`
+  // entry point, where `nextType` is an arbitrary caller-supplied string. It is
+  // redundant (always true) on the `findCompatibleReplacementPlans` path, which
+  // already iterates `insertableEntries` — but this helper serves both callers.
   if (block.role?.kind === 'timeRoot' || !candidate.insertable) return null;
   const replacementPatch = withReplacementType(patch, blockId, nextType);
   const connectedEdges = patch.edges.filter(
@@ -158,8 +162,8 @@ export function findCompatibleReplacementPlans(
   }
 
   // [LAW:one-source-of-truth] Replacement candidates are the catalog's insertable
-  // entries — the same view the block library browses.
-  return insertableEntries(catalog)
+  // entries — the same view the block library browses. Read `entries` once.
+  return insertableEntries(catalog.entries)
     .map((entry) => buildReplacementPlanForType(catalog, patch, blockId, entry.type))
     .filter((plan): plan is CompatibleReplacementPlan => plan !== null)
     .sort((a, b) => a.blockLabel.localeCompare(b.blockLabel));

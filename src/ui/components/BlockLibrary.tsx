@@ -11,7 +11,6 @@ import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
 import { useBlockCatalog } from '../graphEditor/BlockCatalogContext';
 import {
-  type BlockCatalog,
   type CatalogEntry,
   catalogCategories,
   catalogEntriesInCategory,
@@ -93,6 +92,12 @@ function useDebounce<T>(value: T, delay: number): T {
 export const BlockLibrary: React.FC = () => {
   const { selection, diagnostics } = useStores();
   const catalog = useBlockCatalog();
+  // Read the catalog ONCE per render. The V1 catalog reads the mutable registry
+  // fresh on each access, so this snapshot both stays current (runtime-registered
+  // composites appear) and is materialized a single time for every derived view
+  // below. Do NOT memoize on `catalog` — its reference never changes, which would
+  // freeze the library on the first render's registry state. [LAW:effects-at-boundaries]
+  const entries = catalog.entries;
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
@@ -171,17 +176,17 @@ export const BlockLibrary: React.FC = () => {
 
   // Non-insertable types (e.g. singleton roots) are already excluded by the
   // catalog helpers, so every returned category has insertable entries.
-  const filteredCategories = useMemo(() => catalogCategories(catalog), [catalog]);
+  const filteredCategories = useMemo(() => catalogCategories(entries), [entries]);
 
   // Calculate total results across all categories
   const totalResults = useMemo(() => {
     let count = 0;
     filteredCategories.forEach((category: string) => {
-      const entries = catalogEntriesInCategory(catalog, category);
-      count += searchEntries(entries, debouncedSearchQuery).length;
+      const inCategory = catalogEntriesInCategory(entries, category);
+      count += searchEntries(inCategory, debouncedSearchQuery).length;
     });
     return count;
-  }, [catalog, filteredCategories, debouncedSearchQuery]);
+  }, [entries, filteredCategories, debouncedSearchQuery]);
 
   return (
     <div className="block-library">
@@ -229,7 +234,7 @@ export const BlockLibrary: React.FC = () => {
         {filteredCategories.map((category: string) => (
           <BlockCategorySection
             key={category}
-            catalog={catalog}
+            entries={entries}
             category={category}
             collapsed={collapsedCategories.has(category)}
             searchQuery={debouncedSearchQuery}
@@ -256,7 +261,7 @@ export const BlockLibrary: React.FC = () => {
  * Block Category Section
  */
 interface BlockCategorySectionProps {
-  catalog: BlockCatalog;
+  entries: readonly CatalogEntry[];
   category: BlockCategory;
   collapsed: boolean;
   searchQuery: string;
@@ -268,7 +273,7 @@ interface BlockCategorySectionProps {
 }
 
 const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
-  catalog,
+  entries,
   category,
   collapsed,
   searchQuery,
@@ -278,11 +283,11 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
   focused,
   onFocus,
 }) => {
-  const entries = useMemo(() => catalogEntriesInCategory(catalog, category), [catalog, category]);
+  const inCategory = useMemo(() => catalogEntriesInCategory(entries, category), [entries, category]);
 
   const filteredTypes = useMemo(
-    () => searchEntries(entries, searchQuery),
-    [entries, searchQuery],
+    () => searchEntries(inCategory, searchQuery),
+    [inCategory, searchQuery],
   );
 
   if (filteredTypes.length === 0) return null;

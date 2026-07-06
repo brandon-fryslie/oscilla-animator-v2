@@ -116,8 +116,16 @@ export interface BlockCatalog {
 }
 
 // =============================================================================
-// Derived views (one source of truth: `catalog.entries`)
+// Derived views — pure functions over an entry array
 // =============================================================================
+//
+// These take a `readonly CatalogEntry[]`, not a `BlockCatalog`, so a caller reads
+// the (possibly live) catalog ONCE at its boundary and derives every view from
+// that single snapshot. The V1 catalog reads the mutable registry fresh on each
+// `.entries` access; if these helpers each re-read `catalog.entries` they would
+// re-materialize the whole projection N times per render. Taking the array keeps
+// the live read at the boundary and the derivations pure and cheap.
+// [LAW:effects-at-boundaries] [LAW:one-source-of-truth]
 
 /** Look up an entry, throwing if the type is unknown (parity with `requireAnyBlockDef`). */
 export function requireCatalogEntry(catalog: BlockCatalog, type: string): CatalogEntry {
@@ -129,22 +137,25 @@ export function requireCatalogEntry(catalog: BlockCatalog, type: string): Catalo
 }
 
 /** Entries the editor lets the user add (singleton roots excluded). */
-export function insertableEntries(catalog: BlockCatalog): readonly CatalogEntry[] {
-  return catalog.entries.filter((e) => e.insertable);
+export function insertableEntries(entries: readonly CatalogEntry[]): readonly CatalogEntry[] {
+  return entries.filter((e) => e.insertable);
 }
 
 /** Sorted, unique category names over the insertable entries. */
-export function catalogCategories(catalog: BlockCatalog): readonly string[] {
+export function catalogCategories(entries: readonly CatalogEntry[]): readonly string[] {
   const seen = new Set<string>();
-  for (const entry of insertableEntries(catalog)) {
+  for (const entry of insertableEntries(entries)) {
     seen.add(entry.category);
   }
   return [...seen].sort();
 }
 
 /** Insertable entries within one category, in registration order. */
-export function catalogEntriesInCategory(catalog: BlockCatalog, category: string): readonly CatalogEntry[] {
-  return insertableEntries(catalog).filter((e) => e.category === category);
+export function catalogEntriesInCategory(
+  entries: readonly CatalogEntry[],
+  category: string,
+): readonly CatalogEntry[] {
+  return insertableEntries(entries).filter((e) => e.category === category);
 }
 
 /**

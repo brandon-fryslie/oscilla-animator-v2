@@ -86,7 +86,7 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function getVisibleCategories(): string[] {
-  return [...catalogCategories(v1BlockCatalog)];
+  return [...catalogCategories(v1BlockCatalog.entries)];
 }
 
 describe('BlockLibrary', () => {
@@ -128,7 +128,7 @@ describe('BlockLibrary', () => {
     const categories = getVisibleCategories();
     expect(categories.length).toBeGreaterThan(0);
 
-    const entries = catalogEntriesInCategory(v1BlockCatalog, categories[0]!);
+    const entries = catalogEntriesInCategory(v1BlockCatalog.entries, categories[0]!);
     const firstVisible = entries[0];
     expect(firstVisible).toBeTruthy();
 

@@ -64,14 +64,11 @@ describe('searchEntries', () => {
 
 describe('derived views', () => {
   it('insertableEntries excludes non-insertable entries', () => {
-    expect(insertableEntries({ entries, getEntry: () => undefined }).map((e) => e.type)).toEqual([
-      'Sin',
-      'Mul',
-    ]);
+    expect(insertableEntries(entries).map((e) => e.type)).toEqual(['Sin', 'Mul']);
   });
 
   it('catalogCategories is sorted, unique, and over insertable entries only', () => {
     // "Source" (Const) is non-insertable, so it must not appear.
-    expect(catalogCategories({ entries, getEntry: () => undefined })).toEqual(['Math']);
+    expect(catalogCategories(entries)).toEqual(['Math']);
   });
 });
