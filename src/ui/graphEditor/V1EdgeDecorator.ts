@@ -64,7 +64,11 @@ function lensParams(
     .map(([paramId, inputDef]) => ({
       id: paramId,
       label: inputDef.label ?? paramId,
-      value: params?.[paramId] ?? inputDef.defaultValue ?? 0,
+      // The value stays `unknown` — no fabricated `0`. A boolean/color param with
+      // no default must not read back a number, or the value-first widget dispatch
+      // in DecorationParamControls would render a slider for it. An absent value is
+      // chosen by the honest hint/value dispatch instead. [LAW:types-are-the-program]
+      value: params?.[paramId] ?? inputDef.defaultValue,
       hint: inputDef.uiHint,
     }));
 }

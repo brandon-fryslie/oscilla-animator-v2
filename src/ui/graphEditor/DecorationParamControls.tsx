@@ -37,6 +37,13 @@ function fallbackNumericRange(paramId: string): NumericRange {
   return { min: -100, max: 100, step: 0.01 };
 }
 
+/** Readable rendering of a fallback value — objects/arrays as JSON, never `[object Object]`. */
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 function numericRangeFromHint(paramId: string, hint?: UIControlHint): NumericRange {
   if (hint?.kind === 'slider') {
     return { min: hint.min, max: hint.max, step: hint.step };
@@ -131,9 +138,13 @@ export function DecorationParamControls({
           );
         }
 
+        // Read-only fallback for a param with no dedicated inline widget (e.g. a
+        // `kind:'xy'` hint, or an object value). `formatValue` keeps it honest —
+        // an object renders as readable JSON, never `[object Object]`. When a real
+        // xy param appears in the domain, its editor is added above. [LAW:composability]
         return (
           <div key={id} style={{ fontSize: 12, opacity: 0.8 }}>
-            {label}: {String(value)}
+            {label}: {formatValue(value)}
           </div>
         );
       })}
