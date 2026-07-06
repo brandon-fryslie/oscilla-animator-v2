@@ -54,6 +54,15 @@ type CenterView = 'graph' | 'mature' | 'table';
 
 const CenterPane: React.FC = () => {
   const [view, setView] = useState<CenterView>('graph');
+  // The mature editor mounts on its first activation (not before), so its
+  // initial mount — and GraphEditorCore's one-shot fitView — happens while the
+  // pane is visible with a real size, not while hidden (a display:none element
+  // has a zero rect, which would collapse fitView to minimum zoom). Once
+  // mounted it stays mounted, so adapter-owned positions survive later switches.
+  const [matureActivated, setMatureActivated] = useState(false);
+  useEffect(() => {
+    if (view === 'mature') setMatureActivated(true);
+  }, [view]);
   return (
     <div
       style={{
@@ -80,13 +89,16 @@ const CenterPane: React.FC = () => {
       <div style={{ flex: 1, minHeight: 0 }}>
         {view === 'graph' && <NativeGraphCanvas />}
         {view === 'table' && <ModulationTablePanel />}
-        {/* The mature editor stays mounted (display-toggled) because its node
-            positions live in the adapter's in-memory map; unmounting on tab
-            switch would discard the author's layout. Graph/Table re-derive
-            statelessly, so they mount on demand. [LAW:one-source-of-truth] */}
-        <div style={{ height: '100%', display: view === 'mature' ? undefined : 'none' }}>
-          <NativeMatureGraphCanvas />
-        </div>
+        {/* The mature editor mounts on first activation, then stays mounted
+            (display-toggled) because its node positions live in the adapter's
+            in-memory map; unmounting on tab switch would discard the author's
+            layout. Graph/Table re-derive statelessly, so they mount on demand.
+            [LAW:one-source-of-truth] */}
+        {matureActivated && (
+          <div style={{ height: '100%', display: view === 'mature' ? undefined : 'none' }}>
+            <NativeMatureGraphCanvas />
+          </div>
+        )}
       </div>
     </div>
   );
