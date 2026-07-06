@@ -25,6 +25,7 @@ import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/Grap
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
 import { V1TypeOracle } from '../graphEditor/V1TypeOracle';
+import { V1EdgeDecorator } from '../graphEditor/V1EdgeDecorator';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
@@ -146,6 +147,11 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     () => new V1TypeOracle(patchStore.patch, frontend),
     [patchStore.patch, frontend]
   );
+
+  // The V1 edge-decoration authority: wraps the port-attached lens records the
+  // edge chips + popover editor used to read directly, so the renderer goes
+  // through the seam. [LAW:one-source-of-truth]
+  const decorator = useMemo(() => new V1EdgeDecorator(patchStore), [patchStore]);
 
   // Port context menu handler - called from UnifiedNode via GraphEditorContext
   const handlePortContextMenu = useCallback(
@@ -355,6 +361,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           diagnostics={diagnostics}
           debug={debug}
           oracle={oracle}
+          decorator={decorator}
           onNodeContextMenu={handleNodeContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}
           onPortContextMenu={handlePortContextMenu}

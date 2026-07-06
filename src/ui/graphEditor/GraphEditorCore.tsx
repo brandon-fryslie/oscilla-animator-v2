@@ -48,6 +48,7 @@ import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
 import type { TypeOracle } from './type-oracle';
 import { verdictPermits } from './type-oracle';
+import type { EdgeDecorator } from './edge-decorations';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
@@ -104,6 +105,14 @@ export interface GraphEditorCoreProps {
    * always asks the oracle and never falls back to "permit everything" implicitly.
    */
   oracle: TypeOracle;
+
+  /**
+   * The era's authority on an edge's transform chain (V1 lenses / pillar transform
+   * blocks). Every mount supplies one — a V1 decorator, a scene decorator, or the
+   * explicit empty decorator — so the edge renderer reads decorations through the
+   * seam and never past it into a store. [LAW:one-source-of-truth]
+   */
+  decorator: EdgeDecorator;
 
   /** Custom node types map (default: { unified: UnifiedNode }) */
   nodeTypes?: NodeTypes;
@@ -186,6 +195,7 @@ export const GraphEditorCoreInner = observer(
         diagnostics = null,
         debug = null,
         oracle,
+        decorator,
         nodeTypes: customNodeTypes,
         onEditorReady,
         onNodeContextMenu,
@@ -297,6 +307,7 @@ export const GraphEditorCoreInner = observer(
       const contextValue: GraphEditorContextValue = useMemo(
         () => ({
           adapter,
+          decorator,
           enableParamEditing: mergedFeatures.enableParamEditing,
           enableDebugMode: mergedFeatures.enableDebugMode,
           enableContextMenus: mergedFeatures.enableContextMenus,
@@ -308,7 +319,7 @@ export const GraphEditorCoreInner = observer(
           diagnostics,
           debug,
         }),
-        [adapter, mergedFeatures, onPortContextMenu, selection, portHighlight, diagnostics, debug]
+        [adapter, decorator, mergedFeatures, onPortContextMenu, selection, portHighlight, diagnostics, debug]
       );
 
       // -------------------------------------------------------------------------
