@@ -52,8 +52,11 @@ export class SceneTypeOracle implements TypeOracle {
       case 'unsupported':
         return { kind: 'rejected', reason: `${verdict.value} has no ScenePlan realization` };
       default: {
+        // A new PortCompatibility kind is a compile error here (the `never`
+        // assignment) and, if ever reached at runtime, fails loudly rather than
+        // returning undefined or masquerading as a rejection. [LAW:no-silent-failure]
         const _exhaustive: never = verdict;
-        return _exhaustive;
+        throw new Error(`Unhandled scene port compatibility: ${JSON.stringify(_exhaustive)}`);
       }
     }
   }

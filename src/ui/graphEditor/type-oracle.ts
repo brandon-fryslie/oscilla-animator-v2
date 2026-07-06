@@ -50,9 +50,25 @@ export type ConnectionVerdict =
  * Whether a verdict permits the wire (a direct match or an adapter-bridged one).
  * The single place "does this verdict let the wire happen?" is decided, so the
  * drag gate and any future picker read it the same way. [LAW:one-source-of-truth]
+ *
+ * A positive, exhaustive dispatch — not a `!== 'rejected'` negative check — so a
+ * new ConnectionVerdict kind is a compile error here that forces an explicit
+ * permit decision, rather than being silently permitted. This is what protects
+ * callers that read only `verdictPermits` (the drag gate) and never switch on the
+ * verdict themselves. [LAW:types-are-the-program]
  */
 export function verdictPermits(verdict: ConnectionVerdict): boolean {
-  return verdict.kind !== 'rejected';
+  switch (verdict.kind) {
+    case 'allowed':
+    case 'allowedViaAdapter':
+      return true;
+    case 'rejected':
+      return false;
+    default: {
+      const _exhaustive: never = verdict;
+      throw new Error(`Unhandled ConnectionVerdict kind: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
 }
 
 // =============================================================================
