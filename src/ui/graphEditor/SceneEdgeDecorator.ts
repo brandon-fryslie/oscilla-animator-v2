@@ -52,7 +52,27 @@ export class SceneEdgeDecorator implements EdgeDecorator {
     }));
   }
 
-  setParam(_edge: EdgeRef, decorationId: string, paramId: string, value: unknown): void {
+  setParam(edge: EdgeRef, decorationId: string, paramId: string, value: unknown): void {
+    // Edge-scope the write symmetrically with the V1 provider. A pillar decoration id
+    // is a globally-unique block id, so `updateConfig` alone would happily mutate a
+    // transform from an UNRELATED edge; the contract is that `decorationId` names a
+    // step on THIS edge. Verify it against the edge's traced chain and throw on a
+    // mismatch — the same loud rejection V1's `updateLensParams` gives for a lens not
+    // on the target port — rather than silently writing the wrong block's config.
+    // [LAW:no-silent-failure]
+    const route = traceRoute(
+      this.store.patch,
+      this.store.registry,
+      edge.targetBlockId,
+      edge.targetPortId,
+    );
+    const onEdge = route?.transforms.some((t) => t.blockId === decorationId) ?? false;
+    if (!onEdge) {
+      throw new Error(
+        `EdgeDecorator.setParam: decoration "${decorationId}" is not on edge ` +
+          `${edge.sourceBlockId}.${edge.sourcePortId} -> ${edge.targetBlockId}.${edge.targetPortId}`,
+      );
+    }
     this.store.updateConfig(decorationId, paramId, value);
   }
 }

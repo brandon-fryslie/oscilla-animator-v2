@@ -149,3 +149,46 @@ describe('noEdgeDecorator', () => {
     expect(() => noEdgeDecorator.setParam(edge, 'd', 'p', 1)).not.toThrow();
   });
 });
+
+// =============================================================================
+// SceneEdgeDecorator edge-scopes the write — a pillar decoration id is a globally
+// unique block id, so `setParam` must reject a decoration that is not on the given
+// edge's chain rather than silently mutating an unrelated block (symmetric with V1).
+// =============================================================================
+
+describe('SceneEdgeDecorator edge-scopes setParam', () => {
+  function transformRoute() {
+    const store = new PillarPatchStore({ blocks: [], edges: [] });
+    const constId = store.addBlock('Constant');
+    const waveId = store.addBlock('WaveOffset');
+    const scaleId = store.addBlock('Scale');
+    store.addEdge(constId, scaleId, 'in');
+    store.addEdge(scaleId, waveId, 'amplitude');
+    return { decorator: new SceneEdgeDecorator(store), constId, waveId, scaleId };
+  }
+
+  it('throws when the decoration is not on the given edge', () => {
+    const { decorator, constId, scaleId } = transformRoute();
+    // Scale is a decoration on (Scale.out -> amplitude), NOT on (Constant -> Scale.in).
+    expect(() =>
+      decorator.setParam(
+        { sourceBlockId: constId, sourcePortId: 'value', targetBlockId: scaleId, targetPortId: 'in' },
+        scaleId,
+        'factor',
+        9,
+      ),
+    ).toThrow();
+  });
+
+  it('accepts the write on the edge the decoration actually decorates', () => {
+    const { decorator, waveId, scaleId } = transformRoute();
+    expect(() =>
+      decorator.setParam(
+        { sourceBlockId: scaleId, sourcePortId: 'out', targetBlockId: waveId, targetPortId: 'amplitude' },
+        scaleId,
+        'factor',
+        9,
+      ),
+    ).not.toThrow();
+  });
+});
