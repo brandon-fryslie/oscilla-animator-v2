@@ -72,10 +72,14 @@ describe('PatchStore authored input control ownership', () => {
     const blockId = patchStore.addBlock('Rotate2D', { angleDeg: 15 });
     const block = adapter.blocks.get(blockId as BlockId)!;
 
-    // The authored control does not leak back into raw params...
+    // The authored value round-trips and is captured on the store's port
+    // (the canonical home for authored controls)...
+    expect(patchStore.patch.blocks.get(blockId)?.inputPorts.get('angleDeg')?.authoredControl?.source?.params.value)
+      .toBe(15);
+    // ...it does not leak back into raw params...
     expect(block.params.angleDeg).toBeUndefined();
-    // ...and it manifests on the port as a default-source indicator decoration
-    // (the neutral seam exposes the *effect*, not the V1 authoredControl record).
+    // ...and the neutral adapter surfaces it as a default-source indicator
+    // decoration (the seam exposes the *effect*, not the V1 authoredControl record).
     const port = block.inputPorts.get('angleDeg');
     expect(port?.decorations?.some((d) => d.kind === 'indicator')).toBe(true);
   });
