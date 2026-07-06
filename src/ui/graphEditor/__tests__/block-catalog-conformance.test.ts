@@ -81,6 +81,43 @@ const brokenCase: CatalogConformanceCase = {
   setup: () => brokenCatalog,
 };
 
+/**
+ * A catalog whose entry is well-formed at the entry level but carries a port with
+ * an empty tooltip — otherwise every field is populated. This isolates the
+ * port-level type-display checks (which the fully-broken entry above never reaches,
+ * because it fails on the entry label first) and proves the per-field port
+ * assertions — including tooltip — actually have teeth. [LAW:verifiable-goals]
+ */
+const brokenPortCatalog: BlockCatalog = {
+  entries: [
+    {
+      type: 'BadPort',
+      label: 'Bad Port',
+      category: 'X',
+      form: 'primitive',
+      editable: true,
+      insertable: true,
+      openBehavior: { kind: 'none' },
+      inputs: [
+        {
+          id: 'in',
+          label: 'In',
+          // Every field populated EXCEPT tooltip — the field the new assertion guards.
+          typeDisplay: { label: 'float', tooltip: '', color: '#fff', compatibilityToken: 'float' },
+        },
+      ],
+      outputs: [],
+    },
+  ],
+  getEntry: (type) => (type === 'BadPort' ? brokenPortCatalog.entries[0] : undefined),
+};
+
+const brokenPortCase: CatalogConformanceCase = {
+  name: 'BrokenPortCatalog',
+  knownType: 'BadPort',
+  setup: () => brokenPortCatalog,
+};
+
 describe('catalog conformance contract rejects a non-conforming catalog (negative control)', () => {
   it('rejects entries that are not self-describing', () => {
     expect(() => assertEntriesSelfDescribing(brokenCase)).toThrow();
@@ -92,5 +129,9 @@ describe('catalog conformance contract rejects a non-conforming catalog (negativ
 
   it('rejects a catalog missing its declared known type', () => {
     expect(() => assertKnownTypePresent(brokenCase)).toThrow();
+  });
+
+  it('rejects a port whose type-display tooltip is empty', () => {
+    expect(() => assertEntriesSelfDescribing(brokenPortCase)).toThrow();
   });
 });

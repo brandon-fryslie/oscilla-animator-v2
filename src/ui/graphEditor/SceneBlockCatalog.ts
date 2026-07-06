@@ -39,19 +39,40 @@ function toCatalogEntry(catalog: SceneCatalogMetadata): CatalogEntry {
   };
 }
 
-/** Build the scene catalog from a scene registry's catalog metadata. */
+/**
+ * Build the scene catalog from a thunk that yields the scene registry's catalog
+ * metadata. The projection is built lazily on first access and cached once:
+ * unlike the V1 registry, the scene block set (`ALL_SCENE_BLOCKS`) is a static
+ * module constant with no runtime registration, so a single snapshot is always
+ * complete — the caching strategy matches the registry's (im)mutability.
+ *
+ * Deferring the build also decouples the boots: `App.tsx` imports this singleton
+ * for the native path, but the scene registry is only constructed when that path
+ * first reads the catalog, so a scene-registry build error can never take down
+ * the V1 editor. [LAW:no-ambient-temporal-coupling]
+ */
 export function createSceneBlockCatalog(
-  catalogMetadata: readonly SceneCatalogMetadata[],
+  loadCatalog: () => readonly SceneCatalogMetadata[],
 ): BlockCatalog {
-  const entries: readonly CatalogEntry[] = catalogMetadata.map(toCatalogEntry);
-  const byType = new Map<string, CatalogEntry>(entries.map((e) => [e.type, e]));
+  let cache: { entries: readonly CatalogEntry[]; byType: Map<string, CatalogEntry> } | null = null;
+
+  const build = (): { entries: readonly CatalogEntry[]; byType: Map<string, CatalogEntry> } => {
+    if (cache === null) {
+      const entries: readonly CatalogEntry[] = loadCatalog().map(toCatalogEntry);
+      cache = { entries, byType: new Map(entries.map((e) => [e.type, e])) };
+    }
+    return cache;
+  };
+
   return {
-    entries,
-    getEntry: (type) => byType.get(type),
+    get entries() {
+      return build().entries;
+    },
+    getEntry: (type) => build().byType.get(type),
   };
 }
 
-/** The scene catalog is a static projection of the boot-time scene registry. */
+/** The scene catalog, built lazily from the static scene registry. */
 export const sceneBlockCatalog: BlockCatalog = createSceneBlockCatalog(
-  buildSceneRegistry(ALL_SCENE_BLOCKS).catalog,
+  () => buildSceneRegistry(ALL_SCENE_BLOCKS).catalog,
 );

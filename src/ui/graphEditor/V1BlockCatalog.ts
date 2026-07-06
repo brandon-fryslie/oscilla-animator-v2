@@ -14,6 +14,7 @@
 import {
   getBlockCategories,
   getBlockTypesByCategory,
+  getAnyBlockDefinition,
   type BlockDef,
   type BlockOpenBehaviorDef,
   type InputDef,
@@ -82,31 +83,28 @@ function toCatalogEntry(def: AnyDef): CatalogEntry {
  * (categories → types), so the neutral entry set is the same set the editor
  * always showed. [LAW:one-source-of-truth]
  *
- * The projection is built lazily on first access, not at construction: the V1
- * registry is a mutable global populated by `registerAllBlocks()` at boot, so a
- * catalog captured at module-import time could snapshot an empty registry.
- * Deferring to first read guarantees registration has run. [LAW:no-silent-failure]
+ * The projection reads the registry FRESH on every access — it holds no snapshot.
+ * The V1 registry is a mutable global: `registerAllBlocks()` populates it at boot
+ * and `registerComposite()` adds user-authored composites at runtime. A cached
+ * snapshot would both risk capturing an empty registry (if built before boot
+ * registration) and silently omit runtime composites forever. Reading fresh
+ * mirrors the old per-render registry reads and stays correct as the registry
+ * grows. Lookup uses the registry's own O(1) index rather than materializing the
+ * whole catalog. [LAW:no-silent-failure]
  */
 export function createV1BlockCatalog(): BlockCatalog {
-  let cache: { entries: readonly CatalogEntry[]; byType: Map<string, CatalogEntry> } | null = null;
-
-  const build = (): { entries: readonly CatalogEntry[]; byType: Map<string, CatalogEntry> } => {
-    if (cache === null) {
-      const entries: readonly CatalogEntry[] = getBlockCategories()
+  return {
+    get entries(): readonly CatalogEntry[] {
+      return getBlockCategories()
         .flatMap((category) => getBlockTypesByCategory(category))
         .map(toCatalogEntry);
-      cache = { entries, byType: new Map(entries.map((e) => [e.type, e])) };
-    }
-    return cache;
-  };
-
-  return {
-    get entries() {
-      return build().entries;
     },
-    getEntry: (type) => build().byType.get(type),
+    getEntry: (type) => {
+      const def = getAnyBlockDefinition(type);
+      return def ? toCatalogEntry(def) : undefined;
+    },
   };
 }
 
-/** The V1 catalog is a lazy projection of the boot-time registry. */
+/** The V1 catalog is a live projection of the registry (no snapshot). */
 export const v1BlockCatalog: BlockCatalog = createV1BlockCatalog();

@@ -53,6 +53,10 @@ function assertPortWellFormed(entry: CatalogEntry, port: CatalogEntry['inputs'][
     `${name}: ${entry.type} port ${port.id} type label`,
   ).toBeGreaterThan(0);
   expect(
+    port.typeDisplay.tooltip.length,
+    `${name}: ${entry.type} port ${port.id} type tooltip`,
+  ).toBeGreaterThan(0);
+  expect(
     port.typeDisplay.color.length,
     `${name}: ${entry.type} port ${port.id} type color`,
   ).toBeGreaterThan(0);

@@ -26,10 +26,7 @@ import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { PortDecoration } from './types';
 import type { PortId, BlockId } from '../../types';
 import { useBlockCatalog } from './BlockCatalogContext';
-import type { CatalogOpenBehavior } from './block-catalog';
-
-/** Neutral default for a type absent from the catalog: it opens nothing. */
-const NO_OPEN_BEHAVIOR: CatalogOpenBehavior = { kind: 'none' };
+import { NO_OPEN_BEHAVIOR } from './block-catalog';
 import { ParameterControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';

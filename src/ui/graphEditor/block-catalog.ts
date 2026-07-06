@@ -39,6 +39,13 @@ export type CatalogOpenBehavior =
   | { readonly kind: 'expressionEditor' };
 
 /**
+ * The neutral default open behavior — what a type reports when it is absent from
+ * the catalog, or the era has no open action. One canonical value so the node
+ * button and the context menu can never disagree. [LAW:one-source-of-truth]
+ */
+export const NO_OPEN_BEHAVIOR: CatalogOpenBehavior = { kind: 'none' };
+
+/**
  * A wireable port on a catalog entry, projected for insertion/display. Only
  * ports the editor actually surfaces cross the seam — config-only inputs
  * (edited inline, never wired) and hidden outputs are a registry-internal detail

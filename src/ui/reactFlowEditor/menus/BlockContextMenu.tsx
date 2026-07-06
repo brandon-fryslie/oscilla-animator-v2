@@ -22,12 +22,9 @@ import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { findCompatibleReplacementPlans } from './blockReplacement';
 import { useBlockCatalog } from '../../graphEditor/BlockCatalogContext';
-import type { CatalogOpenBehavior } from '../../graphEditor/block-catalog';
+import { NO_OPEN_BEHAVIOR } from '../../graphEditor/block-catalog';
 import { DockviewContext } from '../../dockview';
 import { getBlockOpenBehaviorLabel, hasBlockOpenBehavior, runBlockOpenBehavior } from '../../block-ui';
-
-/** Neutral default for a type absent from the catalog: it opens nothing. */
-const NO_OPEN_BEHAVIOR: CatalogOpenBehavior = { kind: 'none' };
 
 export interface BlockContextMenuProps {
   blockId: BlockId;
