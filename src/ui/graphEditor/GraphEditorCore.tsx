@@ -143,7 +143,7 @@ function stableParamsSignature(params: Readonly<Record<string, unknown>>): strin
 
 function blockSignature(block: BlockLike): string {
   const inputSig = Array.from(block.inputPorts.values())
-    .map((port) => `${port.id}:${port.label}:${port.typeDisplay?.compatibilityToken ?? ''}:${port.decorations?.length ?? 0}:${port.controls?.length ?? 0}`)
+    .map((port) => `${port.id}:${port.typeDisplay?.compatibilityToken ?? ''}:${port.decorations?.length ?? 0}:${port.controls?.length ?? 0}`)
     .join(';');
   const outputSig = Array.from(block.outputPorts.values())
     .map((port) => `${port.id}:${port.typeDisplay?.compatibilityToken ?? ''}`)

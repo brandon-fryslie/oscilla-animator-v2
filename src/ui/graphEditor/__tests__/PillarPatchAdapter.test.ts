@@ -82,5 +82,8 @@ describe('PillarPatchAdapter', () => {
     expect(rewired.sourceBlockId).toBe(sourceBlockId);
     expect(rewired.targetBlockId).toBe(targetBlockId);
     expect(rewired.targetPortId).toBe(targetPortId);
+    // The source output handle is re-derived from the registry (the pillar store
+    // holds only source block identity); it must resolve back to the same port.
+    expect(rewired.sourcePortId).toBe(sourcePortId);
   });
 });

@@ -111,11 +111,21 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
   }
 
   getBlockPosition(id: string): { x: number; y: number } | undefined {
-    return this.positions.get(id);
+    const stored = this.positions.get(id);
+    if (stored) return stored;
+    // PillarPatchStore holds no layout, so seed a deterministic left→right
+    // position from the block's index. This keeps nodes readable on first paint
+    // with no dependency on a post-mount auto-layout pass firing at the right
+    // moment. [LAW:no-ambient-temporal-coupling]
+    const idx = this.store.patch.blocks.findIndex((b) => b.id === id);
+    if (idx < 0) return undefined;
+    return { x: idx * 260, y: (idx % 3) * 140 };
   }
 
   setBlockPosition(id: string, position: { x: number; y: number }): void {
-    this.positions.set(id, position);
+    runInAction(() => {
+      this.positions.set(id, position);
+    });
   }
 
   // ---------------------------------------------------------------------------

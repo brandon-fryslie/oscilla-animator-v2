@@ -324,9 +324,12 @@ export const OscillaEdge = observer(function OscillaEdge(
 
   const sourceDisplayName = patch.blocks.get(source as BlockId)?.displayName;
 
-  // Lenses live on the target port; read them straight from the patch store.
-  // (Edge decorations are owned by the edge-decoration seam; the neutral edge
-  // vocabulary does not carry V1 lens attachments.)
+  // [LAW:one-way-deps] OscillaEdge reads the V1 PatchStore directly here (as it
+  // already did for `sourceDisplayName`/`adapterCount`) — a pre-existing bypass.
+  // For pillar edges these lookups miss and the chips simply don't render. The
+  // edge-decoration seam (oscilla-editor-ux-8lsn.18) inverts this dependency by
+  // moving all V1 reads behind a neutral per-edge decoration provider; until
+  // then the neutral edge vocabulary deliberately does not carry V1 lenses.
   const targetPortLenses = targetHandle
     ? patch.blocks.get(target as BlockId)?.inputPorts.get(targetHandle as PortId)?.lenses
     : undefined;

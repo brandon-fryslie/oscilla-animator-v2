@@ -16,41 +16,27 @@
  * equality.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { PillarPatchAdapter } from '../graphEditor/PillarPatchAdapter';
-import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
+import { GraphEditorCore } from '../graphEditor/GraphEditorCore';
 
 export const NativeMatureGraphCanvas: React.FC = observer(() => {
   const { pillarPatch } = useStores();
   const adapter = useMemo(() => new PillarPatchAdapter(pillarPatch), [pillarPatch]);
-  const coreRef = useRef<GraphEditorCoreHandle | null>(null);
-  const arrangedRef = useRef(false);
 
-  const handleReady = useCallback((handle: GraphEditorCoreHandle) => {
-    coreRef.current = handle;
-  }, []);
-
-  // Seed a left→right ELK layout once nodes exist (PillarPatchStore has no
-  // stored positions; without this every node stacks at the origin). The rAF
-  // lets GraphEditorCore reconcile nodes from the adapter before we arrange.
-  const blockCount = pillarPatch.patch.blocks.length;
-  useEffect(() => {
-    if (arrangedRef.current || blockCount === 0) return;
-    arrangedRef.current = true;
-    const raf = requestAnimationFrame(() => {
-      coreRef.current
-        ?.autoArrange()
-        .then(() => coreRef.current?.zoomToFit())
-        .catch((err: unknown) => console.error('Mature pillar graph layout failed:', err));
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [blockCount]);
-
+  // Layout: PillarPatchAdapter seeds deterministic left→right positions, so the
+  // graph is readable on first paint and GraphEditorCore's own fitView frames
+  // it — no post-mount auto-layout pass, hence no timing/ref race to manage.
+  //
+  // Connection validation: no `patch` is passed, so GraphEditorCore permits any
+  // wire. Pillar wiring validity (type compatibility) is owned by the type-oracle
+  // seam (oscilla-editor-ux-8lsn.17); this spike intentionally leaves it open
+  // rather than duplicate that boundary here.
   return (
     <div style={{ height: '100%', width: '100%' }}>
-      <GraphEditorCore ref={coreRef} adapter={adapter} onEditorReady={handleReady} />
+      <GraphEditorCore adapter={adapter} />
     </div>
   );
 });
