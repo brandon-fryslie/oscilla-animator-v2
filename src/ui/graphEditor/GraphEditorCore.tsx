@@ -143,10 +143,10 @@ function stableParamsSignature(params: Readonly<Record<string, unknown>>): strin
 
 function blockSignature(block: BlockLike): string {
   const inputSig = Array.from(block.inputPorts.values())
-    .map((port) => `${port.id}:${port.combineMode}:${port.defaultSource?.blockType ?? ''}:${port.lenses?.length ?? 0}:${port.resolvedType ? 1 : 0}`)
+    .map((port) => `${port.id}:${port.typeDisplay?.compatibilityToken ?? ''}:${port.decorations?.length ?? 0}:${port.controls?.length ?? 0}`)
     .join(';');
   const outputSig = Array.from(block.outputPorts.values())
-    .map((port) => `${port.id}:${port.resolvedType ? 1 : 0}`)
+    .map((port) => `${port.id}:${port.typeDisplay?.compatibilityToken ?? ''}`)
     .join(';');
 
   return [
@@ -213,7 +213,6 @@ export const GraphEditorCoreInner = observer(
       const nodesRef = useRef(nodes);
       const edgesRef = useRef(edges);
       const warnedInvalidEdgeIdsRef = useRef<Set<string>>(new Set());
-      const warnedMissingBlockDefIdsRef = useRef<Set<string>>(new Set());
       const fitViewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
       nodesRef.current = nodes;
       edgesRef.current = edges;
@@ -255,16 +254,6 @@ export const GraphEditorCoreInner = observer(
             current,
             (blockId) => adapter.getBlockPosition(blockId),
             diagnosticsGetter,
-            (issue) => {
-              if (issue.kind !== 'missingBlockDef') return;
-              const key = `${issue.blockId}:${issue.blockType}`;
-              if (warnedMissingBlockDefIdsRef.current.has(key)) return;
-              warnedMissingBlockDefIdsRef.current.add(key);
-              diagnostics?.log({
-                level: 'warn',
-                message: `Dropped block '${issue.blockId}' from graph projection because block type '${issue.blockType}' is not registered.`,
-              });
-            },
           );
 
           // [LAW:no-shared-mutable-globals] Prune warning cache to current edge IDs
@@ -273,15 +262,6 @@ export const GraphEditorCoreInner = observer(
           for (const warnedId of warnedInvalidEdgeIdsRef.current) {
             if (!liveEdgeIds.has(warnedId)) {
               warnedInvalidEdgeIdsRef.current.delete(warnedId);
-            }
-          }
-
-          const liveMissingBlockKeys = new Set(
-            Array.from(adapter.blocks.values()).map((block) => `${block.id}:${block.type}`),
-          );
-          for (const warnedKey of warnedMissingBlockDefIdsRef.current) {
-            if (!liveMissingBlockKeys.has(warnedKey)) {
-              warnedMissingBlockDefIdsRef.current.delete(warnedKey);
             }
           }
 

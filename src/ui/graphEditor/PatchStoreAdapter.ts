@@ -1,34 +1,46 @@
 /**
  * PatchStoreAdapter - Adapter for main patch graph editing
  *
- * Wraps PatchStore + LayoutStore to implement GraphDataAdapter.
- * This is a thin wrapper that preserves all existing behavior:
- * - MobX reactivity from PatchStore
- * - Event emission (BlockAdded, EdgeRemoved, etc.)
- * - Position persistence to LayoutStore
+ * Wraps PatchStore + LayoutStore + FrontendResultStore to implement the neutral
+ * GraphDataAdapter. This adapter is the boundary where the V1 backend's
+ * vocabulary (CanonicalType, default sources, provenance, binding) is projected
+ * into the editor's neutral, presentation-ready facts: a type display, a
+ * decoration list, and inline controls. [LAW:effects-at-boundaries]
  *
- * ARCHITECTURAL: This adapter does NOT duplicate logic.
- * It delegates all operations to the underlying stores.
+ * ARCHITECTURAL: This adapter does not duplicate graph logic — mutations
+ * delegate to the underlying stores. It DOES own the V1→neutral projection
+ * (formatting, decoration synthesis), so the renderer can stay pure.
  */
 
 import { makeObservable, computed, runInAction } from 'mobx';
-import type { BlockId, CombineMode, DefaultSource } from '../../types';
-import { portId } from '../../types';
+import type { BlockId, UIControlHint, DefaultSource } from '../../types';
 import type { PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore } from '../../stores/LayoutStore';
 import type { FrontendResultStore } from '../../stores/FrontendResultStore';
-import type { InputPort, OutputPort } from '../../graph/Patch';
-import { getAnyBlockDefinition, type InputDef } from '../../blocks/registry';
+import type { Block, InputPort } from '../../graph/Patch';
+import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
+import { canonicalType, FLOAT } from '../../core/canonical-types';
+import type { InferenceCanonicalType } from '../../core/inference-types';
+import type { PortProvenance } from '../../stores/FrontendResultStore';
+import {
+  formatCanonicalTypeTooltip,
+  formatProvenanceTooltip,
+  getAdapterBadgeLabel,
+  getUnresolvedWarning,
+} from './portTooltipFormatters';
+import { typeDisplayFor, defaultSourceIndicator } from './neutral-projection';
 import type {
   GraphDataAdapter,
   BlockLike,
   EdgeLike,
   InputPortLike,
   OutputPortLike,
+  ParamData,
+  PortDecoration,
 } from './types';
 
 /**
- * Adapter that exposes PatchStore + LayoutStore through GraphDataAdapter interface.
+ * Adapter that exposes PatchStore + LayoutStore through GraphDataAdapter.
  */
 export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   constructor(
@@ -47,38 +59,19 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   // Read Operations
   // ---------------------------------------------------------------------------
 
-  /**
-   * Returns all blocks as BlockLike.
-   * PERFORMANCE: Uses MobX computed to cache the transformation.
-   * The underlying patchStore.blocks is already observable.
-   */
   get blocks(): ReadonlyMap<BlockId, BlockLike> {
-    // Transform PatchStore blocks to BlockLike
-    // We create a new Map here, but MobX computed will cache it
     const blockMap = new Map<BlockId, BlockLike>();
 
-    // Read snapshot so MobX tracks it as a dependency of this computed
-    const snapshot = this.frontendStore.snapshot;
-    const hasFrontend = snapshot.status !== 'none';
+    // Read snapshot so MobX tracks it as a dependency of this computed.
+    const hasFrontend = this.frontendStore.snapshot.status !== 'none';
 
     for (const [id, block] of this.patchStore.blocks) {
-      blockMap.set(id, {
-        id,
-        type: block.type,
-        displayName: block.displayName,
-        params: block.params as Record<string, unknown>,
-        inputPorts: this.transformInputPorts(block.inputPorts, hasFrontend ? id : undefined, block.type),
-        outputPorts: this.transformOutputPorts(block.outputPorts, hasFrontend ? id : undefined),
-      });
+      blockMap.set(id, this.toBlockLike(id, block, hasFrontend));
     }
 
     return blockMap;
   }
 
-  /**
-   * Returns all edges as EdgeLike.
-   * PERFORMANCE: Uses MobX computed to cache the transformation.
-   */
   get edges(): readonly EdgeLike[] {
     return this.patchStore.edges.map((edge) => ({
       id: edge.id,
@@ -89,11 +82,6 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
     }));
   }
 
-  /**
-   * Version number that changes when frontend snapshot data changes.
-   * Used by MobX reactions to detect data-only changes (port types, default sources)
-   * that don't alter block/edge structure.
-   */
   get dataVersion(): number {
     return this.frontendStore.snapshot.patchRevision;
   }
@@ -102,43 +90,25 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   // Block Operations
   // ---------------------------------------------------------------------------
 
-  /**
-   * Add a new block at the specified position.
-   * Delegates to PatchStore for block creation, LayoutStore for position.
-   */
   addBlock(type: string, position: { x: number; y: number }): BlockId {
     let blockId!: BlockId;
     runInAction(() => {
-      // [LAW:one-source-of-truth] Add + position are committed atomically so graph projection
-      // sees one coherent source of truth for new node placement.
+      // [LAW:one-source-of-truth] Add + position committed atomically.
       blockId = this.patchStore.addBlock(type, {});
       this.layoutStore.setPosition(blockId, position);
     });
     return blockId;
   }
 
-  /**
-   * Remove a block and its connected edges.
-   * Delegates to PatchStore (handles edge removal) and LayoutStore.
-   */
   removeBlock(id: BlockId): void {
-    // PatchStore removes the block and all connected edges
     this.patchStore.removeBlock(id);
-
-    // LayoutStore removes the position
     this.layoutStore.removePosition(id);
   }
 
-  /**
-   * Get block position from LayoutStore.
-   */
   getBlockPosition(id: BlockId): { x: number; y: number } | undefined {
     return this.layoutStore.getPosition(id);
   }
 
-  /**
-   * Set block position in LayoutStore.
-   */
   setBlockPosition(id: BlockId, position: { x: number; y: number }): void {
     this.layoutStore.setPosition(id, position);
   }
@@ -147,26 +117,13 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   // Edge Operations
   // ---------------------------------------------------------------------------
 
-  /**
-   * Add an edge connecting two ports.
-   * Delegates to PatchStore.
-   */
-  addEdge(
-    source: BlockId,
-    sourcePort: string,
-    target: BlockId,
-    targetPort: string
-  ): string {
+  addEdge(source: BlockId, sourcePort: string, target: BlockId, targetPort: string): string {
     return this.patchStore.addEdge(
       { kind: 'port', blockId: source, slotId: sourcePort },
       { kind: 'port', blockId: target, slotId: targetPort }
     );
   }
 
-  /**
-   * Remove an edge.
-   * Delegates to PatchStore.
-   */
   removeEdge(id: string): void {
     this.patchStore.removeEdge(id);
   }
@@ -175,137 +132,174 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
   // Optional Operations (PatchStore-specific)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Update block parameters.
-   * Delegates to PatchStore (emits ParamChanged events).
-   */
   updateBlockParams(id: BlockId, params: Record<string, unknown>): void {
     this.patchStore.updateBlockParams(id, params);
   }
 
-  /**
-   * Update block display name.
-   * Delegates to PatchStore (validates uniqueness).
-   */
   updateBlockDisplayName(id: BlockId, displayName: string): { error?: string } {
     return this.patchStore.updateBlockDisplayName(id, displayName);
   }
 
-  /**
-   * Update input port properties.
-   * Delegates to PatchStore.
-   */
-  updateInputPort(
+  // ---------------------------------------------------------------------------
+  // Private: V1 -> neutral projection
+  // ---------------------------------------------------------------------------
+
+  private toBlockLike(id: BlockId, block: Block, hasFrontend: boolean): BlockLike {
+    const blockDef = getAnyBlockDefinition(block.type);
+    const inputPorts = new Map<string, InputPortLike>();
+    const outputPorts = new Map<string, OutputPortLike>();
+    const controls: ParamData[] = [];
+    const handledParamIds = new Set<string>();
+
+    if (blockDef) {
+      for (const [portIdStr, inputDef] of Object.entries(blockDef.inputs)) {
+        if (inputDef.exposedAsPort === false) {
+          // Config-only input -> block-level inline control.
+          const value = block.params[portIdStr] ?? inputDef.defaultValue;
+          if (value !== undefined) {
+            handledParamIds.add(portIdStr);
+            controls.push({
+              id: portIdStr,
+              label: inputDef.label || portIdStr,
+              value,
+              hint: (inputDef as InputDef & { uiHint?: UIControlHint }).uiHint,
+              target: { kind: 'blockParam', blockId: id, paramId: portIdStr },
+            });
+          }
+          continue;
+        }
+        inputPorts.set(
+          portIdStr,
+          this.toInputPortLike(id, portIdStr, inputDef, block.inputPorts.get(portIdStr), blockDef, hasFrontend),
+        );
+      }
+
+      for (const [portIdStr, outputDef] of Object.entries(blockDef.outputs)) {
+        const resolved = hasFrontend
+          ? (this.frontendStore.getResolvedPortTypeByIds(id, portIdStr, 'out') as InferenceCanonicalType | undefined)
+          : undefined;
+        const t = resolved ?? outputDef.type ?? canonicalType(FLOAT);
+        outputPorts.set(portIdStr, {
+          id: portIdStr,
+          label: outputDef.label || portIdStr,
+          typeDisplay: typeDisplayFor(t),
+        });
+      }
+    } else {
+      // No block definition (should be rare for V1): render instance ports raw.
+      for (const [portIdStr, port] of block.inputPorts) {
+        inputPorts.set(portIdStr, { id: port.id, label: portIdStr });
+      }
+      for (const [portIdStr, port] of block.outputPorts) {
+        outputPorts.set(portIdStr, { id: port.id, label: portIdStr });
+      }
+    }
+
+    // Extra persisted params not represented by declared inputs.
+    for (const [paramId, value] of Object.entries(block.params)) {
+      if (handledParamIds.has(paramId)) continue;
+      if (paramId === 'payloadType') continue;
+      if (blockDef && paramId in blockDef.inputs) continue;
+      controls.push({
+        id: paramId,
+        label: paramId,
+        value,
+        target: { kind: 'blockParam', blockId: id, paramId },
+      });
+    }
+
+    return {
+      id,
+      type: block.type,
+      typeLabel: blockDef?.label ?? block.type,
+      displayName: block.displayName,
+      params: block.params as Record<string, unknown>,
+      inputPorts,
+      outputPorts,
+      controls,
+    };
+  }
+
+  private toInputPortLike(
     blockId: BlockId,
     portIdStr: string,
-    updates: { defaultSource?: DefaultSource; combineMode?: CombineMode }
-  ): void {
-    this.patchStore.updateInputPort(blockId, portId(portIdStr), updates);
-  }
-
-  /**
-   * Update input port combine mode.
-   * Delegates to PatchStore.
-   */
-  updateInputPortCombineMode(blockId: BlockId, portIdStr: string, mode: CombineMode): void {
-    this.patchStore.updateInputPortCombineMode(blockId, portId(portIdStr), mode);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Private Helpers
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Transform InputPort map to InputPortLike map.
-   *
-   * When the frontend snapshot is available, default sources come from the
-   * compiler's normalization pass (the single enforcer for "which ports have
-   * materialized defaults"). When no snapshot exists, falls back to instance
-   * overrides and registry defaults.
-   */
-  private transformInputPorts(
-    ports: ReadonlyMap<string, InputPort>,
-    blockId?: BlockId,
-    blockType?: string,
-  ): ReadonlyMap<string, InputPortLike> {
-    const portMap = new Map<string, InputPortLike>();
-    const blockDef = blockType ? getAnyBlockDefinition(blockType) : undefined;
-
-    for (const [id, port] of ports) {
-      // Use frontend snapshot data if available (even from failed compilations - helps debugging)
-      // The snapshot is always the LATEST attempt, so it reflects current patch state
-      const hasSnapshot = this.frontendStore.snapshot.status !== 'none';
-
-      // Determine effective default source
-      let ds: DefaultSource | undefined;
-      if (blockId && hasSnapshot) {
-        // Frontend snapshot is the authority (even if compilation failed)
-        ds = this.frontendStore.getDefaultSourceByIds(blockId, id);
-      }
-
-      // If no snapshot data, fall back to authored control, instance override,
-      // or registry seed.
-      if (!ds) {
-        ds = port.authoredControl?.source
-          ? {
-              blockType: port.authoredControl.source.blockType,
-              output: port.authoredControl.source.outputPortId,
-              params: { ...port.authoredControl.source.params },
-            }
-          : port.defaultSource
-          ?? (blockDef?.inputs[id] as InputDef & { defaultSource?: DefaultSource } | undefined)?.defaultSource;
-      }
-
-      // Resolve type from frontend snapshot when available
-      const resolvedType = blockId && hasSnapshot
-        ? this.frontendStore.getResolvedPortTypeByIds(blockId, id, 'in')
-        : undefined;
-
-      // Get provenance from frontend snapshot
-      // If the snapshot has no data for this port, provenance will be undefined
-      const provenance = blockId && hasSnapshot
-        ? this.frontendStore.getPortProvenanceByIds(blockId, id, 'in')
-        : undefined;
-      const binding = blockId && hasSnapshot
-        ? this.frontendStore.getInputBindingByIds(blockId, id)
-        : undefined;
-
-      portMap.set(id, {
-        id: port.id,
-        combineMode: port.combineMode,
-        authoredControl: port.authoredControl,
-        defaultSource: ds,
-        lenses: port.lenses,
-        resolvedType,
-        provenance,
-        binding,
-      });
+    inputDef: InputDef,
+    port: InputPort | undefined,
+    blockDef: AnyBlockDef,
+    hasFrontend: boolean,
+  ): InputPortLike {
+    // Effective default source: frontend snapshot is the authority; fall back
+    // to authored control, instance override, then registry seed.
+    let ds: DefaultSource | undefined = hasFrontend
+      ? this.frontendStore.getDefaultSourceByIds(blockId, portIdStr)
+      : undefined;
+    if (!ds) {
+      ds = port?.authoredControl?.source
+        ? {
+            blockType: port.authoredControl.source.blockType,
+            output: port.authoredControl.source.outputPortId,
+            params: { ...port.authoredControl.source.params },
+          }
+        : port?.defaultSource
+        ?? (inputDef as InputDef & { defaultSource?: DefaultSource }).defaultSource;
     }
 
-    return portMap;
+    const resolved = hasFrontend
+      ? (this.frontendStore.getResolvedPortTypeByIds(blockId, portIdStr, 'in') as InferenceCanonicalType | undefined)
+      : undefined;
+    const effectiveType = resolved ?? inputDef.type ?? canonicalType(FLOAT);
+    const typeDisplay = typeDisplayFor(effectiveType);
+
+    const provenance = hasFrontend
+      ? this.frontendStore.getPortProvenanceByIds(blockId, portIdStr, 'in')
+      : undefined;
+    const binding = hasFrontend ? this.frontendStore.getInputBindingByIds(blockId, portIdStr) : undefined;
+
+    return {
+      id: port?.id ?? portIdStr,
+      label: inputDef.label || portIdStr,
+      typeDisplay,
+      decorations: this.inputDecorations(ds, provenance, resolved, typeDisplay.tooltip),
+      controls: binding?.controls?.map((control) => ({
+        id: `${portIdStr}:${control.id}`,
+        label: control.label,
+        value: control.value,
+        hint: control.hint,
+        target: control.target,
+      })),
+    };
   }
 
   /**
-   * Transform OutputPort map to OutputPortLike map.
-   * Extracts only the properties needed for rendering.
+   * Project V1 default-source + provenance into neutral port decorations.
+   * The indicator dot is always emitted when a default exists; the renderer
+   * hides it while the port is connected.
    */
-  private transformOutputPorts(
-    ports: ReadonlyMap<string, OutputPort>,
-    blockId?: BlockId,
-  ): ReadonlyMap<string, OutputPortLike> {
-    const portMap = new Map<string, OutputPortLike>();
+  private inputDecorations(
+    ds: DefaultSource | undefined,
+    provenance: PortProvenance | undefined,
+    resolved: InferenceCanonicalType | undefined,
+    typeTooltip: string,
+  ): readonly PortDecoration[] {
+    const decorations: PortDecoration[] = [];
 
-    for (const [id, port] of ports) {
-      const resolvedType = blockId
-        ? this.frontendStore.getResolvedPortTypeByIds(blockId, id, 'out')
-        : undefined;
-
-      portMap.set(id, {
-        id: port.id,
-        resolvedType,
-      });
+    if (ds) {
+      const detail = resolved ? formatCanonicalTypeTooltip(resolved) : typeTooltip;
+      const tooltip = [formatProvenanceTooltip(provenance), detail].join('\n\n');
+      decorations.push(defaultSourceIndicator(ds, tooltip));
     }
 
-    return portMap;
+    if (provenance) {
+      const badge = getAdapterBadgeLabel(provenance);
+      if (badge) {
+        decorations.push({ kind: 'badge', label: badge, tooltip: formatProvenanceTooltip(provenance) });
+      }
+      const warning = getUnresolvedWarning(provenance);
+      if (warning) {
+        decorations.push({ kind: 'warning', label: warning, tooltip: formatProvenanceTooltip(provenance) });
+      }
+    }
+
+    return decorations;
   }
 }

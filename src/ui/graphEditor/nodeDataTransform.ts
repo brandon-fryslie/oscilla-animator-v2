@@ -1,25 +1,25 @@
 /**
  * nodeDataTransform - Transform adapter data to ReactFlow nodes/edges
  *
- * Adapter-agnostic version of nodes.ts transformation logic.
- * Works with BlockLike/EdgeLike instead of Block/Edge from PatchStore.
+ * Works with the neutral adapter vocabulary (BlockLike/EdgeLike and their
+ * self-describing ports) rather than any backend's block/port model.
  *
- * ARCHITECTURAL: Single source of truth is the adapter.
- * This module only transforms data for presentation, never stores state.
+ * ARCHITECTURAL: Single source of truth is the adapter. This module only
+ * transforms data for presentation, never stores state, and NEVER consults a
+ * backend block registry — a BlockLike carries everything needed to render it.
+ * [LAW:composability]
  */
 
 import type { Node, Edge as ReactFlowEdge } from 'reactflow';
-import type { BlockLike, EdgeLike, GraphDataAdapter, ParamData } from './types';
-import type { DefaultSource, UIControlHint } from '../../types';
-import type { BlockId } from '../../types';
-import type { LensAttachment } from '../../graph/Patch';
-import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
-import { FLOAT, canonicalType } from '../../core/canonical-types';
-import type { InferenceCanonicalType, InferencePayloadType } from '../../core/inference-types';
-import { formatTypeForTooltip, getTypeColor } from '../reactFlowEditor/typeValidation';
+import type {
+  BlockLike,
+  EdgeLike,
+  GraphDataAdapter,
+  ParamData,
+  PortDecoration,
+  PortTypeDisplay,
+} from './types';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
-import { lensTargetsConnection } from '../reactFlowEditor/lensUtils';
-import type { PortProvenance } from '../../stores/FrontendResultStore';
 import type { Diagnostic } from '../../diagnostics/types';
 
 /**
@@ -32,27 +32,30 @@ export interface PortConnectionInfo {
   edgeId: string;
 }
 
+/** Neutral fallback color for ports with no resolved type. */
+const UNTYPED_PORT_COLOR = '#888888';
+
 /**
- * Port data for ReactFlow rendering
+ * Port data for ReactFlow rendering. Neutral: carries presentation-ready type
+ * color/tooltip and a decoration list; no backend type objects.
  */
 export interface PortData {
   id: string;
   label: string;
-  defaultSource?: DefaultSource;
-  payloadType: InferencePayloadType;
-  typeTooltip: string;
+  /** Handle/swatch color (from the port's neutral type display). */
   typeColor: string;
+  /** Type tooltip text (from the port's neutral type display). */
+  typeTooltip: string;
+  /** Full neutral type display, when known. */
+  typeDisplay?: PortTypeDisplay;
+  /** Visual annotations painted beside the handle. */
+  decorations: readonly PortDecoration[];
   isConnected: boolean;
   connection?: PortConnectionInfo;
-  uiHint?: UIControlHint;
-  lenses?: readonly LensAttachment[];
-  resolvedType?: InferenceCanonicalType;
-  provenance?: PortProvenance;
 }
 
 /**
  * Custom data stored in each ReactFlow node.
- * Adapter-agnostic version of OscillaNodeData.
  */
 export interface UnifiedNodeData {
   blockId: string;
@@ -70,51 +73,32 @@ export interface UnifiedNodeData {
  */
 export type UnifiedNode = Node<UnifiedNodeData>;
 
-/**
- * Create port data with type information.
- */
-function createPortData(
+function portData(
   id: string,
   label: string,
-  type: InferenceCanonicalType | undefined,
+  typeDisplay: PortTypeDisplay | undefined,
+  decorations: readonly PortDecoration[],
   isConnected: boolean,
-  defaultSource?: DefaultSource,
   connection?: PortConnectionInfo,
-  uiHint?: UIControlHint,
-  lenses?: readonly LensAttachment[],
-  provenance?: PortProvenance
 ): PortData {
-  // For inputs without a type (non-port inputs), use a default
-  const effectiveType: InferenceCanonicalType = type || canonicalType(FLOAT);
-
   return {
     id,
     label,
-    defaultSource,
-    payloadType: effectiveType.payload,
-    typeTooltip: formatTypeForTooltip(effectiveType),
-    typeColor: getTypeColor(effectiveType.payload),
+    typeColor: typeDisplay?.color ?? UNTYPED_PORT_COLOR,
+    typeTooltip: typeDisplay?.tooltip ?? label,
+    typeDisplay,
+    decorations,
     isConnected,
     connection,
-    uiHint,
-    lenses,
-    resolvedType: type,
-    provenance,
   };
 }
 
 /**
- * Create ReactFlow node from adapter BlockLike.
- *
- * @param block - Block from adapter
- * @param blockDef - Block definition from registry
- * @param edges - All edges from adapter (for connection info)
- * @param blocks - All blocks from adapter (for looking up connected block labels)
- * @param position - Position for this node
+ * Create ReactFlow node from a neutral BlockLike. Enumerates ports from the
+ * block itself (self-describing) — no registry lookup.
  */
 export function createNodeFromBlockLike(
   block: BlockLike,
-  blockDef: AnyBlockDef,
   edges: readonly EdgeLike[],
   blocks: ReadonlyMap<string, BlockLike>,
   position: { x: number; y: number }
@@ -124,138 +108,70 @@ export function createNodeFromBlockLike(
   const outputConnections = new Map<string, PortConnectionInfo>();
 
   for (const edge of edges) {
-    // Input connection: edge goes TO this block
-    if (edge.targetBlockId === block.id) {
-      // An input can legally have multiple incoming edges (combine). For UI summary,
-      // keep the first one we encounter to avoid nondeterministic overwrites.
-      if (!inputConnections.has(edge.targetPortId)) {
-        const sourceBlock = blocks.get(edge.sourceBlockId);
-        inputConnections.set(edge.targetPortId, {
-          blockId: edge.sourceBlockId,
-          blockLabel: sourceBlock?.displayName || edge.sourceBlockId,
-          portId: edge.sourcePortId,
-          edgeId: edge.id,
-        });
-      }
+    // Input connection: edge goes TO this block. An input can legally have
+    // multiple incoming edges (combine); keep the first for a stable summary.
+    if (edge.targetBlockId === block.id && !inputConnections.has(edge.targetPortId)) {
+      const sourceBlock = blocks.get(edge.sourceBlockId);
+      inputConnections.set(edge.targetPortId, {
+        blockId: edge.sourceBlockId,
+        blockLabel: sourceBlock?.displayName || edge.sourceBlockId,
+        portId: edge.sourcePortId,
+        edgeId: edge.id,
+      });
     }
 
-    // Output connection: edge goes FROM this block
-    if (edge.sourceBlockId === block.id) {
-      // An output can have many outgoing edges. For UI summary, keep the first.
-      if (!outputConnections.has(edge.sourcePortId)) {
-        const targetBlock = blocks.get(edge.targetBlockId);
-        outputConnections.set(edge.sourcePortId, {
-          blockId: edge.targetBlockId,
-          blockLabel: targetBlock?.displayName || edge.targetBlockId,
-          portId: edge.targetPortId,
-          edgeId: edge.id,
-        });
-      }
+    // Output connection: edge goes FROM this block. Keep the first for summary.
+    if (edge.sourceBlockId === block.id && !outputConnections.has(edge.sourcePortId)) {
+      const targetBlock = blocks.get(edge.targetBlockId);
+      outputConnections.set(edge.sourcePortId, {
+        blockId: edge.targetBlockId,
+        blockLabel: targetBlock?.displayName || edge.targetBlockId,
+        portId: edge.targetPortId,
+        edgeId: edge.id,
+      });
     }
   }
 
-  // Build input ports
+  // Build input ports directly from the self-describing block.
   const inputs: PortData[] = [];
-  for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-    // Skip non-port inputs (internal only)
-    if (inputDef.exposedAsPort === false) continue;
-
-    const portState = block.inputPorts.get(inputId);
-    const defaultSource = portState?.defaultSource || (inputDef as InputDef & { defaultSource?: DefaultSource }).defaultSource;
+  for (const [inputId, port] of block.inputPorts) {
     const connection = inputConnections.get(inputId);
-    const isConnected = connection !== undefined;
-
     inputs.push(
-      createPortData(
+      portData(
         inputId,
-        inputDef.label || inputId, // Fallback to inputId if label undefined
-        portState?.resolvedType ?? inputDef.type,
-        isConnected,
-        defaultSource,
+        port.label,
+        port.typeDisplay,
+        port.decorations ?? [],
+        connection !== undefined,
         connection,
-        (inputDef as InputDef & { uiHint?: UIControlHint }).uiHint,
-        portState?.lenses,
-        portState?.provenance
       )
     );
   }
 
-  // Build output ports
+  // Build output ports directly from the self-describing block.
   const outputs: PortData[] = [];
-  for (const [outputId, outputDef] of Object.entries(blockDef.outputs)) {
-    const outputPortState = block.outputPorts.get(outputId);
+  for (const [outputId, port] of block.outputPorts) {
     const connection = outputConnections.get(outputId);
-    const isConnected = connection !== undefined;
-
     outputs.push(
-      createPortData(
+      portData(
         outputId,
-        outputDef.label || outputId, // Fallback to outputId if label undefined
-        outputPortState?.resolvedType ?? outputDef.type,
-        isConnected,
-        undefined,
-        connection
+        port.label,
+        port.typeDisplay,
+        [],
+        connection !== undefined,
+        connection,
       )
     );
   }
 
-  // Build inline controls from frontend-derived binding semantics for exposed
-  // inputs, plus direct block config for config-only inputs.
-  // [LAW:one-source-of-truth] Binding controls come from the frontend semantic
-  // snapshot; config controls write directly to the owning block params.
-  const paramsById = new Map<string, ParamData>();
-  for (const [inputId, inputDef] of Object.entries(blockDef.inputs)) {
-    const isExposedPort = inputDef.exposedAsPort !== false;
-    const isConnected = inputConnections.has(inputId);
-    if (isExposedPort) {
-      if (isConnected) continue;
-
-      const bindingControls = block.inputPorts.get(inputId)?.binding?.controls ?? [];
-      for (const control of bindingControls) {
-        paramsById.set(`${inputId}:${control.id}`, {
-          id: `${inputId}:${control.id}`,
-          label: control.label,
-          value: control.value,
-          hint: control.hint,
-          target: control.target,
-        });
-      }
-      continue;
-    }
-
-    const value = block.params[inputId] ?? inputDef.defaultValue;
-    if (value === undefined) continue;
-
-    paramsById.set(inputId, {
-      id: inputId,
-      label: inputDef.label || inputId,
-      value,
-      hint: inputDef.uiHint,
-      target: {
-        kind: 'blockParam',
-        blockId: block.id as BlockId,
-        paramId: inputId,
-      },
-    });
+  // Inline controls: block-level config controls, plus per-port controls for
+  // exposed inputs that are currently unconnected. The provider owns which
+  // controls exist and where they write. [LAW:one-source-of-truth]
+  const params: ParamData[] = [...block.controls];
+  for (const [inputId, port] of block.inputPorts) {
+    if (inputConnections.has(inputId)) continue;
+    if (port.controls) params.push(...port.controls);
   }
-
-  // Add extra persisted params not represented by declared block inputs.
-  for (const [paramId, value] of Object.entries(block.params)) {
-    if (paramsById.has(paramId)) continue;
-    if (paramId === 'payloadType') continue;
-    if (paramId in blockDef.inputs) continue;
-    paramsById.set(paramId, {
-      id: paramId,
-      label: paramId,
-      value,
-      target: {
-        kind: 'blockParam',
-        blockId: block.id as BlockId,
-        paramId,
-      },
-    });
-  }
-  const params = Array.from(paramsById.values());
 
   const commentText = block.type === 'Comment'
     ? (typeof block.params.text === 'string'
@@ -272,7 +188,7 @@ export function createNodeFromBlockLike(
     data: {
       blockId: block.id,
       blockType: block.type,
-      label: blockDef.label,
+      label: block.typeLabel,
       displayName: block.displayName,
       commentText,
       inputs,
@@ -283,16 +199,13 @@ export function createNodeFromBlockLike(
 }
 
 /**
- * Create ReactFlow edge from adapter EdgeLike.
- * Populates lens data from target port when blocks are available.
- * Optionally includes diagnostics for error visualization.
+ * Create ReactFlow edge from a neutral EdgeLike.
  */
 export function createEdgeFromEdgeLike(
   edge: EdgeLike,
   blocks?: ReadonlyMap<string, BlockLike>,
   diagnosticsGetter?: (edge: EdgeLike) => Diagnostic[]
 ): ReactFlowEdge<OscillaEdgeData> | null {
-  // Look up lenses from target port
   const sourceBlock = blocks?.get(edge.sourceBlockId);
   const targetBlock = blocks?.get(edge.targetBlockId);
 
@@ -301,18 +214,6 @@ export function createEdgeFromEdgeLike(
   if (sourceBlock && !sourceBlock.outputPorts.has(edge.sourcePortId)) return null;
   if (targetBlock && !targetBlock.inputPorts.has(edge.targetPortId)) return null;
 
-  const targetPort = targetBlock?.inputPorts.get(edge.targetPortId);
-  const lenses = targetPort?.lenses?.filter((lens) =>
-    lensTargetsConnection(
-      lens,
-      edge.sourceBlockId,
-      edge.sourcePortId,
-      sourceBlock?.displayName,
-    ),
-  );
-  const hasLenses = lenses != null && lenses.length > 0;
-
-  // Get diagnostics for this edge
   const diagnostics = diagnosticsGetter ? diagnosticsGetter(edge) : undefined;
 
   return {
@@ -324,70 +225,39 @@ export function createEdgeFromEdgeLike(
     type: 'oscilla',
     animated: false,
     data: {
-      lenses: hasLenses ? lenses : undefined,
       diagnostics,
     },
   };
 }
 
 /**
- * Reconcile nodes from adapter data.
- * Updates existing nodes in-place to preserve position, creates new nodes.
- *
- * @param adapter - Data adapter
- * @param currentNodes - Current ReactFlow nodes
- * @param getBlockPosition - Function to get stored position for a block
- * @param diagnosticsGetter - Optional function to get diagnostics for edges
+ * Reconcile nodes from adapter data. Updates existing nodes in-place to
+ * preserve position, creates new nodes.
  */
 export function reconcileNodesFromAdapter(
   adapter: GraphDataAdapter,
   currentNodes: Node[],
   getBlockPosition: (blockId: string) => { x: number; y: number } | undefined,
   diagnosticsGetter?: (edge: EdgeLike) => Diagnostic[],
-  onProjectionIssue?: (issue: { kind: 'missingBlockDef'; blockId: string; blockType: string }) => void,
 ): { nodes: Node[]; edges: ReactFlowEdge[]; droppedInvalidEdgeIds: readonly string[] } {
-  // Build map of existing nodes by ID for fast lookup
   const existingNodeMap = new Map<string, Node>();
   for (const node of currentNodes) {
     existingNodeMap.set(node.id, node);
   }
 
   const nodes: Node[] = [];
-  const patchBlockIds = new Set<string>();
 
   for (const [blockId, block] of adapter.blocks) {
-    patchBlockIds.add(blockId);
-
-    const blockDef = getAnyBlockDefinition(block.type);
-    if (!blockDef) {
-      // [LAW:single-enforcer] Projection issue reporting is delegated to caller,
-      // so this transform stays pure and does not emit direct side effects.
-      onProjectionIssue?.({ kind: 'missingBlockDef', blockId, blockType: block.type });
-      continue;
-    }
-
-    // Determine position
-    let position: { x: number; y: number };
+    // Determine position: preserve dragged position; else stored; else origin.
     const existingNode = existingNodeMap.get(blockId);
-    if (existingNode) {
-      // Preserve existing position (user may have dragged)
-      position = existingNode.position;
-    } else {
-      // New block - check adapter for stored position
-      const storedPosition = getBlockPosition(blockId);
-      if (storedPosition) {
-        position = storedPosition;
-      } else {
-        // Fallback: place at origin (should be rare)
-        position = { x: 100, y: 100 };
-      }
-    }
+    const position = existingNode?.position
+      ?? getBlockPosition(blockId)
+      ?? { x: 100, y: 100 };
 
-    const node = createNodeFromBlockLike(block, blockDef, adapter.edges, adapter.blocks, position);
-    nodes.push(node);
+    nodes.push(createNodeFromBlockLike(block, adapter.edges, adapter.blocks, position));
   }
 
-  // Create edges (pass blocks for lens data population), filtering invalid endpoints.
+  // Create edges, filtering invalid endpoints.
   const edges: ReactFlowEdge[] = [];
   const droppedInvalidEdgeIds: string[] = [];
   for (const edge of adapter.edges) {

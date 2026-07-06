@@ -15,7 +15,7 @@ import { getLensLabel } from './lensUtils';
 import { lensTargetsConnection } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, usePinPopoverState } from './BasePopover';
 import type { Diagnostic } from '../../diagnostics/types';
-import type { BlockId } from '../../types';
+import type { BlockId, PortId } from '../../types';
 import { useStores } from '../../stores';
 import { LensParamControls } from '../components/LensParamControls';
 import { graphColors } from '../graphEditor/graph-tokens';
@@ -324,12 +324,22 @@ export const OscillaEdge = observer(function OscillaEdge(
 
   const sourceDisplayName = patch.blocks.get(source as BlockId)?.displayName;
 
+  // [LAW:one-way-deps] OscillaEdge reads the V1 PatchStore directly here (as it
+  // already did for `sourceDisplayName`/`adapterCount`) — a pre-existing bypass.
+  // For pillar edges these lookups miss and the chips simply don't render. The
+  // edge-decoration seam (oscilla-editor-ux-8lsn.18) inverts this dependency by
+  // moving all V1 reads behind a neutral per-edge decoration provider; until
+  // then the neutral edge vocabulary deliberately does not carry V1 lenses.
+  const targetPortLenses = targetHandle
+    ? patch.blocks.get(target as BlockId)?.inputPorts.get(targetHandle as PortId)?.lenses
+    : undefined;
+
   const edgeLenses = useMemo(
     () =>
-      (data?.lenses ?? []).filter((lens) =>
+      (targetPortLenses ?? []).filter((lens) =>
         lensTargetsConnection(lens, source, sourceHandle ?? '', sourceDisplayName),
       ),
-    [data?.lenses, source, sourceHandle, sourceDisplayName],
+    [targetPortLenses, source, sourceHandle, sourceDisplayName],
   );
 
   const hasLenses = edgeLenses.length > 0;
