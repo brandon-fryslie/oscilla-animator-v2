@@ -24,6 +24,7 @@ import type { EditorHandle } from '../editorCommon';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
+import { V1TypeOracle } from '../graphEditor/V1TypeOracle';
 import { BlockContextMenu } from './menus/BlockContextMenu';
 import { EdgeContextMenu } from './menus/EdgeContextMenu';
 import { PortContextMenu } from './menus/PortContextMenu';
@@ -137,6 +138,13 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
   const adapter = useMemo(
     () => new PatchStoreAdapter(patchStore, layoutStore, frontend),
     [patchStore, layoutStore, frontend]
+  );
+
+  // The V1 type authority for the wiring drag gate — wraps the same
+  // frontend-resolved compatibility the editor validated with before the seam.
+  const oracle = useMemo(
+    () => new V1TypeOracle(patchStore.patch, frontend),
+    [patchStore.patch, frontend]
   );
 
   // Port context menu handler - called from UnifiedNode via GraphEditorContext
@@ -346,8 +354,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
           portHighlight={portHighlight}
           diagnostics={diagnostics}
           debug={debug}
-          frontend={frontend}
-          patch={patchStore.patch}
+          oracle={oracle}
           onNodeContextMenu={handleNodeContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}
           onPortContextMenu={handlePortContextMenu}

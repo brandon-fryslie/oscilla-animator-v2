@@ -24,6 +24,7 @@ import { getCompositeDefinition } from '../../blocks/registry';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
+import { permissiveTypeOracle } from '../graphEditor/type-oracle';
 import { ContextMenu, type ContextMenuItem } from '../reactFlowEditor/ContextMenu';
 import { CompositeEditorDslSidebar } from './CompositeEditorDslSidebar';
 import { useEditor, type EditorHandle } from '../editorCommon';
@@ -525,8 +526,10 @@ export const CompositeEditor = observer(function CompositeEditor() {
             portHighlight={null}
             diagnostics={null}
             debug={null}
-            frontend={null}
-            patch={null}
+            // The composite editor edits a subgraph definition with no
+            // instance-level type resolution, so it imposes no wiring constraints
+            // — stated as an explicit permissive oracle, not a hidden null-patch.
+            oracle={permissiveTypeOracle}
             onNodeContextMenu={handleNodeContextMenu}
             onEdgeContextMenu={handleEdgeContextMenu}
             onPortContextMenu={handlePortContextMenu}

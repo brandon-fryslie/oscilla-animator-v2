@@ -20,6 +20,7 @@ import React, { useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { PillarPatchAdapter } from '../graphEditor/PillarPatchAdapter';
+import { SceneTypeOracle } from '../graphEditor/SceneTypeOracle';
 import { GraphEditorCore } from '../graphEditor/GraphEditorCore';
 
 export const NativeMatureGraphCanvas: React.FC = observer(() => {
@@ -30,13 +31,14 @@ export const NativeMatureGraphCanvas: React.FC = observer(() => {
   // graph is readable on first paint and GraphEditorCore's own fitView frames
   // it — no post-mount auto-layout pass, hence no timing/ref race to manage.
   //
-  // Connection validation: no `patch` is passed, so GraphEditorCore permits any
-  // wire. Pillar wiring validity (type compatibility) is owned by the type-oracle
-  // seam (oscilla-editor-ux-8lsn.17); this spike intentionally leaves it open
-  // rather than duplicate that boundary here.
+  // Connection validation: the scene type oracle judges every wire by the pillar
+  // port-compatibility algebra (compareScenePorts) — the same one validateScenePatch
+  // reports against — so the drag gate agrees with the compiler. [LAW:one-source-of-truth]
+  const oracle = useMemo(() => new SceneTypeOracle(pillarPatch), [pillarPatch]);
+
   return (
     <div style={{ height: '100%', width: '100%' }}>
-      <GraphEditorCore adapter={adapter} />
+      <GraphEditorCore adapter={adapter} oracle={oracle} />
     </div>
   );
 });
