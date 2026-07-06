@@ -46,14 +46,13 @@ import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
 import { getLayoutedElements } from '../reactFlowEditor/layout';
-import { validateSemanticConnection } from '../authoring/semanticQueries';
+import type { TypeOracle } from './type-oracle';
+import { verdictPermits } from './type-oracle';
 // import { ErrorBadgeOverlay } from './ErrorBadgeOverlay'; // DISABLED: Errors now shown in port popovers
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
 import type { DebugStore } from '../../stores/DebugStore';
-import type { FrontendResultStore } from '../../stores/FrontendResultStore';
-import type { Patch } from '../../graph/Patch';
 import { blockId } from '../../types';
 import './GraphEditorCore.css';
 
@@ -98,10 +97,13 @@ export interface GraphEditorCoreProps {
   portHighlight?: PortHighlightStore | null;
   diagnostics?: DiagnosticsStore | null;
   debug?: DebugStore | null;
-  frontend?: FrontendResultStore | null;
 
-  /** Optional patch (for connection validation - needed by validateConnection) */
-  patch?: Patch | null;
+  /**
+   * The era's type authority for wiring legality. Every mount supplies one — a V1
+   * oracle, a scene oracle, or the explicit permissive oracle — so the drag gate
+   * always asks the oracle and never falls back to "permit everything" implicitly.
+   */
+  oracle: TypeOracle;
 
   /** Custom node types map (default: { unified: UnifiedNode }) */
   nodeTypes?: NodeTypes;
@@ -183,8 +185,7 @@ export const GraphEditorCoreInner = observer(
         portHighlight = null,
         diagnostics = null,
         debug = null,
-        frontend = null,
-        patch = null,
+        oracle,
         nodeTypes: customNodeTypes,
         onEditorReady,
         onNodeContextMenu,
@@ -377,25 +378,23 @@ export const GraphEditorCoreInner = observer(
       );
 
       /**
-       * Validate connection before allowing it.
-       * Uses patch + registry for type checking.
+       * Validate a connection before allowing it. The oracle is the single
+       * authority; both eras supply one, so a wire is judged by exactly what that
+       * era's compiler accepts — no "no patch → permit everything" escape hatch.
+       * [LAW:one-source-of-truth] [LAW:dataflow-not-control-flow]
        */
       const isValidConnection = useCallback(
         (connection: Connection) => {
           if (!connection.source || !connection.target) return false;
-          if (!patch) return true; // No patch - skip validation
-
-          const result = validateSemanticConnection(
-            patch,
-            connection.source,
-            connection.sourceHandle || '',
-            connection.target,
-            connection.targetHandle || '',
-            { frontend: frontend ?? undefined },
+          if (!connection.sourceHandle || !connection.targetHandle) return false;
+          return verdictPermits(
+            oracle.canConnect(
+              { blockId: connection.source, portId: connection.sourceHandle },
+              { blockId: connection.target, portId: connection.targetHandle },
+            ),
           );
-          return result.valid;
         },
-        [frontend, patch]
+        [oracle]
       );
 
       // -------------------------------------------------------------------------
