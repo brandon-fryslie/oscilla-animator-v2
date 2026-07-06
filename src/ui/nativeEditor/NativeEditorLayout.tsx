@@ -16,6 +16,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { NativeEditorPanel } from './NativeEditorPanel';
 import { NativeGraphCanvas } from './NativeGraphCanvas';
+import { NativeMatureGraphCanvas } from './NativeMatureGraphCanvas';
 import { ModulationTablePanel } from './ModulationTablePanel';
 
 interface NativeEditorLayoutProps {
@@ -49,7 +50,7 @@ export const NativeEditorLayout: React.FC<NativeEditorLayoutProps> = ({ onCanvas
  * [LAW:one-source-of-truth] The graph and table are alternate projections; the
  *   toggle picks a projection, it does not fork the patch.
  */
-type CenterView = 'graph' | 'table';
+type CenterView = 'graph' | 'mature' | 'table';
 
 const CenterPane: React.FC = () => {
   const [view, setView] = useState<CenterView>('graph');
@@ -73,10 +74,13 @@ const CenterPane: React.FC = () => {
         }}
       >
         <ViewTab label="Graph" active={view === 'graph'} onSelect={() => setView('graph')} />
+        <ViewTab label="Mature" active={view === 'mature'} onSelect={() => setView('mature')} />
         <ViewTab label="Table" active={view === 'table'} onSelect={() => setView('table')} />
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {view === 'graph' ? <NativeGraphCanvas /> : <ModulationTablePanel />}
+        {view === 'graph' && <NativeGraphCanvas />}
+        {view === 'mature' && <NativeMatureGraphCanvas />}
+        {view === 'table' && <ModulationTablePanel />}
       </div>
     </div>
   );
