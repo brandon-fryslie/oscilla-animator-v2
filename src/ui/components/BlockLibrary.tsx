@@ -5,7 +5,7 @@
  * Click to preview type in inspector, double-click to add block.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ActionIcon, rem } from '@mantine/core';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
@@ -174,19 +174,18 @@ export const BlockLibrary: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, handleSearchClear]);
 
-  // Non-insertable types (e.g. singleton roots) are already excluded by the
-  // catalog helpers, so every returned category has insertable entries.
-  const filteredCategories = useMemo(() => catalogCategories(entries), [entries]);
-
-  // Calculate total results across all categories
-  const totalResults = useMemo(() => {
-    let count = 0;
-    filteredCategories.forEach((category: string) => {
-      const inCategory = catalogEntriesInCategory(entries, category);
-      count += searchEntries(inCategory, debouncedSearchQuery).length;
-    });
-    return count;
-  }, [entries, filteredCategories, debouncedSearchQuery]);
+  // Filter each category ONCE — the result is shared by the count and the
+  // sections below, instead of both re-filtering the full entry set per category.
+  // Non-insertable types (singleton roots) are already excluded by the helpers.
+  // No memo: `entries` is a fresh array each render (the live registry read), so
+  // memoizing on it would never cache — it would only add weight. [LAW:effects-at-boundaries]
+  const visibleSections = catalogCategories(entries)
+    .map((category) => ({
+      category,
+      items: searchEntries(catalogEntriesInCategory(entries, category), debouncedSearchQuery),
+    }))
+    .filter((section) => section.items.length > 0);
+  const totalResults = visibleSections.reduce((n, s) => n + s.items.length, 0);
 
   return (
     <div className="block-library">
@@ -231,13 +230,12 @@ export const BlockLibrary: React.FC = () => {
       </div>
 
       <div className="block-library__categories">
-        {filteredCategories.map((category: string) => (
+        {visibleSections.map(({ category, items }) => (
           <BlockCategorySection
             key={category}
-            entries={entries}
             category={category}
+            items={items}
             collapsed={collapsedCategories.has(category)}
-            searchQuery={debouncedSearchQuery}
             onToggle={toggleCategory}
             onBlockClick={handleBlockClick}
             onBlockDoubleClick={handleBlockDoubleClick}
@@ -261,10 +259,10 @@ export const BlockLibrary: React.FC = () => {
  * Block Category Section
  */
 interface BlockCategorySectionProps {
-  entries: readonly CatalogEntry[];
+  /** Pre-filtered entries for this category (search already applied by the parent). */
+  items: readonly CatalogEntry[];
   category: BlockCategory;
   collapsed: boolean;
-  searchQuery: string;
   onToggle: (category: BlockCategory) => void;
   onBlockClick: (type: BlockTypeInfo) => void;
   onBlockDoubleClick: (type: BlockTypeInfo) => void;
@@ -273,25 +271,15 @@ interface BlockCategorySectionProps {
 }
 
 const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
-  entries,
+  items,
   category,
   collapsed,
-  searchQuery,
   onToggle,
   onBlockClick,
   onBlockDoubleClick,
   focused,
   onFocus,
 }) => {
-  const inCategory = useMemo(() => catalogEntriesInCategory(entries, category), [entries, category]);
-
-  const filteredTypes = useMemo(
-    () => searchEntries(inCategory, searchQuery),
-    [inCategory, searchQuery],
-  );
-
-  if (filteredTypes.length === 0) return null;
-
   return (
     <div
       className={`block-category ${collapsed ? 'collapsed' : ''} ${focused ? 'focused' : ''}`}
@@ -302,12 +290,12 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
         <span className="block-category__dot" />
         <span className="block-category__icon">▼</span>
         <h3 className="block-category__title">{category}</h3>
-        <span className="block-category__count">{filteredTypes.length}</span>
+        <span className="block-category__count">{items.length}</span>
       </div>
 
       {!collapsed && (
         <div className="block-category__types">
-          {filteredTypes.map((type: BlockTypeInfo) => (
+          {items.map((type: BlockTypeInfo) => (
             <BlockTypeItem
               key={type.type}
               type={type}

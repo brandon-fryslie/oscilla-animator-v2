@@ -31,11 +31,22 @@ import type {
 
 type AnyDef = BlockDef | CompositeBlockDef;
 
-/** Map the V1 open-behavior descriptor to the neutral one. */
+/**
+ * Map the V1 open-behavior descriptor to the neutral one. Exhaustive: a new
+ * `BlockOpenBehaviorDef` kind is a compile error here (the `never` default), not
+ * a value silently collapsed to `none`. [LAW:no-silent-failure]
+ */
 function toOpenBehavior(behavior: BlockOpenBehaviorDef): CatalogOpenBehavior {
-  return behavior.kind === 'open-expression-editor'
-    ? { kind: 'expressionEditor' }
-    : { kind: 'none' };
+  switch (behavior.kind) {
+    case 'open-expression-editor':
+      return { kind: 'expressionEditor' };
+    case 'noop':
+      return { kind: 'none' };
+    default: {
+      const unhandled: never = behavior;
+      throw new Error(`Unhandled BlockOpenBehaviorDef: ${JSON.stringify(unhandled)}`);
+    }
+  }
 }
 
 /** Wireable input ports only — config-only inputs never cross the seam. */
@@ -58,6 +69,25 @@ function outputPorts(def: AnyDef): readonly CatalogPort[] {
       label: output.label ?? id,
       typeDisplay: typeDisplayFor(output.type),
     }));
+}
+
+/**
+ * One projected `CatalogEntry` per registry def, keyed by the def OBJECT (which
+ * the registry holds stable). This keeps two guarantees at once: the same block
+ * type always yields the same `CatalogEntry` instance — so `entries` and
+ * `getEntry` are identity-consistent and a hot per-node `getEntry` is O(1) after
+ * the first projection instead of re-allocating port arrays every render — while
+ * a newly-registered composite (a new def object) still projects fresh, and a
+ * removed one is garbage-collected with its def. [LAW:one-source-of-truth]
+ */
+const projectionByDef = new WeakMap<AnyDef, CatalogEntry>();
+
+function project(def: AnyDef): CatalogEntry {
+  const cached = projectionByDef.get(def);
+  if (cached) return cached;
+  const entry = toCatalogEntry(def);
+  projectionByDef.set(def, entry);
+  return entry;
 }
 
 function toCatalogEntry(def: AnyDef): CatalogEntry {
@@ -97,11 +127,11 @@ export function createV1BlockCatalog(): BlockCatalog {
     get entries(): readonly CatalogEntry[] {
       return getBlockCategories()
         .flatMap((category) => getBlockTypesByCategory(category))
-        .map(toCatalogEntry);
+        .map(project);
     },
     getEntry: (type) => {
       const def = getAnyBlockDefinition(type);
-      return def ? toCatalogEntry(def) : undefined;
+      return def ? project(def) : undefined;
     },
   };
 }
