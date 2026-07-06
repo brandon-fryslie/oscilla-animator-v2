@@ -14,7 +14,7 @@ import {
   type CatalogEntry,
   searchEntries,
   insertableEntries,
-  catalogCategories,
+  insertableByCategory,
 } from '../block-catalog';
 
 function entry(over: Partial<CatalogEntry> & { type: string }): CatalogEntry {
@@ -67,8 +67,10 @@ describe('derived views', () => {
     expect(insertableEntries(entries).map((e) => e.type)).toEqual(['Sin', 'Mul']);
   });
 
-  it('catalogCategories is sorted, unique, and over insertable entries only', () => {
-    // "Source" (Const) is non-insertable, so it must not appear.
-    expect(catalogCategories(entries)).toEqual(['Math']);
+  it('insertableByCategory groups only insertable entries under sorted categories', () => {
+    const { categories, byCategory } = insertableByCategory(entries);
+    // "Source" (Const) is non-insertable, so its category must not appear.
+    expect(categories).toEqual(['Math']);
+    expect((byCategory.get('Math') ?? []).map((e) => e.type)).toEqual(['Sin', 'Mul']);
   });
 });

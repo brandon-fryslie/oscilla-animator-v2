@@ -11,7 +11,7 @@ import { RootStore, StoreProvider } from '../../../stores';
 import { registerAllBlocks } from '../../../blocks/all';
 import { BlockCatalogProvider } from '../../graphEditor/BlockCatalogContext';
 import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
-import { catalogCategories, catalogEntriesInCategory } from '../../graphEditor/block-catalog';
+import { insertableByCategory } from '../../graphEditor/block-catalog';
 
 registerAllBlocks();
 
@@ -86,7 +86,7 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function getVisibleCategories(): string[] {
-  return [...catalogCategories(v1BlockCatalog.entries)];
+  return [...insertableByCategory(v1BlockCatalog.entries).categories];
 }
 
 describe('BlockLibrary', () => {
@@ -128,7 +128,7 @@ describe('BlockLibrary', () => {
     const categories = getVisibleCategories();
     expect(categories.length).toBeGreaterThan(0);
 
-    const entries = catalogEntriesInCategory(v1BlockCatalog.entries, categories[0]!);
+    const entries = insertableByCategory(v1BlockCatalog.entries).byCategory.get(categories[0]!) ?? [];
     const firstVisible = entries[0];
     expect(firstVisible).toBeTruthy();
 

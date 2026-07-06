@@ -12,8 +12,7 @@ import { useStores } from '../../stores';
 import { useBlockCatalog } from '../graphEditor/BlockCatalogContext';
 import {
   type CatalogEntry,
-  catalogCategories,
-  catalogEntriesInCategory,
+  insertableByCategory,
   searchEntries,
 } from '../graphEditor/block-catalog';
 import { useEditor } from '../editorCommon';
@@ -174,15 +173,16 @@ export const BlockLibrary: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, handleSearchClear]);
 
-  // Filter each category ONCE — the result is shared by the count and the
-  // sections below, instead of both re-filtering the full entry set per category.
-  // Non-insertable types (singleton roots) are already excluded by the helpers.
-  // No memo: `entries` is a fresh array each render (the live registry read), so
-  // memoizing on it would never cache — it would only add weight. [LAW:effects-at-boundaries]
-  const visibleSections = catalogCategories(entries)
+  // Bucket insertable entries by category in a single pass (non-insertable
+  // singleton roots excluded), then apply the search per category. The result is
+  // shared by the count and the section list. No memo: `entries` is a fresh array
+  // each render (the live registry read), so memoizing on it would never cache —
+  // it would only add weight. [LAW:effects-at-boundaries]
+  const { categories, byCategory } = insertableByCategory(entries);
+  const visibleSections = categories
     .map((category) => ({
       category,
-      items: searchEntries(catalogEntriesInCategory(entries, category), debouncedSearchQuery),
+      items: searchEntries(byCategory.get(category) ?? [], debouncedSearchQuery),
     }))
     .filter((section) => section.items.length > 0);
   const totalResults = visibleSections.reduce((n, s) => n + s.items.length, 0);
@@ -326,6 +326,10 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   onClick,
   onDoubleClick,
 }) => {
+  // Counts reflect WIREABLE ports only. The catalog deliberately excludes
+  // config-only inputs (edited inline, never wired) and hidden outputs — those
+  // belong to the controls seam, not the catalog — so this hint is intentionally
+  // the count a graph author can actually connect to. [LAW:decomposition]
   const inputCount = type.inputs.length;
   const outputCount = type.outputs.length;
   const isComposite = type.form === 'composite';

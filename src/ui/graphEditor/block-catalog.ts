@@ -141,21 +141,30 @@ export function insertableEntries(entries: readonly CatalogEntry[]): readonly Ca
   return entries.filter((e) => e.insertable);
 }
 
-/** Sorted, unique category names over the insertable entries. */
-export function catalogCategories(entries: readonly CatalogEntry[]): readonly string[] {
-  const seen = new Set<string>();
-  for (const entry of insertableEntries(entries)) {
-    seen.add(entry.category);
-  }
-  return [...seen].sort();
+/** Insertable entries bucketed by category, plus the sorted category list. */
+export interface CategorizedEntries {
+  /** Sorted, unique category names that have at least one insertable entry. */
+  readonly categories: readonly string[];
+  /** Category name → its insertable entries, in registration order. */
+  readonly byCategory: ReadonlyMap<string, readonly CatalogEntry[]>;
 }
 
-/** Insertable entries within one category, in registration order. */
-export function catalogEntriesInCategory(
-  entries: readonly CatalogEntry[],
-  category: string,
-): readonly CatalogEntry[] {
-  return insertableEntries(entries).filter((e) => e.category === category);
+/**
+ * Group insertable entries by category in a SINGLE pass. This is the one place
+ * the palette needs both "which categories exist" and "which entries are in each"
+ * — computing them together avoids re-filtering `insertable` and re-scanning the
+ * whole array once per category (which the separate category helpers did).
+ * [LAW:one-source-of-truth]
+ */
+export function insertableByCategory(entries: readonly CatalogEntry[]): CategorizedEntries {
+  const byCategory = new Map<string, CatalogEntry[]>();
+  for (const entry of entries) {
+    if (!entry.insertable) continue;
+    const list = byCategory.get(entry.category);
+    if (list) list.push(entry);
+    else byCategory.set(entry.category, [entry]);
+  }
+  return { categories: [...byCategory.keys()].sort(), byCategory };
 }
 
 /**

@@ -26,8 +26,7 @@ import {
   type BlockCatalog,
   type CatalogEntry,
   type CatalogEntryForm,
-  catalogCategories,
-  catalogEntriesInCategory,
+  insertableByCategory,
   insertableEntries,
   requireCatalogEntry,
   searchEntries,
@@ -126,9 +125,10 @@ export function assertDerivedViewsCohere(c: CatalogConformanceCase): void {
     expect(entry.insertable, `${c.name}: insertableEntries yields only insertable entries`).toBe(true);
   }
 
-  for (const category of catalogCategories(entries)) {
+  const { categories, byCategory } = insertableByCategory(entries);
+  for (const category of categories) {
     expect(
-      catalogEntriesInCategory(entries, category).length,
+      (byCategory.get(category) ?? []).length,
       `${c.name}: category ${category} has entries`,
     ).toBeGreaterThan(0);
   }
