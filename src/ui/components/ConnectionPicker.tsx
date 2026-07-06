@@ -9,8 +9,8 @@ import React, { useMemo } from 'react';
 import { Autocomplete, TextField } from '@mui/material';
 import type { BlockId, PortId } from '../../types';
 import type { Patch } from '../../graph/Patch';
-import { requireAnyBlockDef } from '../../blocks/registry';
-import { formatTypeForDisplay } from '../reactFlowEditor/typeValidation';
+import { useBlockCatalog } from '../graphEditor/BlockCatalogContext';
+import { requireCatalogEntry } from '../graphEditor/block-catalog';
 import { colors } from '../theme';
 import { useStores } from '../../stores';
 import { getCompatiblePortsForPort } from '../authoring/semanticQueries';
@@ -56,6 +56,7 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
   onCancel,
 }: ConnectionPickerProps) {
   const { frontend } = useStores();
+  const catalog = useBlockCatalog();
 
   // Build list of compatible ports
   const portOptions = useMemo(() => {
@@ -68,23 +69,22 @@ export const ConnectionPicker: React.FC<ConnectionPickerProps> = function Connec
     )
       .map((candidate): PortOption => {
         const block = patch.blocks.get(candidate.blockId)!;
-        const blockDef = requireAnyBlockDef(block.type);
+        const entry = requireCatalogEntry(catalog, block.type);
         const searchDirection = direction === 'input' ? 'output' : 'input';
-        const portDef = searchDirection === 'input'
-          ? blockDef.inputs[candidate.portId]
-          : blockDef.outputs[candidate.portId];
+        const ports = searchDirection === 'input' ? entry.inputs : entry.outputs;
+        const port = ports.find((p) => p.id === candidate.portId);
 
         return {
           blockId: candidate.blockId,
           blockName: candidate.blockLabel,
           portId: candidate.portId,
           portLabel: candidate.portLabel,
-          typeDisplay: portDef?.type ? formatTypeForDisplay(portDef.type) : '',
+          typeDisplay: port?.typeDisplay.label ?? '',
           isCompatible: true,
         };
       })
       .sort((a, b) => a.blockName.localeCompare(b.blockName));
-  }, [patch, frontend, targetBlockId, targetPortId, direction]);
+  }, [patch, frontend, targetBlockId, targetPortId, direction, catalog]);
 
   return (
     <div style={{ marginTop: '8px' }}>

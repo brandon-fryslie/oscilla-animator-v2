@@ -9,12 +9,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ActionIcon, rem } from '@mantine/core';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
+import { useBlockCatalog } from '../graphEditor/BlockCatalogContext';
 import {
-  getBlockCategories,
-  getBlockTypesByCategory,
-  type BlockDef,
-} from '../../blocks/registry';
-import { type CompositeBlockDef, isCompositeBlockDef } from '../../blocks/composite-types';
+  type BlockCatalog,
+  type CatalogEntry,
+  catalogCategories,
+  catalogEntriesInCategory,
+  searchEntries,
+} from '../graphEditor/block-catalog';
 import { useEditor } from '../editorCommon';
 import { resolveLocalStorageCapability } from '../../services/local-storage-capability';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
@@ -22,13 +24,14 @@ import './BlockLibrary.css';
 
 // Type aliases for clarity
 type BlockCategory = string;
-type BlockTypeInfo = BlockDef | CompositeBlockDef;
+type BlockTypeInfo = CatalogEntry;
 
 // LocalStorage key for category collapse state
 const COLLAPSE_STATE_KEY = 'blockLibrary.collapsedCategories';
 
-// Debounce delay for search (ms)
-const SEARCH_DEBOUNCE_MS = 150;
+// Debounce delay for search (ms). Exported so tests can drive the debounce timer
+// deterministically rather than racing it. [LAW:one-source-of-truth]
+export const SEARCH_DEBOUNCE_MS = 150;
 
 /**
  * Load collapsed categories from localStorage.
@@ -89,6 +92,7 @@ function useDebounce<T>(value: T, delay: number): T {
  */
 export const BlockLibrary: React.FC = () => {
   const { selection, diagnostics } = useStores();
+  const catalog = useBlockCatalog();
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
@@ -165,35 +169,19 @@ export const BlockLibrary: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, handleSearchClear]);
 
-  const categories = getBlockCategories();
-
-  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
-  const filteredCategories = useMemo(() => {
-    return categories.filter(category => {
-      const types = getBlockTypesByCategory(category);
-      // Check if category has any non-timeRoot blocks
-      return types.some((t: BlockTypeInfo) => t.capability !== 'time');
-    });
-  }, [categories]);
+  // Non-insertable types (e.g. singleton roots) are already excluded by the
+  // catalog helpers, so every returned category has insertable entries.
+  const filteredCategories = useMemo(() => catalogCategories(catalog), [catalog]);
 
   // Calculate total results across all categories
   const totalResults = useMemo(() => {
     let count = 0;
     filteredCategories.forEach((category: string) => {
-      const types = getBlockTypesByCategory(category);
-      // Filter out timeRoot blocks
-      const nonTimeRootTypes = types.filter((t: BlockTypeInfo) => t.capability !== 'time');
-      const filtered = debouncedSearchQuery
-        ? nonTimeRootTypes.filter((t: BlockTypeInfo) =>
-          t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
-        )
-        : nonTimeRootTypes;
-      count += filtered.length;
+      const entries = catalogEntriesInCategory(catalog, category);
+      count += searchEntries(entries, debouncedSearchQuery).length;
     });
     return count;
-  }, [filteredCategories, debouncedSearchQuery]);
+  }, [catalog, filteredCategories, debouncedSearchQuery]);
 
   return (
     <div className="block-library">
@@ -241,6 +229,7 @@ export const BlockLibrary: React.FC = () => {
         {filteredCategories.map((category: string) => (
           <BlockCategorySection
             key={category}
+            catalog={catalog}
             category={category}
             collapsed={collapsedCategories.has(category)}
             searchQuery={debouncedSearchQuery}
@@ -267,6 +256,7 @@ export const BlockLibrary: React.FC = () => {
  * Block Category Section
  */
 interface BlockCategorySectionProps {
+  catalog: BlockCatalog;
   category: BlockCategory;
   collapsed: boolean;
   searchQuery: string;
@@ -278,6 +268,7 @@ interface BlockCategorySectionProps {
 }
 
 const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
+  catalog,
   category,
   collapsed,
   searchQuery,
@@ -287,21 +278,12 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
   focused,
   onFocus,
 }) => {
-  const types = getBlockTypesByCategory(category);
+  const entries = useMemo(() => catalogEntriesInCategory(catalog, category), [catalog, category]);
 
-  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
-  const nonTimeRootTypes = useMemo(() => {
-    return types.filter((t: BlockTypeInfo) => t.capability !== 'time');
-  }, [types]);
-
-  const filteredTypes = useMemo(() => {
-    if (!searchQuery) return nonTimeRootTypes;
-    return nonTimeRootTypes.filter((t: BlockTypeInfo) =>
-      t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-    );
-  }, [nonTimeRootTypes, searchQuery]);
+  const filteredTypes = useMemo(
+    () => searchEntries(entries, searchQuery),
+    [entries, searchQuery],
+  );
 
   if (filteredTypes.length === 0) return null;
 
@@ -351,14 +333,14 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   onClick,
   onDoubleClick,
 }) => {
-  const inputCount = Object.keys(type.inputs).length;
-  const outputCount = Object.keys(type.outputs).length;
-  const isComposite = isCompositeBlockDef(type);
+  const inputCount = type.inputs.length;
+  const outputCount = type.outputs.length;
+  const isComposite = type.form === 'composite';
   const isPrimitive = type.form === 'primitive';
 
-  // For composites, check if it's readonly (library) or user-created
-  const isLibraryComposite = isComposite && type.readonly === true;
-  const isUserComposite = isComposite && !type.readonly;
+  // For composites, a locked (library) definition is not editable; a user one is.
+  const isLibraryComposite = isComposite && !type.editable;
+  const isUserComposite = isComposite && type.editable;
 
   // Determine badge appearance
   let badgeText: string;

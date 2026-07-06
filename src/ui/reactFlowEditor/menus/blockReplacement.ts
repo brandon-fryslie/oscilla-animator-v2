@@ -1,6 +1,10 @@
 import type { BlockId, Patch } from '../../../types';
 import type { Endpoint } from '../../../graph/Patch';
-import { getBlockCategories, getBlockTypesByCategory, requireAnyBlockDef } from '../../../blocks/registry';
+import {
+  type BlockCatalog,
+  insertableEntries,
+  requireCatalogEntry,
+} from '../../graphEditor/block-catalog';
 import { validateSemanticConnection } from '../../authoring/semanticQueries';
 
 export interface ReplacementEdgePlan {
@@ -50,6 +54,7 @@ function canConnect(
 }
 
 function buildReplacementPlanForType(
+  catalog: BlockCatalog,
   patch: Patch,
   blockId: BlockId,
   nextType: string,
@@ -57,18 +62,14 @@ function buildReplacementPlanForType(
   const block = patch.blocks.get(blockId);
   if (!block) return null;
   if (block.type === nextType) return null;
-  const candidateDef = requireAnyBlockDef(nextType);
-  if (block.role?.kind === 'timeRoot' || candidateDef.capability === 'time') return null;
+  const candidate = requireCatalogEntry(catalog, nextType);
+  if (block.role?.kind === 'timeRoot' || !candidate.insertable) return null;
   const replacementPatch = withReplacementType(patch, blockId, nextType);
   const connectedEdges = patch.edges.filter(
     (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
   );
-  const candidateInputPortIds = Object.entries(candidateDef.inputs)
-    .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
-    .map(([portId]) => portId);
-  const candidateOutputPortIds = Object.entries(candidateDef.outputs)
-    .filter(([, outputDef]) => !outputDef.hidden)
-    .map(([portId]) => portId);
+  const candidateInputPortIds = candidate.inputs.map((port) => port.id);
+  const candidateOutputPortIds = candidate.outputs.map((port) => port.id);
 
   const rewiredEdges: ReplacementEdgePlan[] = [];
 
@@ -131,30 +132,35 @@ function buildReplacementPlanForType(
   }
 
   return {
-    blockType: candidateDef.type,
-    blockLabel: candidateDef.label || candidateDef.type,
+    blockType: candidate.type,
+    blockLabel: candidate.label || candidate.type,
     rewiredEdges,
   };
 }
 
-export function isCompatibleBlockReplacement(patch: Patch, blockId: BlockId, nextType: string): boolean {
-  return buildReplacementPlanForType(patch, blockId, nextType) !== null;
+export function isCompatibleBlockReplacement(
+  catalog: BlockCatalog,
+  patch: Patch,
+  blockId: BlockId,
+  nextType: string,
+): boolean {
+  return buildReplacementPlanForType(catalog, patch, blockId, nextType) !== null;
 }
 
-export function findCompatibleReplacementPlans(patch: Patch, blockId: BlockId): CompatibleReplacementPlan[] {
+export function findCompatibleReplacementPlans(
+  catalog: BlockCatalog,
+  patch: Patch,
+  blockId: BlockId,
+): CompatibleReplacementPlan[] {
   const block = patch.blocks.get(blockId);
   if (!block || block.role?.kind === 'timeRoot') {
     return [];
   }
 
-  const categories = getBlockCategories();
-  const allDefs = categories.flatMap((category) => getBlockTypesByCategory(category));
-
-  // [LAW:one-source-of-truth] Replacement candidates are derived from the
-  // canonical registry view used by the editor library.
-  return allDefs
-    .filter((def) => def.capability !== 'time')
-    .map((def) => buildReplacementPlanForType(patch, blockId, def.type))
+  // [LAW:one-source-of-truth] Replacement candidates are the catalog's insertable
+  // entries — the same view the block library browses.
+  return insertableEntries(catalog)
+    .map((entry) => buildReplacementPlanForType(catalog, patch, blockId, entry.type))
     .filter((plan): plan is CompatibleReplacementPlan => plan !== null)
     .sort((a, b) => a.blockLabel.localeCompare(b.blockLabel));
 }

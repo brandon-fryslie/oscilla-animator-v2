@@ -15,36 +15,15 @@
 import { makeObservable, computed, observable, runInAction } from 'mobx';
 import type { PillarPatchStore } from '../../stores/PillarPatchStore';
 import type { PillarBlock } from '../../pillars/types/graph';
-import type { SceneCatalogMetadata, SceneValueKind } from '../../pillars/scene/scene-block';
+import type { SceneCatalogMetadata } from '../../pillars/scene/scene-block';
 import type {
   GraphDataAdapter,
   BlockLike,
   EdgeLike,
   InputPortLike,
   OutputPortLike,
-  PortTypeDisplay,
 } from './types';
-
-/** Neutral swatch color per scene value kind (parallels the V1 payload palette). */
-const SCENE_VALUE_COLORS: Record<SceneValueKind, string> = {
-  instanceBundle: '#f59e0b',
-  geometry: '#a78bfa',
-  materialShell: '#38bdf8',
-  texture: '#f472b6',
-  camera: '#8b5cf6',
-  color: '#ec4899',
-  scalar: '#5a9fd4',
-  mask: '#10b981',
-};
-
-function sceneTypeDisplay(value: SceneValueKind): PortTypeDisplay {
-  return {
-    label: value,
-    tooltip: value,
-    color: SCENE_VALUE_COLORS[value] ?? '#888888',
-    compatibilityToken: value,
-  };
-}
+import { sceneTypeDisplay } from './scene-projection';
 
 /**
  * Adapter exposing PillarPatchStore through the neutral GraphDataAdapter.
