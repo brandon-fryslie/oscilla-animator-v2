@@ -21,7 +21,8 @@ import type { BlockId } from '../../../types';
 import { useStores } from '../../../stores';
 import { ContextMenu, type ContextMenuItem } from '../ContextMenu';
 import { findCompatibleReplacementPlans } from './blockReplacement';
-import { getAnyBlockDefinition, DEFAULT_BLOCK_UI } from '../../../blocks/registry';
+import { useBlockCatalog } from '../../graphEditor/BlockCatalogContext';
+import { NO_OPEN_BEHAVIOR } from '../../graphEditor/block-catalog';
 import { DockviewContext } from '../../dockview';
 import { getBlockOpenBehaviorLabel, hasBlockOpenBehavior, runBlockOpenBehavior } from '../../block-ui';
 
@@ -40,25 +41,26 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
 }) => {
   const { patch, layout, selection, diagnostics, expressionEditor } = useStores();
   const dockview = React.useContext(DockviewContext);
+  const catalog = useBlockCatalog();
 
   const items = useMemo<ContextMenuItem[]>(() => {
     const block = patch.blocks.get(blockId);
     if (!block) return [];
-    const blockUi = getAnyBlockDefinition(block.type)?.ui ?? DEFAULT_BLOCK_UI;
+    const openBehavior = catalog.getEntry(block.type)?.openBehavior ?? NO_OPEN_BEHAVIOR;
 
     // Count connected edges
     const connectedEdges = patch.edges.filter(
       (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
     );
     const hasConnections = connectedEdges.length > 0;
-    const replacementPlans = findCompatibleReplacementPlans(patch.patch, blockId);
+    const replacementPlans = findCompatibleReplacementPlans(catalog, patch.patch, blockId);
 
-    const openItems: ContextMenuItem[] = hasBlockOpenBehavior(blockUi.openBehavior)
+    const openItems: ContextMenuItem[] = hasBlockOpenBehavior(openBehavior)
       ? [{
-          label: getBlockOpenBehaviorLabel(blockUi.openBehavior),
+          label: getBlockOpenBehaviorLabel(openBehavior),
           icon: <OpenIcon fontSize="small" />,
           action: () => {
-            runBlockOpenBehavior(blockUi.openBehavior, {
+            runBlockOpenBehavior(openBehavior, {
               blockId,
               api: dockview?.api ?? null,
               diagnostics,
@@ -173,7 +175,7 @@ export const BlockContextMenu: React.FC<BlockContextMenuProps> = ({
         danger: true,
       },
     ];
-  }, [blockId, diagnostics, dockview?.api, expressionEditor, layout, onCenter, patch, selection]);
+  }, [blockId, catalog, diagnostics, dockview?.api, expressionEditor, layout, onCenter, patch, selection]);
 
   return <ContextMenu items={items} anchorPosition={anchorPosition} onClose={onClose} />;
 };

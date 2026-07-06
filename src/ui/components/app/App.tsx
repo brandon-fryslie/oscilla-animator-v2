@@ -15,6 +15,9 @@ import { MantineProvider, createTheme as createMantineTheme, virtualColor } from
 import '@mantine/core/styles.css';
 import { Toolbar } from './Toolbar';
 import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
+import { BlockCatalogProvider } from '../../graphEditor/BlockCatalogContext';
+import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
+import { sceneBlockCatalog } from '../../graphEditor/SceneBlockCatalog';
 import { DockviewProvider } from '../../dockview';
 import type { DockviewApi } from 'dockview';
 import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
@@ -221,8 +224,11 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
           <TestPreviewPanel onCanvasReady={handleCanvasReady} />
         ) : nativeEditor ? (
           /* Native ScenePlan editor: authoring surface + live Three preview */
-          <NativeEditorLayout onCanvasReady={handleCanvasReady} />
+          <BlockCatalogProvider catalog={sceneBlockCatalog}>
+            <NativeEditorLayout onCanvasReady={handleCanvasReady} />
+          </BlockCatalogProvider>
         ) : (
+          <BlockCatalogProvider catalog={v1BlockCatalog}>
           <EditorProvider>
           {/* Capture EditorContext methods */}
           <EditorContextCapture
@@ -264,6 +270,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
           />
           <EngineDebugOverlay />
         </EditorProvider>
+          </BlockCatalogProvider>
         )}
       </ExternalWriteBusContext.Provider>
     </MantineProvider>

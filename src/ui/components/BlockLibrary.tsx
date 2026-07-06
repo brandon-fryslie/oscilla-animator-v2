@@ -5,16 +5,16 @@
  * Click to preview type in inspector, double-click to add block.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ActionIcon, rem } from '@mantine/core';
 import type { BlockId } from '../../types';
 import { useStores } from '../../stores';
+import { useBlockCatalog } from '../graphEditor/BlockCatalogContext';
 import {
-  getBlockCategories,
-  getBlockTypesByCategory,
-  type BlockDef,
-} from '../../blocks/registry';
-import { type CompositeBlockDef, isCompositeBlockDef } from '../../blocks/composite-types';
+  type CatalogEntry,
+  insertableByCategory,
+  searchEntries,
+} from '../graphEditor/block-catalog';
 import { useEditor } from '../editorCommon';
 import { resolveLocalStorageCapability } from '../../services/local-storage-capability';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
@@ -22,13 +22,14 @@ import './BlockLibrary.css';
 
 // Type aliases for clarity
 type BlockCategory = string;
-type BlockTypeInfo = BlockDef | CompositeBlockDef;
+type BlockTypeInfo = CatalogEntry;
 
 // LocalStorage key for category collapse state
 const COLLAPSE_STATE_KEY = 'blockLibrary.collapsedCategories';
 
-// Debounce delay for search (ms)
-const SEARCH_DEBOUNCE_MS = 150;
+// Debounce delay for search (ms). Exported so tests can drive the debounce timer
+// deterministically rather than racing it. [LAW:one-source-of-truth]
+export const SEARCH_DEBOUNCE_MS = 150;
 
 /**
  * Load collapsed categories from localStorage.
@@ -89,6 +90,13 @@ function useDebounce<T>(value: T, delay: number): T {
  */
 export const BlockLibrary: React.FC = () => {
   const { selection, diagnostics } = useStores();
+  const catalog = useBlockCatalog();
+  // Read the catalog ONCE per render. The V1 catalog reads the mutable registry
+  // fresh on each access, so this snapshot both stays current (runtime-registered
+  // composites appear) and is materialized a single time for every derived view
+  // below. Do NOT memoize on `catalog` — its reference never changes, which would
+  // freeze the library on the first render's registry state. [LAW:effects-at-boundaries]
+  const entries = catalog.entries;
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
@@ -165,35 +173,19 @@ export const BlockLibrary: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery, handleSearchClear]);
 
-  const categories = getBlockCategories();
-
-  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
-  const filteredCategories = useMemo(() => {
-    return categories.filter(category => {
-      const types = getBlockTypesByCategory(category);
-      // Check if category has any non-timeRoot blocks
-      return types.some((t: BlockTypeInfo) => t.capability !== 'time');
-    });
-  }, [categories]);
-
-  // Calculate total results across all categories
-  const totalResults = useMemo(() => {
-    let count = 0;
-    filteredCategories.forEach((category: string) => {
-      const types = getBlockTypesByCategory(category);
-      // Filter out timeRoot blocks
-      const nonTimeRootTypes = types.filter((t: BlockTypeInfo) => t.capability !== 'time');
-      const filtered = debouncedSearchQuery
-        ? nonTimeRootTypes.filter((t: BlockTypeInfo) =>
-          t.type.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          t.label.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          (t.description?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false)
-        )
-        : nonTimeRootTypes;
-      count += filtered.length;
-    });
-    return count;
-  }, [filteredCategories, debouncedSearchQuery]);
+  // Bucket insertable entries by category in a single pass (non-insertable
+  // singleton roots excluded), then apply the search per category. The result is
+  // shared by the count and the section list. No memo: `entries` is a fresh array
+  // each render (the live registry read), so memoizing on it would never cache —
+  // it would only add weight. [LAW:effects-at-boundaries]
+  const { categories, byCategory } = insertableByCategory(entries);
+  const visibleSections = categories
+    .map((category) => ({
+      category,
+      items: searchEntries(byCategory.get(category) ?? [], debouncedSearchQuery),
+    }))
+    .filter((section) => section.items.length > 0);
+  const totalResults = visibleSections.reduce((n, s) => n + s.items.length, 0);
 
   return (
     <div className="block-library">
@@ -238,12 +230,12 @@ export const BlockLibrary: React.FC = () => {
       </div>
 
       <div className="block-library__categories">
-        {filteredCategories.map((category: string) => (
+        {visibleSections.map(({ category, items }) => (
           <BlockCategorySection
             key={category}
             category={category}
+            items={items}
             collapsed={collapsedCategories.has(category)}
-            searchQuery={debouncedSearchQuery}
             onToggle={toggleCategory}
             onBlockClick={handleBlockClick}
             onBlockDoubleClick={handleBlockDoubleClick}
@@ -267,9 +259,10 @@ export const BlockLibrary: React.FC = () => {
  * Block Category Section
  */
 interface BlockCategorySectionProps {
+  /** Pre-filtered entries for this category (search already applied by the parent). */
+  items: readonly CatalogEntry[];
   category: BlockCategory;
   collapsed: boolean;
-  searchQuery: string;
   onToggle: (category: BlockCategory) => void;
   onBlockClick: (type: BlockTypeInfo) => void;
   onBlockDoubleClick: (type: BlockTypeInfo) => void;
@@ -278,33 +271,15 @@ interface BlockCategorySectionProps {
 }
 
 const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
+  items,
   category,
   collapsed,
-  searchQuery,
   onToggle,
   onBlockClick,
   onBlockDoubleClick,
   focused,
   onFocus,
 }) => {
-  const types = getBlockTypesByCategory(category);
-
-  // Filter out timeRoot blocks (P5: TimeRoot Hidden)
-  const nonTimeRootTypes = useMemo(() => {
-    return types.filter((t: BlockTypeInfo) => t.capability !== 'time');
-  }, [types]);
-
-  const filteredTypes = useMemo(() => {
-    if (!searchQuery) return nonTimeRootTypes;
-    return nonTimeRootTypes.filter((t: BlockTypeInfo) =>
-      t.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
-    );
-  }, [nonTimeRootTypes, searchQuery]);
-
-  if (filteredTypes.length === 0) return null;
-
   return (
     <div
       className={`block-category ${collapsed ? 'collapsed' : ''} ${focused ? 'focused' : ''}`}
@@ -315,12 +290,12 @@ const BlockCategorySection: React.FC<BlockCategorySectionProps> = ({
         <span className="block-category__dot" />
         <span className="block-category__icon">▼</span>
         <h3 className="block-category__title">{category}</h3>
-        <span className="block-category__count">{filteredTypes.length}</span>
+        <span className="block-category__count">{items.length}</span>
       </div>
 
       {!collapsed && (
         <div className="block-category__types">
-          {filteredTypes.map((type: BlockTypeInfo) => (
+          {items.map((type: BlockTypeInfo) => (
             <BlockTypeItem
               key={type.type}
               type={type}
@@ -351,14 +326,18 @@ const BlockTypeItem: React.FC<BlockTypeItemProps> = ({
   onClick,
   onDoubleClick,
 }) => {
-  const inputCount = Object.keys(type.inputs).length;
-  const outputCount = Object.keys(type.outputs).length;
-  const isComposite = isCompositeBlockDef(type);
+  // Counts reflect WIREABLE ports only. The catalog deliberately excludes
+  // config-only inputs (edited inline, never wired) and hidden outputs — those
+  // belong to the controls seam, not the catalog — so this hint is intentionally
+  // the count a graph author can actually connect to. [LAW:decomposition]
+  const inputCount = type.inputs.length;
+  const outputCount = type.outputs.length;
+  const isComposite = type.form === 'composite';
   const isPrimitive = type.form === 'primitive';
 
-  // For composites, check if it's readonly (library) or user-created
-  const isLibraryComposite = isComposite && type.readonly === true;
-  const isUserComposite = isComposite && !type.readonly;
+  // For composites, a locked (library) definition is not editable; a user one is.
+  const isLibraryComposite = isComposite && !type.editable;
+  const isUserComposite = isComposite && type.editable;
 
   // Determine badge appearance
   let badgeText: string;
