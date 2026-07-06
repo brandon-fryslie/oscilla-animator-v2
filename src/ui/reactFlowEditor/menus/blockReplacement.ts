@@ -2,6 +2,7 @@ import type { BlockId, Patch } from '../../../types';
 import type { Endpoint } from '../../../graph/Patch';
 import {
   type BlockCatalog,
+  type CatalogEntry,
   insertableEntries,
   requireCatalogEntry,
 } from '../../graphEditor/block-catalog';
@@ -54,19 +55,19 @@ function canConnect(
 }
 
 function buildReplacementPlanForType(
-  catalog: BlockCatalog,
+  candidate: CatalogEntry,
   patch: Patch,
   blockId: BlockId,
-  nextType: string,
 ): CompatibleReplacementPlan | null {
+  const nextType = candidate.type;
   const block = patch.blocks.get(blockId);
   if (!block) return null;
   if (block.type === nextType) return null;
-  const candidate = requireCatalogEntry(catalog, nextType);
-  // The `insertable` check is load-bearing for the public `isCompatibleBlockReplacement`
-  // entry point, where `nextType` is an arbitrary caller-supplied string. It is
-  // redundant (always true) on the `findCompatibleReplacementPlans` path, which
-  // already iterates `insertableEntries` — but this helper serves both callers.
+  // The `insertable` check is the single enforcer of insertability for the public
+  // `isCompatibleBlockReplacement` entry point, where the entry is resolved from an
+  // arbitrary caller-supplied type. The `findCompatibleReplacementPlans` path
+  // pre-filters `insertableEntries` purely as an optimization (don't attempt futile
+  // candidates), not as a second enforcer. [LAW:single-enforcer]
   if (block.role?.kind === 'timeRoot' || !candidate.insertable) return null;
   const replacementPatch = withReplacementType(patch, blockId, nextType);
   const connectedEdges = patch.edges.filter(
@@ -148,7 +149,7 @@ export function isCompatibleBlockReplacement(
   blockId: BlockId,
   nextType: string,
 ): boolean {
-  return buildReplacementPlanForType(catalog, patch, blockId, nextType) !== null;
+  return buildReplacementPlanForType(requireCatalogEntry(catalog, nextType), patch, blockId) !== null;
 }
 
 export function findCompatibleReplacementPlans(
@@ -162,9 +163,10 @@ export function findCompatibleReplacementPlans(
   }
 
   // [LAW:one-source-of-truth] Replacement candidates are the catalog's insertable
-  // entries — the same view the block library browses. Read `entries` once.
+  // entries — the same view the block library browses. Read `entries` once and
+  // pass each entry straight through; the plan builder needs no second lookup.
   return insertableEntries(catalog.entries)
-    .map((entry) => buildReplacementPlanForType(catalog, patch, blockId, entry.type))
+    .map((entry) => buildReplacementPlanForType(entry, patch, blockId))
     .filter((plan): plan is CompatibleReplacementPlan => plan !== null)
     .sort((a, b) => a.blockLabel.localeCompare(b.blockLabel));
 }
