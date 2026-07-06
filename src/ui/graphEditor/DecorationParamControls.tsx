@@ -76,14 +76,19 @@ export function DecorationParamControls({
     <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 6 : 10 }}>
       {params.map((param) => {
         const { id, label, value, hint } = param;
+        const kind = hint?.kind;
 
-        if (typeof value === 'number') {
+        // Hint is the authoritative widget signal; the value's runtime type only
+        // decides when NO hint is declared. So a numeric value under a boolean or
+        // select hint renders the hinted widget, never a slider by accident.
+        // [LAW:types-are-the-program]
+        if (kind === 'slider' || kind === 'int' || kind === 'float' || (kind === undefined && typeof value === 'number')) {
           const range = numericRangeFromHint(id, hint);
           return (
             <SliderWithInput
               key={id}
               label={label}
-              value={value}
+              value={typeof value === 'number' ? value : 0}
               onChange={(next) => onChange(id, next)}
               min={range.min}
               max={range.max}
@@ -93,7 +98,7 @@ export function DecorationParamControls({
           );
         }
 
-        if (hint?.kind === 'boolean' || typeof value === 'boolean') {
+        if (kind === 'boolean' || (kind === undefined && typeof value === 'boolean')) {
           return (
             <CheckboxInput
               key={id}
@@ -116,7 +121,7 @@ export function DecorationParamControls({
           );
         }
 
-        if (hint?.kind === 'color') {
+        if (kind === 'color') {
           return (
             <ColorInput
               key={id}
@@ -127,7 +132,7 @@ export function DecorationParamControls({
           );
         }
 
-        if (hint?.kind === 'text' || typeof value === 'string') {
+        if (kind === 'text' || (kind === undefined && typeof value === 'string')) {
           return (
             <TextInput
               key={id}
