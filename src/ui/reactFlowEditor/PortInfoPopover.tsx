@@ -11,9 +11,8 @@ import React, { useEffect } from 'react';
 import { Text, Stack, Group, Badge, Box, Divider } from '@mantine/core';
 import { observer } from 'mobx-react-lite';
 import type { PortData } from '../graphEditor/nodeDataTransform';
-import type { DefaultSource, BlockId, PortId } from '../../types';
+import type { DefaultSource } from '../../types';
 import { useStores, formatDebugValue } from '../../stores';
-import { getLensLabel } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, type PopoverAnchorPosition } from './BasePopover';
 import {
   formatProvenanceTooltip,
@@ -51,7 +50,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   onClose,
   blockId,
 }) => {
-  const { debug, diagnostics, frontend, patch } = useStores();
+  const { debug, diagnostics, frontend } = useStores();
   const debugEnabled = debug.enabled;
 
   useEffect(() => {
@@ -75,9 +74,6 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   const resolvedType = blockId ? frontend.getResolvedPortTypeByIds(blockId, port.id, dir) : undefined;
   const provenance = blockId ? frontend.getPortProvenanceByIds(blockId, port.id, dir) : undefined;
   const defaultSource = isInput && blockId ? frontend.getDefaultSourceByIds(blockId, port.id) : undefined;
-  const lenses = isInput && blockId
-    ? patch.blocks.get(blockId as BlockId)?.inputPorts.get(port.id as PortId)?.lenses
-    : undefined;
 
   let debugValue = undefined;
   if (debugEnabled) {
@@ -326,32 +322,12 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             </Box>
           )}
 
-          {isInput && lenses && lenses.length > 0 && (
-            <Box>
-              <Text size="xs" c="dimmed">
-                Lenses
-              </Text>
-              <Stack gap={4} mt={4}>
-                {lenses.map((lens) => (
-                  <Stack key={lens.id} gap={2}>
-                    <Group gap="xs" wrap="wrap">
-                      <Badge size="xs" color="orange" variant="light">
-                        {getLensLabel(lens.lensType)}
-                      </Badge>
-                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
-                        {lens.sourceAddress.split('.').slice(-2).join('.')}
-                      </Text>
-                    </Group>
-                    {lens.params && Object.keys(lens.params).length > 0 && (
-                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', paddingLeft: '8px' }}>
-                        ({Object.entries(lens.params).map(([k, v]) => `${k}: ${String(v)}`).join(', ')})
-                      </Text>
-                    )}
-                  </Stack>
-                ))}
-              </Stack>
-            </Box>
-          )}
+          {/* Lens detail is shown on the edge (OscillaEdge chips + lens popover);
+              it is not duplicated here. Keeping it out of the port popover also
+              removes this component's only V1 PatchStore read — the remaining
+              frontend.* lookups take string ids and miss gracefully for pillar.
+              Full neutralization of these detail reads is the type-oracle seam
+              (oscilla-editor-ux-8lsn.17). [LAW:one-way-deps] */}
         </Stack>
       </div>
     </BasePopover>
