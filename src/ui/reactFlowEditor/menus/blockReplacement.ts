@@ -1,6 +1,11 @@
 import type { BlockId, Patch } from '../../../types';
 import type { Endpoint } from '../../../graph/Patch';
-import { getBlockCategories, getBlockTypesByCategory, requireAnyBlockDef } from '../../../blocks/registry';
+import {
+  type BlockCatalog,
+  type CatalogEntry,
+  insertableEntries,
+  requireCatalogEntry,
+} from '../../graphEditor/block-catalog';
 import { validateSemanticConnection } from '../../authoring/semanticQueries';
 
 export interface ReplacementEdgePlan {
@@ -50,25 +55,26 @@ function canConnect(
 }
 
 function buildReplacementPlanForType(
+  candidate: CatalogEntry,
   patch: Patch,
   blockId: BlockId,
-  nextType: string,
 ): CompatibleReplacementPlan | null {
+  const nextType = candidate.type;
   const block = patch.blocks.get(blockId);
   if (!block) return null;
   if (block.type === nextType) return null;
-  const candidateDef = requireAnyBlockDef(nextType);
-  if (block.role?.kind === 'timeRoot' || candidateDef.capability === 'time') return null;
+  // The `insertable` check is the single enforcer of insertability for the public
+  // `isCompatibleBlockReplacement` entry point, where the entry is resolved from an
+  // arbitrary caller-supplied type. The `findCompatibleReplacementPlans` path
+  // pre-filters `insertableEntries` purely as an optimization (don't attempt futile
+  // candidates), not as a second enforcer. [LAW:single-enforcer]
+  if (block.role?.kind === 'timeRoot' || !candidate.insertable) return null;
   const replacementPatch = withReplacementType(patch, blockId, nextType);
   const connectedEdges = patch.edges.filter(
     (edge) => edge.from.blockId === blockId || edge.to.blockId === blockId
   );
-  const candidateInputPortIds = Object.entries(candidateDef.inputs)
-    .filter(([, inputDef]) => inputDef.exposedAsPort !== false)
-    .map(([portId]) => portId);
-  const candidateOutputPortIds = Object.entries(candidateDef.outputs)
-    .filter(([, outputDef]) => !outputDef.hidden)
-    .map(([portId]) => portId);
+  const candidateInputPortIds = candidate.inputs.map((port) => port.id);
+  const candidateOutputPortIds = candidate.outputs.map((port) => port.id);
 
   const rewiredEdges: ReplacementEdgePlan[] = [];
 
@@ -131,30 +137,36 @@ function buildReplacementPlanForType(
   }
 
   return {
-    blockType: candidateDef.type,
-    blockLabel: candidateDef.label || candidateDef.type,
+    blockType: candidate.type,
+    blockLabel: candidate.label || candidate.type,
     rewiredEdges,
   };
 }
 
-export function isCompatibleBlockReplacement(patch: Patch, blockId: BlockId, nextType: string): boolean {
-  return buildReplacementPlanForType(patch, blockId, nextType) !== null;
+export function isCompatibleBlockReplacement(
+  catalog: BlockCatalog,
+  patch: Patch,
+  blockId: BlockId,
+  nextType: string,
+): boolean {
+  return buildReplacementPlanForType(requireCatalogEntry(catalog, nextType), patch, blockId) !== null;
 }
 
-export function findCompatibleReplacementPlans(patch: Patch, blockId: BlockId): CompatibleReplacementPlan[] {
+export function findCompatibleReplacementPlans(
+  catalog: BlockCatalog,
+  patch: Patch,
+  blockId: BlockId,
+): CompatibleReplacementPlan[] {
   const block = patch.blocks.get(blockId);
   if (!block || block.role?.kind === 'timeRoot') {
     return [];
   }
 
-  const categories = getBlockCategories();
-  const allDefs = categories.flatMap((category) => getBlockTypesByCategory(category));
-
-  // [LAW:one-source-of-truth] Replacement candidates are derived from the
-  // canonical registry view used by the editor library.
-  return allDefs
-    .filter((def) => def.capability !== 'time')
-    .map((def) => buildReplacementPlanForType(patch, blockId, def.type))
+  // [LAW:one-source-of-truth] Replacement candidates are the catalog's insertable
+  // entries — the same view the block library browses. Read `entries` once and
+  // pass each entry straight through; the plan builder needs no second lookup.
+  return insertableEntries(catalog.entries)
+    .map((entry) => buildReplacementPlanForType(entry, patch, blockId))
     .filter((plan): plan is CompatibleReplacementPlan => plan !== null)
     .sort((a, b) => a.blockLabel.localeCompare(b.blockLabel));
 }

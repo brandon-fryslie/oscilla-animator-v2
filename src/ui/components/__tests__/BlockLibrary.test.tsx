@@ -1,14 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { autorun } from 'mobx';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MantineProvider } from '@mantine/core';
 import { useEffect } from 'react';
 
-import { BlockLibrary } from '../BlockLibrary';
+import { BlockLibrary, SEARCH_DEBOUNCE_MS } from '../BlockLibrary';
 import { EditorProvider, useEditor, type EditorHandle } from '../../editorCommon';
 import { RootStore, StoreProvider } from '../../../stores';
-import { getBlockCategories, getBlockTypesByCategory } from '../../../blocks/registry';
+import { registerAllBlocks } from '../../../blocks/all';
+import { BlockCatalogProvider } from '../../graphEditor/BlockCatalogContext';
+import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
+import { insertableByCategory } from '../../graphEditor/block-catalog';
+
+registerAllBlocks();
 
 function readComputed<T>(reader: () => T): T {
   let value!: T;
@@ -69,20 +74,19 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider>
       <StoreProvider store={testStore}>
-        <EditorProvider>
-          <InjectEditorHandle handle={mockEditorHandle} />
-          {children}
-        </EditorProvider>
+        <BlockCatalogProvider catalog={v1BlockCatalog}>
+          <EditorProvider>
+            <InjectEditorHandle handle={mockEditorHandle} />
+            {children}
+          </EditorProvider>
+        </BlockCatalogProvider>
       </StoreProvider>
     </MantineProvider>
   );
 }
 
 function getVisibleCategories(): string[] {
-  return getBlockCategories().filter((category: string) => {
-    const types = getBlockTypesByCategory(category);
-    return types.some((t: any) => t.capability !== 'time');
-  });
+  return [...insertableByCategory(v1BlockCatalog.entries).categories];
 }
 
 describe('BlockLibrary', () => {
@@ -95,15 +99,27 @@ describe('BlockLibrary', () => {
     vi.clearAllMocks();
   });
 
-  it('filters blocks from search input (case-insensitive)', async () => {
-    render(<BlockLibrary />, { wrapper: TestWrapper });
+  it('filters blocks from search input (case-insensitive)', () => {
+    // The search box debounces input (a setTimeout). Drive that timer explicitly
+    // so the assertion never races a real 150ms timeout under machine load — the
+    // result must be a function of the input, not of wall-clock timing.
+    // [LAW:no-ambient-temporal-coupling]
+    vi.useFakeTimers();
+    try {
+      render(<BlockLibrary />, { wrapper: TestWrapper });
 
-    const searchInput = screen.getByPlaceholderText('Search blocks...');
-    fireEvent.change(searchInput, { target: { value: 'SINE' } });
+      const searchInput = screen.getByPlaceholderText('Search blocks...');
+      fireEvent.change(searchInput, { target: { value: 'SINE' } });
 
-    await waitFor(() => {
+      // Settle the debounce deterministically, then flush the state update.
+      act(() => {
+        vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 50);
+      });
+
       expect(screen.getByText(/\bresults?\b/i)).toBeInTheDocument();
-    });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('adds a block to the patch on double click', async () => {
@@ -112,8 +128,8 @@ describe('BlockLibrary', () => {
     const categories = getVisibleCategories();
     expect(categories.length).toBeGreaterThan(0);
 
-    const types = getBlockTypesByCategory(categories[0]!);
-    const firstVisible = types.find((t: any) => t.capability !== 'time');
+    const entries = insertableByCategory(v1BlockCatalog.entries).byCategory.get(categories[0]!) ?? [];
+    const firstVisible = entries[0];
     expect(firstVisible).toBeTruthy();
 
     const beforeCount = readComputed(() => testStore.patch.blocks.size);

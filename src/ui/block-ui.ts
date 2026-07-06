@@ -2,11 +2,11 @@ import type { DockviewApi } from 'dockview';
 import type { BlockId } from '../types';
 import type {
   AnyBlockDef,
-  BlockOpenBehaviorDef,
   BlockParamEditorDef,
 } from '../blocks/registry';
 import { openExpressionEditorPanel } from './dockview';
 import type { DiagnosticsStore, ExpressionEditorStore } from '../stores';
+import type { CatalogOpenBehavior } from './graphEditor/block-catalog';
 
 export interface RunBlockOpenBehaviorContext {
   readonly blockId: BlockId;
@@ -19,29 +19,31 @@ function unreachableBehavior(behavior: never, message: string): never {
   throw new Error(`${message}: ${JSON.stringify(behavior)}`);
 }
 
-export function hasBlockOpenBehavior(behavior: BlockOpenBehaviorDef): boolean {
-  return behavior.kind !== 'noop';
+// The open behavior is a neutral, per-type fact supplied by the BlockCatalog; a
+// backend without an expression editor reports `{ kind: 'none' }`.
+export function hasBlockOpenBehavior(behavior: CatalogOpenBehavior): boolean {
+  return behavior.kind !== 'none';
 }
 
-export function getBlockOpenBehaviorLabel(behavior: BlockOpenBehaviorDef): string {
-  if (behavior.kind === 'open-expression-editor') {
+export function getBlockOpenBehaviorLabel(behavior: CatalogOpenBehavior): string {
+  if (behavior.kind === 'expressionEditor') {
     return 'Open Expression Editor';
   }
-  if (behavior.kind === 'noop') {
+  if (behavior.kind === 'none') {
     return 'Open';
   }
-  return unreachableBehavior(behavior, 'Unhandled BlockOpenBehaviorDef in getBlockOpenBehaviorLabel');
+  return unreachableBehavior(behavior, 'Unhandled CatalogOpenBehavior in getBlockOpenBehaviorLabel');
 }
 
 export function runBlockOpenBehavior(
-  behavior: BlockOpenBehaviorDef,
+  behavior: CatalogOpenBehavior,
   context: RunBlockOpenBehaviorContext,
 ): void {
-  if (behavior.kind === 'noop') {
+  if (behavior.kind === 'none') {
     return;
   }
 
-  if (behavior.kind === 'open-expression-editor') {
+  if (behavior.kind === 'expressionEditor') {
     context.expressionEditor.openForBlock(context.blockId);
     if (!context.api) {
       context.diagnostics.log({
@@ -53,7 +55,7 @@ export function runBlockOpenBehavior(
     openExpressionEditorPanel(context.api, context.blockId);
     return;
   }
-  return unreachableBehavior(behavior, 'Unhandled BlockOpenBehaviorDef in runBlockOpenBehavior');
+  return unreachableBehavior(behavior, 'Unhandled CatalogOpenBehavior in runBlockOpenBehavior');
 }
 
 export function getBlockParamEditor(

@@ -6,6 +6,7 @@ import {
   findCompatibleReplacementPlans,
   isCompatibleBlockReplacement,
 } from '../menus/blockReplacement';
+import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
 
 registerAllBlocks();
 
@@ -22,7 +23,7 @@ describe('blockReplacement helpers', () => {
       b.wire(target, 'out', sink, 'input');
     });
 
-    const compatible = findCompatibleReplacementPlans(patch, target);
+    const compatible = findCompatibleReplacementPlans(v1BlockCatalog, patch, target);
     const types = compatible.map((item) => item.blockType);
 
     expect(types).toContain('Subtract');
@@ -37,6 +38,6 @@ describe('blockReplacement helpers', () => {
       b.wire(source, 'out', target, 'a');
     });
 
-    expect(isCompatibleBlockReplacement(patch, target, 'Const')).toBe(false);
+    expect(isCompatibleBlockReplacement(v1BlockCatalog, patch, target, 'Const')).toBe(false);
   });
 });

@@ -25,7 +25,8 @@ import { useStores } from '../../stores';
 import type { UnifiedNodeData, PortData } from './nodeDataTransform';
 import type { PortDecoration } from './types';
 import type { PortId, BlockId } from '../../types';
-import { getAnyBlockDefinition, DEFAULT_BLOCK_UI } from '../../blocks/registry';
+import { useBlockCatalog } from './BlockCatalogContext';
+import { NO_OPEN_BEHAVIOR } from './block-catalog';
 import { ParameterControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
@@ -190,8 +191,9 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   const { adapter, enableParamEditing, onPortContextMenu, selection, portHighlight } = useGraphEditor();
   const { diagnostics, expressionEditor } = useStores();
   const dockview = React.useContext(DockviewContext);
-  const blockUi = getAnyBlockDefinition(data.blockType)?.ui ?? DEFAULT_BLOCK_UI;
-  const canRunOpenBehavior = hasBlockOpenBehavior(blockUi.openBehavior);
+  const catalog = useBlockCatalog();
+  const openBehavior = catalog.getEntry(data.blockType)?.openBehavior ?? NO_OPEN_BEHAVIOR;
+  const canRunOpenBehavior = hasBlockOpenBehavior(openBehavior);
 
   const portPopover = usePinPopoverState<PortPopoverData>({
     isSame: (a, b) => a.port.id === b.port.id && a.isInput === b.isInput,
@@ -265,13 +267,13 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
   const handleOpenBehavior = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    runBlockOpenBehavior(blockUi.openBehavior, {
+    runBlockOpenBehavior(openBehavior, {
       blockId: data.blockId as BlockId,
       api: dockview?.api ?? null,
       diagnostics,
       expressionEditor,
     });
-  }, [blockUi.openBehavior, data.blockId, diagnostics, dockview?.api, expressionEditor]);
+  }, [openBehavior, data.blockId, diagnostics, dockview?.api, expressionEditor]);
 
   return (
     <div
@@ -410,8 +412,8 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
         {canRunOpenBehavior && (
           <button
             type="button"
-            aria-label={getBlockOpenBehaviorLabel(blockUi.openBehavior)}
-            title={getBlockOpenBehaviorLabel(blockUi.openBehavior)}
+            aria-label={getBlockOpenBehaviorLabel(openBehavior)}
+            title={getBlockOpenBehaviorLabel(openBehavior)}
             onClick={handleOpenBehavior}
             style={{
               display: 'inline-flex',
