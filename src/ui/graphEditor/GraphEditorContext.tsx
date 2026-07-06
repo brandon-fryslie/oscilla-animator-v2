@@ -11,6 +11,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 import type { GraphDataAdapter } from './types';
+import type { EdgeDecorator } from './edge-decorations';
 import type { SelectionStore } from '../../stores/SelectionStore';
 import type { PortHighlightStore } from '../../stores/PortHighlightStore';
 import type { DiagnosticsStore } from '../../stores/DiagnosticsStore';
@@ -36,6 +37,14 @@ export type PortContextMenuHandler = (request: PortContextMenuRequest) => void;
 export interface GraphEditorContextValue {
   /** Data adapter for graph operations */
   adapter: GraphDataAdapter;
+
+  /**
+   * The era's authority on an edge's transform chain (V1 lenses / pillar transform
+   * blocks). The edge renderer reads it for chips + param editing, so it holds no
+   * lens/era opinion. Every mount supplies one — a V1 decorator, a scene decorator,
+   * or the explicit empty decorator. [LAW:one-source-of-truth]
+   */
+  decorator: EdgeDecorator;
 
   // Feature flags
   /** Enable inline parameter editing in nodes */

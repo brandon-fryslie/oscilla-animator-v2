@@ -25,6 +25,7 @@ import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/Grap
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { CompositeStoreAdapter } from '../graphEditor/CompositeStoreAdapter';
 import { permissiveTypeOracle } from '../graphEditor/type-oracle';
+import { noEdgeDecorator } from '../graphEditor/edge-decorations';
 import { ContextMenu, type ContextMenuItem } from '../reactFlowEditor/ContextMenu';
 import { CompositeEditorDslSidebar } from './CompositeEditorDslSidebar';
 import { useEditor, type EditorHandle } from '../editorCommon';
@@ -530,6 +531,7 @@ export const CompositeEditor = observer(function CompositeEditor() {
             // instance-level type resolution, so it imposes no wiring constraints
             // — stated as an explicit permissive oracle, not a hidden null-patch.
             oracle={permissiveTypeOracle}
+            decorator={noEdgeDecorator}
             onNodeContextMenu={handleNodeContextMenu}
             onEdgeContextMenu={handleEdgeContextMenu}
             onPortContextMenu={handlePortContextMenu}

@@ -11,13 +11,12 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from 'reac
 import React, { useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import type { OscillaEdgeData } from './nodes';
-import { getLensLabel } from './lensUtils';
-import { lensTargetsConnection } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, usePinPopoverState } from './BasePopover';
 import type { Diagnostic } from '../../diagnostics/types';
-import type { BlockId, PortId } from '../../types';
 import { useStores } from '../../stores';
-import { LensParamControls } from '../components/LensParamControls';
+import { useGraphEditor } from '../graphEditor/GraphEditorContext';
+import { DecorationParamControls } from '../graphEditor/DecorationParamControls';
+import type { EdgeRef } from '../graphEditor/edge-decorations';
 import { graphColors } from '../graphEditor/graph-tokens';
 import { useDebugMiniView, useDebugPortMiniView, type MiniViewData } from '../debug-viz/useDebugMiniView';
 import type { HistoryView } from '../debug-viz/types';
@@ -40,9 +39,9 @@ interface LensImpactPreviewProps {
   afterLabel: string;
 }
 
-interface LensPopoverContext {
-  lensId: string;
-  lensIndex: number;
+interface DecorationPopoverContext {
+  decorationId: string;
+  decorationIndex: number;
   targetPortId: string;
 }
 
@@ -296,9 +295,10 @@ export const OscillaEdge = observer(function OscillaEdge(
   const targetHandle = (props as { targetHandle?: string; targetHandleId?: string }).targetHandle
     ?? (props as { targetHandleId?: string }).targetHandleId
     ?? '';
-  const { selection, frontend, patch, debug } = useStores();
-  const lensPopover = usePinPopoverState<LensPopoverContext>({
-    isSame: (a, b) => a.lensId === b.lensId && a.targetPortId === b.targetPortId,
+  const { selection, frontend, debug } = useStores();
+  const { decorator } = useGraphEditor();
+  const decoPopover = usePinPopoverState<DecorationPopoverContext>({
+    isSame: (a, b) => a.decorationId === b.decorationId && a.targetPortId === b.targetPortId,
   });
 
   // Compute bezier path
@@ -322,27 +322,18 @@ export const OscillaEdge = observer(function OscillaEdge(
     strokeWidth: hasDiagnostics ? 2.5 : (style.strokeWidth ?? 2),
   };
 
-  const sourceDisplayName = patch.blocks.get(source as BlockId)?.displayName;
-
-  // [LAW:one-way-deps] OscillaEdge reads the V1 PatchStore directly here (as it
-  // already did for `sourceDisplayName`/`adapterCount`) — a pre-existing bypass.
-  // For pillar edges these lookups miss and the chips simply don't render. The
-  // edge-decoration seam (oscilla-editor-ux-8lsn.18) inverts this dependency by
-  // moving all V1 reads behind a neutral per-edge decoration provider; until
-  // then the neutral edge vocabulary deliberately does not carry V1 lenses.
-  const targetPortLenses = targetHandle
-    ? patch.blocks.get(target as BlockId)?.inputPorts.get(targetHandle as PortId)?.lenses
-    : undefined;
-
-  const edgeLenses = useMemo(
-    () =>
-      (targetPortLenses ?? []).filter((lens) =>
-        lensTargetsConnection(lens, source, sourceHandle ?? '', sourceDisplayName),
-      ),
-    [targetPortLenses, source, sourceHandle, sourceDisplayName],
-  );
-
-  const hasLenses = edgeLenses.length > 0;
+  // [LAW:one-way-deps] The former direct read of `patch.blocks…inputPorts…lenses`
+  // is inverted: an edge's transform chain now comes from the neutral per-mount
+  // `EdgeDecorator`, so this renderer holds no lens/era opinion and lights up for
+  // both boots (V1 lenses, pillar transform chains) through one code path.
+  const edgeRef: EdgeRef = {
+    sourceBlockId: source,
+    sourcePortId: sourceHandle,
+    targetBlockId: target,
+    targetPortId: targetHandle,
+  };
+  const decorations = decorator.decorations(edgeRef);
+  const hasDecorations = decorations.length > 0;
 
   const adapterCount = useMemo(() => {
     if (!targetHandle) return 0;
@@ -351,7 +342,7 @@ export const OscillaEdge = observer(function OscillaEdge(
     return provenance.chain.filter((step) => step.kind === 'adapter').length;
   }, [frontend, target, targetHandle]);
 
-  const hasTransforms = hasLenses || adapterCount > 0;
+  const hasTransforms = hasDecorations || adapterCount > 0;
 
   // Compute position for lens indicator (near target port)
   // Place it at 90% along the edge path, biased toward the target
@@ -366,18 +357,18 @@ export const OscillaEdge = observer(function OscillaEdge(
       .join('\n');
   } else if (hasTransforms) {
     const labels = [
-      ...edgeLenses.map((lens) => getLensLabel(lens.lensType)),
+      ...decorations.map((deco) => deco.label),
       ...(adapterCount > 0 ? [`Adapters x${adapterCount}`] : []),
     ];
     tooltipText = labels.join(', ');
   }
 
-  const lensContext = lensPopover.active?.data ?? null;
-  const activeLens = edgeLenses.find((lens) => lens.id === lensContext?.lensId) ?? null;
-  const activeTargetPortId = lensContext?.targetPortId ?? '';
+  const decoContext = decoPopover.active?.data ?? null;
+  const activeDecoration = decorations.find((deco) => deco.id === decoContext?.decorationId) ?? null;
+  const activeTargetPortId = decoContext?.targetPortId ?? '';
 
   useEffect(() => {
-    if (lensPopover.active) {
+    if (decoPopover.active) {
       debug.setHoveredLensEdge(id);
       return () => {
         if (debug.hoveredLensEdgeId === id) {
@@ -389,7 +380,7 @@ export const OscillaEdge = observer(function OscillaEdge(
       debug.setHoveredLensEdge(null);
     }
     return undefined;
-  }, [lensPopover.active, debug, id]);
+  }, [decoPopover.active, debug, id]);
 
   return (
     <>
@@ -421,26 +412,26 @@ export const OscillaEdge = observer(function OscillaEdge(
             }}
             title={tooltipText}
           >
-            {edgeLenses.map((lens, lensIndex) => (
+            {decorations.map((deco, decoIndex) => (
               <button
-                key={lens.id}
+                key={deco.id}
                 onMouseDown={(event) => {
                   event.stopPropagation();
                   debug.markSuppressNextEdgePopoverPin();
                 }}
                 onMouseEnter={(event) => {
                   if (!targetHandle) return;
-                  lensPopover.setHover({
+                  decoPopover.setHover({
                     data: {
-                      lensId: lens.id,
-                      lensIndex,
+                      decorationId: deco.id,
+                      decorationIndex: decoIndex,
                       targetPortId: targetHandle,
                     },
                     anchorPosition: { top: event.clientY + 12, left: event.clientX + 12 },
                   });
                 }}
                 onMouseLeave={() => {
-                  lensPopover.clearHover();
+                  decoPopover.clearHover();
                 }}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -448,10 +439,10 @@ export const OscillaEdge = observer(function OscillaEdge(
                   if (!targetHandle) return;
                   const nextPosition = { top: event.clientY + 12, left: event.clientX + 12 };
                   // [LAW:single-enforcer] Click-pin capability is centralized in BasePopover; state remains local here.
-                  lensPopover.togglePinned({
+                  decoPopover.togglePinned({
                     data: {
-                      lensId: lens.id,
-                      lensIndex,
+                      decorationId: deco.id,
+                      decorationIndex: decoIndex,
                       targetPortId: targetHandle,
                     },
                     anchorPosition: nextPosition,
@@ -461,8 +452,8 @@ export const OscillaEdge = observer(function OscillaEdge(
                   minHeight: 26,
                   minWidth: 74,
                   borderRadius: 13,
-                  background: graphColors.lensBadge,
-                  border: '1px solid #d97706',
+                  background: deco.color,
+                  border: '1px solid rgba(0,0,0,0.35)',
                   fontSize: 10,
                   fontWeight: 700,
                   color: '#111',
@@ -477,9 +468,9 @@ export const OscillaEdge = observer(function OscillaEdge(
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
-                title={`${getLensLabel(lens.lensType)} (click: preview + edit)`}
+                title={`${deco.tooltip} (click: preview + edit)`}
               >
-                {getLensLabel(lens.lensType)}
+                {deco.label}
               </button>
             ))}
 
@@ -518,11 +509,11 @@ export const OscillaEdge = observer(function OscillaEdge(
       )}
 
       <BasePopover
-        open={Boolean(lensPopover.active && activeLens && activeTargetPortId)}
-        anchorPosition={lensPopover.active?.anchorPosition ?? null}
-        interactive={lensPopover.interactive}
+        open={Boolean(decoPopover.active && activeDecoration && activeTargetPortId)}
+        anchorPosition={decoPopover.active?.anchorPosition ?? null}
+        interactive={decoPopover.interactive}
         onClose={() => {
-          lensPopover.closeAll();
+          decoPopover.closeAll();
           debug.setHoveredLensEdge(null);
         }}
         paperStyle={{
@@ -532,7 +523,7 @@ export const OscillaEdge = observer(function OscillaEdge(
           padding: 14,
         }}
       >
-        {activeLens && activeTargetPortId && (
+        {activeDecoration && activeTargetPortId && (
           <div
             style={{
               display: 'flex',
@@ -541,7 +532,7 @@ export const OscillaEdge = observer(function OscillaEdge(
             }}
           >
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-              Lens: {getLensLabel(activeLens.lensType)}
+              Transform: {activeDecoration.label}
             </div>
 
             <div
@@ -553,23 +544,24 @@ export const OscillaEdge = observer(function OscillaEdge(
               }}
             >
               <LensImpactPreview
-                beforeEdgeId={lensContext?.lensIndex === 0 ? id : null}
-                beforeBlockId={lensContext?.lensIndex === 0 ? null : target}
-                beforePortId={lensContext?.lensIndex === 0 ? null : activeTargetPortId}
+                beforeEdgeId={decoContext?.decorationIndex === 0 ? id : null}
+                beforeBlockId={decoContext?.decorationIndex === 0 ? null : target}
+                beforePortId={decoContext?.decorationIndex === 0 ? null : activeTargetPortId}
                 afterBlockId={target}
                 afterPortId={activeTargetPortId}
-                beforeLabel={lensContext?.lensIndex === 0
+                beforeLabel={decoContext?.decorationIndex === 0
                   ? `before · ${source}.${sourceHandle}`
                   : `before · ${target}.${activeTargetPortId}`}
                 afterLabel={`after · ${target}.${activeTargetPortId}`}
               />
             </div>
 
-            {lensPopover.mode === 'pinned' && (
-              <LensParamControls
-                lens={activeLens}
-                targetBlockId={target as BlockId}
-                targetPortId={activeTargetPortId}
+            {decoPopover.mode === 'pinned' && (
+              <DecorationParamControls
+                params={activeDecoration.params}
+                onChange={(paramId, value) =>
+                  decorator.setParam(edgeRef, activeDecoration.id, paramId, value)
+                }
                 compact
               />
             )}
