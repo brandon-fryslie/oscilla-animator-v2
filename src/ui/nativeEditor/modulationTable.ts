@@ -262,8 +262,13 @@ export function buildModulationTable(
  * unwired, or when the chain dangles at a transform whose own input is unwired (a
  * broken route the compiler surfaces as a diagnostic — the grid, which can only
  * place a route under a source column, shows nothing rather than a phantom source).
+ *
+ * Exported because it is the ONE trace of a pillar transform chain: the Modulation
+ * Table reads it here, and the editor's `SceneEdgeDecorator` reads it to project
+ * the same chain as edge chips. Both views therefore report identical chains from
+ * one implementation, never two that can drift. [LAW:one-source-of-truth]
  */
-function traceRoute(
+export function traceRoute(
   patch: PillarPatch,
   registry: SceneRegistry,
   inputBlockId: string,

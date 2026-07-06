@@ -21,6 +21,7 @@ import { observer } from 'mobx-react-lite';
 import { useStores } from '../../stores';
 import { PillarPatchAdapter } from '../graphEditor/PillarPatchAdapter';
 import { SceneTypeOracle } from '../graphEditor/SceneTypeOracle';
+import { SceneEdgeDecorator } from '../graphEditor/SceneEdgeDecorator';
 import { GraphEditorCore } from '../graphEditor/GraphEditorCore';
 
 export const NativeMatureGraphCanvas: React.FC = observer(() => {
@@ -36,9 +37,14 @@ export const NativeMatureGraphCanvas: React.FC = observer(() => {
   // reports against — so the drag gate agrees with the compiler. [LAW:one-source-of-truth]
   const oracle = useMemo(() => new SceneTypeOracle(pillarPatch), [pillarPatch]);
 
+  // Edge decorations: the scene decorator traces each edge's pillar transform
+  // chain (Scale/Offset/Clamp) — the same chain the Modulation Table reads — so
+  // the mature canvas shows and edits it as edge chips. [LAW:one-source-of-truth]
+  const decorator = useMemo(() => new SceneEdgeDecorator(pillarPatch), [pillarPatch]);
+
   return (
     <div style={{ height: '100%', width: '100%' }}>
-      <GraphEditorCore adapter={adapter} oracle={oracle} />
+      <GraphEditorCore adapter={adapter} oracle={oracle} decorator={decorator} />
     </div>
   );
 });

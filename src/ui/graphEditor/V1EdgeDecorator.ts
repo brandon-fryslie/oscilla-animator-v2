@@ -1,0 +1,70 @@
+/**
+ * V1EdgeDecorator — the V1 provider of the EdgeDecorator seam.
+ *
+ * Wraps the SAME lens machinery the V1 editor already reads: the target input
+ * port's `LensAttachment` records (filtered to the ones targeting this edge's
+ * source, exactly as `OscillaEdge` did through its former direct-store bypass),
+ * projected to neutral steps. Each step's params come from the lens block def's
+ * non-`in` inputs (values from the attachment); a param write routes straight to
+ * `PatchStore.updateLensParams`. It adds no concept of its own — it translates the
+ * lens subsystem into the neutral vocabulary so the edge renderer holds no lens
+ * opinion. [LAW:one-source-of-truth]
+ */
+
+import type { PatchStore } from '../../stores/PatchStore';
+import { requireAnyBlockDef } from '../../blocks/registry';
+import type { BlockId } from '../../types';
+import { getLensLabel, lensTargetsConnection } from '../reactFlowEditor/lensUtils';
+import type { EdgeDecoration, EdgeDecorator, EdgeRef, DecorationParam } from './edge-decorations';
+
+/** Chip color for a V1 lens step — the amber the edge chips have always used. */
+const LENS_CHIP_COLOR = '#f0a020';
+
+export class V1EdgeDecorator implements EdgeDecorator {
+  constructor(private readonly patch: PatchStore) {}
+
+  decorations(edge: EdgeRef): readonly EdgeDecoration[] {
+    const sourceDisplayName = this.patch.blocks.get(edge.sourceBlockId as BlockId)?.displayName;
+    const lenses = this.patch.getLensesForPort(edge.targetBlockId as BlockId, edge.targetPortId);
+    return lenses
+      .filter((lens) =>
+        lensTargetsConnection(lens, edge.sourceBlockId, edge.sourcePortId, sourceDisplayName),
+      )
+      .slice()
+      .sort((a, b) => a.sortKey - b.sortKey)
+      .map((lens) => ({
+        id: lens.id,
+        label: getLensLabel(lens.lensType),
+        color: LENS_CHIP_COLOR,
+        tooltip: `${getLensLabel(lens.lensType)} (${lens.lensType})`,
+        params: lensParams(lens.lensType, lens.params),
+      }));
+  }
+
+  setParam(edge: EdgeRef, decorationId: string, paramId: string, value: unknown): void {
+    this.patch.updateLensParams(edge.targetBlockId as BlockId, edge.targetPortId, decorationId, {
+      [paramId]: value,
+    });
+  }
+}
+
+/**
+ * Project a lens block def's editable inputs (everything but its `in` value port)
+ * to neutral params, reading current values from the attachment and falling back
+ * to the def default — the exact projection `LensParamControls` performed inline,
+ * lifted behind the seam so the neutral param editor can render it. [LAW:decomposition]
+ */
+function lensParams(
+  lensType: string,
+  params: Record<string, unknown> | undefined,
+): readonly DecorationParam[] {
+  const def = requireAnyBlockDef(lensType);
+  return Object.entries(def.inputs)
+    .filter(([inputId]) => inputId !== 'in')
+    .map(([paramId, inputDef]) => ({
+      id: paramId,
+      label: inputDef.label ?? paramId,
+      value: params?.[paramId] ?? inputDef.defaultValue ?? 0,
+      hint: inputDef.uiHint,
+    }));
+}
