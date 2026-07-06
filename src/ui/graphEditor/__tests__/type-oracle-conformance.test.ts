@@ -20,6 +20,7 @@ import type { BlockId } from '../../../types';
 
 import { V1TypeOracle } from '../V1TypeOracle';
 import { SceneTypeOracle } from '../SceneTypeOracle';
+import { permissiveTypeOracle, verdictPermits } from '../type-oracle';
 import type { ConnectionVerdict, PortDirection, PortRef, TypeOracle } from '../type-oracle';
 
 import {
@@ -143,5 +144,28 @@ describe('type-oracle conformance contract rejects a non-conforming oracle (nega
 
   it('rejects an oracle that refuses a known-good wire', () => {
     expect(() => assertPermitsKnownGoodWire(brokenRejectingCase)).toThrow();
+  });
+});
+
+// =============================================================================
+// permissiveTypeOracle — pinned directly, because it is the one provider the
+// conformance contract structurally cannot cover: it rejects no wire and types no
+// port, so it supplies no known-bad / known-port fixture. It is nonetheless
+// production code (the composite editor), so its two invariants are asserted here
+// to guard against a future guard leaking a display or a reject. [LAW:verifiable-goals]
+// =============================================================================
+
+describe('permissiveTypeOracle', () => {
+  it('permits every wire', () => {
+    const verdict = permissiveTypeOracle.canConnect(
+      { blockId: 'a', portId: 'out' },
+      { blockId: 'b', portId: 'in' },
+    );
+    expect(verdictPermits(verdict)).toBe(true);
+  });
+
+  it('reports no type for any port, in either direction', () => {
+    expect(permissiveTypeOracle.describePort({ blockId: 'a', portId: 'out' }, 'output')).toBeUndefined();
+    expect(permissiveTypeOracle.describePort({ blockId: 'b', portId: 'in' }, 'input')).toBeUndefined();
   });
 });
