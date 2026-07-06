@@ -18,6 +18,7 @@ import type { InternalBlockId, InternalEdge } from '../../blocks/composite-types
 import type { CompositeEditorStore } from '../../stores/CompositeEditorStore';
 import { getAnyBlockDefinition } from '../../blocks/registry';
 import type { AnyBlockDef } from '../../blocks/registry';
+import { typeDisplayFor, defaultSourceIndicator, UNTYPED_TYPE } from './neutral-projection';
 import type {
   GraphDataAdapter,
   BlockLike,
@@ -51,18 +52,33 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
     for (const [id, blockState] of this.store.internalBlocks) {
       const blockDef = getAnyBlockDefinition(blockState.type);
       if (!blockDef) {
-        // Skip blocks with missing definitions (shouldn't happen in normal use)
+        // [LAW:no-silent-failure] An unregistered block type still renders — as
+        // a bare block carrying its type as label — instead of vanishing from
+        // the projection with only a reduced count as evidence. (Matches
+        // PatchStoreAdapter's degraded-render fallback.)
+        blockMap.set(id, {
+          id,
+          type: blockState.type,
+          typeLabel: blockState.type,
+          displayName: blockState.displayName || blockState.type,
+          params: blockState.params || {},
+          inputPorts: new Map(),
+          outputPorts: new Map(),
+          controls: [],
+        });
         continue;
       }
 
-      // Transform InternalBlockState to BlockLike
+      // Transform InternalBlockState to neutral BlockLike
       blockMap.set(id, {
         id,
         type: blockState.type,
+        typeLabel: blockDef.label,
         displayName: blockState.displayName || blockDef.label,
         params: blockState.params || {},
         inputPorts: this.getInputPortsForBlock(blockDef),
         outputPorts: this.getOutputPortsForBlock(blockDef),
+        controls: [],
       });
     }
 
@@ -215,11 +231,14 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
     const portMap = new Map<string, InputPortLike>();
 
     for (const [id, inputDef] of Object.entries(blockDef.inputs)) {
+      if (inputDef.exposedAsPort === false) continue;
+      const ds = inputDef.defaultSource;
+      const typeDisplay = typeDisplayFor(inputDef.type ?? UNTYPED_TYPE);
       portMap.set(id, {
         id,
-        // Default combineMode to 'last' (matches PatchStore behavior for new blocks)
-        combineMode: 'last' as const,
-        defaultSource: inputDef.defaultSource,
+        label: inputDef.label || id,
+        typeDisplay,
+        decorations: ds ? [defaultSourceIndicator(ds, typeDisplay.tooltip)] : [],
       });
     }
 
@@ -232,9 +251,11 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
   private getOutputPortsForBlock(blockDef: AnyBlockDef): ReadonlyMap<string, OutputPortLike> {
     const portMap = new Map<string, OutputPortLike>();
 
-    for (const portId of Object.keys(blockDef.outputs)) {
-      portMap.set(portId, {
-        id: portId,
+    for (const [id, outputDef] of Object.entries(blockDef.outputs)) {
+      portMap.set(id, {
+        id,
+        label: outputDef.label || id,
+        typeDisplay: typeDisplayFor(outputDef.type ?? UNTYPED_TYPE),
       });
     }
 

@@ -1,140 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { createNodeFromBlockLike } from '../nodeDataTransform';
-import { getAnyBlockDefinition } from '../../../blocks/registry';
-import { registerAllBlocks } from '../../../blocks/all';
-import type { BlockLike, EdgeLike } from '../types';
+import type { BlockLike, EdgeLike, InputPortLike } from '../types';
 import type { BlockId, PortId } from '../../../types';
 
-registerAllBlocks();
+/**
+ * A self-describing input port whose single inline control mirrors what
+ * PatchStoreAdapter emits for a default-sourced Const input (control id is
+ * `${portId}:value`, targeting the binding source param).
+ */
+function controllablePort(portId: string, label: string, value: number): InputPortLike {
+  return {
+    id: portId,
+    label,
+    controls: [{
+      id: `${portId}:value`,
+      label,
+      value,
+      hint: { kind: 'slider', min: 0, max: 1, step: 0.001 },
+      target: {
+        kind: 'bindingSourceParam',
+        blockId: 'ellipse-1' as BlockId,
+        portId: portId as PortId,
+        sourceBlockType: 'Const',
+        sourceOutputPortId: 'out' as PortId,
+        paramId: 'value',
+      },
+    }],
+  };
+}
 
-function ellipseBlock(params: Record<string, unknown> = {}): BlockLike {
+function ellipseBlock(): BlockLike {
   return {
     id: 'ellipse-1',
     type: 'Ellipse',
+    typeLabel: 'Ellipse',
     displayName: 'Ellipse 1',
-    params,
+    params: {},
     inputPorts: new Map([
-      ['rx', {
-        id: 'rx',
-        combineMode: 'last',
-        binding: {
-          kind: 'resolved',
-          writerCount: 1,
-          sourceKind: 'defaultSource',
-          sourceBlockType: 'Const',
-          sourcePortId: 'out',
-          chain: [],
-          controls: [{
-            id: 'value',
-            label: 'Radius X',
-            value: 0.02,
-            hint: { kind: 'slider', min: 0.005, max: 0.08, step: 0.001 },
-            target: {
-              kind: 'bindingSourceParam',
-              blockId: 'ellipse-1' as BlockId,
-              portId: 'rx' as PortId,
-              sourceBlockType: 'Const',
-              sourceOutputPortId: 'out' as PortId,
-              paramId: 'value',
-            },
-          }],
-        },
-      }],
-      ['ry', {
-        id: 'ry',
-        combineMode: 'last',
-        binding: {
-          kind: 'resolved',
-          writerCount: 1,
-          sourceKind: 'defaultSource',
-          sourceBlockType: 'Const',
-          sourcePortId: 'out',
-          chain: [],
-          controls: [{
-            id: 'value',
-            label: 'Radius Y',
-            value: 0.02,
-            hint: { kind: 'slider', min: 0.005, max: 0.08, step: 0.001 },
-            target: {
-              kind: 'bindingSourceParam',
-              blockId: 'ellipse-1' as BlockId,
-              portId: 'ry' as PortId,
-              sourceBlockType: 'Const',
-              sourceOutputPortId: 'out' as PortId,
-              paramId: 'value',
-            },
-          }],
-        },
-      }],
-      ['rotation', {
-        id: 'rotation',
-        combineMode: 'last',
-        binding: {
-          kind: 'resolved',
-          writerCount: 1,
-          sourceKind: 'defaultSource',
-          sourceBlockType: 'Const',
-          sourcePortId: 'out',
-          chain: [],
-          controls: [{
-            id: 'value',
-            label: 'Rotation',
-            value: 0,
-            hint: { kind: 'slider', min: 0, max: 6.28, step: 0.01 },
-            target: {
-              kind: 'bindingSourceParam',
-              blockId: 'ellipse-1' as BlockId,
-              portId: 'rotation' as PortId,
-              sourceBlockType: 'Const',
-              sourceOutputPortId: 'out' as PortId,
-              paramId: 'value',
-            },
-          }],
-        },
-      }],
-      ['resolution', {
-        id: 'resolution',
-        combineMode: 'last',
-        binding: {
-          kind: 'resolved',
-          writerCount: 1,
-          sourceKind: 'defaultSource',
-          sourceBlockType: 'Const',
-          sourcePortId: 'out',
-          chain: [],
-          controls: [{
-            id: 'value',
-            label: 'Resolution',
-            value: 64,
-            hint: { kind: 'slider', min: 16, max: 128, step: 1 },
-            target: {
-              kind: 'bindingSourceParam',
-              blockId: 'ellipse-1' as BlockId,
-              portId: 'resolution' as PortId,
-              sourceBlockType: 'Const',
-              sourceOutputPortId: 'out' as PortId,
-              paramId: 'value',
-            },
-          }],
-        },
-      }],
+      ['rx', controllablePort('rx', 'Radius X', 0.02)],
+      ['ry', controllablePort('ry', 'Radius Y', 0.02)],
+      ['rotation', controllablePort('rotation', 'Rotation', 0)],
+      ['resolution', controllablePort('resolution', 'Resolution', 64)],
     ]),
     outputPorts: new Map([
-      ['shape', { id: 'shape' }],
-      ['controlPoints', { id: 'controlPoints' }],
+      ['shape', { id: 'shape', label: 'shape' }],
+      ['controlPoints', { id: 'controlPoints', label: 'controlPoints' }],
     ]),
+    controls: [],
   };
 }
 
 describe('createNodeFromBlockLike controllable params', () => {
-  it('projects unconnected exposed const defaults as controllable params', () => {
+  it('projects unconnected exposed inputs\' controls as node params', () => {
     const block = ellipseBlock();
-    const blockDef = getAnyBlockDefinition(block.type);
-    expect(blockDef).toBeDefined();
 
     const node = createNodeFromBlockLike(
       block,
-      blockDef!,
       [],
       new Map([[block.id, block]]),
       { x: 0, y: 0 },
@@ -152,10 +73,12 @@ describe('createNodeFromBlockLike controllable params', () => {
     const source: BlockLike = {
       id: 'const-1',
       type: 'Const',
+      typeLabel: 'Const',
       displayName: 'Const 1',
       params: { value: 0.1 },
       inputPorts: new Map(),
-      outputPorts: new Map([['out', { id: 'out' }]]),
+      outputPorts: new Map([['out', { id: 'out', label: 'out' }]]),
+      controls: [],
     };
     const edge: EdgeLike = {
       id: 'e1',
@@ -164,12 +87,9 @@ describe('createNodeFromBlockLike controllable params', () => {
       targetBlockId: block.id,
       targetPortId: 'rx',
     };
-    const blockDef = getAnyBlockDefinition(block.type);
-    expect(blockDef).toBeDefined();
 
     const node = createNodeFromBlockLike(
       block,
-      blockDef!,
       [edge],
       new Map([
         [source.id, source],

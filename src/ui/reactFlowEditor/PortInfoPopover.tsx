@@ -13,7 +13,6 @@ import { observer } from 'mobx-react-lite';
 import type { PortData } from '../graphEditor/nodeDataTransform';
 import type { DefaultSource } from '../../types';
 import { useStores, formatDebugValue } from '../../stores';
-import { getLensLabel } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, type PopoverAnchorPosition } from './BasePopover';
 import {
   formatProvenanceTooltip,
@@ -51,7 +50,7 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   onClose,
   blockId,
 }) => {
-  const { debug, diagnostics } = useStores();
+  const { debug, diagnostics, frontend } = useStores();
   const debugEnabled = debug.enabled;
 
   useEffect(() => {
@@ -65,6 +64,16 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
   if (!port || !anchorPosition) {
     return null;
   }
+
+  // Rich V1 port detail is read straight from the compiler/patch stores here
+  // (this popover is a store-reading surface owned by the type-oracle /
+  // edge-decoration seams; the pillar path simply has no such data and these
+  // sections stay empty). The neutral node vocabulary carries only the type
+  // header (color/tooltip), which is shown regardless of era.
+  const dir = isInput ? 'in' : 'out';
+  const resolvedType = blockId ? frontend.getResolvedPortTypeByIds(blockId, port.id, dir) : undefined;
+  const provenance = blockId ? frontend.getPortProvenanceByIds(blockId, port.id, dir) : undefined;
+  const defaultSource = isInput && blockId ? frontend.getDefaultSourceByIds(blockId, port.id) : undefined;
 
   let debugValue = undefined;
   if (debugEnabled) {
@@ -154,33 +163,33 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
                 <Text size="sm" c="white" style={{ fontFamily: 'monospace' }}>
                   {port.typeTooltip}
                 </Text>
-                {port.resolvedType && (
+                {resolvedType && (
                   <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', whiteSpace: 'pre-line' }}>
-                    {formatCanonicalTypeTooltip(port.resolvedType)}
+                    {formatCanonicalTypeTooltip(resolvedType)}
                   </Text>
                 )}
               </Stack>
             </Group>
           </Box>
 
-          {port.provenance && (
+          {provenance && (
             <Box>
               <Text size="xs" c="dimmed">
                 Provenance
               </Text>
               <Group gap="xs" mt={2}>
-                {getAdapterBadgeLabel(port.provenance) && (
+                {getAdapterBadgeLabel(provenance) && (
                   <Badge size="xs" color="orange" variant="filled">
                     Adapter
                   </Badge>
                 )}
-                {getUnresolvedWarning(port.provenance) && (
+                {getUnresolvedWarning(provenance) && (
                   <Badge size="xs" color="red" variant="filled">
                     Unresolved
                   </Badge>
                 )}
                 <Text size="sm" c="white">
-                  {formatProvenanceTooltip(port.provenance)}
+                  {formatProvenanceTooltip(provenance)}
                 </Text>
               </Group>
             </Box>
@@ -297,48 +306,28 @@ export const PortInfoPopover: React.FC<PortInfoPopoverProps> = observer(({
             );
           })()}
 
-          {isInput && !port.isConnected && port.defaultSource && (
+          {isInput && !port.isConnected && defaultSource && (
             <Box>
               <Text size="xs" c="dimmed">
                 Default Source
               </Text>
               <Badge
                 size="sm"
-                color={getDefaultSourceBadgeColor(port.defaultSource)}
+                color={getDefaultSourceBadgeColor(defaultSource)}
                 variant="light"
                 mt={2}
               >
-                {formatDefaultSourceLabel(port.defaultSource)}
+                {formatDefaultSourceLabel(defaultSource)}
               </Badge>
             </Box>
           )}
 
-          {isInput && port.lenses && port.lenses.length > 0 && (
-            <Box>
-              <Text size="xs" c="dimmed">
-                Lenses
-              </Text>
-              <Stack gap={4} mt={4}>
-                {port.lenses.map((lens) => (
-                  <Stack key={lens.id} gap={2}>
-                    <Group gap="xs" wrap="wrap">
-                      <Badge size="xs" color="orange" variant="light">
-                        {getLensLabel(lens.lensType)}
-                      </Badge>
-                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
-                        {lens.sourceAddress.split('.').slice(-2).join('.')}
-                      </Text>
-                    </Group>
-                    {lens.params && Object.keys(lens.params).length > 0 && (
-                      <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace', paddingLeft: '8px' }}>
-                        ({Object.entries(lens.params).map(([k, v]) => `${k}: ${String(v)}`).join(', ')})
-                      </Text>
-                    )}
-                  </Stack>
-                ))}
-              </Stack>
-            </Box>
-          )}
+          {/* Lens detail is shown on the edge (OscillaEdge chips + lens popover);
+              it is not duplicated here. Keeping it out of the port popover also
+              removes this component's only V1 PatchStore read — the remaining
+              frontend.* lookups take string ids and miss gracefully for pillar.
+              Full neutralization of these detail reads is the type-oracle seam
+              (oscilla-editor-ux-8lsn.17). [LAW:one-way-deps] */}
         </Stack>
       </div>
     </BasePopover>

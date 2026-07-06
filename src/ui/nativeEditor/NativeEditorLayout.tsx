@@ -16,6 +16,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { NativeEditorPanel } from './NativeEditorPanel';
 import { NativeGraphCanvas } from './NativeGraphCanvas';
+import { NativeMatureGraphCanvas } from './NativeMatureGraphCanvas';
 import { ModulationTablePanel } from './ModulationTablePanel';
 
 interface NativeEditorLayoutProps {
@@ -43,16 +44,25 @@ export const NativeEditorLayout: React.FC<NativeEditorLayoutProps> = ({ onCanvas
 };
 
 /**
- * The center pane offers the two views onto the authored patch: the node graph
- * and the modulation table. Both read the same `PillarPatchStore`, so switching
- * is purely a presentation choice — no patch state moves with the toggle.
- * [LAW:one-source-of-truth] The graph and table are alternate projections; the
- *   toggle picks a projection, it does not fork the patch.
+ * The center pane offers alternate views onto the same authored patch. Each
+ * reads the same `PillarPatchStore`, so switching is a presentation choice — no
+ * patch state moves with the toggle.
+ * [LAW:one-source-of-truth] The views are alternate projections of one patch;
+ *   the toggle picks a projection, it does not fork the patch.
  */
-type CenterView = 'graph' | 'table';
+type CenterView = 'graph' | 'mature' | 'table';
 
 const CenterPane: React.FC = () => {
   const [view, setView] = useState<CenterView>('graph');
+  // The mature editor mounts on its first activation (not before), so its
+  // initial mount — and GraphEditorCore's one-shot fitView — happens while the
+  // pane is visible with a real size, not while hidden (a display:none element
+  // has a zero rect, which would collapse fitView to minimum zoom). Once
+  // mounted it stays mounted, so adapter-owned positions survive later switches.
+  const [matureActivated, setMatureActivated] = useState(false);
+  useEffect(() => {
+    if (view === 'mature') setMatureActivated(true);
+  }, [view]);
   return (
     <div
       style={{
@@ -73,10 +83,22 @@ const CenterPane: React.FC = () => {
         }}
       >
         <ViewTab label="Graph" active={view === 'graph'} onSelect={() => setView('graph')} />
+        <ViewTab label="Mature" active={view === 'mature'} onSelect={() => setView('mature')} />
         <ViewTab label="Table" active={view === 'table'} onSelect={() => setView('table')} />
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {view === 'graph' ? <NativeGraphCanvas /> : <ModulationTablePanel />}
+        {view === 'graph' && <NativeGraphCanvas />}
+        {view === 'table' && <ModulationTablePanel />}
+        {/* The mature editor mounts on first activation, then stays mounted
+            (display-toggled) because its node positions live in the adapter's
+            in-memory map; unmounting on tab switch would discard the author's
+            layout. Graph/Table re-derive statelessly, so they mount on demand.
+            [LAW:one-source-of-truth] */}
+        {matureActivated && (
+          <div style={{ height: '100%', display: view === 'mature' ? undefined : 'none' }}>
+            <NativeMatureGraphCanvas />
+          </div>
+        )}
       </div>
     </div>
   );
