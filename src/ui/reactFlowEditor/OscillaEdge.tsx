@@ -15,7 +15,7 @@ import { getLensLabel } from './lensUtils';
 import { lensTargetsConnection } from './lensUtils';
 import { BasePopover, POPUP_SURFACE_STYLE, usePinPopoverState } from './BasePopover';
 import type { Diagnostic } from '../../diagnostics/types';
-import type { BlockId } from '../../types';
+import type { BlockId, PortId } from '../../types';
 import { useStores } from '../../stores';
 import { LensParamControls } from '../components/LensParamControls';
 import { graphColors } from '../graphEditor/graph-tokens';
@@ -324,12 +324,19 @@ export const OscillaEdge = observer(function OscillaEdge(
 
   const sourceDisplayName = patch.blocks.get(source as BlockId)?.displayName;
 
+  // Lenses live on the target port; read them straight from the patch store.
+  // (Edge decorations are owned by the edge-decoration seam; the neutral edge
+  // vocabulary does not carry V1 lens attachments.)
+  const targetPortLenses = targetHandle
+    ? patch.blocks.get(target as BlockId)?.inputPorts.get(targetHandle as PortId)?.lenses
+    : undefined;
+
   const edgeLenses = useMemo(
     () =>
-      (data?.lenses ?? []).filter((lens) =>
+      (targetPortLenses ?? []).filter((lens) =>
         lensTargetsConnection(lens, source, sourceHandle ?? '', sourceDisplayName),
       ),
-    [data?.lenses, source, sourceHandle, sourceDisplayName],
+    [targetPortLenses, source, sourceHandle, sourceDisplayName],
   );
 
   const hasLenses = edgeLenses.length > 0;

@@ -23,32 +23,81 @@ import { observer } from 'mobx-react-lite';
 import { useGraphEditor } from './GraphEditorContext';
 import { useStores } from '../../stores';
 import type { UnifiedNodeData, PortData } from './nodeDataTransform';
-import type { DefaultSource, PortId, BlockId } from '../../types';
+import type { PortDecoration } from './types';
+import type { PortId, BlockId } from '../../types';
 import { getAnyBlockDefinition, DEFAULT_BLOCK_UI } from '../../blocks/registry';
 import { ParameterControl } from '../reactFlowEditor/ParameterControls';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
-import {
-  formatProvenanceTooltip,
-  formatCanonicalTypeTooltip,
-  getAdapterBadgeLabel,
-  getUnresolvedWarning,
-} from './portTooltipFormatters';
 import { resolvePortStyle } from './port-style';
 import { graphColors } from './graph-tokens';
-import { isTimeDefaultSource } from '../defaultSourcePresentation';
 import { DockviewContext } from '../dockview';
 import { getBlockOpenBehaviorLabel, hasBlockOpenBehavior, runBlockOpenBehavior } from '../block-ui';
 
 /**
- * Get indicator color based on default source type.
+ * Render an input port's neutral decorations beside its handle.
+ *
+ * [LAW:single-enforcer] This is the one place that maps a decoration kind to
+ * pixels; providers pre-compute the label/color/tooltip. `indicator`
+ * decorations (a default-source dot) hide when the port is connected; badges
+ * and warnings always show.
  */
-function getIndicatorColor(ds: DefaultSource): string {
-  if (isTimeDefaultSource(ds)) {
-    return graphColors.timeRootIndicator;
-  }
-  return graphColors.defaultSourceIndicator;
+function renderInputDecorations(
+  decorations: readonly PortDecoration[],
+  isConnected: boolean,
+  topPercent: number,
+): React.ReactNode {
+  return decorations.map((dec, i) => {
+    if (dec.kind === 'indicator') {
+      if (isConnected) return null;
+      return (
+        <div
+          key={`dec-${i}`}
+          style={{
+            position: 'absolute',
+            left: '-3px',
+            top: `calc(${topPercent}% - 12px)`,
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: dec.color ?? graphColors.defaultSourceIndicator,
+            pointerEvents: 'none',
+          }}
+          title={dec.tooltip}
+        />
+      );
+    }
+
+    const background =
+      dec.kind === 'warning'
+        ? graphColors.unresolvedBadge
+        : dec.color ?? graphColors.adapterBadge;
+    return (
+      <div
+        key={`dec-${i}`}
+        style={{
+          position: 'absolute',
+          left: '-18px',
+          top: `calc(${topPercent}% - 4px)`,
+          width: '12px',
+          height: '12px',
+          borderRadius: '3px',
+          background,
+          color: '#fff',
+          fontSize: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          fontWeight: 'bold',
+        }}
+        title={dec.tooltip}
+      >
+        {dec.label}
+      </div>
+    );
+  });
 }
 
 /**
@@ -301,75 +350,8 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
               }}
             />
 
-            {/* Default Source Indicator */}
-            {!input.isConnected && input.defaultSource && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '-3px',
-                  top: `calc(${topPercent}% - 12px)`,
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: getIndicatorColor(input.defaultSource),
-                  pointerEvents: 'none',
-                }}
-                title={[
-                  formatProvenanceTooltip(input.provenance),
-                  input.resolvedType ? formatCanonicalTypeTooltip(input.resolvedType) : input.typeTooltip,
-                ].join('\n\n')}
-              />
-            )}
-
-            {/* Adapter Badge */}
-            {input.provenance && getAdapterBadgeLabel(input.provenance) && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '-18px',
-                  top: `calc(${topPercent}% - 4px)`,
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '3px',
-                  background: graphColors.adapterBadge,
-                  color: '#fff',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  pointerEvents: 'none',
-                  fontWeight: 'bold',
-                }}
-                title={formatProvenanceTooltip(input.provenance)}
-              >
-                {getAdapterBadgeLabel(input.provenance)}
-              </div>
-            )}
-
-            {/* Unresolved Warning */}
-            {input.provenance && getUnresolvedWarning(input.provenance) && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '-18px',
-                  top: `calc(${topPercent}% - 4px)`,
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '3px',
-                  background: graphColors.unresolvedBadge,
-                  color: '#fff',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  pointerEvents: 'none',
-                  fontWeight: 'bold',
-                }}
-                title={formatProvenanceTooltip(input.provenance)}
-              >
-                {getUnresolvedWarning(input.provenance)}
-              </div>
-            )}
+            {/* Neutral port decorations (default-source dot, adapter badge, warning) */}
+            {renderInputDecorations(input.decorations, input.isConnected, topPercent)}
           </React.Fragment>
         );
       })}

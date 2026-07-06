@@ -39,7 +39,7 @@ function getControlsViaAdapter(
   portId: string,
 ) {
   const block = adapter.blocks.get(blockId);
-  return block?.inputPorts.get(portId)?.binding?.controls ?? [];
+  return block?.inputPorts.get(portId)?.controls ?? [];
 }
 
 // =============================================================================
