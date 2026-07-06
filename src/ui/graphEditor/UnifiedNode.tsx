@@ -48,6 +48,10 @@ function renderInputDecorations(
   isConnected: boolean,
   topPercent: number,
 ): React.ReactNode {
+  // Square badges/warnings share a column; stack them vertically so a port that
+  // carries more than one (e.g. co-emitted adapter badge + unresolved warning)
+  // never renders them on top of each other.
+  let squareIndex = 0;
   return decorations.map((dec, i) => {
     if (dec.kind === 'indicator') {
       if (isConnected) return null;
@@ -69,6 +73,8 @@ function renderInputDecorations(
       );
     }
 
+    const stackOffset = squareIndex * 14;
+    squareIndex += 1;
     const background =
       dec.kind === 'warning'
         ? graphColors.unresolvedBadge
@@ -79,7 +85,7 @@ function renderInputDecorations(
         style={{
           position: 'absolute',
           left: '-18px',
-          top: `calc(${topPercent}% - 4px)`,
+          top: `calc(${topPercent}% - 4px + ${stackOffset}px)`,
           width: '12px',
           height: '12px',
           borderRadius: '3px',

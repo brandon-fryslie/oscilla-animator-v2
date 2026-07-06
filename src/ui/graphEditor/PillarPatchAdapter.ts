@@ -84,7 +84,10 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
     return this.store.patch.edges.map((edge) => ({
       id: edge.id,
       sourceBlockId: edge.source,
-      sourcePortId: outputHandleByBlock.get(edge.source) ?? 'out',
+      // On a registry miss use an impossible handle id (never a real port), so
+      // createEdgeFromEdgeLike's handle-validity check drops the edge rather than
+      // risking a coincidental match on a block that happens to expose 'out'.
+      sourcePortId: outputHandleByBlock.get(edge.source) ?? '__unresolved_output__',
       targetBlockId: edge.target,
       targetPortId: edge.inputSlot,
     }));

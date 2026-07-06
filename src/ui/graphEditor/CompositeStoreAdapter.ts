@@ -52,7 +52,20 @@ export class CompositeStoreAdapter implements GraphDataAdapter<InternalBlockId> 
     for (const [id, blockState] of this.store.internalBlocks) {
       const blockDef = getAnyBlockDefinition(blockState.type);
       if (!blockDef) {
-        // Skip blocks with missing definitions (shouldn't happen in normal use)
+        // [LAW:no-silent-failure] An unregistered block type still renders — as
+        // a bare block carrying its type as label — instead of vanishing from
+        // the projection with only a reduced count as evidence. (Matches
+        // PatchStoreAdapter's degraded-render fallback.)
+        blockMap.set(id, {
+          id,
+          type: blockState.type,
+          typeLabel: blockState.type,
+          displayName: blockState.displayName || blockState.type,
+          params: blockState.params || {},
+          inputPorts: new Map(),
+          outputPorts: new Map(),
+          controls: [],
+        });
         continue;
       }
 

@@ -66,6 +66,16 @@ describe('PillarPatchAdapter', () => {
     expect(adapter.getBlockPosition(id)).toBeUndefined();
   });
 
+  it('writes block config through updateBlockParams (the inline-control path)', () => {
+    const store = new PillarPatchStore();
+    const adapter = new PillarPatchAdapter(store);
+
+    const id = adapter.addBlock('Constant', { x: 0, y: 0 });
+    adapter.updateBlockParams(id, { value: 0.7 });
+
+    expect(adapter.blocks.get(id)!.params.value).toBe(0.7);
+  });
+
   it('round-trips an edge through removeEdge + addEdge (delegating to the store)', () => {
     const store = new PillarPatchStore();
     const adapter = new PillarPatchAdapter(store);
