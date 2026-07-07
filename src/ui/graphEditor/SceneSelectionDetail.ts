@@ -15,6 +15,7 @@
 import type { PillarPatchStore } from '../../stores/PillarPatchStore';
 import type { PillarBlock } from '../../pillars/types/graph';
 import type { ScenePortDeclaration, SceneValueKind } from '../../pillars/scene/scene-block';
+import type { BlockId } from '../../types';
 import type { ControlMutationTarget } from '../../types/control-target';
 import { traceRoute } from '../nativeEditor/modulationTable';
 import { sceneTypeDisplay, sceneControlToHint } from './scene-projection';
@@ -54,11 +55,27 @@ export class SceneSelectionDetail implements SelectionDetail {
     const block = this.block(blockId);
     if (!block) return undefined;
     const catalog = this.store.registry.get(block.type)?.catalog;
-    const displayName = catalog?.displayName ?? block.type;
+    // An unregistered type (corrupted save, migration gap) is an unknown block, not a
+    // valid one with no ports — mark it so the view shows its error state, matching V1.
+    // [LAW:no-silent-failure]
+    if (!catalog) {
+      return {
+        id: blockId,
+        variant: 'unknownType',
+        type: block.type,
+        typeLabel: block.type,
+        displayName: block.type,
+        canEditDisplayName: false,
+        inputs: [],
+        outputs: [],
+        config: [],
+      };
+    }
+    const displayName = catalog.displayName;
 
     const inputs: InputPortDetail[] = [];
     const outputs: OutputPortDetail[] = [];
-    for (const port of catalog?.ports ?? []) {
+    for (const port of catalog.ports) {
       if (port.direction === 'input') {
         inputs.push({
           id: port.id,
@@ -198,18 +215,29 @@ export class SceneSelectionDetail implements SelectionDetail {
     // A `connected` feed is built only from a proven-non-empty list. [LAW:types-are-the-program]
     const [head, ...tail] = sources;
     if (head) return { kind: 'connected', sources: [head, ...tail] };
-    if (port.default.kind === 'configScalar') {
-      const configKey = port.default.configKey;
-      const raw = (block.config as Record<string, unknown>)[configKey];
-      // Fall back to the catalog field's authored default, then an explicit "(unset)"
-      // — never stringify `undefined` into a label that reads "amplitude = undefined".
-      const catalogDefault = this.store.registry
-        .get(block.type)
-        ?.catalog.configFields.find((f) => f.key === configKey)?.defaultValue;
-      const value = raw ?? catalogDefault;
-      return { kind: 'default', label: `${configKey} = ${value === undefined ? '(unset)' : String(value)}` };
+
+    // Exhaustive over ScenePortInputDefault: a new variant is a compile error here, not
+    // a silent 'unconnected'. [LAW:no-silent-failure]
+    switch (port.default.kind) {
+      case 'configScalar': {
+        const configKey = port.default.configKey;
+        const raw = (block.config as Record<string, unknown>)[configKey];
+        // Fall back to the catalog field's authored default, then an explicit "(unset)"
+        // — never stringify `undefined` into a label that reads "amplitude = undefined".
+        const catalogDefault = this.store.registry
+          .get(block.type)
+          ?.catalog.configFields.find((f) => f.key === configKey)?.defaultValue;
+        const value = raw ?? catalogDefault;
+        return { kind: 'default', label: `${configKey} = ${value === undefined ? '(unset)' : String(value)}` };
+      }
+      case 'required':
+        // A required input with no wire is genuinely unfed — the compiler surfaces it.
+        return { kind: 'unconnected' };
+      default: {
+        const _exhaustive: never = port.default;
+        throw new Error(`Unhandled ScenePortInputDefault: ${JSON.stringify(_exhaustive)}`);
+      }
     }
-    return { kind: 'unconnected' };
   }
 
   private configFields(block: PillarBlock): readonly ConfigField[] {
@@ -221,7 +249,11 @@ export class SceneSelectionDetail implements SelectionDetail {
         label: field.label,
         value: (block.config as Record<string, unknown>)[field.key] ?? field.defaultValue,
         hint: sceneControlToHint(field.control),
-        target: { kind: 'blockParam', blockId: block.id as never, paramId: field.key },
+        // Boundary cast: pillar block ids are plain strings, and this target's brand is
+        // consumed only by THIS provider's own applyControl (which passes it to
+        // updateConfig as a string) — the id never crosses into V1. A genuinely neutral
+        // write-target type is the control-affordance ticket's (editor-ux .23) work.
+        target: { kind: 'blockParam', blockId: block.id as BlockId, paramId: field.key },
       },
     }));
   }

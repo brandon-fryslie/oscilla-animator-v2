@@ -15,7 +15,7 @@
  * fabricated 0/#000000 that lies about what is stored. [LAW:types-are-the-program]
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { colors } from '../theme';
 import '../components/BlockInspector.css';
@@ -830,6 +830,7 @@ function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(current);
   const [error, setError] = useState<string | null>(null);
+  const escaping = useRef(false);
 
   // Enter/leave edit mode by resetting the draft to the authoritative name
   // SYNCHRONOUSLY at the transition, so a rejected value never lingers and there is
@@ -880,10 +881,23 @@ function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (
           setDraft(e.target.value);
           if (error) setError(null);
         }}
-        onBlur={commit}
+        onBlur={() => {
+          // Commit runs on exactly one path — blur. Enter and Escape both blur the
+          // input; an escape flag tells this handler to cancel instead of commit, so
+          // setDisplayName is never called twice for one edit.
+          if (escaping.current) {
+            escaping.current = false;
+            cancelEdit();
+            return;
+          }
+          commit();
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
-          if (e.key === 'Escape') cancelEdit();
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') {
+            escaping.current = true;
+            e.currentTarget.blur();
+          }
         }}
         style={{
           fontSize: '18px',

@@ -52,7 +52,7 @@ describe('selection-detail parity: detail == era authority', () => {
     expect(block.inputs.map((p) => p.id).sort()).toEqual(authorityInputs.sort());
     expect(authorityInputs.length, 'block exercises a non-empty port set').toBeGreaterThan(0);
 
-    const configIds = block.config.map((f) => (f.kind === 'control' ? f.control.id : 'expr'));
+    const configIds = block.config.map((f) => (f.kind === 'control' ? f.control.id : f.id));
     expect(configIds.sort()).toEqual(authorityConfig.sort());
     expect(configIds).toContain('op');
 
@@ -91,6 +91,5 @@ describe('selection-detail parity: detail == era authority', () => {
     const edge = detail.describeEdge(edgeId)!;
     expect(edge.chain.map((s) => s.label)).toEqual(authorityChain);
     expect(authorityChain.length, 'edge exercises a non-empty transform chain').toBe(1);
-    void scaleId;
   });
 });
