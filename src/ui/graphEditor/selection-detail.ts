@@ -149,7 +149,7 @@ export interface OutputPortDetail {
  */
 export type ConfigField =
   | { readonly kind: 'control'; readonly control: DetailControl }
-  | { readonly kind: 'expression'; readonly blockId: string; readonly value: string };
+  | { readonly kind: 'expression'; readonly id: string; readonly blockId: string; readonly value: string };
 
 /**
  * How a selected block reads for the inspector. `variant` distinguishes an

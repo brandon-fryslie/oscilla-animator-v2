@@ -26,6 +26,8 @@ import {
   assertDescribesKnownBlock,
   assertUnknownBlockAbsent,
   assertUnknownEdgeAbsent,
+  assertUnknownPortAbsent,
+  assertUnknownTypeAbsent,
   runSelectionDetailConformanceSuite,
   type SelectionDetailConformanceCase,
 } from './selection-detail-conformance.contract';
@@ -53,6 +55,10 @@ function v1Case(): SelectionDetailConformanceCase {
     unknownBlockId: 'no-such-block',
     knownEdgeId: edgeId,
     unknownEdgeId: 'no-such-edge',
+    knownPort: { blockId: compareId, portId: 'a' },
+    unknownPort: { blockId: 'no-such-block', portId: 'x' },
+    knownType: 'Compare',
+    unknownType: 'no-such-type',
     editableConfig: { blockId: compareId, paramId: 'op', value: 'lt' },
   };
 }
@@ -75,6 +81,10 @@ function sceneCase(): SelectionDetailConformanceCase {
     unknownBlockId: 'no-such-block',
     knownEdgeId: edgeId,
     unknownEdgeId: 'no-such-edge',
+    knownPort: { blockId: waveId, portId: 'amplitude' },
+    unknownPort: { blockId: 'no-such-block', portId: 'x' },
+    knownType: 'WaveOffset',
+    unknownType: 'no-such-type',
     editableConfig: { blockId: constId, paramId: 'value', value: 42 },
   };
 }
@@ -116,6 +126,8 @@ const NOOP = {
   removeLens: () => {},
   connect: () => {},
   removeEdge: () => {},
+  describeBlock: () => undefined,
+  describeEdge: () => undefined,
   describePort: () => undefined,
   describeTypePreview: () => undefined,
 } as const;
@@ -125,6 +137,10 @@ const DUMMY = {
   unknownBlockId: 'ghost',
   knownEdgeId: 'e',
   unknownEdgeId: 'ghost',
+  knownPort: { blockId: 'b', portId: 'i' },
+  unknownPort: { blockId: 'ghost', portId: 'x' },
+  knownType: 'T',
+  unknownType: 'ghost',
   editableConfig: { blockId: 'b', paramId: 'p', value: 5 },
 } as const;
 
@@ -135,10 +151,18 @@ const brokenInventsUnknownBlock: SelectionDetail = {
   describeEdge: () => undefined,
 };
 
-/** Returns a malformed block (empty id/type) for the known block. */
+/**
+ * Returns a block whose IDENTITY is well-formed (so the id/type checks pass) but
+ * whose input port is malformed — empty id + label. This forces the failure through
+ * `assertBlockWellFormed`'s port loop specifically, not the earlier id-match guard,
+ * so that assertion is proven to have teeth.
+ */
 const brokenMalformedBlock: SelectionDetail = {
   ...NOOP,
-  describeBlock: () => ({ ...okBlock, id: '', type: '' }),
+  describeBlock: () => ({
+    ...okBlock,
+    inputs: [{ id: '', label: '', feed: { kind: 'unconnected' }, controls: [] }],
+  }),
   describeEdge: () => undefined,
 };
 
@@ -156,6 +180,26 @@ const brokenIgnoresApply: SelectionDetail = {
   describeEdge: () => undefined,
 };
 
+/** Returns a port detail for EVERY port id — so it invents the unknown port. */
+const brokenInventsUnknownPort: SelectionDetail = {
+  ...NOOP,
+  describePort: () => ({
+    ref: { blockId: 'b', portId: 'i' },
+    direction: 'input',
+    label: 'L',
+    parentBlock: { blockId: 'b', portId: '', blockLabel: 'B' },
+    feed: { kind: 'unconnected' },
+    targets: [],
+    controls: [],
+  }),
+};
+
+/** Returns a preview for EVERY type — so it invents the unknown type. */
+const brokenInventsUnknownType: SelectionDetail = {
+  ...NOOP,
+  describeTypePreview: () => ({ type: 'T', typeLabel: 'T', inputs: [], outputs: [] }),
+};
+
 describe('selection-detail conformance contract rejects a non-conforming provider (negative control)', () => {
   it('rejects a provider that invents a detail for an unknown block', () => {
     expect(() => assertUnknownBlockAbsent({ name: 'x', detail: brokenInventsUnknownBlock, ...DUMMY })).toThrow();
@@ -171,6 +215,14 @@ describe('selection-detail conformance contract rejects a non-conforming provide
 
   it('rejects a provider that ignores a config write', () => {
     expect(() => assertConfigRoundTrips({ name: 'x', detail: brokenIgnoresApply, ...DUMMY })).toThrow();
+  });
+
+  it('rejects a provider that invents a detail for an unknown port', () => {
+    expect(() => assertUnknownPortAbsent({ name: 'x', detail: brokenInventsUnknownPort, ...DUMMY })).toThrow();
+  });
+
+  it('rejects a provider that invents a preview for an unknown type', () => {
+    expect(() => assertUnknownTypeAbsent({ name: 'x', detail: brokenInventsUnknownType, ...DUMMY })).toThrow();
   });
 });
 

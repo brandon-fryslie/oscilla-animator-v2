@@ -72,7 +72,7 @@ export class SceneSelectionDetail implements SelectionDetail {
           id: port.id,
           label: port.label,
           typeDisplay: sceneTypeDisplay(port.value),
-          targets: this.outgoing(blockId),
+          targets: this.outgoing(blockId, port.id),
         });
       }
     }
@@ -123,7 +123,7 @@ export class SceneSelectionDetail implements SelectionDetail {
       typeDisplay: sceneTypeDisplay(port.value),
       parentBlock: this.endpoint(ref.blockId, undefined),
       feed: isInput && port.direction === 'input' ? this.inputFeed(block, port) : { kind: 'unconnected' },
-      targets: isInput ? [] : this.outgoing(ref.blockId),
+      targets: isInput ? [] : this.outgoing(ref.blockId, ref.portId),
       controls: [],
     };
   }
@@ -199,8 +199,15 @@ export class SceneSelectionDetail implements SelectionDetail {
     const [head, ...tail] = sources;
     if (head) return { kind: 'connected', sources: [head, ...tail] };
     if (port.default.kind === 'configScalar') {
-      const value = (block.config as Record<string, unknown>)[port.default.configKey];
-      return { kind: 'default', label: `${port.default.configKey} = ${String(value)}` };
+      const configKey = port.default.configKey;
+      const raw = (block.config as Record<string, unknown>)[configKey];
+      // Fall back to the catalog field's authored default, then an explicit "(unset)"
+      // — never stringify `undefined` into a label that reads "amplitude = undefined".
+      const catalogDefault = this.store.registry
+        .get(block.type)
+        ?.catalog.configFields.find((f) => f.key === configKey)?.defaultValue;
+      const value = raw ?? catalogDefault;
+      return { kind: 'default', label: `${configKey} = ${value === undefined ? '(unset)' : String(value)}` };
     }
     return { kind: 'unconnected' };
   }
@@ -219,7 +226,11 @@ export class SceneSelectionDetail implements SelectionDetail {
     }));
   }
 
-  private outgoing(blockId: string): readonly EndpointDetail[] {
+  private outgoing(blockId: string, portId: string): readonly EndpointDetail[] {
+    // A pillar edge names only its source block; the source output is the block's
+    // sole output. So a block's outgoing edges belong to exactly that one output
+    // port — attribute them to it, and to no other output port. [LAW:dataflow-not-control-flow]
+    if (this.soleOutput(blockId) !== portId) return [];
     return this.store.patch.edges
       .filter((e) => e.source === blockId)
       .map((e) => this.endpoint(e.target, e.inputSlot));

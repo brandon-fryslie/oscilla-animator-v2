@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { BlockDetail, SelectionDetail } from '../selection-detail';
+import type { BlockDetail, PortRef, SelectionDetail } from '../selection-detail';
 
 /** Everything a provider must supply to be run through the conformance contract. */
 export interface SelectionDetailConformanceCase {
@@ -38,6 +38,14 @@ export interface SelectionDetailConformanceCase {
   readonly knownEdgeId: string;
   /** An edge id this era is known NOT to have (proves absent-as-absent). */
   readonly unknownEdgeId: string;
+  /** A port this era is known to describe. */
+  readonly knownPort: PortRef;
+  /** A port this era is known NOT to have (proves absent-as-absent). */
+  readonly unknownPort: PortRef;
+  /** A block TYPE this era is known to preview. */
+  readonly knownType: string;
+  /** A block type this era is known NOT to have (proves absent-as-absent). */
+  readonly unknownType: string;
   /** One editable config field on `knownBlockId`, with a value to write and read back. */
   readonly editableConfig: {
     readonly blockId: string;
@@ -96,6 +104,37 @@ export function assertUnknownEdgeAbsent(c: SelectionDetailConformanceCase): void
   expect(c.detail.describeEdge(c.unknownEdgeId), `${c.name}: unknown edge is absent`).toBeUndefined();
 }
 
+/** The known port yields a detail with real identity and a parent block. */
+export function assertDescribesKnownPort(c: SelectionDetailConformanceCase): void {
+  const port = c.detail.describePort(c.knownPort);
+  expect(port, `${c.name}: describes the known port`).toBeDefined();
+  expect(port?.ref.portId, `${c.name}: port ref matches`).toBe(c.knownPort.portId);
+  expect(port?.label.length, `${c.name}: port has a label`).toBeGreaterThan(0);
+  expect(port?.parentBlock.blockId.length, `${c.name}: port has a parent block`).toBeGreaterThan(0);
+}
+
+/** An unknown port is absent — a provider never invents a port. */
+export function assertUnknownPortAbsent(c: SelectionDetailConformanceCase): void {
+  expect(c.detail.describePort(c.unknownPort), `${c.name}: unknown port is absent`).toBeUndefined();
+}
+
+/** The known type yields a well-formed preview: real identity, well-formed ports. */
+export function assertDescribesTypePreview(c: SelectionDetailConformanceCase): void {
+  const preview = c.detail.describeTypePreview(c.knownType);
+  expect(preview, `${c.name}: describes the known type`).toBeDefined();
+  expect(preview?.type.length, `${c.name}: preview has a type`).toBeGreaterThan(0);
+  expect(preview?.typeLabel.length, `${c.name}: preview has a type label`).toBeGreaterThan(0);
+  for (const port of [...(preview?.inputs ?? []), ...(preview?.outputs ?? [])]) {
+    expect(port.id.length, `${c.name}: preview port has an id`).toBeGreaterThan(0);
+    expect(port.typeLabel.length, `${c.name}: preview port has a type label`).toBeGreaterThan(0);
+  }
+}
+
+/** An unknown type is absent — a provider never invents a preview. */
+export function assertUnknownTypeAbsent(c: SelectionDetailConformanceCase): void {
+  expect(c.detail.describeTypePreview(c.unknownType), `${c.name}: unknown type is absent`).toBeUndefined();
+}
+
 /**
  * A config write round-trips: after `applyControl`, the same config field on the
  * block reads back the written value. This is what makes the neutral inspector's
@@ -126,6 +165,10 @@ export function runSelectionDetailConformanceSuite(c: SelectionDetailConformance
     it('leaves an unknown block absent', () => assertUnknownBlockAbsent(c));
     it('describes a known edge with real endpoints', () => assertDescribesKnownEdge(c));
     it('leaves an unknown edge absent', () => assertUnknownEdgeAbsent(c));
+    it('describes a known port with a parent block', () => assertDescribesKnownPort(c));
+    it('leaves an unknown port absent', () => assertUnknownPortAbsent(c));
+    it('describes a known type preview', () => assertDescribesTypePreview(c));
+    it('leaves an unknown type absent', () => assertUnknownTypeAbsent(c));
     it('round-trips a config edit', () => assertConfigRoundTrips(c));
   });
 }

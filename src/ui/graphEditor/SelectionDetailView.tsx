@@ -15,7 +15,7 @@
  * fabricated 0/#000000 that lies about what is stored. [LAW:types-are-the-program]
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { colors } from '../theme';
 import '../components/BlockInspector.css';
@@ -171,7 +171,7 @@ const BlockDetailView = observer(function BlockDetailView({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {block.config.map((field) =>
               field.kind === 'expression' ? (
-                <InspectorExpressionField key={field.blockId} blockId={field.blockId} value={field.value} />
+                <InspectorExpressionField key={`expr:${field.id}`} blockId={field.blockId} value={field.value} />
               ) : (
                 <DetailControlField key={field.control.id} detail={detail} control={field.control} />
               ),
@@ -413,9 +413,7 @@ const PortDetailView = observer(function PortDetailView({
       </Section>
 
       <Section title="Parent Block">
-        <div style={{ padding: '8px', background: colors.bgPanel, borderRadius: '4px', fontSize: '13px' }}>
-          {port.parentBlock.blockLabel}
-        </div>
+        <EndpointRow endpoint={port.parentBlock} navigate={navigate} />
       </Section>
     </div>
   );
@@ -778,7 +776,8 @@ function NeutralControl({
       case 'text':
         return <TextInput value={String(value ?? '')} onChange={onChange} size="sm" />;
       case 'xy': {
-        const xy = (value ?? {}) as { x?: number; y?: number };
+        if (typeof value !== 'object' || value === null) return <ReadOnly value={value} />;
+        const xy = value as { x?: number; y?: number };
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <SliderWithInput label="X" value={xy.x ?? 0} min={-1000} max={1000} step={1} onChange={(x) => onChange({ ...xy, x })} />
@@ -831,18 +830,24 @@ function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(current);
   const [error, setError] = useState<string | null>(null);
-  // Reset the draft to the authoritative name whenever we (re)enter editing, so a
-  // rejected value never lingers as the starting point of the next edit.
-  useEffect(() => {
-    if (editing) {
-      setDraft(current);
-      setError(null);
-    }
-  }, [editing, current]);
+
+  // Enter/leave edit mode by resetting the draft to the authoritative name
+  // SYNCHRONOUSLY at the transition, so a rejected value never lingers and there is
+  // no one-frame flicker of stale text on the next edit.
+  const beginEdit = () => {
+    setDraft(current);
+    setError(null);
+    setEditing(true);
+  };
+  const cancelEdit = () => {
+    setDraft(current);
+    setError(null);
+    setEditing(false);
+  };
 
   if (!editing) {
     return (
-      <span style={{ cursor: 'pointer' }} onClick={() => setEditing(true)} title="Click to rename">
+      <span style={{ cursor: 'pointer' }} onClick={beginEdit} title="Click to rename">
         {current}
       </span>
     );
@@ -878,10 +883,7 @@ function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Enter') commit();
-          if (e.key === 'Escape') {
-            setError(null);
-            setEditing(false);
-          }
+          if (e.key === 'Escape') cancelEdit();
         }}
         style={{
           fontSize: '18px',
