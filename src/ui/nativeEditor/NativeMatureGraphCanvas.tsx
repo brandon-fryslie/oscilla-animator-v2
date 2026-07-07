@@ -25,7 +25,7 @@ import { SceneEdgeDecorator } from '../graphEditor/SceneEdgeDecorator';
 import { GraphEditorCore } from '../graphEditor/GraphEditorCore';
 
 export const NativeMatureGraphCanvas: React.FC = observer(() => {
-  const { pillarPatch } = useStores();
+  const { pillarPatch, selection } = useStores();
   const adapter = useMemo(() => new PillarPatchAdapter(pillarPatch), [pillarPatch]);
 
   // Layout: PillarPatchAdapter seeds deterministic left→right positions, so the
@@ -42,9 +42,12 @@ export const NativeMatureGraphCanvas: React.FC = observer(() => {
   // the mature canvas shows and edits it as edge chips. [LAW:one-source-of-truth]
   const decorator = useMemo(() => new SceneEdgeDecorator(pillarPatch), [pillarPatch]);
 
+  // Selection: the shared SelectionStore is the one neutral selection surface both
+  // boots read; wiring it here lets a node click populate the inspector panel with
+  // this pillar block's detail through the SelectionDetail seam. [LAW:one-source-of-truth]
   return (
     <div style={{ height: '100%', width: '100%' }}>
-      <GraphEditorCore adapter={adapter} oracle={oracle} decorator={decorator} />
+      <GraphEditorCore adapter={adapter} oracle={oracle} decorator={decorator} selection={selection} />
     </div>
   );
 });

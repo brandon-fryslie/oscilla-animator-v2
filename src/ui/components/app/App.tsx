@@ -10,7 +10,7 @@
  * Provides global keyboard shortcuts.
  */
 
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { MantineProvider, createTheme as createMantineTheme, virtualColor } from '@mantine/core';
 import '@mantine/core/styles.css';
 import { Toolbar } from './Toolbar';
@@ -18,6 +18,9 @@ import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon
 import { BlockCatalogProvider } from '../../graphEditor/BlockCatalogContext';
 import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
 import { sceneBlockCatalog } from '../../graphEditor/SceneBlockCatalog';
+import { SelectionDetailProvider } from '../../graphEditor/SelectionDetailContext';
+import { V1SelectionDetail } from '../../graphEditor/V1SelectionDetail';
+import { SceneSelectionDetail } from '../../graphEditor/SceneSelectionDetail';
 import { DockviewProvider } from '../../dockview';
 import type { DockviewApi } from 'dockview';
 import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
@@ -126,6 +129,18 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
   // Get store from context and expose to non-React code via callback
   const rootStore = useStores();
 
+  // The era's SelectionDetail provider for the inspector panels — constructed once
+  // over the boot's stores, provided at the boot shell (the level BlockCatalog sits
+  // at) so the dockview inspector panels reach it. [LAW:one-source-of-truth]
+  const v1SelectionDetail = useMemo(
+    () => new V1SelectionDetail(rootStore.patch, rootStore.frontend),
+    [rootStore],
+  );
+  const sceneSelectionDetail = useMemo(
+    () => new SceneSelectionDetail(rootStore.pillarPatch),
+    [rootStore],
+  );
+
   // Notify main.ts when store is available (once on mount)
   const storeReadyRef = useRef(false);
   useEffect(() => {
@@ -225,10 +240,13 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
         ) : nativeEditor ? (
           /* Native ScenePlan editor: authoring surface + live Three preview */
           <BlockCatalogProvider catalog={sceneBlockCatalog}>
-            <NativeEditorLayout onCanvasReady={handleCanvasReady} />
+            <SelectionDetailProvider detail={sceneSelectionDetail}>
+              <NativeEditorLayout onCanvasReady={handleCanvasReady} />
+            </SelectionDetailProvider>
           </BlockCatalogProvider>
         ) : (
           <BlockCatalogProvider catalog={v1BlockCatalog}>
+          <SelectionDetailProvider detail={v1SelectionDetail}>
           <EditorProvider>
           {/* Capture EditorContext methods */}
           <EditorContextCapture
@@ -270,6 +288,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
           />
           <EngineDebugOverlay />
         </EditorProvider>
+          </SelectionDetailProvider>
           </BlockCatalogProvider>
         )}
       </ExternalWriteBusContext.Provider>

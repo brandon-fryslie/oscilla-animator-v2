@@ -18,6 +18,7 @@ import { NativeEditorPanel } from './NativeEditorPanel';
 import { NativeGraphCanvas } from './NativeGraphCanvas';
 import { NativeMatureGraphCanvas } from './NativeMatureGraphCanvas';
 import { ModulationTablePanel } from './ModulationTablePanel';
+import { SelectionDetailView } from '../graphEditor/SelectionDetailView';
 
 interface NativeEditorLayoutProps {
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -38,6 +39,12 @@ export const NativeEditorLayout: React.FC<NativeEditorLayoutProps> = ({ onCanvas
         <NativeEditorPanel />
       </div>
       <CenterPane />
+      {/* Inspector: the ONE neutral SelectionDetailView, fed the scene provider by
+          the boot-level SelectionDetailProvider (App). Selecting a block in the
+          mature canvas populates it — the same inspector the V1 dockview mounts. */}
+      <div style={{ width: 320, flexShrink: 0, borderRight: '1px solid #2a2a38', overflow: 'auto', background: '#12121a' }}>
+        <SelectionDetailView />
+      </div>
       <PreviewCanvas onCanvasReady={onCanvasReady} />
     </div>
   );
