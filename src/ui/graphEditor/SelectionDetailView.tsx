@@ -50,6 +50,8 @@ import type {
 
 /** Navigate the selection to a block (clicking a connected endpoint). */
 type Navigate = (blockId: string) => void;
+/** Navigate the selection to a port (clicking a port row to drill in). */
+type NavigatePort = (blockId: string, portId: string) => void;
 
 // =============================================================================
 // Top-level dispatch
@@ -57,12 +59,12 @@ type Navigate = (blockId: string) => void;
 
 export const SelectionDetailView = observer(function SelectionDetailView() {
   const detail = useSelectionDetail();
-  const { ref, selectBlock } = useEditorSelection();
+  const { ref, selectBlock, selectPort } = useEditorSelection();
 
   return (
     <div className="block-inspector">
       <div className="block-inspector__content">
-        {renderContent(detail, ref, selectBlock)}
+        {renderContent(detail, ref, selectBlock, selectPort)}
       </div>
     </div>
   );
@@ -72,6 +74,7 @@ function renderContent(
   detail: SelectionDetail,
   ref: ReturnType<typeof useEditorSelection>['ref'],
   navigate: Navigate,
+  navigatePort: NavigatePort,
 ): React.ReactElement {
   switch (ref.kind) {
     case 'none':
@@ -90,7 +93,11 @@ function renderContent(
     }
     case 'block': {
       const block = detail.describeBlock(ref.blockId);
-      return block ? <BlockDetailView detail={detail} block={block} navigate={navigate} /> : <NoSelection />;
+      return block ? (
+        <BlockDetailView detail={detail} block={block} navigate={navigate} navigatePort={navigatePort} />
+      ) : (
+        <NoSelection />
+      );
     }
     default: {
       const _exhaustive: never = ref;
@@ -115,10 +122,12 @@ const BlockDetailView = observer(function BlockDetailView({
   detail,
   block,
   navigate,
+  navigatePort,
 }: {
   detail: SelectionDetail;
   block: BlockDetail;
   navigate: Navigate;
+  navigatePort: NavigatePort;
 }) {
   if (block.variant === 'timeRoot') {
     return (
@@ -147,7 +156,14 @@ const BlockDetailView = observer(function BlockDetailView({
         <Section title="Inputs">
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {block.inputs.map((port) => (
-              <InputPortRow key={port.id} detail={detail} blockId={block.id} port={port} navigate={navigate} />
+              <InputPortRow
+                key={port.id}
+                detail={detail}
+                blockId={block.id}
+                port={port}
+                navigate={navigate}
+                onInspect={() => navigatePort(block.id, port.id)}
+              />
             ))}
           </ul>
         </Section>
@@ -158,7 +174,11 @@ const BlockDetailView = observer(function BlockDetailView({
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {block.outputs.map((port) => (
               <li key={port.id} style={rowStyle}>
-                <PortHeaderLine label={port.label} typeDisplay={port.typeDisplay} />
+                <PortHeaderLine
+                  label={port.label}
+                  typeDisplay={port.typeDisplay}
+                  onInspect={() => navigatePort(block.id, port.id)}
+                />
                 <TargetList targets={port.targets} navigate={navigate} />
               </li>
             ))}
@@ -208,15 +228,17 @@ const InputPortRow = observer(function InputPortRow({
   blockId,
   port,
   navigate,
+  onInspect,
 }: {
   detail: SelectionDetail;
   blockId: string;
   port: InputPortDetail;
   navigate: Navigate;
+  onInspect: () => void;
 }) {
   return (
     <li style={rowStyle}>
-      <PortHeaderLine label={port.label} typeDisplay={port.typeDisplay} />
+      <PortHeaderLine label={port.label} typeDisplay={port.typeDisplay} onInspect={onInspect} />
       <FeedLine feed={port.feed} navigate={navigate} />
       {port.combineMode && <CombineModeEditor detail={detail} blockId={blockId} portId={port.id} combine={port.combineMode} />}
       {port.defaultSource && <DefaultSourceEditor detail={detail} blockId={blockId} portId={port.id} ds={port.defaultSource} />}
@@ -533,13 +555,30 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-function PortHeaderLine({ label, typeDisplay }: { label: string; typeDisplay?: PortTypeDisplay }) {
+function PortHeaderLine({
+  label,
+  typeDisplay,
+  onInspect,
+}: {
+  label: string;
+  typeDisplay?: PortTypeDisplay;
+  onInspect?: () => void;
+}) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div
+      onClick={onInspect}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        cursor: onInspect ? 'pointer' : undefined,
+      }}
+    >
       <div>
         <strong>{label}</strong>
         {typeDisplay && <span style={{ color: colors.textSecondary }}> ({typeDisplay.label})</span>}
       </div>
+      {onInspect && <span style={{ fontSize: '11px', color: colors.textMuted }}>→</span>}
     </div>
   );
 }
