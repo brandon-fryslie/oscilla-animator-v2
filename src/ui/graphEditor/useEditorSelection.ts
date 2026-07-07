@@ -10,7 +10,7 @@
  */
 
 import { useStores } from '../../stores';
-import type { BlockId } from '../../types';
+import type { BlockId, PortId } from '../../types';
 import type { PortRef } from './type-oracle';
 
 export type EditorSelectionRef =
@@ -23,6 +23,7 @@ export type EditorSelectionRef =
 export interface EditorSelection {
   readonly ref: EditorSelectionRef;
   selectBlock(blockId: string): void;
+  selectPort(blockId: string, portId: string): void;
 }
 
 /**
@@ -36,6 +37,8 @@ export function useEditorSelection(): EditorSelection {
   return {
     ref,
     selectBlock: (blockId: string) => selection.selectBlock(blockId as BlockId),
+    selectPort: (blockId: string, portId: string) =>
+      selection.selectPort(blockId as BlockId, portId as PortId),
   };
 }
 
