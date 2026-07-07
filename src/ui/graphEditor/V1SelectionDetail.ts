@@ -249,10 +249,14 @@ export class V1SelectionDetail implements SelectionDetail {
       this.store.updateInputPort(blockId as BlockId, portId, { defaultSource: undefined });
       return;
     }
+    // `blockType` comes from the block-type dropdown, whose options are exactly the
+    // registry's valid default-source types — so an unregistered type or a type with
+    // no output is an impossible state, not a user path. Crash loudly rather than
+    // dropping the change silently. [LAW:no-silent-failure]
     const def = BLOCK_DEFS_BY_TYPE.get(blockType);
-    if (!def) return;
+    if (!def) throw new Error(`setDefaultSource: unknown block type "${blockType}"`);
     const output = outputPortId ?? Object.keys(def.outputs)[0];
-    if (!output) return;
+    if (!output) throw new Error(`setDefaultSource: block type "${blockType}" has no output port`);
     const nextDefault: DefaultSource = { blockType, output, params: {} };
     this.store.updateInputPort(blockId as BlockId, portId, { defaultSource: nextDefault });
   }
@@ -305,12 +309,12 @@ export class V1SelectionDetail implements SelectionDetail {
     const incoming = this.patch.edges.filter(
       (e) => e.to.blockId === block.id && e.to.slotId === portId,
     );
-    if (incoming.length > 0) {
-      return {
-        kind: 'connected',
-        sources: incoming.map((e) => this.endpoint(e.from.blockId, e.from.slotId, 'output')),
-      };
-    }
+    const sources = incoming.map((e) => this.endpoint(e.from.blockId, e.from.slotId, 'output'));
+    // Build the connected branch only from a proven-non-empty list (head narrows the
+    // tuple type) — a `connected` feed with zero sources is unrepresentable. [LAW:types-are-the-program]
+    const [head, ...tail] = sources;
+    if (head) return { kind: 'connected', sources: [head, ...tail] };
+
     const effective = this.effectiveDefaultSource(block, portId, inputDef);
     if (effective) {
       return { kind: 'default', label: formatDefaultSourceLabel(effective) };

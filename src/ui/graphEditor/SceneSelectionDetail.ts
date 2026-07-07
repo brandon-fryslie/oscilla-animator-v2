@@ -194,12 +194,10 @@ export class SceneSelectionDetail implements SelectionDetail {
     const incoming = this.store.patch.edges.filter(
       (e) => e.target === block.id && e.inputSlot === port.id,
     );
-    if (incoming.length > 0) {
-      return {
-        kind: 'connected',
-        sources: incoming.map((e) => this.endpoint(e.source, this.soleOutput(e.source))),
-      };
-    }
+    const sources = incoming.map((e) => this.endpoint(e.source, this.soleOutput(e.source)));
+    // A `connected` feed is built only from a proven-non-empty list. [LAW:types-are-the-program]
+    const [head, ...tail] = sources;
+    if (head) return { kind: 'connected', sources: [head, ...tail] };
     if (port.default.kind === 'configScalar') {
       const value = (block.config as Record<string, unknown>)[port.default.configKey];
       return { kind: 'default', label: `${port.default.configKey} = ${String(value)}` };

@@ -830,7 +830,15 @@ function isBoolean(v: unknown): v is boolean {
 function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (name: string) => { error?: string } }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(current);
-  useEffect(() => setDraft(current), [current]);
+  const [error, setError] = useState<string | null>(null);
+  // Reset the draft to the authoritative name whenever we (re)enter editing, so a
+  // rejected value never lingers as the starting point of the next edit.
+  useEffect(() => {
+    if (editing) {
+      setDraft(current);
+      setError(null);
+    }
+  }, [editing, current]);
 
   if (!editing) {
     return (
@@ -839,30 +847,52 @@ function NeutralNameEditor({ current, onCommit }: { current: string; onCommit: (
       </span>
     );
   }
+
+  // Commit: validate + surface the store's rejection inline; only leave edit mode on
+  // success, so an invalid/duplicate/empty rename is never silently swallowed.
+  // [LAW:no-silent-failure]
+  const commit = () => {
+    const name = draft.trim();
+    if (name.length === 0) {
+      setError('Name cannot be empty');
+      return;
+    }
+    const result = onCommit(name);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    setEditing(false);
+  };
+
   return (
-    <input
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        onCommit(draft);
-        setEditing(false);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        if (e.key === 'Escape') {
-          setDraft(current);
-          setEditing(false);
-        }
-      }}
-      style={{
-        fontSize: '18px',
-        fontWeight: 'bold',
-        background: colors.bgPanel,
-        color: colors.textPrimary,
-        border: `1px solid ${colors.border}`,
-        borderRadius: '4px',
-      }}
-    />
+    <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          if (error) setError(null);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') {
+            setError(null);
+            setEditing(false);
+          }
+        }}
+        style={{
+          fontSize: '18px',
+          fontWeight: 'bold',
+          background: colors.bgPanel,
+          color: colors.textPrimary,
+          border: `1px solid ${error ? colors.error : colors.border}`,
+          borderRadius: '4px',
+        }}
+      />
+      {error && <span style={{ fontSize: '11px', color: colors.error }}>{error}</span>}
+    </div>
   );
 }
