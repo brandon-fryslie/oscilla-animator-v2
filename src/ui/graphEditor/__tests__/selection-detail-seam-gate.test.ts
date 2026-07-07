@@ -38,7 +38,9 @@ const CONVERTED_CONSUMERS = ['components/BlockInspector.tsx', 'graphEditor/Selec
  */
 const FORBIDDEN_PATTERNS: readonly RegExp[] = [
   /\buseStores\b/,
-  /from\s+['"][^'"]*\/stores['"]/,
+  // Any import from the stores barrel OR a concrete store module (…/stores,
+  // …/stores/PatchStore, …/stores/PillarPatchStore, …). [LAW:single-enforcer]
+  /from\s+['"][^'"]*\/stores(\/[^'"]+)?['"]/,
   /\bgetAnyBlockDefinition\b/,
   /\bBLOCK_DEFS_BY_TYPE\b/,
   /\bFrontendResultStore\b/,

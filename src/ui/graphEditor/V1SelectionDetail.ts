@@ -403,7 +403,7 @@ export class V1SelectionDetail implements SelectionDetail {
         // field directly (not the UI helper) to keep this pure data provider free of
         // UI-module coupling. [LAW:one-source-of-truth] [LAW:one-way-deps]
         if (def.ui.inspector.paramEditors[key]?.kind === 'expression-editor') {
-          return { kind: 'expression', blockId: block.id, value: String(params[key] ?? '') };
+          return { kind: 'expression', id: key, blockId: block.id, value: String(params[key] ?? '') };
         }
         return {
           kind: 'control',
