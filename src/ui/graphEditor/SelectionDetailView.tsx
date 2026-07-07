@@ -600,7 +600,7 @@ function EndpointRow({ endpoint, navigate }: { endpoint: EndpointDetail; navigat
     >
       <div>
         <span style={{ color: colors.primary }}>{endpoint.blockLabel}</span>
-        <span style={{ color: colors.textSecondary }}>.{endpoint.portId}</span>
+        {endpoint.portId && <span style={{ color: colors.textSecondary }}>.{endpoint.portId}</span>}
       </div>
       {endpoint.typeDisplay && (
         <span

@@ -25,8 +25,6 @@ export const InspectorEdgeDebugProbe = observer(function InspectorEdgeDebugProbe
   label: string;
 }) {
   const { debug } = useStores();
-  const data = useDebugMiniView(edgeId, label);
-
   return (
     <div style={{ marginBottom: '12px' }}>
       <h4 style={{ margin: '0 0 6px', fontSize: '13px', color: colors.textSecondary }}>
@@ -35,14 +33,20 @@ export const InspectorEdgeDebugProbe = observer(function InspectorEdgeDebugProbe
           ({debug.enabled ? 'active' : 'disabled'})
         </span>
       </h4>
-      {debug.enabled &&
-        (data ? (
-          <DebugEdgeValueDisplay data={data} />
-        ) : (
-          <div style={{ padding: '8px', background: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textMuted }}>
-            No debug data available for this edge
-          </div>
-        ))}
+      {/* The polling hook lives in ActiveProbe, which MOUNTS only when debug is on —
+          a conditional mount, not a conditional hook — so the 250ms poll and history
+          tracking never start while debug is disabled. */}
+      {debug.enabled && <ActiveProbe edgeId={edgeId} label={label} />}
+    </div>
+  );
+});
+
+const ActiveProbe = observer(function ActiveProbe({ edgeId, label }: { edgeId: string; label: string }) {
+  const data = useDebugMiniView(edgeId, label);
+  if (data) return <DebugEdgeValueDisplay data={data} />;
+  return (
+    <div style={{ padding: '8px', background: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textMuted }}>
+      No debug data available for this edge
     </div>
   );
 });
