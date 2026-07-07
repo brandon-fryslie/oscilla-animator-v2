@@ -31,6 +31,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import { useStores } from '../../stores';
+import type { BlockId } from '../../types';
 import type { SceneRegistry } from '../../pillars/scene';
 import type { PillarPatch } from '../../pillars/types';
 import { layoutGraphLeftToRight } from './graphLayout';
@@ -117,7 +118,7 @@ function topologyKey(patch: PillarPatch): string {
 }
 
 const GraphInner: React.FC = observer(() => {
-  const { pillarPatch } = useStores();
+  const { pillarPatch, selection } = useStores();
   const { patch, registry } = pillarPatch;
   const { fitView } = useReactFlow();
 
@@ -212,16 +213,22 @@ const GraphInner: React.FC = observer(() => {
 
   // A fresh selection starts from the default perspective — clicking a block is "show
   // me this block's path following first branches", and rotation builds from there.
+  // The local selectedId drives the focus-path visualization; publishing to the
+  // shared SelectionStore in parallel lets the inspector panel populate this block's
+  // detail from the Graph tab too — the same neutral selection surface the Mature
+  // canvas writes. [LAW:one-source-of-truth]
   const selectNode: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedId(node.id);
     setChoices(DEFAULT_PERSPECTIVE);
+    selection.selectBlock(node.id as BlockId);
     wrapperRef.current?.focus();
-  }, []);
+  }, [selection]);
 
   const clearSelection = useCallback(() => {
     setSelectedId(null);
     setChoices(DEFAULT_PERSPECTIVE);
-  }, []);
+    selection.clearSelection();
+  }, [selection]);
 
   // Right-click rotates the perspective at a pivot to follow a different branch. The
   // selection holds; only the followed branch changes, so the lit path re-roots
@@ -245,9 +252,12 @@ const GraphInner: React.FC = observer(() => {
       if (direction === undefined) return;
       event.preventDefault();
       const next = stepChain(patch.edges, selectedId, direction, choices);
-      if (next !== null) setSelectedId(next);
+      if (next !== null) {
+        setSelectedId(next);
+        selection.selectBlock(next as BlockId);
+      }
     },
-    [selectedId, choices, patch.edges],
+    [selectedId, choices, patch.edges, selection],
   );
 
   return (
