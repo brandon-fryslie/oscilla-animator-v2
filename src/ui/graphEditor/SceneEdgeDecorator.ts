@@ -18,8 +18,7 @@
 
 import type { PillarPatchStore } from '../../stores/PillarPatchStore';
 import { traceRoute } from '../nativeEditor/modulationTable';
-import type { SceneConfigControl } from '../../pillars/scene';
-import type { UIControlHint } from '../../types';
+import { sceneControlToHint } from './scene-projection';
 import type { EdgeDecoration, EdgeDecorator, EdgeRef, DecorationParam } from './edge-decorations';
 
 /** Chip color for a pillar transform step. */
@@ -46,7 +45,7 @@ export class SceneEdgeDecorator implements EdgeDecorator {
           id: field.key,
           label: field.label,
           value: field.value,
-          hint: controlToHint(field.control),
+          hint: sceneControlToHint(field.control),
         }),
       ),
     }));
@@ -74,35 +73,5 @@ export class SceneEdgeDecorator implements EdgeDecorator {
       );
     }
     this.store.updateConfig(decorationId, paramId, value);
-  }
-}
-
-/**
- * Map a scene config control to the editor's neutral widget hint. The numeric and
- * boolean/color controls that transform blocks actually use map exactly; controls
- * that carry data the route projection does not surface (`select` options, asset
- * pickers) return undefined, so the neutral editor falls back to a value-directed
- * widget rather than inventing an empty picker — an explicit deferral, not a silent
- * gap. A new SceneConfigControl is a compile error here, forcing a decision.
- * [LAW:no-silent-failure]
- */
-function controlToHint(control: SceneConfigControl): UIControlHint | undefined {
-  switch (control) {
-    case 'number':
-      return { kind: 'float' };
-    case 'integer':
-      return { kind: 'int' };
-    case 'color':
-      return { kind: 'color' };
-    case 'toggle':
-      return { kind: 'boolean' };
-    case 'select':
-    case 'asset':
-    case 'colorList':
-      return undefined;
-    default: {
-      const _exhaustive: never = control;
-      throw new Error(`Unhandled SceneConfigControl: ${JSON.stringify(_exhaustive)}`);
-    }
   }
 }
