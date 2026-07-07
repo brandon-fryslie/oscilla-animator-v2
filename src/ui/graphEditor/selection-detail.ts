@@ -92,7 +92,7 @@ export interface EndpointDetail {
  * feed is `unconnected`, never a fabricated source. [LAW:dataflow-not-control-flow]
  */
 export type PortFeed =
-  | { readonly kind: 'connected'; readonly sources: readonly EndpointDetail[] }
+  | { readonly kind: 'connected'; readonly sources: readonly [EndpointDetail, ...(readonly EndpointDetail[])] }
   | { readonly kind: 'default'; readonly label: string }
   | { readonly kind: 'unconnected' };
 

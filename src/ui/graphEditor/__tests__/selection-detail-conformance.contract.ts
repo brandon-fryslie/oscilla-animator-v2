@@ -62,6 +62,9 @@ function assertBlockWellFormed(block: BlockDetail, label: string): void {
       expect(field.control.id.length, `${label}: config control has an id`).toBeGreaterThan(0);
     } else {
       expect(field.blockId.length, `${label}: expression field has a block id`).toBeGreaterThan(0);
+      // `InspectorExpressionField` requires a string body; a provider that omits it
+      // ships a field that renders wrong, so the contract must reject it here.
+      expect(typeof field.value, `${label}: expression field has a string value`).toBe('string');
     }
   }
 }
