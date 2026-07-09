@@ -8,6 +8,10 @@ export default defineConfig({
       './src/__tests__/setup-blocks.ts',
       './src/ui/components/__tests__/setup.ts',
     ],
+    // @mui/x-data-grid ships a bare `.css` side-effect import in its ESM entry.
+    // Inlining routes it through Vite's transform (which handles CSS) instead of
+    // Node's ESM loader, which rejects `.css` with "Unknown file extension".
+    server: { deps: { inline: ['@mui/x-data-grid'] } },
     // Pass --expose-gc to worker threads for memory profiling tests
     pool: 'forks',
     poolOptions: {

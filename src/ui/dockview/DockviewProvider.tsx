@@ -14,8 +14,7 @@ import {
   type DockviewWillShowOverlayLocationEvent,
 } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
-import { PANEL_COMPONENTS } from './panelRegistry';
-import { createDefaultLayout } from './defaultLayout';
+import type { EditorLayoutPolicy } from './editorLayoutPolicy';
 import type { EditorHandle } from '../editorCommon';
 import { DockviewRightHeaderActions } from './DockviewHeaderActions';
 import { clearStoredDockviewLayout, loadDockviewLayout, saveDockviewLayout } from './layoutPersistence';
@@ -34,6 +33,8 @@ export interface DockviewContextValue {
 export const DockviewContext = createContext<DockviewContextValue | null>(null);
 
 interface DockviewProviderProps {
+  /** The era's panel set, default layout, and persistence slot. [LAW:dataflow-not-control-flow] */
+  policy: EditorLayoutPolicy;
   children?: React.ReactNode;
   onReactFlowEditorReady?: (handle: EditorHandle) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement) => void;
@@ -42,10 +43,13 @@ interface DockviewProviderProps {
 }
 
 /**
- * DockviewProvider wraps the application layout with Dockview.
+ * DockviewProvider wraps the application layout with Dockview. The provider is
+ * model-agnostic SHELL (persistence, drag rules, header actions); the era-varying
+ * panel set and layout arrive as the `policy` value. [LAW:one-source-of-truth]
  * Provides access to the Dockview API via context.
  */
 export const DockviewProvider: React.FC<DockviewProviderProps> = ({
+  policy,
   onReactFlowEditorReady,
   onCanvasReady,
   onActivePanelChange,
@@ -66,24 +70,24 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
     (event: DockviewReadyEvent) => {
       setApi(event.api);
 
-      const savedLayout = loadDockviewLayout();
+      const savedLayout = loadDockviewLayout(policy.storageKey);
       if (savedLayout) {
         try {
           event.api.fromJSON(savedLayout);
         } catch {
           // [LAW:single-enforcer] persisted layout repair occurs at this initialization boundary.
-          clearStoredDockviewLayout();
-          createDefaultLayout(event.api);
+          clearStoredDockviewLayout(policy.storageKey);
+          policy.createLayout(event.api);
         }
       } else {
-        createDefaultLayout(event.api);
+        policy.createLayout(event.api);
       }
       applySidebarConstraints(event.api);
 
       // Notify parent that API is ready
       onApiReady?.(event.api);
     },
-    [onApiReady]
+    [onApiReady, policy]
   );
 
   const shouldBlockEdgeDrop = useCallback((event: DockviewWillDropEvent | DockviewWillShowOverlayLocationEvent): boolean => {
@@ -158,7 +162,7 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
       }
       saveTimeoutRef.current = window.setTimeout(() => {
         saveTimeoutRef.current = null;
-        saveDockviewLayout(api.toJSON());
+        saveDockviewLayout(policy.storageKey, api.toJSON());
       }, 120);
     };
 
@@ -176,14 +180,14 @@ export const DockviewProvider: React.FC<DockviewProviderProps> = ({
         saveTimeoutRef.current = null;
       }
     };
-  }, [api]);
+  }, [api, policy]);
 
   return (
     <DockviewContext.Provider value={{ api }}>
       <DockviewRuntimeCallbacksContext.Provider value={runtimeCallbacks}>
         <DockviewReact
           className="oscilla-dockview"
-          components={PANEL_COMPONENTS}
+          components={policy.components}
           rightHeaderActionsComponent={DockviewRightHeaderActions}
           onReady={handleReady}
           onWillDrop={handleWillDrop}

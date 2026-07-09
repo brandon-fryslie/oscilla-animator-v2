@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -23,14 +23,28 @@ import {
   resetDockviewLayout,
   toggleSidebar,
 } from '../../dockview/layoutActions';
-import { PANEL_MENU_ITEMS } from '../../dockview/panelRegistry';
+import type { EditorLayoutPolicy } from '../../dockview/editorLayoutPolicy';
 
 interface ToolbarProps {
   stats?: string;
   dockviewApi?: DockviewApi | null;
+  /** The active era's panel set — drives the Panels menu, reopen, and reset. */
+  policy: EditorLayoutPolicy;
+  /**
+   * Whether to surface the model-bound Patch menu (New/Export/Reset). The pillar
+   * era omits it — its patch operations are owned elsewhere (scene-export, etc.),
+   * so a menu that clears the V1 store would lie. Absent-as-absent, not a broken
+   * no-op. [LAW:no-silent-failure] Parallel to PanelDefinition.initiallyHidden.
+   */
+  patchMenuEnabled?: boolean;
 }
 
-export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', dockviewApi }) => {
+export const Toolbar: React.FC<ToolbarProps> = observer(({
+  stats = 'FPS: --',
+  dockviewApi,
+  policy,
+  patchMenuEnabled = true,
+}) => {
   const camera = useStore('camera');
   const patch = useStore('patch');
   const diagnostics = useStore('diagnostics');
@@ -42,7 +56,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
   const [toastMessage, setToastMessage] = useState('');
   const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
-  const panelMenuItems = useMemo(() => PANEL_MENU_ITEMS, []);
+  const panelMenuItems = policy.menuItems;
 
   const handleExport = async () => {
     const result = await exportPatch();
@@ -117,7 +131,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         </Menu.Item>
         <Menu.Divider />
         <Menu.Item
-          onClick={() => dockviewApi && resetDockviewLayout(dockviewApi)}
+          onClick={() => dockviewApi && resetDockviewLayout(dockviewApi, policy)}
           disabled={!dockviewApi}
         >
           Reset Layout
@@ -135,7 +149,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         {panelMenuItems.map((panel) => (
           <Menu.Item
             key={panel.id}
-            onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, panel.id)}
+            onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, policy, panel.id)}
             disabled={!dockviewApi}
           >
             {panel.title}
@@ -151,12 +165,16 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         <Button variant="subtle" color="gray" size="xs">Menu</Button>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>Patch</Menu.Label>
-        <Menu.Item onClick={handleNewPatch}>New Patch</Menu.Item>
-        <Menu.Item onClick={handleExport}>Export Patch</Menu.Item>
-        <Menu.Item onClick={handleCopyBoundaryFixtureJson}>Copy Boundary Fixture JSON</Menu.Item>
-        <Menu.Item onClick={clearStorageAndReload}>Reset Storage</Menu.Item>
-        <Menu.Divider />
+        {patchMenuEnabled && (
+          <>
+            <Menu.Label>Patch</Menu.Label>
+            <Menu.Item onClick={handleNewPatch}>New Patch</Menu.Item>
+            <Menu.Item onClick={handleExport}>Export Patch</Menu.Item>
+            <Menu.Item onClick={handleCopyBoundaryFixtureJson}>Copy Boundary Fixture JSON</Menu.Item>
+            <Menu.Item onClick={clearStorageAndReload}>Reset Storage</Menu.Item>
+            <Menu.Divider />
+          </>
+        )}
         <Menu.Label>Layout</Menu.Label>
         <Menu.Item onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'left')} disabled={!dockviewApi}>
           Toggle Left Sidebar
@@ -164,7 +182,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         <Menu.Item onClick={() => dockviewApi && toggleSidebar(dockviewApi, 'right')} disabled={!dockviewApi}>
           Toggle Right Sidebar
         </Menu.Item>
-        <Menu.Item onClick={() => dockviewApi && resetDockviewLayout(dockviewApi)} disabled={!dockviewApi}>
+        <Menu.Item onClick={() => dockviewApi && resetDockviewLayout(dockviewApi, policy)} disabled={!dockviewApi}>
           Reset Layout
         </Menu.Item>
         <Menu.Divider />
@@ -172,7 +190,7 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
         {panelMenuItems.map((panel) => (
           <Menu.Item
             key={panel.id}
-            onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, panel.id)}
+            onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, policy, panel.id)}
             disabled={!dockviewApi}
           >
             {panel.title}
@@ -250,22 +268,29 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({ stats = 'FPS: --', do
               )}
             </Group>
 
-            <Button
-              variant="gradient"
-              gradient={{ from: 'violet', to: 'grape', deg: 90 }}
-              color="gray"
-              size="xs"
-              onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, 'left-sidebar')}
-              disabled={!dockviewApi}
-            >
-              Demos
-            </Button>
+            {/* [LAW:one-source-of-truth] The Demos button opens the left-sidebar
+                demo browser, which only an era registering that panel has. Deriving
+                its presence from the panel set means it can never offer to open a
+                panel the era lacks — the scene era omits it rather than rendering a
+                button that silently no-ops. [LAW:no-silent-failure] */}
+            {policy.components['left-sidebar'] && (
+              <Button
+                variant="gradient"
+                gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+                color="gray"
+                size="xs"
+                onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, policy, 'left-sidebar')}
+                disabled={!dockviewApi}
+              >
+                Demos
+              </Button>
+            )}
 
             {isMobile ? (
               mobileActionsMenu
             ) : (
               <>
-                {patchMenu}
+                {patchMenuEnabled && patchMenu}
                 {layoutMenu}
                 {panelsMenu}
                 <Button

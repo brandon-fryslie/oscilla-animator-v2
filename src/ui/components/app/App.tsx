@@ -13,25 +13,14 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { MantineProvider, createTheme as createMantineTheme, virtualColor } from '@mantine/core';
 import '@mantine/core/styles.css';
-import { Toolbar } from './Toolbar';
-import { EditorProvider, type EditorHandle, useEditor } from '../../editorCommon';
 import { BlockCatalogProvider } from '../../graphEditor/BlockCatalogContext';
-import { v1BlockCatalog } from '../../graphEditor/V1BlockCatalog';
-import { sceneBlockCatalog } from '../../graphEditor/SceneBlockCatalog';
 import { SelectionDetailProvider } from '../../graphEditor/SelectionDetailContext';
-import { V1SelectionDetail } from '../../graphEditor/V1SelectionDetail';
-import { SceneSelectionDetail } from '../../graphEditor/SceneSelectionDetail';
-import { DockviewProvider } from '../../dockview';
-import type { DockviewApi } from 'dockview';
-import { useGlobalHotkeys, type HotkeyFeedback } from '../../hotkeys';
-import { Toast } from '../common/Toast';
 import { useStores, type RootStore } from '../../../stores';
 import type { ExternalWriteBus } from '../../../runtime/ExternalChannel';
 import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
-import { useShowPreview, isNativeEditorSelection } from '../../../testing/test-params';
+import { useShowPreview, resolveBootSelection } from '../../../testing/test-params';
 import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
-import { NativeEditorLayout } from '../../nativeEditor';
-import { EngineDebugOverlay } from './EngineDebugOverlay';
+import { resolveEditorEra } from './editorEra';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -120,26 +109,19 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSinkReady, externalWriteBus }) => {
   const showPreview = useShowPreview();
-  // [LAW:single-enforcer] The native editor is the default boot surface; both
-  //   this layout choice and the runtime dispatch read the same resolved boot
-  //   selection, so the UI chrome and the render path can never disagree.
-  const nativeEditor = isNativeEditorSelection();
   const [stats, setStats] = useState('FPS: --');
 
   // Get store from context and expose to non-React code via callback
   const rootStore = useStores();
 
-  // The era's SelectionDetail provider for the inspector panels — constructed once
-  // over the boot's stores, provided at the boot shell (the level BlockCatalog sits
-  // at) so the dockview inspector panels reach it. [LAW:one-source-of-truth]
-  const v1SelectionDetail = useMemo(
-    () => new V1SelectionDetail(rootStore.patch, rootStore.frontend),
-    [rootStore],
-  );
-  const sceneSelectionDetail = useMemo(
-    () => new SceneSelectionDetail(rootStore.pillarPatch),
-    [rootStore],
-  );
+  // [LAW:dataflow-not-control-flow] The era is one value resolved from the boot
+  //   selection; App reads it and mounts `era.Shell`. Both the block catalog and
+  //   the inspector's SelectionDetail come from that same value, provided once at
+  //   this boot shell (the level the dockview inspector panels reach). The runtime
+  //   dispatch reads the same BootSelection, so chrome and render path never
+  //   disagree. [LAW:one-source-of-truth]
+  const era = useMemo(() => resolveEditorEra(resolveBootSelection()), []);
+  const selectionDetail = useMemo(() => era.makeSelectionDetail(rootStore), [era, rootStore]);
 
   // Notify main.ts when store is available (once on mount)
   const storeReadyRef = useRef(false);
@@ -149,24 +131,6 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
       onStoreReady(rootStore);
     }
   }, [rootStore, onStoreReady]);
-
-  // Store handle for React Flow editor
-  const reactFlowHandleRef = useRef<EditorHandle | null>(null);
-  const editorContextRef = useRef<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>(null);
-  const [activeEditorTab, setActiveEditorTab] = useState<'flow-editor' | 'composite-editor' | null>('flow-editor');
-  const [editorReady, setEditorReady] = useState(false);
-  const [editorContextReady, setEditorContextReady] = useState(false);
-  const handleEditorContextReady = useCallback((ready: boolean) => {
-    setEditorContextReady(ready);
-  }, []);
-
-  // Dockview API for toolbar panel focus
-  const [dockviewApi, setDockviewApi] = useState<DockviewApi | null>(null);
-
-  // Toast state for keyboard shortcuts
-  const [toastOpen, setToastOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastSeverity, setToastSeverity] = useState<'success' | 'error'>('success');
 
   // Initialize ref with prop value so it's available immediately on first render
   const canvasCallbackRef = useRef<((canvas: HTMLCanvasElement) => void) | undefined>(onCanvasReady);
@@ -190,46 +154,7 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
     };
   }, [onStatsSinkReady]);
 
-  // Handle editor ready callback
-  const handleReactFlowEditorReady = useCallback((adapter: EditorHandle) => {
-    reactFlowHandleRef.current = adapter;
-    setEditorReady(true);
-    if (activeEditorTab === 'flow-editor') {
-      editorContextRef.current?.setEditorHandle(adapter);
-    }
-  }, [activeEditorTab]);
-
-  // Handle Dockview panel activation to update active editor
-  const handleActivePanelChange = useCallback((panelId: string | undefined) => {
-    if (panelId === 'flow-editor') {
-      setActiveEditorTab('flow-editor');
-    } else if (panelId === 'composite-editor') {
-      // CompositeEditor manages its own EditorHandle via useEditor()
-      setActiveEditorTab('composite-editor');
-    }
-  }, []);
-
-  // Update EditorContext when active editor changes or editor becomes ready
-  useEffect(() => {
-    if (!editorContextReady || !editorContextRef.current) return;
-
-    if (activeEditorTab === 'flow-editor' && editorReady) {
-      editorContextRef.current.setEditorHandle(reactFlowHandleRef.current);
-    } else if (activeEditorTab === 'composite-editor') {
-      // CompositeEditor sets its own handle - don't interfere
-    }
-  }, [activeEditorTab, editorReady, editorContextReady]);
-
-  // Global hotkey feedback handler
-  const handleHotkeyFeedback = useCallback((feedback: HotkeyFeedback) => {
-    setToastMessage(feedback.message);
-    setToastSeverity(feedback.severity);
-    setToastOpen(true);
-  }, []);
-
-  const handleToastClose = () => {
-    setToastOpen(false);
-  };
+  const Shell = era.Shell;
 
   return (
     <MantineProvider theme={mantineTheme} defaultColorScheme="dark">
@@ -237,91 +162,14 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
         {showPreview ? (
           /* Test automation: full-viewport canvas or errors, zero chrome */
           <TestPreviewPanel onCanvasReady={handleCanvasReady} />
-        ) : nativeEditor ? (
-          /* Native ScenePlan editor: authoring surface + live Three preview */
-          <BlockCatalogProvider catalog={sceneBlockCatalog}>
-            <SelectionDetailProvider detail={sceneSelectionDetail}>
-              <NativeEditorLayout onCanvasReady={handleCanvasReady} />
-            </SelectionDetailProvider>
-          </BlockCatalogProvider>
         ) : (
-          <BlockCatalogProvider catalog={v1BlockCatalog}>
-          <SelectionDetailProvider detail={v1SelectionDetail}>
-          <EditorProvider>
-          {/* Capture EditorContext methods */}
-          <EditorContextCapture
-            contextRef={editorContextRef}
-            onReady={handleEditorContextReady}
-          />
-          <GlobalHotkeys onFeedback={handleHotkeyFeedback} />
-
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100vh',
-              overflow: 'hidden',
-              background: '#1a1a2e',
-              color: '#eee',
-              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-            }}
-          >
-            <Toolbar stats={stats} dockviewApi={dockviewApi} />
-
-            {/* Dockview workspace - all panels managed by Dockview */}
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <DockviewProvider
-                onReactFlowEditorReady={handleReactFlowEditorReady}
-                onCanvasReady={handleCanvasReady}
-                onActivePanelChange={handleActivePanelChange}
-                onApiReady={setDockviewApi}
-              />
-            </div>
-          </div>
-
-          {/* Toast for keyboard shortcut feedback */}
-          <Toast
-            open={toastOpen}
-            message={toastMessage}
-            severity={toastSeverity}
-            onClose={handleToastClose}
-          />
-          <EngineDebugOverlay />
-        </EditorProvider>
-          </SelectionDetailProvider>
+          <BlockCatalogProvider catalog={era.blockCatalog}>
+            <SelectionDetailProvider detail={selectionDetail}>
+              <Shell stats={stats} onCanvasReady={handleCanvasReady} />
+            </SelectionDetailProvider>
           </BlockCatalogProvider>
         )}
       </ExternalWriteBusContext.Provider>
     </MantineProvider>
   );
-};
-
-/**
- * Registers global hotkeys. Must be inside EditorProvider.
- */
-const GlobalHotkeys: React.FC<{ onFeedback: (feedback: HotkeyFeedback) => void }> = ({ onFeedback }) => {
-  useGlobalHotkeys({ onFeedback });
-  return null;
-};
-
-/**
- * Helper component to capture EditorContext methods.
- */
-const EditorContextCapture: React.FC<{
-  contextRef: React.MutableRefObject<{ setEditorHandle: (handle: EditorHandle | null) => void } | null>;
-  onReady?: (ready: boolean) => void;
-}> = ({ contextRef, onReady }) => {
-  const { setEditorHandle } = useEditor();
-
-  useEffect(() => {
-    // [LAW:single-enforcer] App-level editor handle wiring is enforced at this context bridge.
-    contextRef.current = { setEditorHandle };
-    onReady?.(true);
-    return () => {
-      contextRef.current = null;
-      onReady?.(false);
-    };
-  }, [contextRef, onReady, setEditorHandle]);
-
-  return null;
 };
