@@ -180,4 +180,41 @@ describe('graph-clipboard: multi-block copy/paste round-trips per provider', () 
     expect(() => pasteClipboard(adapter, clip, { dx: 0, dy: 0 })).toThrow('boom');
     expect(live.size, 'the block added before the throw was rolled back').toBe(0);
   });
+
+  it('a paste whose addEdge throws rolls back every already-added block', () => {
+    // The other cleanup shape: all blocks add successfully, then wiring throws.
+    // Rollback must remove the blocks that already exist in the graph.
+    const live = new Map<string, BlockLike>();
+    let n = 0;
+    const adapter: GraphDataAdapter<string> = {
+      blocks: live,
+      edges: [],
+      addBlock(type) {
+        n += 1;
+        const id = `n${n}`;
+        live.set(id, {
+          id, type, typeLabel: type, displayName: id, params: {},
+          inputPorts: new Map(), outputPorts: new Map([['out', { id: 'out', label: 'out' }]]),
+          controls: [],
+        });
+        return id;
+      },
+      removeBlock(id) { live.delete(id); },
+      getBlockPosition: () => ({ x: 0, y: 0 }),
+      setBlockPosition() {},
+      addEdge() { throw new Error('bad wire'); },
+      removeEdge() {},
+    };
+
+    const clip: GraphClipboard = {
+      blocks: [
+        { localId: 'a', type: 'Const', params: {}, position: { x: 0, y: 0 } },
+        { localId: 'b', type: 'Const', params: {}, position: { x: 0, y: 0 } },
+      ],
+      edges: [{ sourceLocalId: 'a', sourcePortId: 'out', targetLocalId: 'b', targetPortId: 'in' }],
+    };
+
+    expect(() => pasteClipboard(adapter, clip, { dx: 0, dy: 0 })).toThrow('bad wire');
+    expect(live.size, 'all blocks added before the wiring throw were rolled back').toBe(0);
+  });
 });
