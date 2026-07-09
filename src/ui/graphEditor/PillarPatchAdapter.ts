@@ -13,7 +13,7 @@
  */
 
 import { makeObservable, computed, observable, runInAction } from 'mobx';
-import type { PillarPatchStore } from '../../stores/PillarPatchStore';
+import type { PillarPatchStore, PillarPatchState } from '../../stores/PillarPatchStore';
 import type { PillarBlock } from '../../pillars/types/graph';
 import type { SceneCatalogMetadata } from '../../pillars/scene/scene-block';
 import type {
@@ -23,19 +23,34 @@ import type {
   InputPortLike,
   OutputPortLike,
 } from './types';
+import type {
+  GraphSnapshotSource,
+  GraphHistorySnapshot,
+} from '../../stores/GraphHistoryStore';
 import { sceneTypeDisplay } from './scene-projection';
+
+/** Pillar authored state the undo history captures: store state plus editor layout. */
+interface PillarHistoryState {
+  readonly store: PillarPatchState;
+  readonly positions: ReadonlyMap<string, { x: number; y: number }>;
+}
 
 /**
  * Adapter exposing PillarPatchStore through the neutral GraphDataAdapter.
  */
-export class PillarPatchAdapter implements GraphDataAdapter<string> {
+export class PillarPatchAdapter implements GraphDataAdapter<string>, GraphSnapshotSource {
   /** Editor layout positions (PillarPatchStore stores none). */
   private readonly positions = observable.map<string, { x: number; y: number }>();
 
+  /** Counter bumped on layout changes; the history token folds it with the store's. */
+  private positionsRevision = 0;
+
   constructor(private readonly store: PillarPatchStore) {
-    makeObservable(this, {
+    makeObservable<PillarPatchAdapter, 'positionsRevision'>(this, {
       blocks: computed,
       edges: computed,
+      positionsRevision: observable,
+      historyToken: computed,
     });
   }
 
@@ -81,6 +96,7 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
     runInAction(() => {
       id = this.store.addBlock(type);
       this.positions.set(id, position);
+      this.positionsRevision++;
     });
     return id;
   }
@@ -89,6 +105,7 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
     runInAction(() => {
       this.store.removeBlock(id);
       this.positions.delete(id);
+      this.positionsRevision++;
     });
   }
 
@@ -106,7 +123,13 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
 
   setBlockPosition(id: string, position: { x: number; y: number }): void {
     runInAction(() => {
+      // Bump the layout revision only on a real coordinate change, so a re-set to the
+      // same spot (or a bulk layout pass over unchanged nodes) mints no spurious undo
+      // checkpoint — mirroring LayoutStore.setPosition. [LAW:dataflow-not-control-flow]
+      const prev = this.positions.get(id);
+      if (prev && prev.x === position.x && prev.y === position.y) return;
       this.positions.set(id, position);
+      this.positionsRevision++;
     });
   }
 
@@ -132,6 +155,36 @@ export class PillarPatchAdapter implements GraphDataAdapter<string> {
       for (const [key, value] of Object.entries(params)) {
         this.store.updateConfig(id, key, value);
       }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // GraphSnapshotSource (undo/redo)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Structural change-token folding the store's authored revision with layout. Moves
+   * on any edit through any write-path (canvas, modulation table, inspector) — never
+   * on the derived ScenePlan recompute. [LAW:one-source-of-truth]
+   */
+  get historyToken(): { store: number; layout: number } {
+    return { store: this.store.revision, layout: this.positionsRevision };
+  }
+
+  captureHistorySnapshot(): GraphHistorySnapshot {
+    const state: PillarHistoryState = {
+      store: this.store.captureState(),
+      positions: new Map(this.positions),
+    };
+    return state as unknown as GraphHistorySnapshot;
+  }
+
+  restoreHistorySnapshot(snapshot: GraphHistorySnapshot): void {
+    const state = snapshot as unknown as PillarHistoryState;
+    runInAction(() => {
+      this.store.restoreState(state.store);
+      this.positions.replace(new Map(state.positions));
+      this.positionsRevision++;
     });
   }
 

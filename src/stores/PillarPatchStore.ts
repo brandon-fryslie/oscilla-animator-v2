@@ -17,7 +17,7 @@
  *   data the runtime and UI read, not a branch this store takes.
  */
 
-import { makeAutoObservable, reaction } from 'mobx';
+import { makeAutoObservable, reaction, toJS } from 'mobx';
 
 import { makeGridOfSquaresPatch } from '../pillars/fixtures/grid-of-squares';
 import type { PillarBlock, PillarEdge, PillarPatch } from '../pillars/types';
@@ -37,6 +37,17 @@ import {
   type SceneValidation,
 } from '../pillars/scene';
 
+/**
+ * The full mutable authoring state of a PillarPatchStore, deep-cloned. Includes the
+ * id counter so a restore-then-edit can never remint an id a redo would reintroduce.
+ * Opaque to the undo history; captured and restored only by this store.
+ */
+export interface PillarPatchState {
+  readonly blocks: PillarBlock[];
+  readonly edges: PillarEdge[];
+  readonly idCounter: number;
+}
+
 export class PillarPatchStore {
   /** The scene block catalog the palette, inspector, and validation all read. */
   readonly registry: SceneRegistry = buildSceneRegistry(ALL_SCENE_BLOCKS);
@@ -44,6 +55,13 @@ export class PillarPatchStore {
   private blocks: PillarBlock[];
   private edges: PillarEdge[];
   private idCounter = 0;
+
+  /**
+   * Monotonic counter bumped on every authored mutation. The undo history keys its
+   * change-token on this, so a checkpoint fires on the edit itself and never on the
+   * derived `compiled`/`validation` recompute. [LAW:one-source-of-truth]
+   */
+  revision = 0;
 
   constructor(seed: PillarPatch = makeGridOfSquaresPatch()) {
     this.blocks = [...seed.blocks];
@@ -108,6 +126,7 @@ export class PillarPatchStore {
         config: defaultSceneConfig(def.catalog),
       },
     ];
+    this.revision++;
     return id;
   }
 
@@ -115,6 +134,7 @@ export class PillarPatchStore {
     this.blocks = this.blocks.filter((b) => b.id !== id);
     // Edges touching a removed block cannot resolve; drop them with the block.
     this.edges = this.edges.filter((e) => e.source !== id && e.target !== id);
+    this.revision++;
   }
 
   /**
@@ -126,6 +146,36 @@ export class PillarPatchStore {
     this.blocks = this.blocks.map((b) =>
       b.id === blockId ? { ...b, config: { ...b.config, [key]: value } } : b,
     );
+    this.revision++;
+  }
+
+  // ── History (undo/redo) ───────────────────────────────────────────────────
+
+  /**
+   * Capture the full authoring state as an independent deep copy, so later edits
+   * cannot mutate a held snapshot. [LAW:effects-at-boundaries]
+   */
+  captureState(): PillarPatchState {
+    // toJS strips the MobX observable wrappers to a plain, independent deep copy;
+    // later edits cannot mutate a held snapshot. [LAW:effects-at-boundaries]
+    return {
+      blocks: toJS(this.blocks),
+      edges: toJS(this.edges),
+      idCounter: this.idCounter,
+    };
+  }
+
+  /**
+   * Replace the authoring state with a previously-captured snapshot. Blocks/edges
+   * are copied again so the store never shares structure with the history stacks.
+   * The derived `compiled` ScenePlan recomputes and the live preview hot-swaps
+   * through the normal recompile — no special undo path. [LAW:one-source-of-truth]
+   */
+  restoreState(state: PillarPatchState): void {
+    this.blocks = structuredClone(state.blocks);
+    this.edges = structuredClone(state.edges);
+    this.idCounter = state.idCounter;
+    this.revision++;
   }
 
   // ── Edge operations ───────────────────────────────────────────────────────
@@ -159,11 +209,13 @@ export class PillarPatchStore {
       ),
       { id, source, target, inputSlot, role: edgeRoleForPort(port) },
     ];
+    this.revision++;
     return id;
   }
 
   removeEdge(id: string): void {
     this.edges = this.edges.filter((e) => e.id !== id);
+    this.revision++;
   }
 
   // ── Persistence ───────────────────────────────────────────────────────────

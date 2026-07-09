@@ -20,6 +20,7 @@ import { PillarPatchAdapter } from '../../../graphEditor/PillarPatchAdapter';
 import { SceneTypeOracle } from '../../../graphEditor/SceneTypeOracle';
 import { SceneEdgeDecorator } from '../../../graphEditor/SceneEdgeDecorator';
 import { GraphEditorCore } from '../../../graphEditor/GraphEditorCore';
+import { useGraphHistoryBinding } from '../../../graphEditor/useGraphHistoryBinding';
 
 export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() => {
   const { pillarPatch, selection } = useStores();
@@ -37,6 +38,9 @@ export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() 
   // Clamp) — the same chain the modulation table reads — so the canvas shows and
   // edits it as edge chips. [LAW:one-source-of-truth]
   const decorator = useMemo(() => new SceneEdgeDecorator(pillarPatch), [pillarPatch]);
+
+  // Undo/redo: bind this era's adapter as the single history authority's source.
+  useGraphHistoryBinding(adapter, pillarPatch);
 
   return (
     <div style={{ height: '100%', width: '100%' }}>

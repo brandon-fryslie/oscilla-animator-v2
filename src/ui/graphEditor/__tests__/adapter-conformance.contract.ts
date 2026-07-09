@@ -25,6 +25,7 @@
 import { reaction } from 'mobx';
 import { describe, expect, it } from 'vitest';
 import type { GraphDataAdapter } from '../types';
+import type { GraphSnapshotSource } from '../../../stores/GraphHistoryStore';
 
 /**
  * Everything a provider must supply to be run through the conformance contract.
@@ -51,6 +52,8 @@ export interface ConformanceCase<Id = string> {
     readonly params: boolean;
     /** `updateBlockDisplayName` present and writes through. */
     readonly displayName: boolean;
+    /** Implements GraphSnapshotSource: authored state captures and restores for undo. */
+    readonly history: boolean;
   };
 }
 
@@ -251,6 +254,29 @@ export function assertDisplayNameDelegates<Id>(c: ConformanceCase<Id>): void {
 }
 
 /**
+ * GraphSnapshotSource round-trips: a captured snapshot restores the exact authored
+ * state, and the history token moves on an edit so the history authority checkpoints.
+ * This is the undo contract stated once, independent of the GraphHistoryStore. [LAW:single-enforcer]
+ */
+export function assertHistorySnapshotRoundtrips<Id>(c: ConformanceCase<Id>): void {
+  const adapter = c.setup().newAdapter();
+  const source = adapter as unknown as GraphSnapshotSource;
+  expect(typeof source.captureHistorySnapshot, `${c.name}: declares captureHistorySnapshot`).toBe('function');
+  expect(typeof source.restoreHistorySnapshot, `${c.name}: declares restoreHistorySnapshot`).toBe('function');
+
+  const before = adapter.blocks.size;
+  const tokenBefore = source.historyToken;
+  const snapshot = source.captureHistorySnapshot();
+
+  adapter.addBlock(c.addableType, { x: 0, y: 0 });
+  expect(adapter.blocks.size, `${c.name}: edit grows the graph`).toBe(before + 1);
+  expect(source.historyToken, `${c.name}: history token moves on an edit`).not.toEqual(tokenBefore);
+
+  source.restoreHistorySnapshot(snapshot);
+  expect(adapter.blocks.size, `${c.name}: restore returns to the captured state`).toBe(before);
+}
+
+/**
  * Register the whole contract against one provider. A future 4th provider is
  * drop-in verifiable: build a ConformanceCase for it and call this.
  */
@@ -270,5 +296,8 @@ export function runConformanceSuite<Id>(c: ConformanceCase<Id>): void {
 
     const displayNameIt = c.capabilities.displayName ? it : it.skip;
     displayNameIt('updateBlockDisplayName writes through to the store', () => assertDisplayNameDelegates(c));
+
+    const historyIt = c.capabilities.history ? it : it.skip;
+    historyIt('history snapshot captures and restores authored state', () => assertHistorySnapshotRoundtrips(c));
   });
 }

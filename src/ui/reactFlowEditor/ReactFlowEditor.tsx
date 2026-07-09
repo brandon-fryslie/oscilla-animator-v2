@@ -24,6 +24,7 @@ import type { EditorHandle } from '../editorCommon';
 import { GraphEditorCore, type GraphEditorCoreHandle } from '../graphEditor/GraphEditorCore';
 import type { PortContextMenuRequest } from '../graphEditor/GraphEditorContext';
 import { PatchStoreAdapter } from '../graphEditor/PatchStoreAdapter';
+import { useGraphHistoryBinding } from '../graphEditor/useGraphHistoryBinding';
 import { V1TypeOracle } from '../graphEditor/V1TypeOracle';
 import { V1EdgeDecorator } from '../graphEditor/V1EdgeDecorator';
 import { BlockContextMenu } from './menus/BlockContextMenu';
@@ -140,6 +141,9 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
     () => new PatchStoreAdapter(patchStore, layoutStore, frontend),
     [patchStore, layoutStore, frontend]
   );
+
+  // Undo/redo: bind this era's adapter as the single history authority's source.
+  useGraphHistoryBinding(adapter, patchStore);
 
   // The V1 type authority for the wiring drag gate — wraps the same
   // frontend-resolved compatibility the editor validated with before the seam.

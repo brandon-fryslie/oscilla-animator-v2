@@ -7,7 +7,10 @@
 
 import { useCallback } from 'react';
 import { useHotkeys, type HotkeyItem } from '@mantine/hooks';
-import { HOTKEY_REGISTRY, type HotkeyAction } from './hotkeyRegistry';
+import { HOTKEY_REGISTRY, type HotkeyAction, type HistoryAction } from './hotkeyRegistry';
+
+/** The registry actions this V1 shell hook owns — everything except era-neutral history. */
+type GlobalHotkeyAction = Exclude<HotkeyAction, HistoryAction>;
 import { useStores } from '../../stores';
 import { useEditor } from '../editorCommon';
 import { useExportPatch } from '../hooks/useExportPatch';
@@ -34,7 +37,7 @@ export function useGlobalHotkeys(options: UseGlobalHotkeysOptions = {}): void {
     [onFeedback],
   );
 
-  const handlers: Record<HotkeyAction, (event: KeyboardEvent) => void> = {
+  const handlers: Record<GlobalHotkeyAction, (event: KeyboardEvent) => void> = {
     'export-patch': async () => {
       const result = await exportPatch();
       showFeedback(result.message, result.success ? 'success' : 'error');
@@ -82,8 +85,10 @@ export function useGlobalHotkeys(options: UseGlobalHotkeysOptions = {}): void {
     },
   };
 
+  // History (undo/redo) is era-neutral and owned by useHistoryHotkeys, mounted for
+  // both boots; bind only this shell's non-history actions. [LAW:single-enforcer]
   const hotkeyItems: HotkeyItem[] = (
-    Object.keys(HOTKEY_REGISTRY) as HotkeyAction[]
+    Object.keys(handlers) as GlobalHotkeyAction[]
   ).map((action) => [
     HOTKEY_REGISTRY[action].keys,
     handlers[action],
