@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveBootSelection, isNativeEditorSelection, validateV1OptIn } from '../test-params';
+import { resolveBootSelection, validateV1OptIn } from '../test-params';
 
 /**
  * The resolver is the single authority for boot-path selection. These tests pin
@@ -29,7 +29,6 @@ describe('resolveBootSelection', () => {
   it('defaults to the native editor when no relevant param is present', () => {
     setSearch('');
     expect(resolveBootSelection()).toEqual({ kind: 'native-editor' });
-    expect(isNativeEditorSelection()).toBe(true);
   });
 
   it('keeps the native editor default when unrelated params are present', () => {
@@ -40,7 +39,6 @@ describe('resolveBootSelection', () => {
   it('selects V1 when ?v1=true', () => {
     setSearch('?v1=true');
     expect(resolveBootSelection()).toEqual({ kind: 'v1-legacy' });
-    expect(isNativeEditorSelection()).toBe(false);
   });
 
   it('selects V1 when ?v1=1', () => {

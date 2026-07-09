@@ -129,14 +129,6 @@ export function resolveBootSelection(): BootSelection {
 }
 
 /**
- * Whether the current URL selects the live native editor surface — the UI-layout
- * projection of {@link resolveBootSelection} (native-editor chrome vs. V1 chrome).
- */
-export function isNativeEditorSelection(): boolean {
-  return resolveBootSelection().kind === 'native-editor';
-}
-
-/**
  * Validate ?v1= early (pre-React). Throws on invalid values — fast feedback for
  * the legacy opt-in. No-op if param is absent.
  */
