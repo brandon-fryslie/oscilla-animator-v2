@@ -268,16 +268,23 @@ export const Toolbar: React.FC<ToolbarProps> = observer(({
               )}
             </Group>
 
-            <Button
-              variant="gradient"
-              gradient={{ from: 'violet', to: 'grape', deg: 90 }}
-              color="gray"
-              size="xs"
-              onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, policy, 'left-sidebar')}
-              disabled={!dockviewApi}
-            >
-              Demos
-            </Button>
+            {/* [LAW:one-source-of-truth] The Demos button opens the left-sidebar
+                demo browser, which only an era registering that panel has. Deriving
+                its presence from the panel set means it can never offer to open a
+                panel the era lacks — the scene era omits it rather than rendering a
+                button that silently no-ops. [LAW:no-silent-failure] */}
+            {policy.components['left-sidebar'] && (
+              <Button
+                variant="gradient"
+                gradient={{ from: 'violet', to: 'grape', deg: 90 }}
+                color="gray"
+                size="xs"
+                onClick={() => dockviewApi && openOrFocusPanel(dockviewApi, policy, 'left-sidebar')}
+                disabled={!dockviewApi}
+              >
+                Demos
+              </Button>
+            )}
 
             {isMobile ? (
               mobileActionsMenu

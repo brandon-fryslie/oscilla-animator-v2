@@ -177,13 +177,14 @@ const sceneEra: EditorEra = {
 };
 
 /**
- * The default boot and the fixed-demo boot render the pillar patch; only the
- * explicit `?v1=true` opt-in selects the V1 era. This mirrors the runtime
- * dispatch in RuntimeService, which reads the same BootSelection. [LAW:one-source-of-truth]
+ * Only the default `native-editor` boot renders the pillar (scene) era; both the
+ * fixed-demo boot (`scene-plan-demo`) and the explicit `?v1=true` opt-in render
+ * the V1 era's chrome. This mirrors the runtime dispatch in RuntimeService, which
+ * reads the same BootSelection. [LAW:one-source-of-truth]
  *
- * Note: `scene-plan-demo` keeps the V1 shell it had before this convergence — it
- * is a fixed steel-thread demo whose editing chrome is the V1 editor; only the
- * live `native-editor` surface moves to the pillar shell here.
+ * The fixed-demo boot keeps the V1 shell it had before this convergence — it is a
+ * steel-thread demo whose editing chrome is the V1 editor; only the live
+ * `native-editor` surface moves to the pillar shell here.
  */
 export function resolveEditorEra(boot: BootSelection): EditorEra {
   return boot.kind === 'native-editor' ? sceneEra : v1Era;
