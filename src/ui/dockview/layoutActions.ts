@@ -1,6 +1,6 @@
 import type { DockviewApi, DockviewGroupPanel } from 'dockview';
-import { PANEL_DEFINITIONS } from './panelRegistry';
-import { createDefaultLayout } from './defaultLayout';
+import type { PanelDefinition } from './panelMetadata';
+import type { EditorLayoutPolicy } from './editorLayoutPolicy';
 import { clearStoredDockviewLayout } from './layoutPersistence';
 import { getRightSidebarTabForPanelRequest } from './rightSidebarTabConfig';
 import {
@@ -167,8 +167,12 @@ export function moveActivePanelToFloating(api: DockviewApi): boolean {
   return true;
 }
 
-function getReferenceGroup(api: DockviewApi, groupName: string): DockviewGroupPanel | undefined {
-  const peerDefinition = PANEL_DEFINITIONS.find((panel) => panel.group === groupName && api.getPanel(panel.id));
+function getReferenceGroup(
+  api: DockviewApi,
+  definitions: readonly PanelDefinition[],
+  groupName: string,
+): DockviewGroupPanel | undefined {
+  const peerDefinition = definitions.find((panel) => panel.group === groupName && api.getPanel(panel.id));
   const peerPanel = peerDefinition ? api.getPanel(peerDefinition.id) : undefined;
   return peerPanel?.group ?? api.activeGroup ?? api.groups[0];
 }
@@ -181,7 +185,11 @@ function getSidebarPanelIdForRequest(panelId: string): string | null {
   return SIDEBAR_PANEL_IDS[sidebar];
 }
 
-export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
+export function openOrFocusPanel(
+  api: DockviewApi,
+  policy: EditorLayoutPolicy,
+  panelId: string,
+): boolean {
   const sidebarPanelId = getSidebarPanelIdForRequest(panelId);
   if (sidebarPanelId) {
     const sidebar = getSidebarForPanel(sidebarPanelId)!;
@@ -197,7 +205,7 @@ export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
     return true;
   }
 
-  const definition = PANEL_DEFINITIONS.find((panel) => panel.id === panelId);
+  const definition = policy.definitions.find((panel) => panel.id === panelId);
   if (!definition) {
     return false;
   }
@@ -219,7 +227,7 @@ export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
     return true;
   }
 
-  const referenceGroup = getReferenceGroup(api, definition.group);
+  const referenceGroup = getReferenceGroup(api, policy.definitions, definition.group);
   api.addPanel({
     id: definition.id,
     component: definition.component,
@@ -235,10 +243,10 @@ export function openOrFocusPanel(api: DockviewApi, panelId: string): boolean {
   return true;
 }
 
-export function resetDockviewLayout(api: DockviewApi): void {
-  // [LAW:one-source-of-truth] default layout structure is owned by createDefaultLayout.
-  clearStoredDockviewLayout();
+export function resetDockviewLayout(api: DockviewApi, policy: EditorLayoutPolicy): void {
+  // [LAW:one-source-of-truth] default layout structure is owned by the era's policy.
+  clearStoredDockviewLayout(policy.storageKey);
   api.clear();
-  createDefaultLayout(api);
+  policy.createLayout(api);
   applySidebarConstraints(api);
 }
