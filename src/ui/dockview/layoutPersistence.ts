@@ -24,7 +24,13 @@ export function loadDockviewLayout(storageKey: string): SerializedDockview | nul
 
   try {
     return JSON.parse(raw) as SerializedDockview;
-  } catch {
+  } catch (err) {
+    // [LAW:no-silent-failure] A corrupt entry would otherwise be re-parsed and
+    // re-rejected on every load, silently forcing the default layout forever.
+    // Surface it and clear it so the next save writes a clean value — the same
+    // self-repair the DockviewProvider applies when `fromJSON` rejects a layout.
+    console.warn(`[dockview] discarding corrupt saved layout (${storageKey}):`, err);
+    clearStoredDockviewLayout(storageKey);
     return null;
   }
 }
@@ -38,8 +44,11 @@ export function saveDockviewLayout(storageKey: string, layout: SerializedDockvie
 
   try {
     storage.setItem(storageKey, JSON.stringify(layout));
-  } catch {
-    // Intentionally non-fatal (storage quota/restrictions).
+  } catch (err) {
+    // [LAW:no-silent-failure] Non-fatal (storage quota/restrictions), but the
+    // user's layout silently failing to persist deserves a signal rather than
+    // a discovery on the next reload.
+    console.warn(`[dockview] failed to persist layout (${storageKey}):`, err);
   }
 }
 

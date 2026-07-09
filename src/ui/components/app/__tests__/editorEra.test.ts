@@ -31,7 +31,9 @@ describe('resolveEditorEra', () => {
     // A scene-plan-demo is a fixed steel thread whose editing chrome is the V1
     // editor; only the live native-editor surface moves to the pillar shell.
     const boot: BootSelection = { kind: 'scene-plan-demo', planId: 'grid-of-squares' };
-    expect(resolveEditorEra(boot).id).toBe('v1');
+    const era = resolveEditorEra(boot);
+    expect(era.id).toBe('v1');
+    expect(era.blockCatalog).toBe(v1BlockCatalog);
   });
 });
 
