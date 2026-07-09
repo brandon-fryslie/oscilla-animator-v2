@@ -23,7 +23,7 @@ import { GraphEditorCore } from '../../../graphEditor/GraphEditorCore';
 import { useGraphHistoryBinding } from '../../../graphEditor/useGraphHistoryBinding';
 
 export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() => {
-  const { pillarPatch, selection } = useStores();
+  const { pillarPatch, selection, clipboard } = useStores();
 
   // PillarPatchAdapter seeds deterministic left→right positions, so the graph is
   // readable on first paint and GraphEditorCore's own fitView frames it.
@@ -44,7 +44,13 @@ export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() 
 
   return (
     <div style={{ height: '100%', width: '100%' }}>
-      <GraphEditorCore adapter={adapter} oracle={oracle} decorator={decorator} selection={selection} />
+      <GraphEditorCore
+        adapter={adapter}
+        oracle={oracle}
+        decorator={decorator}
+        selection={selection}
+        clipboard={clipboard}
+      />
     </div>
   );
 });
