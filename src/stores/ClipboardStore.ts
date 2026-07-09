@@ -12,10 +12,7 @@
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import type { GraphClipboard } from '../ui/graphEditor/graph-clipboard';
-
-/** Distance (graph units) each successive paste of one clipboard is nudged. */
-const PASTE_STEP = 32;
+import { PASTE_OFFSET_STEP, type GraphClipboard } from '../ui/graphEditor/graph-clipboard';
 
 export class ClipboardStore {
   /** The last-copied selection, or null when the clipboard is empty. */
@@ -44,7 +41,7 @@ export class ClipboardStore {
    * has actually succeeded, so a failed paste never skips a cascade step. [LAW:no-silent-failure]
    */
   pasteOffset(): { dx: number; dy: number } {
-    const step = PASTE_STEP * (this.pasteCount + 1);
+    const step = PASTE_OFFSET_STEP * (this.pasteCount + 1);
     return { dx: step, dy: step };
   }
 
