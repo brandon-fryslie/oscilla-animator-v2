@@ -503,7 +503,10 @@ export const GraphEditorCoreInner = observer(
 
       const handlePaste = useCallback(() => {
         if (!clipboard?.content) return;
-        const newIds = pasteClipboard(adapter, clipboard.content, clipboard.nextPasteOffset());
+        // Advance the cascade only AFTER a successful paste, so a throwing paste
+        // never skips an offset step. [LAW:no-silent-failure]
+        const newIds = pasteClipboard(adapter, clipboard.content, clipboard.pasteOffset());
+        clipboard.commitPaste();
         selectNodes(newIds);
       }, [clipboard, adapter, selectNodes]);
 
@@ -518,7 +521,11 @@ export const GraphEditorCoreInner = observer(
 
       const handleSelectAll = useCallback(() => {
         setNodes((current) => current.map((node) => ({ ...node, selected: true })));
-      }, [setNodes]);
+        // With everything selected there is no single inspector primary; clear the
+        // store's single-selection so it can't show a stale block that contradicts
+        // the "all selected" canvas. [LAW:one-source-of-truth]
+        selection?.selectBlock(null);
+      }, [setNodes, selection]);
 
       const handleDeselectAll = useCallback(() => {
         setNodes((current) => current.map((node) => ({ ...node, selected: false })));

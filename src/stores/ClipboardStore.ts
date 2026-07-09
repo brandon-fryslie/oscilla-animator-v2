@@ -38,11 +38,18 @@ export class ClipboardStore {
   }
 
   /**
-   * The uniform offset for the next paste, cascading so repeated pastes of the same
-   * clipboard step away from each other instead of stacking on one spot.
+   * The uniform offset the NEXT paste should use, cascading so repeated pastes of the
+   * same clipboard step away from each other instead of stacking on one spot. Pure —
+   * reading it advances nothing; the caller calls `commitPaste` only once the paste
+   * has actually succeeded, so a failed paste never skips a cascade step. [LAW:no-silent-failure]
    */
-  nextPasteOffset(): { dx: number; dy: number } {
+  pasteOffset(): { dx: number; dy: number } {
+    const step = PASTE_STEP * (this.pasteCount + 1);
+    return { dx: step, dy: step };
+  }
+
+  /** Advance the cascade after a successful paste. */
+  commitPaste(): void {
     this.pasteCount += 1;
-    return { dx: PASTE_STEP * this.pasteCount, dy: PASTE_STEP * this.pasteCount };
   }
 }
