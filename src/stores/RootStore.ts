@@ -373,6 +373,9 @@ export class RootStore {
     // Dispose PillarPatchStore persistence
     this.pillarPatch.stopPersistence();
 
+    // Dispose undo/redo history reaction
+    this.history.dispose();
+
     // Dispose DiagnosticHub
     this.diagnosticHub.dispose();
 

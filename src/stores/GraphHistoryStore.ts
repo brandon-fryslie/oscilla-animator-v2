@@ -73,14 +73,12 @@ export class GraphHistoryStore {
   private key: object | null = null;
   /** The current committed state — the checkpoint that would be pushed on next edit. */
   private baseline: GraphHistorySnapshot | null = null;
-  /** True while applying a restore, so the change-token reaction does not re-record it. */
-  private restoring = false;
   private disposeReaction: (() => void) | null = null;
 
   constructor() {
     makeObservable<
       GraphHistoryStore,
-      'past' | 'future' | 'onTokenChanged' | 'applyRestore'
+      'past' | 'future' | 'onTokenChanged' | 'applyRestore' | 'armReaction'
     >(this, {
       past: observable.shallow,
       future: observable.shallow,
@@ -88,10 +86,12 @@ export class GraphHistoryStore {
       canRedo: computed,
       bind: action,
       unbind: action,
+      dispose: action,
       undo: action,
       redo: action,
       onTokenChanged: action,
       applyRestore: action,
+      armReaction: action,
     });
   }
 
@@ -119,11 +119,7 @@ export class GraphHistoryStore {
 
     this.source = source;
     this.baseline = source.captureHistorySnapshot();
-    this.disposeReaction = reaction(
-      () => source.historyToken,
-      () => this.onTokenChanged(),
-      { equals: comparer.structural },
-    );
+    this.armReaction();
   }
 
   /**
@@ -137,6 +133,32 @@ export class GraphHistoryStore {
     this.disposeReaction = null;
     this.source = null;
     this.baseline = null;
+  }
+
+  /**
+   * Tear down for good (RootStore disposal / HMR): drop the reaction and detach the
+   * source so no watcher outlives the store. [LAW:no-ambient-temporal-coupling]
+   */
+  dispose(): void {
+    this.disposeReaction?.();
+    this.disposeReaction = null;
+    this.source = null;
+    this.baseline = null;
+  }
+
+  /** (Re)create the change-token reaction on the current source. */
+  private armReaction(): void {
+    this.disposeReaction?.();
+    const source = this.source;
+    if (source === null) {
+      this.disposeReaction = null;
+      return;
+    }
+    this.disposeReaction = reaction(
+      () => source.historyToken,
+      () => this.onTokenChanged(),
+      { equals: comparer.structural },
+    );
   }
 
   undo(): void {
@@ -161,14 +183,6 @@ export class GraphHistoryStore {
 
   /** A user edit landed in the model: the old baseline becomes history, redo is void. */
   private onTokenChanged(): void {
-    // MobX flushes this reaction at the end of the outermost action — for a restore
-    // that is AFTER undo()/redo() returns — so the flag cannot be reset synchronously
-    // around the restore. Instead the restore's own token change consumes it here, so
-    // exactly one post-restore change is swallowed and never recorded as a fresh edit.
-    if (this.restoring) {
-      this.restoring = false;
-      return;
-    }
     if (this.source === null || this.baseline === null) return;
     this.past.push(this.baseline);
     this.future = [];
@@ -176,15 +190,18 @@ export class GraphHistoryStore {
   }
 
   private applyRestore(snapshot: GraphHistorySnapshot): void {
-    // Every restore bumps the source's revision, so it produces exactly one token
-    // change for onTokenChanged to consume; the flag stays armed until then.
-    this.restoring = true;
+    // Suspend change observation across the restore so it is never seen as a fresh
+    // edit — no dependence on the restore happening to move the token, no flag that
+    // could stay armed and silently swallow the next real edit. Re-arm in `finally`
+    // on the current token so a throwing restore still leaves a live watcher.
+    // [LAW:no-ambient-temporal-coupling] [LAW:no-silent-failure]
+    this.disposeReaction?.();
+    this.disposeReaction = null;
     try {
       this.source!.restoreHistorySnapshot(snapshot);
       this.baseline = snapshot;
-    } catch (error) {
-      this.restoring = false;
-      throw error;
+    } finally {
+      this.armReaction();
     }
   }
 }

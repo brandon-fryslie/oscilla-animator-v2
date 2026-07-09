@@ -14,7 +14,8 @@ import { FrontendResultStore } from '../FrontendResultStore';
 import { LayoutStore } from '../LayoutStore';
 import { PatchStore } from '../PatchStore';
 import { PillarPatchStore } from '../PillarPatchStore';
-import { GraphHistoryStore } from '../GraphHistoryStore';
+import { makeAutoObservable } from 'mobx';
+import { GraphHistoryStore, type GraphHistorySnapshot, type GraphSnapshotSource } from '../GraphHistoryStore';
 import { PatchStoreAdapter } from '../../ui/graphEditor/PatchStoreAdapter';
 import { PillarPatchAdapter } from '../../ui/graphEditor/PillarPatchAdapter';
 import type { BlockId } from '../../types';
@@ -31,6 +32,38 @@ function makePillar() {
   const store = new PillarPatchStore();
   const adapter = new PillarPatchAdapter(store);
   return { store, adapter };
+}
+
+/**
+ * A minimal source whose `restoreHistorySnapshot` deliberately does NOT move the
+ * token — the pathological case the old `restoring`-flag design could not survive.
+ * `value` is the authored state; `token` is bumped only by `edit()`, never by restore.
+ */
+class TokenFrozenSource implements GraphSnapshotSource {
+  value = 0;
+  private token = 0;
+
+  constructor() {
+    makeAutoObservable(this);
+  }
+
+  get historyToken(): number {
+    return this.token;
+  }
+
+  edit(next: number): void {
+    this.value = next;
+    this.token++;
+  }
+
+  captureHistorySnapshot(): GraphHistorySnapshot {
+    return { value: this.value } as unknown as GraphHistorySnapshot;
+  }
+
+  restoreHistorySnapshot(snapshot: GraphHistorySnapshot): void {
+    // Intentionally leaves `token` unchanged, exercising the restore-doesn't-move-token path.
+    this.value = (snapshot as unknown as { value: number }).value;
+  }
 }
 
 describe('GraphHistoryStore', () => {
@@ -164,6 +197,35 @@ describe('GraphHistoryStore', () => {
 
     const pillar = makePillar();
     history.bind(pillar.adapter, pillar.store);
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('records the next edit even when a restore does not move the token', () => {
+    // Regression: the reaction is suspended across a restore and re-armed after, so
+    // there is no flag that could stay armed and swallow the following real edit.
+    const history = new GraphHistoryStore();
+    const source = new TokenFrozenSource();
+    history.bind(source, source);
+
+    source.edit(1);
+    expect(history.canUndo).toBe(true);
+    history.undo();
+    expect(source.value).toBe(0);
+
+    // The undo's restore left the token frozen; a fresh edit must still checkpoint.
+    source.edit(2);
+    expect(history.canUndo).toBe(true);
+    history.undo();
+    expect(source.value).toBe(0);
+  });
+
+  it('dispose stops observing further edits', () => {
+    const history = new GraphHistoryStore();
+    const source = new TokenFrozenSource();
+    history.bind(source, source);
+
+    history.dispose();
+    source.edit(1);
     expect(history.canUndo).toBe(false);
   });
 

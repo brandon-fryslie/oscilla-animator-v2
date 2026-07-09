@@ -123,6 +123,11 @@ export class PillarPatchAdapter implements GraphDataAdapter<string>, GraphSnapsh
 
   setBlockPosition(id: string, position: { x: number; y: number }): void {
     runInAction(() => {
+      // Bump the layout revision only on a real coordinate change, so a re-set to the
+      // same spot (or a bulk layout pass over unchanged nodes) mints no spurious undo
+      // checkpoint — mirroring LayoutStore.setPosition. [LAW:dataflow-not-control-flow]
+      const prev = this.positions.get(id);
+      if (prev && prev.x === position.x && prev.y === position.y) return;
       this.positions.set(id, position);
       this.positionsRevision++;
     });
