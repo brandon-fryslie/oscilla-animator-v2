@@ -18,6 +18,14 @@ import { runInAction, toJS } from 'mobx';
 import type { GraphDataAdapter } from './types';
 
 /**
+ * The distance (graph units) a re-minted block sits from its source — one step for a
+ * duplicate, N steps for the Nth cascading paste. The single home for this fact, so
+ * duplicate (GraphEditorCore) and the paste cascade (ClipboardStore) can't drift apart.
+ * [LAW:one-source-of-truth]
+ */
+export const PASTE_OFFSET_STEP = 32;
+
+/**
  * One block captured for the clipboard, in neutral vocabulary. `localId` is the
  * block's id at copy time; it is used only to re-link internal edges within this
  * payload and is never re-used as a graph id — paste re-mints fresh ids.

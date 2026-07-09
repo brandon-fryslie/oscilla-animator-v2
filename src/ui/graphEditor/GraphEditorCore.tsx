@@ -42,7 +42,7 @@ import {
   type PortContextMenuHandler,
 } from './GraphEditorContext';
 import { reconcileNodesFromAdapter, type UnifiedNodeData } from './nodeDataTransform';
-import { copyBlocks, pasteClipboard } from './graph-clipboard';
+import { copyBlocks, pasteClipboard, PASTE_OFFSET_STEP } from './graph-clipboard';
 import type { ClipboardStore } from '../../stores/ClipboardStore';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
@@ -154,9 +154,6 @@ export interface GraphEditorCoreHandle {
   zoomToFit(): Promise<void>;
   screenToFlowPosition(position: { x: number; y: number }): { x: number; y: number };
 }
-
-/** Offset a `duplicate` places its copies from the originals (graph units). */
-const DUPLICATE_OFFSET = 32;
 
 /**
  * True while focus is in a text field, so editor shortcuts (mod+C/V/D/A) cede to
@@ -515,7 +512,7 @@ export const GraphEditorCoreInner = observer(
         // so it works even where no clipboard store is wired. [LAW:composability]
         const clip = copyBlocks(adapter, selectedNodeIds());
         if (!clip) return;
-        const newIds = pasteClipboard(adapter, clip, { dx: DUPLICATE_OFFSET, dy: DUPLICATE_OFFSET });
+        const newIds = pasteClipboard(adapter, clip, { dx: PASTE_OFFSET_STEP, dy: PASTE_OFFSET_STEP });
         selectNodes(newIds);
       }, [adapter, selectedNodeIds, selectNodes]);
 
