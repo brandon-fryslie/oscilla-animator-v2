@@ -30,6 +30,7 @@ import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
 import { PillarPatchStore } from './PillarPatchStore';
 import { GraphHistoryStore } from './GraphHistoryStore';
+import { ClipboardStore } from './ClipboardStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 import {
@@ -152,6 +153,8 @@ export class RootStore {
   readonly pillarPatch: PillarPatchStore;
   // Single undo/redo authority; the active editor binds its adapter as the source.
   readonly history: GraphHistoryStore;
+  // The editor's one clipboard buffer, era-neutral; shared by both boots' canvases.
+  readonly clipboard: ClipboardStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -210,6 +213,9 @@ export class RootStore {
 
     // Single undo/redo authority (bound to the active editor's adapter at mount).
     this.history = new GraphHistoryStore();
+
+    // Era-neutral clipboard buffer, shared by every editor canvas.
+    this.clipboard = new ClipboardStore();
 
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();

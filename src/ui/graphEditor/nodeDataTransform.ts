@@ -254,7 +254,14 @@ export function reconcileNodesFromAdapter(
       ?? getBlockPosition(blockId)
       ?? { x: 100, y: 100 };
 
-    nodes.push(createNodeFromBlockLike(block, adapter.edges, adapter.blocks, position));
+    // Carry over the interactive selection flag: a data-only reconcile (an edit
+    // elsewhere, a frontend recompile bumping dataVersion) must not silently clear
+    // the user's multi-selection, which the clipboard/duplicate ops read from.
+    // [LAW:one-source-of-truth] ReactFlow owns the selection set; reconcile preserves it.
+    nodes.push({
+      ...createNodeFromBlockLike(block, adapter.edges, adapter.blocks, position),
+      selected: existingNode?.selected ?? false,
+    });
   }
 
   // Create edges, filtering invalid endpoints.
