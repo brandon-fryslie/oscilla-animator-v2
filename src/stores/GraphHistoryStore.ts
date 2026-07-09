@@ -141,16 +141,22 @@ export class GraphHistoryStore {
 
   undo(): void {
     if (this.source === null || this.baseline === null || this.past.length === 0) return;
-    const previous = this.past.pop() as GraphHistorySnapshot;
-    this.future.push(this.baseline);
+    // Peek, restore, THEN mutate the stacks: a throwing restore leaves past/future and
+    // baseline untouched rather than losing the popped entry. [LAW:no-silent-failure]
+    const oldBaseline = this.baseline;
+    const previous = this.past[this.past.length - 1];
     this.applyRestore(previous);
+    this.past.pop();
+    this.future.push(oldBaseline);
   }
 
   redo(): void {
     if (this.source === null || this.baseline === null || this.future.length === 0) return;
-    const next = this.future.pop() as GraphHistorySnapshot;
-    this.past.push(this.baseline);
+    const oldBaseline = this.baseline;
+    const next = this.future[this.future.length - 1];
     this.applyRestore(next);
+    this.future.pop();
+    this.past.push(oldBaseline);
   }
 
   /** A user edit landed in the model: the old baseline becomes history, redo is void. */

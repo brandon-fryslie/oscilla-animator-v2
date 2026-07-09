@@ -27,6 +27,7 @@ import {
   assertAddBlockReadableAndBranded,
   assertBlocksSelfDescribing,
   assertEdgesAnchorToRealHandles,
+  assertHistorySnapshotRoundtrips,
   assertMutationsDelegateToStore,
   assertReactivity,
   runConformanceSuite,
@@ -184,5 +185,11 @@ describe('conformance contract rejects a non-conforming adapter (negative contro
 
   it('rejects mutations that break MobX reactivity', () => {
     expect(() => assertReactivity(brokenCase)).toThrow();
+  });
+
+  it('rejects an adapter that lacks the history snapshot capability', () => {
+    // BrokenAdapter implements no GraphSnapshotSource, so the assertion's capability
+    // guard must fire — proving the history contract has teeth. [LAW:verifiable-goals]
+    expect(() => assertHistorySnapshotRoundtrips(brokenCase)).toThrow();
   });
 });
