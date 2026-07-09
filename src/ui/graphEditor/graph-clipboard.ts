@@ -115,8 +115,21 @@ export function pasteClipboard(
       });
       localToNew.set(block.localId, newId);
 
-      if (adapter.updateBlockParams && Object.keys(block.params).length > 0) {
-        adapter.updateBlockParams(newId, structuredClone(block.params));
+      const paramCount = Object.keys(block.params).length;
+      if (paramCount > 0) {
+        if (adapter.updateBlockParams) {
+          adapter.updateBlockParams(newId, structuredClone(block.params));
+        } else {
+          // The block carries params but this adapter can't set them; the paste
+          // cannot be faithful. Surface it loudly rather than dropping the data
+          // silently. (Both live adapters implement updateBlockParams, so this is
+          // a guard against a future param-less adapter being wired to clipboard.)
+          // [LAW:no-silent-failure]
+          console.warn(
+            `graph-clipboard: pasted '${block.type}' lost ${paramCount} param(s) — ` +
+              `this adapter has no updateBlockParams.`,
+          );
+        }
       }
       // Display name is intentionally NOT forced here: the store is the single
       // enforcer of name uniqueness, and a paste's authored name necessarily
