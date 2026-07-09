@@ -21,6 +21,7 @@ import { ExternalWriteBusContext } from '../../ExternalWriteBusContext';
 import { useShowPreview, resolveBootSelection } from '../../../testing/test-params';
 import { TestPreviewPanel } from '../../../testing/TestPreviewPanel';
 import { resolveEditorEra } from './editorEra';
+import { useHistoryHotkeys } from '../../hotkeys/useHistoryHotkeys';
 
 // Mantine dark theme configuration - gorgeous modern look
 const mantineTheme = createMantineTheme({
@@ -113,6 +114,10 @@ export const App: React.FC<AppProps> = ({ onCanvasReady, onStoreReady, onStatsSi
 
   // Get store from context and expose to non-React code via callback
   const rootStore = useStores();
+
+  // Era-neutral undo/redo, active in both boots (a no-op until an editor binds the
+  // history). The rest of the hotkeys are still wired per-shell. [LAW:single-enforcer]
+  useHistoryHotkeys();
 
   // [LAW:dataflow-not-control-flow] The era is one value resolved from the boot
   //   selection; App reads it and mounts `era.Shell`. Both the block catalog and
