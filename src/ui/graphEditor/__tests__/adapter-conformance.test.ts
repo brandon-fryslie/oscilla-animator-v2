@@ -40,7 +40,7 @@ import {
 const patchStoreCase: ConformanceCase<BlockId> = {
   name: 'PatchStoreAdapter',
   addableType: 'Const',
-  capabilities: { params: true, displayName: true },
+  capabilities: { params: true, displayName: true, history: true },
   setup() {
     const patchStore = new PatchStore();
     const layoutStore = new LayoutStore();
@@ -61,7 +61,7 @@ const patchStoreCase: ConformanceCase<BlockId> = {
 const compositeStoreCase: ConformanceCase<InternalBlockId> = {
   name: 'CompositeStoreAdapter',
   addableType: 'Noise',
-  capabilities: { params: false, displayName: false },
+  capabilities: { params: false, displayName: false, history: false },
   setup() {
     const store = new CompositeEditorStore();
 
@@ -76,7 +76,7 @@ const compositeStoreCase: ConformanceCase<InternalBlockId> = {
 const pillarPatchCase: ConformanceCase<string> = {
   name: 'PillarPatchAdapter',
   addableType: 'Constant',
-  capabilities: { params: true, displayName: false },
+  capabilities: { params: true, displayName: false, history: true },
   setup() {
     // PillarPatchStore self-seeds the grid-of-squares patch (3 blocks, 2 edges).
     const store = new PillarPatchStore();
@@ -159,7 +159,7 @@ class BrokenAdapter implements GraphDataAdapter<string> {
 const brokenCase: ConformanceCase<string> = {
   name: 'BrokenAdapter',
   addableType: 'X',
-  capabilities: { params: false, displayName: false },
+  capabilities: { params: false, displayName: false, history: false },
   setup() {
     return { newAdapter: () => new BrokenAdapter() };
   },

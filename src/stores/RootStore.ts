@@ -29,6 +29,7 @@ import { DemoStore } from './DemoStore';
 import { HelpStore } from './HelpStore';
 import { ExpressionEditorStore } from './ExpressionEditorStore';
 import { PillarPatchStore } from './PillarPatchStore';
+import { GraphHistoryStore } from './GraphHistoryStore';
 import { executeAction, type ActionResult } from '../diagnostics/actionExecutor';
 import type { DiagnosticAction } from '../diagnostics/types';
 import {
@@ -149,6 +150,8 @@ export class RootStore {
   readonly expressionEditor: ExpressionEditorStore;
   // The authored native (ScenePlan-path) patch — SSOT for the native graph editor.
   readonly pillarPatch: PillarPatchStore;
+  // Single undo/redo authority; the active editor binds its adapter as the source.
+  readonly history: GraphHistoryStore;
 
   // Patch revision tracking (for diagnostics)
   private patchRevision: number = 0;
@@ -204,6 +207,9 @@ export class RootStore {
 
     // Create LayoutStore (node positions - UI state, not topology)
     this.layout = new LayoutStore();
+
+    // Single undo/redo authority (bound to the active editor's adapter at mount).
+    this.history = new GraphHistoryStore();
 
     // Create CameraStore (3D preview state - viewer only)
     this.camera = new CameraStore();

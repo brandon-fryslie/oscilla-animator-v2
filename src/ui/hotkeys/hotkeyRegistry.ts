@@ -25,7 +25,16 @@ export type HotkeyAction =
   | 'toggle-play'
   | 'reset-time'
   | 'zoom-fit'
-  | 'delete-selected';
+  | 'delete-selected'
+  | HistoryAction;
+
+/**
+ * Era-neutral history actions, owned by useHistoryHotkeys (mounted for both boots),
+ * not by the V1-only useGlobalHotkeys. Split out so each hook binds exactly its own
+ * actions with no double-binding. [LAW:single-enforcer]
+ */
+export type HistoryAction = 'undo' | 'redo';
+export const HISTORY_ACTIONS: readonly HistoryAction[] = ['undo', 'redo'];
 
 export const HOTKEY_REGISTRY: Record<HotkeyAction, HotkeyEntry> = {
   'export-patch': {
@@ -56,6 +65,16 @@ export const HOTKEY_REGISTRY: Record<HotkeyAction, HotkeyEntry> = {
   'delete-selected': {
     keys: 'Backspace',
     description: 'Delete selected block/edge',
+    category: 'editor',
+  },
+  undo: {
+    keys: 'mod+Z',
+    description: 'Undo last graph edit',
+    category: 'editor',
+  },
+  redo: {
+    keys: 'mod+shift+Z',
+    description: 'Redo last undone graph edit',
     category: 'editor',
   },
 };

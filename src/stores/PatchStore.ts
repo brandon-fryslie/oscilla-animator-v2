@@ -426,6 +426,16 @@ export class PatchStore {
   // =============================================================================
 
   /**
+   * Monotonic revision bumped on every authored mutation to `_data` (structure,
+   * params, ports, lenses). Unlike the frontend's compile revision, this moves only
+   * on an actual edit — so the undo history can key its change-token on authored
+   * intent, never on derived compile churn. [LAW:one-source-of-truth]
+   */
+  get dataVersion(): number {
+    return this._dataVersion;
+  }
+
+  /**
    * Returns an immutable view of the patch.
    * This is the primary interface for reading patch data.
    *

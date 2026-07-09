@@ -14,9 +14,13 @@
 
 import { makeObservable, computed, runInAction } from 'mobx';
 import type { BlockId, UIControlHint, DefaultSource } from '../../types';
-import type { PatchStore } from '../../stores/PatchStore';
-import type { LayoutStore } from '../../stores/LayoutStore';
+import type { ImmutablePatch, PatchStore } from '../../stores/PatchStore';
+import type { LayoutStore, NodePosition } from '../../stores/LayoutStore';
 import type { FrontendResultStore } from '../../stores/FrontendResultStore';
+import type {
+  GraphSnapshotSource,
+  GraphHistorySnapshot,
+} from '../../stores/GraphHistoryStore';
 import type { Block, InputPort } from '../../graph/Patch';
 import { getAnyBlockDefinition, type AnyBlockDef, type InputDef } from '../../blocks/registry';
 import { canonicalType, FLOAT } from '../../core/canonical-types';
@@ -39,10 +43,16 @@ import type {
   PortDecoration,
 } from './types';
 
+/** V1 authored state the undo history captures: the patch plus editor layout. */
+interface PatchStoreHistoryState {
+  readonly patch: ImmutablePatch;
+  readonly positions: ReadonlyMap<BlockId, NodePosition>;
+}
+
 /**
  * Adapter that exposes PatchStore + LayoutStore through GraphDataAdapter.
  */
-export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
+export class PatchStoreAdapter implements GraphDataAdapter<BlockId>, GraphSnapshotSource {
   constructor(
     private readonly patchStore: PatchStore,
     private readonly layoutStore: LayoutStore,
@@ -52,6 +62,7 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
       blocks: computed,
       edges: computed,
       dataVersion: computed,
+      historyToken: computed,
     });
   }
 
@@ -138,6 +149,38 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId> {
 
   updateBlockDisplayName(id: BlockId, displayName: string): { error?: string } {
     return this.patchStore.updateBlockDisplayName(id, displayName);
+  }
+
+  // ---------------------------------------------------------------------------
+  // GraphSnapshotSource (undo/redo)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Structural change-token folding authored-patch and layout revisions. Moves only
+   * on an actual edit through ANY write-path (canvas, context menu, inspector,
+   * hotkey) — never on frontend compile churn. [LAW:one-source-of-truth]
+   */
+  get historyToken(): { patch: number; layout: number } {
+    return { patch: this.patchStore.dataVersion, layout: this.layoutStore.revision };
+  }
+
+  captureHistorySnapshot(): GraphHistorySnapshot {
+    // `patchStore.patch` is already a defensive, frozen clone per revision, so holding
+    // the reference is safe — later edits produce a fresh snapshot, never mutate this.
+    const state: PatchStoreHistoryState = {
+      patch: this.patchStore.patch,
+      positions: new Map(this.layoutStore.positions),
+    };
+    return state as unknown as GraphHistorySnapshot;
+  }
+
+  restoreHistorySnapshot(snapshot: GraphHistorySnapshot): void {
+    const state = snapshot as unknown as PatchStoreHistoryState;
+    runInAction(() => {
+      this.patchStore.loadPatch(state.patch);
+      this.layoutStore.clear();
+      this.layoutStore.setPositions(state.positions);
+    });
   }
 
   // ---------------------------------------------------------------------------

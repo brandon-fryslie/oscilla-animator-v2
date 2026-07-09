@@ -20,9 +20,18 @@ export interface NodePosition {
 export class LayoutStore {
   positions: Map<BlockId, NodePosition> = new Map();
 
+  /**
+   * Monotonic counter bumped on every position mutation. Layout is UI state the
+   * undo history must track, but it lives here rather than in the patch — so this
+   * counter is the cheap observable the history change-token folds in, letting a
+   * drag-end be one checkpoint without deep-observing the map. [LAW:one-source-of-truth]
+   */
+  revision = 0;
+
   constructor() {
     makeObservable(this, {
       positions: observable,
+      revision: observable,
       setPosition: action,
       setPositions: action,
       removePosition: action,
@@ -36,6 +45,7 @@ export class LayoutStore {
    */
   setPosition(blockId: BlockId, pos: NodePosition): void {
     this.positions.set(blockId, pos);
+    this.revision++;
   }
 
   /**
@@ -45,6 +55,7 @@ export class LayoutStore {
     for (const [id, pos] of map) {
       this.positions.set(id, pos);
     }
+    this.revision++;
   }
 
   /**
@@ -59,6 +70,7 @@ export class LayoutStore {
    */
   removePosition(blockId: BlockId): void {
     this.positions.delete(blockId);
+    this.revision++;
   }
 
   /**
@@ -71,6 +83,7 @@ export class LayoutStore {
         this.positions.delete(id);
       }
     }
+    this.revision++;
   }
 
   /**
@@ -78,5 +91,6 @@ export class LayoutStore {
    */
   clear(): void {
     this.positions.clear();
+    this.revision++;
   }
 }
