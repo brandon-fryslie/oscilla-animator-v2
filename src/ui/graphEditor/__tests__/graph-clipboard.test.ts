@@ -17,8 +17,8 @@ import { PillarPatchStore } from '../../../stores/PillarPatchStore';
 
 import { PatchStoreAdapter } from '../PatchStoreAdapter';
 import { PillarPatchAdapter } from '../PillarPatchAdapter';
-import type { GraphDataAdapter } from '../types';
-import { copyBlocks, pasteClipboard } from '../graph-clipboard';
+import type { BlockLike, GraphDataAdapter } from '../types';
+import { copyBlocks, pasteClipboard, type GraphClipboard } from '../graph-clipboard';
 
 // Each provider is read here through the neutral string-keyed seam (a branded
 // BlockId is the same value at runtime), so one assertion checks them all.
@@ -141,5 +141,43 @@ describe('graph-clipboard: multi-block copy/paste round-trips per provider', () 
     const adapter = patchStoreCase.newAdapter();
     expect(copyBlocks(adapter, [])).toBeNull();
     expect(copyBlocks(adapter, ['does-not-exist'])).toBeNull();
+  });
+
+  it('a paste that throws part-way rolls back, leaving no orphaned blocks', () => {
+    // An adapter whose addBlock throws on the 2nd call — the failure mode a mobx
+    // action does NOT roll back for us. Paste must compensate so nothing is left behind.
+    const live = new Map<string, BlockLike>();
+    let adds = 0;
+    const adapter: GraphDataAdapter<string> = {
+      blocks: live,
+      edges: [],
+      addBlock(type) {
+        adds += 1;
+        if (adds === 2) throw new Error('boom');
+        const id = `n${adds}`;
+        live.set(id, {
+          id, type, typeLabel: type, displayName: id, params: {},
+          inputPorts: new Map(), outputPorts: new Map([['out', { id: 'out', label: 'out' }]]),
+          controls: [],
+        });
+        return id;
+      },
+      removeBlock(id) { live.delete(id); },
+      getBlockPosition: () => ({ x: 0, y: 0 }),
+      setBlockPosition() {},
+      addEdge: () => 'e',
+      removeEdge() {},
+    };
+
+    const clip: GraphClipboard = {
+      blocks: [
+        { localId: 'a', type: 'Const', params: {}, position: { x: 0, y: 0 } },
+        { localId: 'b', type: 'Const', params: {}, position: { x: 0, y: 0 } },
+      ],
+      edges: [],
+    };
+
+    expect(() => pasteClipboard(adapter, clip, { dx: 0, dy: 0 })).toThrow('boom');
+    expect(live.size, 'the block added before the throw was rolled back').toBe(0);
   });
 });

@@ -25,7 +25,6 @@ import type { GraphDataAdapter } from './types';
 export interface ClipboardBlock {
   readonly localId: string;
   readonly type: string;
-  readonly displayName: string;
   readonly params: Record<string, unknown>;
   /** Absolute copy-time position; paste applies one uniform offset to all. */
   readonly position: { readonly x: number; readonly y: number };
@@ -67,7 +66,6 @@ export function copyBlocks(
     blocks.push({
       localId: id,
       type: block.type,
-      displayName: block.displayName,
       // toJS produces an independent plain-JS copy (block.params is a MobX observable),
       // so later edits to the live graph never mutate the payload. [LAW:effects-at-boundaries]
       params: toJS(block.params),
@@ -99,6 +97,10 @@ export function copyBlocks(
  *
  * The whole paste runs in ONE mobx action so it lands as a single authored-state
  * change — hence a single undo checkpoint, not one per block. [LAW:no-mode-explosion]
+ *
+ * Paste is all-or-nothing: a mobx action batches notifications but does NOT roll back
+ * on throw, so this compensates by hand — any block added before a failure is removed
+ * and the error is rethrown, leaving no orphaned, half-wired blocks. [LAW:no-silent-failure]
  */
 export function pasteClipboard(
   adapter: GraphDataAdapter,
@@ -107,48 +109,54 @@ export function pasteClipboard(
 ): string[] {
   return runInAction(() => {
     const localToNew = new Map<string, string>();
+    const added: string[] = [];
 
-    for (const block of clip.blocks) {
-      const newId = adapter.addBlock(block.type, {
-        x: block.position.x + offset.dx,
-        y: block.position.y + offset.dy,
-      });
-      localToNew.set(block.localId, newId);
+    try {
+      for (const block of clip.blocks) {
+        const newId = adapter.addBlock(block.type, {
+          x: block.position.x + offset.dx,
+          y: block.position.y + offset.dy,
+        });
+        added.push(newId);
+        localToNew.set(block.localId, newId);
 
-      const paramCount = Object.keys(block.params).length;
-      if (paramCount > 0) {
-        if (adapter.updateBlockParams) {
-          adapter.updateBlockParams(newId, structuredClone(block.params));
-        } else {
-          // The block carries params but this adapter can't set them; the paste
-          // cannot be faithful. Surface it loudly rather than dropping the data
-          // silently. (Both live adapters implement updateBlockParams, so this is
-          // a guard against a future param-less adapter being wired to clipboard.)
-          // [LAW:no-silent-failure]
-          console.warn(
-            `graph-clipboard: pasted '${block.type}' lost ${paramCount} param(s) — ` +
-              `this adapter has no updateBlockParams.`,
-          );
+        const paramCount = Object.keys(block.params).length;
+        if (paramCount > 0) {
+          if (adapter.updateBlockParams) {
+            adapter.updateBlockParams(newId, structuredClone(block.params));
+          } else {
+            // The block carries params but this adapter can't set them; the paste
+            // cannot be faithful. Surface it loudly rather than dropping the data
+            // silently. (Both live adapters implement updateBlockParams, so this is
+            // a guard against a future param-less adapter being wired to clipboard.)
+            // [LAW:no-silent-failure]
+            console.warn(
+              `graph-clipboard: pasted '${block.type}' lost ${paramCount} param(s) — ` +
+                `this adapter has no updateBlockParams.`,
+            );
+          }
         }
+        // Display name is intentionally NOT restored: the store is the single enforcer
+        // of name uniqueness, and a copy's authored name necessarily collides with the
+        // still-present source, so the freshly added block keeps the store's unique
+        // auto-name rather than us forcing a name only to have it rejected. [LAW:single-enforcer]
       }
-      // Display name is intentionally NOT forced here: the store is the single
-      // enforcer of name uniqueness, and a paste's authored name necessarily
-      // collides with the still-present block it was copied from. So the freshly
-      // added block keeps the store's unique auto-name rather than us writing the
-      // authored name only to have it rejected and swallowed. The payload still
-      // carries displayName for the coming patch-dsl text form / cross-patch paste.
-      // [LAW:single-enforcer] [LAW:no-silent-failure]
-    }
 
-    for (const edge of clip.edges) {
-      // Every internal edge's endpoints were captured, so both ids resolve; a miss
-      // is a real defect, so read them non-optionally and let a bad payload fail loudly.
-      const source = requireMapped(localToNew, edge.sourceLocalId);
-      const target = requireMapped(localToNew, edge.targetLocalId);
-      adapter.addEdge(source, edge.sourcePortId, target, edge.targetPortId);
-    }
+      for (const edge of clip.edges) {
+        // Every internal edge's endpoints were captured, so both ids resolve; a miss
+        // is a real defect, so read them non-optionally and let a bad payload fail loudly.
+        const source = requireMapped(localToNew, edge.sourceLocalId);
+        const target = requireMapped(localToNew, edge.targetLocalId);
+        adapter.addEdge(source, edge.sourcePortId, target, edge.targetPortId);
+      }
 
-    return [...localToNew.values()];
+      return [...localToNew.values()];
+    } catch (err) {
+      // Undo the blocks added so far (removeBlock also drops their edges) so a failed
+      // paste leaves the graph exactly as it found it, then resurface the error.
+      for (const id of added) adapter.removeBlock(id);
+      throw err;
+    }
   });
 }
 
