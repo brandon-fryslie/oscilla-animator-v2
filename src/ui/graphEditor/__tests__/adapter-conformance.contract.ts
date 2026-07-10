@@ -247,12 +247,14 @@ export function assertParamEditingDelegates<Id>(c: ConformanceCase<Id>): void {
 
 /**
  * A value distinct from `value`, in the same type, so a write is observably a change.
- * The number branch is finite-guarded: `NaN + 1 === NaN` (and `±Infinity + 1`), which
- * would make the write-through re-read pass vacuously and hide a no-op `apply`, so a
- * non-finite seed maps to a genuinely distinct finite value instead. [LAW:verifiable-goals]
+ * The number branch guarantees distinctness against IEEE-754 edges: `NaN + 1 === NaN`,
+ * `±Infinity + 1 === ±Infinity`, and `Number.MAX_VALUE + 1 === Number.MAX_VALUE` (all
+ * fixed points of `+ 1`) would make the write-through re-read pass vacuously and hide a
+ * no-op `apply`, so any such value maps to `0` — distinct from every fixed point.
+ * [LAW:verifiable-goals]
  */
 function nextDistinctValue(value: unknown): unknown {
-  if (typeof value === 'number') return Number.isFinite(value) ? value + 1 : 0;
+  if (typeof value === 'number') return value + 1 !== value ? value + 1 : 0;
   if (typeof value === 'boolean') return !value;
   if (typeof value === 'string') return `${value}_edited`;
   return 'edited';
@@ -279,12 +281,16 @@ export function assertControlsSelfDescribingAndEditable<Id>(c: ConformanceCase<I
     expect(typeof control.apply, `${c.name}: control ${control.id} carries an apply sink`).toBe('function');
   }
 
-  // Editable: the first control's `apply` reaches the owning store and re-reads.
-  const first = controls[0];
-  const next = nextDistinctValue(first.value);
-  first.apply(next);
-  const reread = adapter.blocks.get(id)?.controls.find((ctrl) => ctrl.id === first.id);
-  expect(reread?.value, `${c.name}: control ${first.id} edit writes through and re-reads`).toBe(next);
+  // Editable: EVERY control's `apply` reaches the owning store and re-reads — not just
+  // the first, so a block that ships a dead later control is caught. Each `apply` closes
+  // over its own field, so an old closure still writes correctly after the intervening
+  // re-projections. [LAW:verifiable-goals]
+  for (const control of controls) {
+    const next = nextDistinctValue(control.value);
+    control.apply(next);
+    const reread = adapter.blocks.get(id)?.controls.find((ctrl) => ctrl.id === control.id);
+    expect(reread?.value, `${c.name}: control ${control.id} edit writes through and re-reads`).toBe(next);
+  }
 }
 
 /** updateBlockDisplayName writes through to the store and is reflected in the projection. */
