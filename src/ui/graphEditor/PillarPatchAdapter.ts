@@ -22,12 +22,13 @@ import type {
   EdgeLike,
   InputPortLike,
   OutputPortLike,
+  ParamData,
 } from './types';
 import type {
   GraphSnapshotSource,
   GraphHistorySnapshot,
 } from '../../stores/GraphHistoryStore';
-import { sceneTypeDisplay } from './scene-projection';
+import { sceneTypeDisplay, sceneControlToHint } from './scene-projection';
 
 /** Pillar authored state the undo history captures: store state plus editor layout. */
 interface PillarHistoryState {
@@ -222,9 +223,32 @@ export class PillarPatchAdapter implements GraphDataAdapter<string>, GraphSnapsh
       params: block.config as Record<string, unknown>,
       inputPorts,
       outputPorts,
-      // Inline config controls are deferred (add/remove/wire/move is the spike's
-      // required edit set); config editing arrives with the control-affordance seam.
-      controls: [],
+      controls: this.configControls(block, catalog),
     };
+  }
+
+  /**
+   * Project a pillar block's catalog config fields into neutral inline controls.
+   * Each field's `apply` closes over `updateConfig` on THIS store, so editing a
+   * pillar knob on the canvas writes straight to the authored config and the
+   * `compiled` computed re-derives the live ScenePlan — no V1 mutation target, no
+   * id cast. Fields whose control the flat catalog cannot fully describe (select /
+   * asset / colorList) carry no hint and fall to the widget's value-directed
+   * default; a new SceneConfigControl is a compile error in `sceneControlToHint`,
+   * not a silent gap here. [LAW:effects-at-boundaries] [LAW:one-source-of-truth]
+   */
+  private configControls(
+    block: PillarBlock,
+    catalog: SceneCatalogMetadata | undefined,
+  ): readonly ParamData[] {
+    const config = block.config as Record<string, unknown>;
+    return (catalog?.configFields ?? []).map((field) => ({
+      id: field.key,
+      label: field.label,
+      value: config[field.key] ?? field.defaultValue,
+      hint: sceneControlToHint(field.control),
+      apply: (value: unknown) =>
+        runInAction(() => this.store.updateConfig(block.id, field.key, value)),
+    }));
   }
 }

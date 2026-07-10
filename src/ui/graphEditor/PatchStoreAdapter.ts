@@ -14,6 +14,7 @@
 
 import { makeObservable, computed, runInAction } from 'mobx';
 import type { BlockId, UIControlHint, DefaultSource } from '../../types';
+import type { ControlMutationTarget } from '../../types/control-target';
 import type { ImmutablePatch, PatchStore } from '../../stores/PatchStore';
 import type { LayoutStore, NodePosition } from '../../stores/LayoutStore';
 import type { FrontendResultStore } from '../../stores/FrontendResultStore';
@@ -201,12 +202,13 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId>, GraphSnapsh
           const value = block.params[portIdStr] ?? inputDef.defaultValue;
           if (value !== undefined) {
             handledParamIds.add(portIdStr);
+            const target: ControlMutationTarget = { kind: 'blockParam', blockId: id, paramId: portIdStr };
             controls.push({
               id: portIdStr,
               label: inputDef.label || portIdStr,
               value,
               hint: (inputDef as InputDef & { uiHint?: UIControlHint }).uiHint,
-              target: { kind: 'blockParam', blockId: id, paramId: portIdStr },
+              apply: (next) => this.patchStore.updateControlValue(target, next),
             });
           }
           continue;
@@ -243,11 +245,12 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId>, GraphSnapsh
       if (handledParamIds.has(paramId)) continue;
       if (paramId === 'payloadType') continue;
       if (blockDef && paramId in blockDef.inputs) continue;
+      const target: ControlMutationTarget = { kind: 'blockParam', blockId: id, paramId };
       controls.push({
         id: paramId,
         label: paramId,
         value,
-        target: { kind: 'blockParam', blockId: id, paramId },
+        apply: (next) => this.patchStore.updateControlValue(target, next),
       });
     }
 
@@ -308,7 +311,7 @@ export class PatchStoreAdapter implements GraphDataAdapter<BlockId>, GraphSnapsh
         label: control.label,
         value: control.value,
         hint: control.hint,
-        target: control.target,
+        apply: (next: unknown) => this.patchStore.updateControlValue(control.target, next),
       })),
     };
   }

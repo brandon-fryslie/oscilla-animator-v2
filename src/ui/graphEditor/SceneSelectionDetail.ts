@@ -15,8 +15,6 @@
 import type { PillarPatchStore } from '../../stores/PillarPatchStore';
 import type { PillarBlock } from '../../pillars/types/graph';
 import type { ScenePortDeclaration, SceneValueKind } from '../../pillars/scene/scene-block';
-import type { BlockId } from '../../types';
-import type { ControlMutationTarget } from '../../types/control-target';
 import { traceRoute } from '../nativeEditor/modulationTable';
 import { sceneTypeDisplay, sceneControlToHint } from './scene-projection';
 import type { PortTypeDisplay } from './types';
@@ -162,17 +160,6 @@ export class SceneSelectionDetail implements SelectionDetail {
   // Commands
   // ===========================================================================
 
-  applyControl(target: ControlMutationTarget, value: unknown): void {
-    // The pillar model has exactly one control target: a block config field. Route
-    // it to updateConfig; any other target kind cannot be produced by this provider
-    // (it emits only blockParam controls), so a mismatch is a wiring bug, surfaced
-    // loudly rather than silently dropped. [LAW:no-silent-failure]
-    if (target.kind !== 'blockParam') {
-      throw new Error(`SceneSelectionDetail.applyControl: unsupported target kind "${target.kind}"`);
-    }
-    this.store.updateConfig(target.blockId, target.paramId, value);
-  }
-
   setDisplayName(): { error?: string } {
     // Pillar blocks carry no per-instance display name — the inspector never offers
     // the editor (canEditDisplayName === false), so this is unreachable UI-side.
@@ -249,11 +236,10 @@ export class SceneSelectionDetail implements SelectionDetail {
         label: field.label,
         value: (block.config as Record<string, unknown>)[field.key] ?? field.defaultValue,
         hint: sceneControlToHint(field.control),
-        // Boundary cast: pillar block ids are plain strings, and this target's brand is
-        // consumed only by THIS provider's own applyControl (which passes it to
-        // updateConfig as a string) — the id never crosses into V1. A genuinely neutral
-        // write-target type is the control-affordance ticket's (editor-ux .23) work.
-        target: { kind: 'blockParam', blockId: block.id as BlockId, paramId: field.key },
+        // The control's write-back is the provider's own store mutation, closed over
+        // here. `block.id` is a plain pillar string handed straight to `updateConfig` —
+        // no brand, no cast, no V1 mutation-target crossing the seam. [LAW:effects-at-boundaries]
+        apply: (value) => this.store.updateConfig(block.id, field.key, value),
       },
     }));
   }
