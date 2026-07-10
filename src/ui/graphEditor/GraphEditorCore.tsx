@@ -42,7 +42,7 @@ import {
   type PortContextMenuHandler,
 } from './GraphEditorContext';
 import { reconcileNodesFromAdapter, type UnifiedNodeData } from './nodeDataTransform';
-import { copyBlocks, pasteClipboard, PASTE_OFFSET_STEP } from './graph-clipboard';
+import { copyBlocks, pasteClipboard, pasteCascadeOffset } from './graph-clipboard';
 import type { ClipboardStore } from '../../stores/ClipboardStore';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
@@ -500,21 +500,31 @@ export const GraphEditorCoreInner = observer(
 
       const handlePaste = useCallback(() => {
         if (!clipboard?.content) return;
-        // Advance the cascade only AFTER a successful paste, so a throwing paste
-        // never skips an offset step. [LAW:no-silent-failure]
-        const newIds = pasteClipboard(adapter, clipboard.content, clipboard.pasteOffset());
-        clipboard.commitPaste();
-        selectNodes(newIds);
-      }, [clipboard, adapter, selectNodes]);
+        try {
+          // Offset by the current cascade index; advance it only AFTER a successful
+          // paste, so a throwing paste never skips a step. [LAW:no-silent-failure]
+          const newIds = pasteClipboard(adapter, clipboard.content, pasteCascadeOffset(clipboard.pasteCount));
+          clipboard.commitPaste();
+          selectNodes(newIds);
+        } catch (error) {
+          // pasteClipboard already rolled back; surface the failure through the
+          // diagnostics boundary instead of letting it escape the key handler. [LAW:single-enforcer]
+          reportUiError(`Paste failed: ${error instanceof Error ? error.message : String(error)}`, error, 'error');
+        }
+      }, [clipboard, adapter, selectNodes, reportUiError]);
 
       const handleDuplicate = useCallback(() => {
-        // Duplicate is copy-then-paste at a fixed offset — no clipboard involved,
+        // Duplicate is copy-then-paste at one cascade step — no clipboard involved,
         // so it works even where no clipboard store is wired. [LAW:composability]
         const clip = copyBlocks(adapter, selectedNodeIds());
         if (!clip) return;
-        const newIds = pasteClipboard(adapter, clip, { dx: PASTE_OFFSET_STEP, dy: PASTE_OFFSET_STEP });
-        selectNodes(newIds);
-      }, [adapter, selectedNodeIds, selectNodes]);
+        try {
+          const newIds = pasteClipboard(adapter, clip, pasteCascadeOffset(0));
+          selectNodes(newIds);
+        } catch (error) {
+          reportUiError(`Duplicate failed: ${error instanceof Error ? error.message : String(error)}`, error, 'error');
+        }
+      }, [adapter, selectedNodeIds, selectNodes, reportUiError]);
 
       const handleSelectAll = useCallback(() => {
         setNodes((current) => current.map((node) => ({ ...node, selected: true })));
