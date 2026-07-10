@@ -117,6 +117,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
   const {
     patch: patchStore,
     selection,
+    clipboard,
     diagnostics,
     debug,
     layout: layoutStore,
@@ -361,6 +362,7 @@ const ReactFlowEditorInner: React.FC<ReactFlowEditorProps> = observer(({
             enableMinimap: settings.showMinimap,
           }}
           selection={selection}
+          clipboard={clipboard}
           portHighlight={portHighlight}
           diagnostics={diagnostics}
           debug={debug}

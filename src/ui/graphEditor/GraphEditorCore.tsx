@@ -16,7 +16,7 @@
 
 import React, { useEffect, useCallback, useMemo, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { observer } from 'mobx-react-lite';
-import { reaction } from 'mobx';
+import { reaction, runInAction } from 'mobx';
 import ReactFlow, {
   Background,
   Controls,
@@ -42,6 +42,8 @@ import {
   type PortContextMenuHandler,
 } from './GraphEditorContext';
 import { reconcileNodesFromAdapter, type UnifiedNodeData } from './nodeDataTransform';
+import { copyBlocks, pasteClipboard, pasteCascadeOffset } from './graph-clipboard';
+import type { ClipboardStore } from '../../stores/ClipboardStore';
 import { UnifiedNode as UnifiedNodeComponent } from './UnifiedNode';
 import { OscillaEdge } from '../reactFlowEditor/OscillaEdge';
 import type { OscillaEdgeData } from '../reactFlowEditor/nodes';
@@ -95,6 +97,12 @@ export interface GraphEditorCoreProps {
 
   /** Optional store references (for selection, debug, etc.) */
   selection?: SelectionStore | null;
+  /**
+   * The editor's shared clipboard buffer. When provided, copy/paste keys operate
+   * on it; where a mount omits it (e.g. the composite editor) copy/paste is inert
+   * while duplicate — which needs no buffer — still works. [LAW:composability]
+   */
+  clipboard?: ClipboardStore | null;
   portHighlight?: PortHighlightStore | null;
   diagnostics?: DiagnosticsStore | null;
   debug?: DebugStore | null;
@@ -147,6 +155,16 @@ export interface GraphEditorCoreHandle {
   screenToFlowPosition(position: { x: number; y: number }): { x: number; y: number };
 }
 
+/**
+ * True while focus is in a text field, so editor shortcuts (mod+C/V/D/A) cede to
+ * the browser's own text editing there and never hijack a param edit.
+ */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+}
+
 function stableParamsSignature(params: Readonly<Record<string, unknown>>): string {
   const entries = Object.entries(params).sort(([a], [b]) => a.localeCompare(b));
   return entries.map(([k, v]) => `${k}:${JSON.stringify(v)}`).join(',');
@@ -191,6 +209,7 @@ export const GraphEditorCoreInner = observer(
         adapter,
         features = {},
         selection = null,
+        clipboard = null,
         portHighlight = null,
         diagnostics = null,
         debug = null,
@@ -335,16 +354,20 @@ export const GraphEditorCoreInner = observer(
           // Apply changes to local state first
           onNodesChange(changes);
 
-          // Persist position changes to adapter
-          for (const change of changes) {
-            if (change.type === 'position' && change.position && change.dragging === false) {
-              // Drag ended - persist to adapter
-              adapter.setBlockPosition(change.id, change.position);
-            } else if (change.type === 'remove') {
-              // Node removed - persist to adapter
-              adapter.removeBlock(change.id);
+          // Persist structural changes to the adapter as ONE mobx action, so a
+          // multi-node delete (or multi-node drag-end) lands as a single authored
+          // edit — hence one undo checkpoint, not one per node. [LAW:no-mode-explosion]
+          runInAction(() => {
+            for (const change of changes) {
+              if (change.type === 'position' && change.position && change.dragging === false) {
+                // Drag ended - persist to adapter
+                adapter.setBlockPosition(change.id, change.position);
+              } else if (change.type === 'remove') {
+                // Node removed - persist to adapter (edge cleanup is the store's job)
+                adapter.removeBlock(change.id);
+              }
             }
-          }
+          });
         },
         [onNodesChange, adapter]
       );
@@ -358,12 +381,14 @@ export const GraphEditorCoreInner = observer(
           // Apply changes to local state first
           onEdgesChange(changes);
 
-          // Persist edge removals to adapter
-          for (const change of changes) {
-            if (change.type === 'remove') {
-              adapter.removeEdge(change.id);
+          // One action for the whole batch — a multi-edge delete is one checkpoint.
+          runInAction(() => {
+            for (const change of changes) {
+              if (change.type === 'remove') {
+                adapter.removeEdge(change.id);
+              }
             }
-          }
+          });
         },
         [onEdgesChange, adapter]
       );
@@ -442,6 +467,93 @@ export const GraphEditorCoreInner = observer(
           onPaneClick(event);
         }
       }, [selection, onPaneClick]);
+
+      // -----------------------------------------------------------------------
+      // Core editing: multi-select, clipboard, duplicate (era-neutral)
+      //
+      // These act through the neutral adapter seam, so BOTH eras get them from
+      // this one core. ReactFlow owns the interactive selection set (marquee /
+      // shift-click); these handlers read `node.selected` from it and, after a
+      // paste, write the new selection back. [LAW:one-source-of-truth]
+      // -----------------------------------------------------------------------
+
+      const selectedNodeIds = useCallback(
+        () => nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+        [],
+      );
+
+      /** Make exactly `ids` the selection, and follow the first as the inspector's primary. */
+      const selectNodes = useCallback(
+        (ids: readonly string[]) => {
+          const idSet = new Set(ids);
+          setNodes((current) => current.map((node) => ({ ...node, selected: idSet.has(node.id) })));
+          selection?.selectBlock(ids.length > 0 ? blockId(ids[0]) : null);
+        },
+        [setNodes, selection],
+      );
+
+      const handleCopy = useCallback(() => {
+        if (!clipboard) return;
+        const clip = copyBlocks(adapter, selectedNodeIds());
+        if (clip) clipboard.copy(clip);
+      }, [clipboard, adapter, selectedNodeIds]);
+
+      const handlePaste = useCallback(() => {
+        if (!clipboard?.content) return;
+        try {
+          // Offset by the current cascade index; advance it only AFTER a successful
+          // paste, so a throwing paste never skips a step. [LAW:no-silent-failure]
+          const newIds = pasteClipboard(adapter, clipboard.content, pasteCascadeOffset(clipboard.pasteCount));
+          clipboard.commitPaste();
+          selectNodes(newIds);
+        } catch (error) {
+          // pasteClipboard already rolled back; surface the failure through the
+          // diagnostics boundary instead of letting it escape the key handler. [LAW:single-enforcer]
+          reportUiError(`Paste failed: ${error instanceof Error ? error.message : String(error)}`, error, 'error');
+        }
+      }, [clipboard, adapter, selectNodes, reportUiError]);
+
+      const handleDuplicate = useCallback(() => {
+        // Duplicate is copy-then-paste at one cascade step — no clipboard involved,
+        // so it works even where no clipboard store is wired. [LAW:composability]
+        const clip = copyBlocks(adapter, selectedNodeIds());
+        if (!clip) return;
+        try {
+          const newIds = pasteClipboard(adapter, clip, pasteCascadeOffset(0));
+          selectNodes(newIds);
+        } catch (error) {
+          reportUiError(`Duplicate failed: ${error instanceof Error ? error.message : String(error)}`, error, 'error');
+        }
+      }, [adapter, selectedNodeIds, selectNodes, reportUiError]);
+
+      const handleSelectAll = useCallback(() => {
+        setNodes((current) => current.map((node) => ({ ...node, selected: true })));
+        // With everything selected there is no single inspector primary; clear the
+        // store's single-selection so it can't show a stale block that contradicts
+        // the "all selected" canvas. [LAW:one-source-of-truth]
+        selection?.selectBlock(null);
+      }, [setNodes, selection]);
+
+      const handleDeselectAll = useCallback(() => {
+        setNodes((current) => current.map((node) => ({ ...node, selected: false })));
+        selection?.clearSelection();
+      }, [setNodes, selection]);
+
+      const handleKeyDown = useCallback(
+        (event: React.KeyboardEvent) => {
+          // A text field owns its own copy/paste/select-all; never hijack it.
+          if (isEditableTarget(event.target)) return;
+          const mod = event.metaKey || event.ctrlKey;
+          const key = event.key.toLowerCase();
+
+          if (mod && key === 'c') { event.preventDefault(); handleCopy(); }
+          else if (mod && key === 'v') { event.preventDefault(); handlePaste(); }
+          else if (mod && key === 'd') { event.preventDefault(); handleDuplicate(); }
+          else if (mod && key === 'a') { event.preventDefault(); handleSelectAll(); }
+          else if (key === 'escape') { handleDeselectAll(); }
+        },
+        [handleCopy, handlePaste, handleDuplicate, handleSelectAll, handleDeselectAll],
+      );
 
       // -------------------------------------------------------------------------
       // Auto-Arrange (ELK Layout)
@@ -650,7 +762,14 @@ export const GraphEditorCoreInner = observer(
 
       return (
         <GraphEditorProvider value={contextValue}>
-          <div className="graph-editor-core" style={{ width: '100%', height: '100%' }}>
+          <div
+            className="graph-editor-core"
+            style={{ width: '100%', height: '100%', outline: 'none' }}
+            // Focusable so the whole copy/paste/duplicate/select flow is reachable
+            // by keyboard alone once the canvas has focus. [LAW:verifiable-goals]
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+          >
             <ReactFlow
               nodes={nodes}
               edges={edges}
