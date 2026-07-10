@@ -73,7 +73,14 @@ export function NeutralParamControl({
           <ReadOnly value={value} />
         );
       case 'boolean':
-        return <CheckboxInput checked={Boolean(value)} onChange={onChange} />;
+        // Value-guarded: only a real boolean drives the checkbox; a non-boolean under
+        // a boolean hint is shown read-only rather than coerced into a fabricated
+        // checked state that lies about what is stored. [LAW:no-silent-failure]
+        return isBoolean(value) ? (
+          <CheckboxInput checked={value} onChange={onChange} />
+        ) : (
+          <ReadOnly value={value} />
+        );
       case 'color':
         return isString(value) ? <ColorInput value={value} onChange={onChange} /> : <ReadOnly value={value} />;
       case 'text':
