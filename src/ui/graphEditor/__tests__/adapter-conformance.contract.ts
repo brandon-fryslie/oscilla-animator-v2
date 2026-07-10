@@ -245,9 +245,14 @@ export function assertParamEditingDelegates<Id>(c: ConformanceCase<Id>): void {
   expect(adapter.blocks.get(id)?.params.value, `${c.name}: param write reflected in projection`).toBe(0.7);
 }
 
-/** A value distinct from `value`, in the same type, so a write is observably a change. */
+/**
+ * A value distinct from `value`, in the same type, so a write is observably a change.
+ * The number branch is finite-guarded: `NaN + 1 === NaN` (and `±Infinity + 1`), which
+ * would make the write-through re-read pass vacuously and hide a no-op `apply`, so a
+ * non-finite seed maps to a genuinely distinct finite value instead. [LAW:verifiable-goals]
+ */
 function nextDistinctValue(value: unknown): unknown {
-  if (typeof value === 'number') return value + 1;
+  if (typeof value === 'number') return Number.isFinite(value) ? value + 1 : 0;
   if (typeof value === 'boolean') return !value;
   if (typeof value === 'string') return `${value}_edited`;
   return 'edited';
