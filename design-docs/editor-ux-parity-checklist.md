@@ -83,7 +83,7 @@ gate" when that comparison is defined and executable today.
 | # | Surface | Disposition | Note |
 |---|---|---|---|
 | 13 | SettingsPanel | **remaining — `.25`** | `SettingsPanel` is **model-agnostic** app config (debug toggles, cardinality trace) — the epic's explicit "REUSE, don't rewrite" category. Today it is reachable ONLY in the V1 boot (right-sidebar tab); `SCENE_PANEL_MENU_ITEMS` omits it, so the scene shell exposes no Settings. Filed as `.25` to WIRE the existing `SettingsPanel` into the scene shell (reuse, not rebuild). [LAW:one-source-of-truth] |
-| 17 | Node-position persistence | **remaining — `.14` residual** | The dockview LAYOUT persists per-era, but pillar graph node positions do not survive navigation (in-memory adapter map). Called out in row 1's caveat and the `.20` boot comment; needs a scene position store (V1 uses `LayoutStore`). |
+| 17 | Node-position persistence | **remaining — `.26`** (`.14` residual) | The dockview LAYOUT persists per-era, but pillar graph node positions do not survive navigation (in-memory adapter map). Called out in row 1's caveat and the `.20` boot comment; filed as `.26` to give the scene era a position store (V1 uses `LayoutStore`). |
 
 ## Orphaned V1 code (delete candidates, surfaced by this audit)
 
@@ -100,8 +100,8 @@ than leaving dead residue. [LAW:carrying-cost]
 ## Exit condition for the epic
 
 Full exit (and legacy-delete tranche 3) is reached when every **remaining-ticketed** row above
-is landed (`.4`, `.5`, `.7`, `.8`, `.10`, `.12`, `.11`-derived, plus the SettingsPanel and
-node-position rows) and every **superseded** row's owner epic has shipped its replacement — at
+is landed (`.4`, `.5`, `.7`, `.8`, `.10`, `.12`, `.11`-derived, `.25` SettingsPanel, `.26`
+node-position) and every **superseded** row's owner epic has shipped its replacement — at
 which point the V1 providers (`v1Era`, `v1LayoutPolicy`, `V1BlockCatalog`, `V1SelectionDetail`,
 and the V1-only dock panels) can be deleted. Until then, `oscilla-editor-ux-8lsn.24` stays open
 as the living accounting: **zero undispositioned rows today; not zero remaining rows.**
