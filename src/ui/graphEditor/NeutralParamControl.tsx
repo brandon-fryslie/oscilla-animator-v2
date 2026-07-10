@@ -44,30 +44,35 @@ export function NeutralParamControl({
 }): React.ReactElement {
   if (hint) {
     switch (hint.kind) {
+      // `editableBounds` restores the inline min/max editing the deleted canvas
+      // FloatControl had — essential here because a knob with no hint min/max gets a
+      // default range that BOTH the slider and its text input clamp to, so a value
+      // outside that range is unreachable without expanding the bounds.
       case 'slider':
         return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min} max={hint.max} step={hint.step} onChange={onChange} />
+          <SliderWithInput label="" value={value} min={hint.min} max={hint.max} step={hint.step} onChange={onChange} editableBounds />
         ) : (
           <ReadOnly value={value} />
         );
       case 'int':
         return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 10000} step={hint.step ?? 1} onChange={onChange} />
+          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 10000} step={hint.step ?? 1} onChange={onChange} editableBounds />
         ) : (
           <ReadOnly value={value} />
         );
       case 'float':
         return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 1} step={hint.step ?? 0.01} onChange={onChange} />
+          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 1} step={hint.step ?? 0.01} onChange={onChange} editableBounds />
         ) : (
           <ReadOnly value={value} />
         );
       case 'select':
-        // Value-guarded like every other case: render the picker only when the stored
-        // value is one of the real options; otherwise show the actual value read-only
-        // rather than coercing null/undefined into a fabricated "null"/"undefined"
-        // option that isn't in the list. [LAW:no-silent-failure]
-        return isString(value) && hint.options.some((o) => o.value === value) ? (
+        // Value-guarded on the runtime type only: a non-string (null/undefined) shows
+        // read-only rather than a fabricated "null" option. A string value that has
+        // drifted out of the option list (renamed/removed option) still gets an editable
+        // picker so the user can choose a valid option — never locked read-only.
+        // [LAW:no-silent-failure]
+        return isString(value) ? (
           <SelectInput value={value} onChange={onChange} options={hint.options.slice()} size="sm" />
         ) : (
           <ReadOnly value={value} />
@@ -84,14 +89,22 @@ export function NeutralParamControl({
       case 'color':
         return isString(value) ? <ColorInput value={value} onChange={onChange} /> : <ReadOnly value={value} />;
       case 'text':
-        return <TextInput value={String(value ?? '')} onChange={onChange} size="sm" />;
+        // Value-guarded like the rest: only a real string is editable as text; a
+        // non-string under a text hint shows read-only rather than being coerced into a
+        // string display and written back as one. [LAW:no-silent-failure]
+        return isString(value) ? <TextInput value={value} onChange={onChange} size="sm" /> : <ReadOnly value={value} />;
       case 'xy': {
+        // Guard both axes: render the pair of sliders only when x and y are finite
+        // numbers, else show the real value read-only — never fabricate 0 for a missing
+        // or non-finite axis. [LAW:types-are-the-program]
         if (typeof value !== 'object' || value === null) return <ReadOnly value={value} />;
-        const xy = value as { x?: number; y?: number };
+        const xy = value as { x?: unknown; y?: unknown };
+        const { x, y } = xy;
+        if (!isNumber(x) || !isNumber(y)) return <ReadOnly value={value} />;
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <SliderWithInput label="X" value={xy.x ?? 0} min={-1000} max={1000} step={1} onChange={(x) => onChange({ ...xy, x })} />
-            <SliderWithInput label="Y" value={xy.y ?? 0} min={-1000} max={1000} step={1} onChange={(y) => onChange({ ...xy, y })} />
+            <SliderWithInput label="X" value={x} min={-1000} max={1000} step={1} onChange={(nx) => onChange({ ...xy, x: nx })} editableBounds />
+            <SliderWithInput label="Y" value={y} min={-1000} max={1000} step={1} onChange={(ny) => onChange({ ...xy, y: ny })} editableBounds />
           </div>
         );
       }

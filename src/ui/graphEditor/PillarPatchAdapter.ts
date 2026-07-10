@@ -247,8 +247,10 @@ export class PillarPatchAdapter implements GraphDataAdapter<string>, GraphSnapsh
       label: field.label,
       value: config[field.key] ?? field.defaultValue,
       hint: sceneControlToHint(field.control),
-      apply: (value: unknown) =>
-        runInAction(() => this.store.updateConfig(block.id, field.key, value)),
+      // `updateConfig` is already an action (PillarPatchStore is makeAutoObservable),
+      // so no runInAction wrapper — same direct call as SceneSelectionDetail. The store
+      // method owns the action boundary; callers don't re-wrap it. [LAW:single-enforcer]
+      apply: (value: unknown) => this.store.updateConfig(block.id, field.key, value),
     }));
   }
 }
