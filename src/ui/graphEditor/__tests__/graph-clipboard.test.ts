@@ -18,7 +18,7 @@ import { PillarPatchStore } from '../../../stores/PillarPatchStore';
 import { PatchStoreAdapter } from '../PatchStoreAdapter';
 import { PillarPatchAdapter } from '../PillarPatchAdapter';
 import type { BlockLike, GraphDataAdapter } from '../types';
-import { copyBlocks, pasteClipboard, type GraphClipboard } from '../graph-clipboard';
+import { copyBlocks, pasteClipboard, pasteCascadeOffset, type GraphClipboard } from '../graph-clipboard';
 
 // Each provider is read here through the neutral string-keyed seam (a branded
 // BlockId is the same value at runtime), so one assertion checks them all.
@@ -141,6 +141,14 @@ describe('graph-clipboard: multi-block copy/paste round-trips per provider', () 
     const adapter = patchStoreCase.newAdapter();
     expect(copyBlocks(adapter, [])).toBeNull();
     expect(copyBlocks(adapter, ['does-not-exist'])).toBeNull();
+  });
+
+  it('pasteCascadeOffset steps one increment per paste index, uniform in x/y', () => {
+    const first = pasteCascadeOffset(0);
+    const second = pasteCascadeOffset(1);
+    expect(first.dx).toBe(first.dy);
+    expect(second.dx).toBeGreaterThan(first.dx);
+    expect(second.dy).toBeGreaterThan(first.dy);
   });
 
   it('a paste that throws part-way rolls back, leaving no orphaned blocks', () => {

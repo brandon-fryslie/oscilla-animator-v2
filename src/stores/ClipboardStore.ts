@@ -6,25 +6,31 @@
  * survives dockview panel remounts. Owned by RootStore — a single owner with an
  * explicit API, never a module-level global. [LAW:no-shared-mutable-globals]
  *
- * The clipboard only stores; it does not know how to read or write a graph. Turning
- * a selection into a payload and a payload back into blocks is graph-clipboard's
- * job, over the adapter seam. [LAW:decomposition]
+ * This holds only era-neutral STATE: the payload and how many times it has been
+ * pasted. Turning a selection into a payload, a payload back into blocks, and the
+ * paste OFFSET geometry all live in the UI's graph-clipboard module — presentation
+ * concerns that must not create a stores→UI dependency. [LAW:one-way-deps] [LAW:decomposition]
  */
 
 import { makeObservable, observable, action } from 'mobx';
-import { PASTE_OFFSET_STEP, type GraphClipboard } from '../ui/graphEditor/graph-clipboard';
+import type { GraphClipboard } from '../ui/graphEditor/graph-clipboard';
 
 export class ClipboardStore {
   /** The last-copied selection, or null when the clipboard is empty. */
   content: GraphClipboard | null = null;
 
-  /** How many times the current content has been pasted; resets on copy. */
-  private pasteCount = 0;
+  /**
+   * How many times the current content has been pasted; resets on copy. The UI maps
+   * this to the cascading paste offset, so repeated pastes don't stack on one spot.
+   */
+  pasteCount = 0;
 
   constructor() {
     makeObservable(this, {
       content: observable.ref,
+      pasteCount: observable,
       copy: action,
+      commitPaste: action,
     });
   }
 
@@ -34,18 +40,7 @@ export class ClipboardStore {
     this.pasteCount = 0;
   }
 
-  /**
-   * The uniform offset the NEXT paste should use, cascading so repeated pastes of the
-   * same clipboard step away from each other instead of stacking on one spot. Pure —
-   * reading it advances nothing; the caller calls `commitPaste` only once the paste
-   * has actually succeeded, so a failed paste never skips a cascade step. [LAW:no-silent-failure]
-   */
-  pasteOffset(): { dx: number; dy: number } {
-    const step = PASTE_OFFSET_STEP * (this.pasteCount + 1);
-    return { dx: step, dy: step };
-  }
-
-  /** Advance the cascade after a successful paste. */
+  /** Record a successful paste, advancing the cascade. */
   commitPaste(): void {
     this.pasteCount += 1;
   }

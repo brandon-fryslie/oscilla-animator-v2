@@ -17,13 +17,19 @@
 import { runInAction, toJS } from 'mobx';
 import type { GraphDataAdapter } from './types';
 
+/** The distance (graph units) one re-mint step offsets a block from its source. */
+const PASTE_OFFSET_STEP = 32;
+
 /**
- * The distance (graph units) a re-minted block sits from its source — one step for a
- * duplicate, N steps for the Nth cascading paste. The single home for this fact, so
- * duplicate (GraphEditorCore) and the paste cascade (ClipboardStore) can't drift apart.
- * [LAW:one-source-of-truth]
+ * The uniform offset for the Nth (0-based) paste of a clipboard, cascading one step per
+ * paste so repeated pastes step away from each other instead of stacking. A duplicate is
+ * paste index 0 (one step). The single home for re-mint offset geometry, so duplicate and
+ * the paste cascade can't drift apart. [LAW:one-source-of-truth]
  */
-export const PASTE_OFFSET_STEP = 32;
+export function pasteCascadeOffset(pasteIndex: number): { dx: number; dy: number } {
+  const step = PASTE_OFFSET_STEP * (pasteIndex + 1);
+  return { dx: step, dy: step };
+}
 
 /**
  * One block captured for the clipboard, in neutral vocabulary. `localId` is the

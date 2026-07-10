@@ -4,31 +4,19 @@ import type { GraphClipboard } from '../../ui/graphEditor/graph-clipboard';
 
 const EMPTY: GraphClipboard = { blocks: [], edges: [] };
 
-describe('ClipboardStore paste cascade', () => {
-  it('peeking the offset does not advance the cascade; only commit does', () => {
+describe('ClipboardStore paste count', () => {
+  it('commit advances the count, copy resets it', () => {
     const store = new ClipboardStore();
     store.copy(EMPTY);
-
-    // Reading the offset twice without committing returns the SAME step — a paste
-    // that threw (so never committed) must not skip a cascade step. [LAW:no-silent-failure]
-    const first = store.pasteOffset();
-    expect(store.pasteOffset()).toEqual(first);
+    expect(store.pasteCount).toBe(0);
 
     store.commitPaste();
-    const second = store.pasteOffset();
-    expect(second.dx).toBeGreaterThan(first.dx);
-    expect(second.dy).toBeGreaterThan(first.dy);
-  });
+    store.commitPaste();
+    expect(store.pasteCount).toBe(2);
 
-  it('copy restarts the cascade', () => {
-    const store = new ClipboardStore();
+    // Copying fresh content restarts the cascade — the caller (handlePaste) only
+    // commits after a successful paste, so a failed paste leaves the count put.
     store.copy(EMPTY);
-    const start = store.pasteOffset();
-    store.commitPaste();
-    store.commitPaste();
-    expect(store.pasteOffset().dx).toBeGreaterThan(start.dx);
-
-    store.copy(EMPTY);
-    expect(store.pasteOffset()).toEqual(start);
+    expect(store.pasteCount).toBe(0);
   });
 });
