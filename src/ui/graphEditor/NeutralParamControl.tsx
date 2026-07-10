@@ -63,7 +63,15 @@ export function NeutralParamControl({
           <ReadOnly value={value} />
         );
       case 'select':
-        return <SelectInput value={String(value)} onChange={onChange} options={hint.options.slice()} size="sm" />;
+        // Value-guarded like every other case: render the picker only when the stored
+        // value is one of the real options; otherwise show the actual value read-only
+        // rather than coercing null/undefined into a fabricated "null"/"undefined"
+        // option that isn't in the list. [LAW:no-silent-failure]
+        return isString(value) && hint.options.some((o) => o.value === value) ? (
+          <SelectInput value={value} onChange={onChange} options={hint.options.slice()} size="sm" />
+        ) : (
+          <ReadOnly value={value} />
+        );
       case 'boolean':
         return <CheckboxInput checked={Boolean(value)} onChange={onChange} />;
       case 'color':
