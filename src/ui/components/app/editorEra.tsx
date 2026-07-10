@@ -8,10 +8,13 @@
  *
  * The two shells share EditorWorkspace (Toolbar + Dockview). They differ only in
  * era-specific CHROME that is genuinely model-bound: the V1 shell wires the flow
- * editor's imperative handle to the global hotkeys (which act on the V1 PatchStore)
- * and the composite-editor tab; the scene shell mounts the workspace bare, because
- * scene hotkeys (editor-ux .8) and their handle plumbing are not yet built and a
- * V1-store hotkey would silently no-op on a pillar selection. [LAW:no-silent-failure]
+ * editor's imperative handle to the FULL global-hotkey registry (which acts on the
+ * V1 PatchStore/EditorHandle) and the composite-editor tab; the scene shell mounts
+ * the workspace bare of that registry. The era-neutral keys — undo/redo (App-level
+ * useHistoryHotkeys) and canvas clipboard/select-all (GraphEditorCore onKeyDown) —
+ * already work in both boots; only the rest of the command registry (editor-ux .8)
+ * awaits an EditorHandle over PillarPatchAdapter, because a V1-store hotkey would
+ * silently no-op on a pillar selection. [LAW:no-silent-failure]
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
