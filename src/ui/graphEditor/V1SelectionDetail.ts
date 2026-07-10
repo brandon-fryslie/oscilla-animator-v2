@@ -231,10 +231,6 @@ export class V1SelectionDetail implements SelectionDetail {
   // Commands
   // ===========================================================================
 
-  applyControl(target: ControlMutationTarget, value: unknown): void {
-    this.store.updateControlValue(target, value);
-  }
-
   setDisplayName(blockId: string, displayName: string): { error?: string } {
     return this.store.updateBlockDisplayName(blockId as BlockId, displayName);
   }
@@ -330,7 +326,7 @@ export class V1SelectionDetail implements SelectionDetail {
       label: control.label,
       value: control.value,
       hint: control.hint,
-      target: control.target,
+      apply: (next: unknown) => this.store.updateControlValue(control.target, next),
     }));
   }
 
@@ -405,6 +401,7 @@ export class V1SelectionDetail implements SelectionDetail {
         if (def.ui.inspector.paramEditors[key]?.kind === 'expression-editor') {
           return { kind: 'expression', id: key, blockId: block.id, value: String(params[key] ?? '') };
         }
+        const target: ControlMutationTarget = { kind: 'blockParam', blockId: block.id, paramId: key };
         return {
           kind: 'control',
           control: {
@@ -412,7 +409,7 @@ export class V1SelectionDetail implements SelectionDetail {
             label: key,
             value: params[key],
             hint: inputDef?.uiHint,
-            target: { kind: 'blockParam', blockId: block.id, paramId: key },
+            apply: (next: unknown) => this.store.updateControlValue(target, next),
           },
         };
       });
@@ -459,19 +456,22 @@ export class V1SelectionDetail implements SelectionDetail {
     if (!def) return [];
     return Object.entries(def.inputs)
       .filter(([inputId]) => inputId !== 'in')
-      .map(([paramId, inputDef]) => ({
-        id: paramId,
-        label: inputDef.label ?? paramId,
-        value: params?.[paramId] ?? inputDef.defaultValue,
-        hint: inputDef.uiHint,
-        target: {
+      .map(([paramId, inputDef]) => {
+        const target: ControlMutationTarget = {
           kind: 'bindingLensParam',
           blockId: edge.to.blockId as BlockId,
           portId: edge.to.slotId as PortId,
           lensId,
           paramId,
-        },
-      }));
+        };
+        return {
+          id: paramId,
+          label: inputDef.label ?? paramId,
+          value: params?.[paramId] ?? inputDef.defaultValue,
+          hint: inputDef.uiHint,
+          apply: (next: unknown) => this.store.updateControlValue(target, next),
+        };
+      });
   }
 
   private chainStep(step: TransformStep): EdgeChainStep {

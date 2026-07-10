@@ -22,7 +22,6 @@
  */
 
 import type { UIControlHint } from '../../types';
-import type { ControlMutationTarget } from '../../types/control-target';
 
 // =============================================================================
 // Neutral presentation vocabulary
@@ -74,16 +73,21 @@ export interface PortDecoration {
 export type PortDecorationKind = 'indicator' | 'badge' | 'warning' | 'transform';
 
 /**
- * An inline control the editor renders for a value — a param editor bound to a
- * mutation target. Era-neutral: the target names WHAT to mutate; the provider's
- * owning store performs it.
+ * An inline control the editor renders for a value. Era-neutral: `id/label/value/
+ * hint` are the self-describing facts the widget renders; `apply` is the value-sink
+ * the provider closed over its own store. The renderer never learns HOW a write
+ * happens — it hands the new value to `apply` and the era that minted the control
+ * performs the mutation. This is why no backend-branded mutation target crosses the
+ * seam: the effect stays with the party that owns it. [LAW:effects-at-boundaries]
+ * [LAW:one-type-per-behavior]
  */
 export interface ParamData {
   readonly id: string;
   readonly label: string;
   readonly value: unknown;
   readonly hint?: UIControlHint;
-  readonly target: ControlMutationTarget;
+  /** Write a new value back to the provider's own store. */
+  readonly apply: (value: unknown) => void;
 }
 
 // =============================================================================

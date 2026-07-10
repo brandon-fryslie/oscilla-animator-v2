@@ -54,6 +54,13 @@ export interface ConformanceCase<Id = string> {
     readonly displayName: boolean;
     /** Implements GraphSnapshotSource: authored state captures and restores for undo. */
     readonly history: boolean;
+    /**
+     * A block of `addableType` exposes >=1 self-describing inline control whose
+     * `apply` writes through to the owning store. This is the neutral parameter-
+     * affordance guarantee: an editor renders and edits a block's config from the
+     * control descriptors alone, in either era. [LAW:effects-at-boundaries]
+     */
+    readonly controls: boolean;
   };
 }
 
@@ -238,6 +245,54 @@ export function assertParamEditingDelegates<Id>(c: ConformanceCase<Id>): void {
   expect(adapter.blocks.get(id)?.params.value, `${c.name}: param write reflected in projection`).toBe(0.7);
 }
 
+/**
+ * A value distinct from `value`, in the same type, so a write is observably a change.
+ * The number branch guarantees distinctness against IEEE-754 edges: `NaN + 1 === NaN`,
+ * `±Infinity + 1 === ±Infinity`, and `Number.MAX_VALUE + 1 === Number.MAX_VALUE` (all
+ * fixed points of `+ 1`) would make the write-through re-read pass vacuously and hide a
+ * no-op `apply`, so any such value maps to `0` — distinct from every fixed point.
+ * [LAW:verifiable-goals]
+ */
+function nextDistinctValue(value: unknown): unknown {
+  if (typeof value === 'number') return value + 1 !== value ? value + 1 : 0;
+  if (typeof value === 'boolean') return !value;
+  if (typeof value === 'string') return `${value}_edited`;
+  return 'edited';
+}
+
+/**
+ * A block's inline controls are self-describing AND editable: each carries an id,
+ * label and an `apply` sink, and writing through `apply` is reflected in a fresh
+ * read of the same control. This is the neutral param-control contract — an editor
+ * renders and edits config from the descriptors alone, and the provider's own store
+ * performs the mutation, so the same node/inspector edits both eras. [LAW:effects-at-boundaries]
+ */
+export function assertControlsSelfDescribingAndEditable<Id>(c: ConformanceCase<Id>): void {
+  const adapter = c.setup().newAdapter();
+  const id = adapter.addBlock(c.addableType, { x: 0, y: 0 });
+  const block = adapter.blocks.get(id);
+  expect(block, `${c.name}: added block is readable`).toBeDefined();
+
+  const controls = block!.controls;
+  expect(controls.length, `${c.name}: '${c.addableType}' exposes >=1 inline control`).toBeGreaterThan(0);
+  for (const control of controls) {
+    expect(control.id.length, `${c.name}: control carries an id`).toBeGreaterThan(0);
+    expect(control.label.length, `${c.name}: control ${control.id} carries a label`).toBeGreaterThan(0);
+    expect(typeof control.apply, `${c.name}: control ${control.id} carries an apply sink`).toBe('function');
+  }
+
+  // Editable: EVERY control's `apply` reaches the owning store and re-reads — not just
+  // the first, so a block that ships a dead later control is caught. Each `apply` closes
+  // over its own field, so an old closure still writes correctly after the intervening
+  // re-projections. [LAW:verifiable-goals]
+  for (const control of controls) {
+    const next = nextDistinctValue(control.value);
+    control.apply(next);
+    const reread = adapter.blocks.get(id)?.controls.find((ctrl) => ctrl.id === control.id);
+    expect(reread?.value, `${c.name}: control ${control.id} edit writes through and re-reads`).toBe(next);
+  }
+}
+
 /** updateBlockDisplayName writes through to the store and is reflected in the projection. */
 export function assertDisplayNameDelegates<Id>(c: ConformanceCase<Id>): void {
   const adapter = c.setup().newAdapter();
@@ -293,6 +348,9 @@ export function runConformanceSuite<Id>(c: ConformanceCase<Id>): void {
 
     const paramsIt = c.capabilities.params ? it : it.skip;
     paramsIt('updateBlockParams writes through to the store', () => assertParamEditingDelegates(c));
+
+    const controlsIt = c.capabilities.controls ? it : it.skip;
+    controlsIt('inline controls are self-describing and editable', () => assertControlsSelfDescribingAndEditable(c));
 
     const displayNameIt = c.capabilities.displayName ? it : it.skip;
     displayNameIt('updateBlockDisplayName writes through to the store', () => assertDisplayNameDelegates(c));

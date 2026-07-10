@@ -42,6 +42,29 @@ function getControlsViaAdapter(
   return block?.inputPorts.get(portId)?.controls ?? [];
 }
 
+/**
+ * A port's first inline control writes through and re-reads the written value after
+ * a recompile. This asserts the neutral control is genuinely editable — its `apply`
+ * closure reaches the owning store and the projection re-derives the edit — without
+ * peeking at the era-internal mutation target it routes through. [LAW:behavior-not-structure]
+ */
+function expectControlWritesThrough(
+  adapter: PatchStoreAdapter,
+  patchStore: PatchStore,
+  frontendStore: FrontendResultStore,
+  blockId: BlockId,
+  portId: string,
+  value: number,
+  revision: number,
+): void {
+  const control = getControlsViaAdapter(adapter, blockId, portId)[0];
+  expect(control, `control on ${String(blockId)}.${portId} is present`).toBeDefined();
+  control!.apply(value);
+  compileAndPublish(patchStore, frontendStore, revision);
+  const reread = getControlsViaAdapter(adapter, blockId, portId)[0];
+  expect(reread?.value, `edit to ${String(blockId)}.${portId} writes through and re-reads`).toBe(value);
+}
+
 // =============================================================================
 // Multi-editor isolation: independent PatchStore instances
 // =============================================================================
@@ -186,7 +209,8 @@ describe('Late subscriber hydration', () => {
 
     const controls = getControlsViaAdapter(lateAdapter, ellipseId, 'rx');
     expect(controls.length).toBeGreaterThan(0);
-    expect(controls[0]?.target.kind).toBe('bindingSourceParam');
+    // The late adapter's control is live: editing it writes through to the store.
+    expectControlWritesThrough(lateAdapter, patchStore, frontendStore, ellipseId, 'rx', 0.31, 2);
   });
 });
 
@@ -207,8 +231,8 @@ describe('Control availability reacts to graph changes', () => {
     // Before connection: defaultSource provenance
     const bindingBefore = frontendStore.getInputBindingByIds(ellipseId, 'rx');
     expect(bindingBefore?.sourceKind).toBe('defaultSource');
-    const controlsBefore = getControlsViaAdapter(adapter, ellipseId, 'rx');
-    expect(controlsBefore[0]?.target.kind).toBe('bindingSourceParam');
+    // Before wiring, the default-sourced control writes through to the port's default.
+    expectControlWritesThrough(adapter, patchStore, frontendStore, ellipseId, 'rx', 0.33, 2);
 
     // Connect a Const block to rx
     const constId = patchStore.addBlock('Const', { value: 0.5 });
@@ -216,14 +240,13 @@ describe('Control availability reacts to graph changes', () => {
       { kind: 'port', blockId: constId, slotId: 'out' },
       { kind: 'port', blockId: ellipseId, slotId: 'rx' },
     );
-    compileAndPublish(patchStore, frontendStore, 2);
+    compileAndPublish(patchStore, frontendStore, 3);
 
     // After connection: userEdge provenance
     const bindingAfter = frontendStore.getInputBindingByIds(ellipseId, 'rx');
     expect(bindingAfter?.sourceKind).toBe('userEdge');
-    const controlsAfter = getControlsViaAdapter(adapter, ellipseId, 'rx');
-    // User-wired Const controls point at blockParam, not bindingSourceParam
-    expect(controlsAfter[0]?.target.kind).toBe('blockParam');
+    // After wiring, the same control now writes through to the wired Const source.
+    expectControlWritesThrough(adapter, patchStore, frontendStore, ellipseId, 'rx', 0.44, 4);
   });
 
   it('disconnecting an edge restores defaultSource controls', () => {
