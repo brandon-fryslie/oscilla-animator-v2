@@ -36,8 +36,7 @@
  * boundary. [LAW:effects-at-boundaries]
  */
 
-import type { UIControlHint } from '../../types';
-import type { PortTypeDisplay } from './types';
+import type { PortTypeDisplay, ParamData } from './types';
 import type { EdgeRef } from './edge-decorations';
 import type { PortRef, PortDirection } from './type-oracle';
 
@@ -54,20 +53,15 @@ export interface SelectOption {
 }
 
 /**
- * A neutral inline control — identical shape to the editor's other inline controls
- * (`ParamData`), so a config field, a binding control and a default-value editor all
- * render through one widget and write back through one closure. `apply` is the
- * value-sink the provider closed over its own store, so no backend-branded mutation
- * target crosses the seam. [LAW:one-source-of-truth] [LAW:effects-at-boundaries]
+ * A neutral inline control for the inspector. This is exactly the editor's inline-
+ * control shape — the canvas `ParamData` — because it IS the same behavior: a
+ * self-describing descriptor (`id/label/value/hint`) plus an `apply` sink the provider
+ * closed over its own store, rendered by the one `NeutralParamControl` widget. It is
+ * the same type under a seam-specific name, not a second definition to keep in sync,
+ * so a change to the control shape can never diverge between canvas and inspector.
+ * [LAW:one-source-of-truth] [LAW:one-type-per-behavior] [LAW:effects-at-boundaries]
  */
-export interface DetailControl {
-  readonly id: string;
-  readonly label: string;
-  readonly value: unknown;
-  readonly hint?: UIControlHint;
-  /** Write a new value back to the provider's own store. */
-  readonly apply: (value: unknown) => void;
-}
+export type DetailControl = ParamData;
 
 /**
  * A connection endpoint (a block's port) with the facts an inspector paints: the
