@@ -19,8 +19,13 @@ import { useStores } from '../../../../stores';
 import { PillarPatchAdapter } from '../../../graphEditor/PillarPatchAdapter';
 import { SceneTypeOracle } from '../../../graphEditor/SceneTypeOracle';
 import { SceneEdgeDecorator } from '../../../graphEditor/SceneEdgeDecorator';
-import { GraphEditorCore } from '../../../graphEditor/GraphEditorCore';
+import { GraphEditorCore, type GraphEditorFeatures } from '../../../graphEditor/GraphEditorCore';
 import { useGraphHistoryBinding } from '../../../graphEditor/useGraphHistoryBinding';
+
+// Module-level constant so the reference is stable across renders: GraphEditorCore
+// memoizes on `features` identity (mergedFeatures → contextValue), so an inline
+// object literal would recompute the whole editor context every render. [LAW:composability]
+const SCENE_EDITOR_FEATURES: GraphEditorFeatures = { enableParamEditing: true };
 
 export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() => {
   const { pillarPatch, selection, clipboard } = useStores();
@@ -50,6 +55,10 @@ export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() 
         decorator={decorator}
         selection={selection}
         clipboard={clipboard}
+        // Inline config editing on the canvas, parity with the V1 flow editor: the
+        // PillarPatchAdapter projects each block's config fields as neutral controls
+        // whose `apply` writes to PillarPatchStore. [LAW:one-type-per-behavior]
+        features={SCENE_EDITOR_FEATURES}
       />
     </div>
   );

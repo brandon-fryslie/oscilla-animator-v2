@@ -183,9 +183,13 @@ export function SliderWithInput({
 
   return (
     <Box mb="xs">
-      <Text size="xs" fw={500} c="gray.4" mb={4}>
-        {label}
-      </Text>
+      {/* Render the header only for a non-empty label: callers that render the label
+          themselves pass "" and must not get a dead font-scaled gap above the track. */}
+      {label && (
+        <Text size="xs" fw={500} c="gray.4" mb={4}>
+          {label}
+        </Text>
+      )}
       <Group gap="xs" align="center">
         <Box style={{ flex: 1 }}>
           <Slider

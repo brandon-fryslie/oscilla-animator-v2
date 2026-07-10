@@ -27,7 +27,7 @@ import type { PortDecoration } from './types';
 import type { PortId, BlockId } from '../../types';
 import { useBlockCatalog } from './BlockCatalogContext';
 import { NO_OPEN_BEHAVIOR } from './block-catalog';
-import { ParameterControl } from '../reactFlowEditor/ParameterControls';
+import { NeutralParamControl } from './NeutralParamControl';
 import { PortInfoPopover } from '../reactFlowEditor/PortInfoPopover';
 import { usePinPopoverState, type PopoverAnchorPosition } from '../reactFlowEditor/BasePopover';
 import { DisplayNameEditor } from '../components/DisplayNameEditor';
@@ -508,13 +508,19 @@ export const UnifiedNode: React.FC<NodeProps<UnifiedNodeData>> = observer(({ dat
           }}
         >
           {data.params.map((param) => (
-            <ParameterControl
+            // `nodrag` + stopPropagation keep a scrub/click on the control from
+            // dragging the node; the write is the provider's own `apply` closure, so
+            // this node edits a V1 binding control and a pillar config knob identically.
+            // [LAW:one-type-per-behavior] [LAW:effects-at-boundaries]
+            <div
               key={param.id}
-              label={param.label}
-              value={param.value}
-              hint={param.hint}
-              target={param.target}
-            />
+              className="nodrag"
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{ marginBottom: '6px' }}
+            >
+              <div style={{ fontSize: '10px', color: '#aaa', marginBottom: '2px' }}>{param.label}</div>
+              <NeutralParamControl hint={param.hint} value={param.value} onChange={param.apply} />
+            </div>
           ))}
         </div>
       )}
