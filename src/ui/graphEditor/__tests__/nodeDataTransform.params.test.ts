@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { createNodeFromBlockLike } from '../nodeDataTransform';
 import type { BlockLike, EdgeLike, InputPortLike } from '../types';
-import type { BlockId, PortId } from '../../../types';
 
 /**
  * A self-describing input port whose single inline control mirrors what
  * PatchStoreAdapter emits for a default-sourced Const input (control id is
- * `${portId}:value`, targeting the binding source param).
+ * `${portId}:value`). The write-back is the provider's own `apply` closure; this
+ * transform test only exercises how controls project into node params, so `apply`
+ * is an inert sink here.
  */
 function controllablePort(portId: string, label: string, value: number): InputPortLike {
   return {
@@ -17,14 +18,7 @@ function controllablePort(portId: string, label: string, value: number): InputPo
       label,
       value,
       hint: { kind: 'slider', min: 0, max: 1, step: 0.001 },
-      target: {
-        kind: 'bindingSourceParam',
-        blockId: 'ellipse-1' as BlockId,
-        portId: portId as PortId,
-        sourceBlockType: 'Const',
-        sourceOutputPortId: 'out' as PortId,
-        paramId: 'value',
-      },
+      apply: () => {},
     }],
   };
 }

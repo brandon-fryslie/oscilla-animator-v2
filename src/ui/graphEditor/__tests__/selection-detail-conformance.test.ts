@@ -107,7 +107,10 @@ const okBlock: BlockDetail = {
   canEditDisplayName: false,
   inputs: [],
   outputs: [],
-  config: [{ kind: 'control', control: { id: 'p', label: 'P', value: 0, target: { kind: 'blockParam', blockId: 'b' as never, paramId: 'p' } } }],
+  // `apply` is an inert sink: this shared block is the well-formed detail AND the
+  // "ignores writes" negative control (`brokenIgnoresApply`), whose re-read never
+  // reflects the edit — so the config round-trip assertion is proven to have teeth.
+  config: [{ kind: 'control', control: { id: 'p', label: 'P', value: 0, apply: () => {} } }],
 };
 
 const okEdge: EdgeDetail = {
@@ -118,7 +121,6 @@ const okEdge: EdgeDetail = {
 };
 
 const NOOP = {
-  applyControl: () => {},
   setDisplayName: () => ({}),
   setDefaultSource: () => {},
   setCombineMode: () => {},
@@ -243,7 +245,6 @@ describe('emptySelectionDetail', () => {
 
   it('accepts every command as a no-op without throwing', () => {
     expect(() => {
-      emptySelectionDetail.applyControl({ kind: 'blockParam', blockId: 'b' as never, paramId: 'p' }, 1);
       emptySelectionDetail.setCombineMode('b', 'p', 'sum');
       emptySelectionDetail.connect({ blockId: 'a', portId: 'o' }, { blockId: 'b', portId: 'i' });
       emptySelectionDetail.removeEdge('e');

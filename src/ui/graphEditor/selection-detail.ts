@@ -37,7 +37,6 @@
  */
 
 import type { UIControlHint } from '../../types';
-import type { ControlMutationTarget } from '../../types/control-target';
 import type { PortTypeDisplay } from './types';
 import type { EdgeRef } from './edge-decorations';
 import type { PortRef, PortDirection } from './type-oracle';
@@ -55,17 +54,19 @@ export interface SelectOption {
 }
 
 /**
- * A neutral inline control bound to a mutation target — identical shape to the
- * editor's other inline controls (`ParamData`), so a config field, a binding
- * control and a default-value editor all render through one widget and write back
- * through one `applyControl`. [LAW:one-source-of-truth]
+ * A neutral inline control — identical shape to the editor's other inline controls
+ * (`ParamData`), so a config field, a binding control and a default-value editor all
+ * render through one widget and write back through one closure. `apply` is the
+ * value-sink the provider closed over its own store, so no backend-branded mutation
+ * target crosses the seam. [LAW:one-source-of-truth] [LAW:effects-at-boundaries]
  */
 export interface DetailControl {
   readonly id: string;
   readonly label: string;
   readonly value: unknown;
   readonly hint?: UIControlHint;
-  readonly target: ControlMutationTarget;
+  /** Write a new value back to the provider's own store. */
+  readonly apply: (value: unknown) => void;
 }
 
 /**
@@ -293,8 +294,13 @@ export interface SelectionDetail {
   describeTypePreview(blockType: string): TypePreviewDetail | undefined;
 
   // ---- Commands (effects at the provider boundary) -----------------------
-  /** Write one inline control's value. */
-  applyControl(target: ControlMutationTarget, value: unknown): void;
+  //
+  // A generic control write is NOT a method here: each `DetailControl` carries its
+  // own `apply` closure (the provider closed over its store when it minted the
+  // control), so the inspector writes via `control.apply(value)` with no target to
+  // route. Only STRUCTURED, era-specific commands (default source, combine mode,
+  // lens growth) stay as methods, because they address a block/port the inspector
+  // names, not a control the provider already bound. [LAW:effects-at-boundaries]
   /** Rename a block instance; returns a validation error message when rejected. */
   setDisplayName(blockId: string, displayName: string): { error?: string };
   /** Set (or clear, with `undefined`) an input port's default source. */
@@ -328,7 +334,6 @@ export const emptySelectionDetail: SelectionDetail = {
   describeEdge: () => undefined,
   describePort: () => undefined,
   describeTypePreview: () => undefined,
-  applyControl: () => {},
   setDisplayName: () => ({}),
   setDefaultSource: () => {},
   setCombineMode: () => {},

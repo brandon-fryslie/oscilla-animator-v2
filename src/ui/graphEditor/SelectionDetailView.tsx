@@ -19,17 +19,10 @@ import React, { useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { colors } from '../theme';
 import '../components/BlockInspector.css';
-import {
-  NumberInput,
-  TextInput,
-  SelectInput,
-  CheckboxInput,
-  ColorInput,
-  SliderWithInput,
-} from '../components/common';
+import { SelectInput } from '../components/common';
+import { NeutralParamControl } from './NeutralParamControl';
 import { InspectorExpressionField } from '../components/InspectorExpressionField';
 import { InspectorEdgeDebugProbe } from '../components/InspectorEdgeDebugProbe';
-import type { UIControlHint } from '../../types';
 import type { PortTypeDisplay } from './types';
 import { useSelectionDetail } from './SelectionDetailContext';
 import { useEditorSelection } from './useEditorSelection';
@@ -193,7 +186,7 @@ const BlockDetailView = observer(function BlockDetailView({
               field.kind === 'expression' ? (
                 <InspectorExpressionField key={`expr:${field.id}`} blockId={field.blockId} value={field.value} />
               ) : (
-                <DetailControlField key={field.control.id} detail={detail} control={field.control} />
+                <DetailControlField key={field.control.id} control={field.control} />
               ),
             )}
           </div>
@@ -245,7 +238,7 @@ const InputPortRow = observer(function InputPortRow({
       {port.controls.length > 0 && (
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {port.controls.map((control) => (
-            <DetailControlField key={control.id} detail={detail} control={control} />
+            <DetailControlField key={control.id} control={control} />
           ))}
         </div>
       )}
@@ -353,7 +346,7 @@ const LensManagementView = observer(function LensManagementView({
           {lens.params.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {lens.params.map((p) => (
-                <DetailControlField key={p.id} detail={detail} control={p} />
+                <DetailControlField key={p.id} control={p} />
               ))}
             </div>
           )}
@@ -425,7 +418,7 @@ const PortDetailView = observer(function PortDetailView({
       {port.controls.length > 0 && (
         <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {port.controls.map((c) => (
-            <DetailControlField key={c.id} detail={detail} control={c} />
+            <DetailControlField key={c.id} control={c} />
           ))}
         </div>
       )}
@@ -756,110 +749,17 @@ const smallButtonStyle: React.CSSProperties = {
 };
 
 const DetailControlField = observer(function DetailControlField({
-  detail,
   control,
 }: {
-  detail: SelectionDetail;
   control: DetailControl;
 }) {
-  const onChange = (value: unknown) => detail.applyControl(control.target, value);
   return (
     <div>
       <label style={labelStyle}>{control.label}</label>
-      <NeutralControl hint={control.hint} value={control.value} onChange={onChange} />
+      <NeutralParamControl hint={control.hint} value={control.value} onChange={control.apply} />
     </div>
   );
 });
-
-/**
- * Hint-first, value-guarded widget dispatch. A numeric widget renders only when the
- * value is a number; a boolean/color/text widget likewise. When the stored value
- * does not match the hinted widget, a read-only fallback shows the real value
- * rather than a fabricated default. [LAW:types-are-the-program] [LAW:no-silent-failure]
- */
-function NeutralControl({
-  hint,
-  value,
-  onChange,
-}: {
-  hint?: UIControlHint;
-  value: unknown;
-  onChange: (value: unknown) => void;
-}) {
-  if (hint) {
-    switch (hint.kind) {
-      case 'slider':
-        return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min} max={hint.max} step={hint.step} onChange={onChange} />
-        ) : (
-          <ReadOnly value={value} />
-        );
-      case 'int':
-        return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 10000} step={hint.step ?? 1} onChange={onChange} />
-        ) : (
-          <ReadOnly value={value} />
-        );
-      case 'float':
-        return isNumber(value) ? (
-          <SliderWithInput label="" value={value} min={hint.min ?? 0} max={hint.max ?? 1} step={hint.step ?? 0.01} onChange={onChange} />
-        ) : (
-          <ReadOnly value={value} />
-        );
-      case 'select':
-        return <SelectInput value={String(value)} onChange={onChange} options={hint.options.slice()} size="sm" />;
-      case 'boolean':
-        return <CheckboxInput checked={Boolean(value)} onChange={onChange} />;
-      case 'color':
-        return isString(value) ? <ColorInput value={value} onChange={onChange} /> : <ReadOnly value={value} />;
-      case 'text':
-        return <TextInput value={String(value ?? '')} onChange={onChange} size="sm" />;
-      case 'xy': {
-        if (typeof value !== 'object' || value === null) return <ReadOnly value={value} />;
-        const xy = value as { x?: number; y?: number };
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <SliderWithInput label="X" value={xy.x ?? 0} min={-1000} max={1000} step={1} onChange={(x) => onChange({ ...xy, x })} />
-            <SliderWithInput label="Y" value={xy.y ?? 0} min={-1000} max={1000} step={1} onChange={(y) => onChange({ ...xy, y })} />
-          </div>
-        );
-      }
-      default: {
-        const _exhaustive: never = hint;
-        throw new Error(`Unhandled UIControlHint: ${JSON.stringify(_exhaustive)}`);
-      }
-    }
-  }
-
-  // No hint: choose by the stored value's type; never fabricate.
-  if (isBoolean(value)) return <CheckboxInput checked={value} onChange={onChange} />;
-  if (isNumber(value)) return <NumberInput value={value} onChange={onChange} size="sm" />;
-  if (isString(value)) return <TextInput value={value} onChange={onChange} size="sm" />;
-  return <ReadOnly value={value} />;
-}
-
-function ReadOnly({ value }: { value: unknown }) {
-  return (
-    <div style={{ padding: '6px 8px', background: colors.bgPanel, borderRadius: '4px', fontSize: '12px', color: colors.textMuted }}>
-      {value === undefined || value === null ? '—' : formatValue(value)}
-    </div>
-  );
-}
-
-function formatValue(value: unknown): string {
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function isNumber(v: unknown): v is number {
-  return typeof v === 'number' && Number.isFinite(v);
-}
-function isString(v: unknown): v is string {
-  return typeof v === 'string';
-}
-function isBoolean(v: unknown): v is boolean {
-  return typeof v === 'boolean';
-}
 
 // =============================================================================
 // Neutral name editor

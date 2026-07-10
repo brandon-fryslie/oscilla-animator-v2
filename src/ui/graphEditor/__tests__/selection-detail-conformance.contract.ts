@@ -136,10 +136,11 @@ export function assertUnknownTypeAbsent(c: SelectionDetailConformanceCase): void
 }
 
 /**
- * A config write round-trips: after `applyControl`, the same config field on the
- * block reads back the written value. This is what makes the neutral inspector's
- * editing real — the provider's applyControl is the era's own mutation, and the
- * detail re-derives it.
+ * A config write round-trips: after the control's own `apply`, the same config field
+ * on the block reads back the written value. This is what makes the neutral
+ * inspector's editing real — `apply` is the era's own store mutation the provider
+ * closed over, and the detail re-derives it. No mutation target crosses the seam.
+ * [LAW:effects-at-boundaries]
  */
 export function assertConfigRoundTrips(c: SelectionDetailConformanceCase): void {
   const before = c.detail.describeBlock(c.editableConfig.blockId);
@@ -147,7 +148,7 @@ export function assertConfigRoundTrips(c: SelectionDetailConformanceCase): void 
   expect(field, `${c.name}: editable config field is present`).toBeDefined();
   if (field?.kind !== 'control') throw new Error('editable config field must be a control');
 
-  c.detail.applyControl(field.control.target, c.editableConfig.value);
+  field.control.apply(c.editableConfig.value);
 
   const after = c.detail.describeBlock(c.editableConfig.blockId);
   const reread = after?.config.find((f) => f.kind === 'control' && f.control.id === c.editableConfig.paramId);

@@ -50,6 +50,10 @@ export const SceneGraphEditorPanel: React.FC<IDockviewPanelProps> = observer(() 
         decorator={decorator}
         selection={selection}
         clipboard={clipboard}
+        // Inline config editing on the canvas, parity with the V1 flow editor: the
+        // PillarPatchAdapter projects each block's config fields as neutral controls
+        // whose `apply` writes to PillarPatchStore. [LAW:one-type-per-behavior]
+        features={{ enableParamEditing: true }}
       />
     </div>
   );
