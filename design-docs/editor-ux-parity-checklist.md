@@ -56,16 +56,11 @@ gate" when that comparison is defined and executable today.
 | 9b | Inspector panel completeness (block + edge dockview panels) | **`.10`** | Detail BODY shipped (row 9a); the fuller per-selection dockview panel set is the remaining growth. |
 | 10 | ExpressionEditorWorkbench / SharedExpressionEditor | **`.12`** | No scene expression editor. `.12` is explicitly a DISPOSITION ticket (may resolve to superseded/wontfix once the pillar expression story is decided). |
 
-### Pending a probe
-
-| # | Surface | Disposition | Note |
-|---|---|---|---|
-| 11 | CompositeEditor (+ DSL sidebar) | **remaining — pending `.11` PROBE** | Composites (subgraph blocks) in the pillar model are not yet designed; V1 `composite-editor` panel has no scene equivalent. `.11` PROBE decides whether this becomes shipped-shared or superseded. Not dropped. |
-
 ### Superseded (V1-only by design — a named non-editor-ux epic owns the replacement)
 
 | # | Surface | Owner epic | Reason |
 |---|---|---|---|
+| 11 | CompositeEditor (+ DSL sidebar) | `oscilla-scene-composites-d0d5` | **`.11` PROBE disposition (2026-07-10).** Composites are a MODEL capability, owned by the new `oscilla-scene-composites-d0d5` epic — NOT editor-ux substrate. Settled model shape: registered sub-patch templates expanded at compile-time into a flat `PillarPatch` (V1's flatness-preserving shape; hierarchical ScenePlan nodes rejected). User directive: composites are the honest implementation substrate for native blocks (a leaf block hiding a composition is a design error), so this is real work, not deferred-indefinitely. **Text-DSL is the canonical scene authoring surface** (`.4` in that epic); the **visual `CompositeEditor` panel + explode are user-deferred** future conveniences. V1 `CompositeEditor` + DSL-sidebar panels **delete at tranche 3** (scene composite authoring is text-first) — editor-ux substrate exit is **not** gated on the deferred visual editor. Surface owned, not dropped. [LAW:no-silent-failure] [LAW:one-source-of-truth] |
 | 12 | CompilationInspector / IRTreeView / IRNodeDetail | `oscilla-scene-diagnostics-gjgg` | Inspects V1 `CompiledProgramIR`; the ScenePlan path needs a NEW inspector, not a port. One-era code gets no shared seam. [LAW:composability] |
 | 15 | DemoBrowserSidebar | `oscilla-patch-dsl-463w` | Demo browsing is the native PillarPatch demo library, owned by the patch-dsl epic — not an editor chrome surface. |
 | 16 | debug-viz (live value overlay) | `oscilla-scene-diagnostics-gjgg` | Live per-port value visualization is a diagnostics/observation concern on the pillar path. |
@@ -100,8 +95,10 @@ than leaving dead residue. [LAW:carrying-cost]
 ## Exit condition for the epic
 
 Full exit (and legacy-delete tranche 3) is reached when every **remaining-ticketed** row above
-is landed (`.4`, `.5`, `.7`, `.8`, `.10`, `.12`, `.11`-derived, `.25` SettingsPanel, `.26`
+is landed (`.4`, `.5`, `.7`, `.8`, `.10`, `.12`, `.25` SettingsPanel, `.26`
 node-position) and every **superseded** row's owner epic has shipped its replacement — at
 which point the V1 providers (`v1Era`, `v1LayoutPolicy`, `V1BlockCatalog`, `V1SelectionDetail`,
-and the V1-only dock panels) can be deleted. Until then, `oscilla-editor-ux-8lsn.24` stays open
+and the V1-only dock panels) can be deleted. (Row 11 CompositeEditor is superseded by
+`oscilla-scene-composites-d0d5`; its V1 panels delete at tranche 3 regardless of that epic's
+schedule, since scene composite authoring is text-first and the visual editor is user-deferred.) Until then, `oscilla-editor-ux-8lsn.24` stays open
 as the living accounting: **zero undispositioned rows today; not zero remaining rows.**
