@@ -64,7 +64,7 @@ gate" when that comparison is defined and executable today.
 | 12 | CompilationInspector / IRTreeView / IRNodeDetail | `oscilla-scene-diagnostics-gjgg` | Inspects V1 `CompiledProgramIR`; the ScenePlan path needs a NEW inspector, not a port. One-era code gets no shared seam. [LAW:composability] |
 | 15 | DemoBrowserSidebar | `oscilla-patch-dsl-463w` | Demo browsing is the native PillarPatch demo library, owned by the patch-dsl epic — not an editor chrome surface. |
 | 16 | debug-viz (live value overlay) | `oscilla-scene-diagnostics-gjgg` | Live per-port value visualization is a diagnostics/observation concern on the pillar path. |
-| — | diagnostic-console / log-panel | `oscilla-scene-diagnostics-gjgg` | V1 dock panels; diagnostics markers + console are owned elsewhere per the epic's "owned elsewhere" clause. (Not in the 16-row inventory; recorded so no V1 panel is silently dropped.) |
+| — | diagnostic-console / log-panel | `oscilla-scene-diagnostics-gjgg` | V1 dock panels; diagnostics markers + console are owned elsewhere per the epic's "owned elsewhere" clause. (Not in the main parity inventory; recorded so no V1 panel is silently dropped.) |
 
 ### Wontfix
 
@@ -96,9 +96,12 @@ than leaving dead residue. [LAW:carrying-cost]
 
 Full exit (and legacy-delete tranche 3) is reached when every **remaining-ticketed** row above
 is landed (`.4`, `.5`, `.7`, `.8`, `.10`, `.12`, `.25` SettingsPanel, `.26`
-node-position) and every **superseded** row's owner epic has shipped its replacement — at
-which point the V1 providers (`v1Era`, `v1LayoutPolicy`, `V1BlockCatalog`, `V1SelectionDetail`,
-and the V1-only dock panels) can be deleted. (Row 11 CompositeEditor is superseded by
-`oscilla-scene-composites-d0d5`; its V1 panels delete at tranche 3 regardless of that epic's
-schedule, since scene composite authoring is text-first and the visual editor is user-deferred.) Until then, `oscilla-editor-ux-8lsn.24` stays open
+node-position) and every **superseded** row's owner epic has shipped its replacement —
+**except row 11 (see below)** — at which point the V1 providers (`v1Era`, `v1LayoutPolicy`,
+`V1BlockCatalog`, `V1SelectionDetail`, and the V1-only dock panels) can be deleted.
+
+Row 11 (CompositeEditor) is the deliberate exception to that gate: its V1 panels delete at
+tranche 3 **regardless of `oscilla-scene-composites-d0d5`'s schedule**, because scene composite
+authoring is text-first and the visual editor is user-deferred — so there is no scene
+CompositeEditor to wait for. The general rule does not gate on this row. Until then, `oscilla-editor-ux-8lsn.24` stays open
 as the living accounting: **zero undispositioned rows today; not zero remaining rows.**
